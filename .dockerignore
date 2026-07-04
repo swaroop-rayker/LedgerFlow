@@ -1,0 +1,13 @@
+.gradle
+.idea
+build
+app/build
+core/common/build
+core/security/build
+core/ui/build
+domain/build
+data/build
+services/build
+presentation/build
+local.properties
+*.apk

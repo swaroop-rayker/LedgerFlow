@@ -1,0 +1,37 @@
+name: LedgerFlow CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant Execute Permission for Gradlew
+      run: chmod +x gradlew
+
+    - name: Check Code Style (Ktlint)
+      run: ./gradlew ktlintCheck --continue
+
+    - name: Run Static Analysis (Detekt)
+      run: ./gradlew detekt
+
+    - name: Run Android Lint Checks
+      run: ./gradlew lintDebug
+
+    - name: Run Unit Tests
+      run: ./gradlew testDebugUnitTest
