@@ -29,7 +29,77 @@ LedgerFlow/
 
 ---
 
-## 2. Premium UI/UX Polish
+## 2. System Architecture & Workings
+
+LedgerFlow is designed as an offline-first system prioritizing cryptography, biometric verification, and automated workflows.
+
+### Component Dependency Architecture
+
+```mermaid
+graph TD
+    subgraph Client Application (Android)
+        subgraph presentation [Presentation Layer]
+            UI[Jetpack Compose UI]
+            VM[ViewModels / StateFlow]
+        end
+        
+        subgraph domain [Domain Layer]
+            UC[Use Cases / Business Logic]
+            RepoInterfaces[Repository Interfaces]
+        end
+        
+        subgraph data [Data Layer]
+            RepoImpls[Repository Implementations]
+            Room[Room SQLCipher Encrypted DBs]
+            DS[Encrypted Datastores]
+        end
+
+        subgraph services [Background Services]
+            SMS[SMS Broadcast Receiver]
+            Parser[SMS Regex Parser]
+            SyncWorker[WorkManager Sync Job]
+        end
+    end
+
+    %% Dependencies
+    UI --> VM
+    VM --> UC
+    UC --> RepoInterfaces
+    RepoImpls --Implements--> RepoInterfaces
+    RepoImpls --> Room
+    RepoImpls --> DS
+    SyncWorker --> RepoInterfaces
+    SMS --> Parser
+    Parser --> SyncWorker
+```
+
+### Transaction Lifecyle: SMS Broadcast to Ledger Sync
+
+Unlike regular financial apps, LedgerFlow captures bank transaction messages asynchronously even when the device is locked, without compromising the master ledger database encryption key.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Tel as Telecom Provider
+    participant Receiver as SMSBroadcastReceiver (Locked state)
+    participant QueueDB as SQLCipher Pending Queue DB
+    participant SyncWorker as WorkManager SyncWorker (Periodic)
+    participant MainDB as SQLCipher Main Ledger DB (Biometric Unlocked)
+    
+    Tel->>Receiver: Incoming transactional SMS
+    Receiver->>Receiver: Matches regex patterns (Bank/Amount)
+    Receiver->>QueueDB: Writes parsed data (Boot-accessible Key)
+    Note over QueueDB: Stored securely while phone is locked
+    
+    Note over MainDB: User unlocks phone with Fingerprint/PIN
+    SyncWorker->>QueueDB: Polls pending transactions
+    SyncWorker->>MainDB: Decrypts & Merges into ledger (Biometric Keystore Key)
+    SyncWorker->>QueueDB: Clears processed queue items
+```
+
+---
+
+## 3. Premium UI/UX Polish
 
 LedgerFlow has been redesigned to reflect a premium, professional personal finance intelligence tool, focusing on visual trust, high-contrast readability, and calm colors:
 
@@ -41,7 +111,7 @@ LedgerFlow has been redesigned to reflect a premium, professional personal finan
 
 ---
 
-## 3. Core Security & Privacy Models
+## 4. Core Security & Privacy Models
 
 *   **FLAG_SECURE**: Configured in `MainActivity` to block operating system screenshot capture and screen recording.
 *   **Two-Tier Encryption Database Layout**:
@@ -51,7 +121,7 @@ LedgerFlow has been redesigned to reflect a premium, professional personal finan
 
 ---
 
-## 4. Development & Verifications
+## 5. Development & Verifications
 
 To open the project and run verification tests:
 
