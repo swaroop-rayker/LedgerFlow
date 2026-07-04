@@ -37,7 +37,7 @@ LedgerFlow is designed as an offline-first system prioritizing cryptography, bio
 
 ```mermaid
 graph TD
-    subgraph Client Application (Android)
+    subgraph "Client Application (Android)"
         subgraph presentation [Presentation Layer]
             UI[Jetpack Compose UI]
             VM[ViewModels / StateFlow]
@@ -81,10 +81,10 @@ Unlike regular financial apps, LedgerFlow captures bank transaction messages asy
 sequenceDiagram
     autonumber
     participant Tel as Telecom Provider
-    participant Receiver as SMSBroadcastReceiver (Locked state)
+    participant Receiver as "SMSBroadcastReceiver (Locked state)"
     participant QueueDB as SQLCipher Pending Queue DB
-    participant SyncWorker as WorkManager SyncWorker (Periodic)
-    participant MainDB as SQLCipher Main Ledger DB (Biometric Unlocked)
+    participant SyncWorker as "WorkManager SyncWorker (Periodic)"
+    participant MainDB as "SQLCipher Main Ledger DB (Biometric Unlocked)"
     
     Tel->>Receiver: Incoming transactional SMS
     Receiver->>Receiver: Matches regex patterns (Bank/Amount)
