@@ -9,5 +9,6 @@ data class Category(
     val parentId: Long? = null,
     val isArchived: Boolean = false,
     val color: String? = null,
-    val icon: String? = null
+    val icon: String? = null,
+    val isPinned: Boolean = false
 )

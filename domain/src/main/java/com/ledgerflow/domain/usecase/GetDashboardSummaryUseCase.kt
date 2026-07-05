@@ -9,89 +9,117 @@ import javax.inject.Inject
 class GetDashboardSummaryUseCase @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val categoryRepository: CategoryRepository,
-    private val merchantRepository: MerchantRepository,
-    private val budgetRepository: BudgetRepository
+    private val budgetRepository: BudgetRepository,
+    private val pendingTransactionRepository: PendingTransactionRepository
 ) {
     suspend operator fun invoke(): Result<DashboardSummary> {
         return try {
-            // Determine active month time range
-            val calendar = Calendar.getInstance()
-            calendar.set(Calendar.DAY_OF_MONTH, 1)
-            calendar.set(Calendar.HOUR_OF_DAY, 0)
-            calendar.set(Calendar.MINUTE, 0)
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-            val startOfMonth = calendar.timeInMillis
+            val nowCalendar = Calendar.getInstance()
+            val nowTime = nowCalendar.timeInMillis
 
-            calendar.set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
-            calendar.set(Calendar.HOUR_OF_DAY, 23)
-            calendar.set(Calendar.MINUTE, 59)
-            calendar.set(Calendar.SECOND, 59)
-            calendar.set(Calendar.MILLISECOND, 999)
-            val endOfMonth = calendar.timeInMillis
+            // Start of today
+            val todayCalendar = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val startOfToday = todayCalendar.timeInMillis
+
+            // Start of week
+            val weekCalendar = Calendar.getInstance().apply {
+                set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val startOfWeek = weekCalendar.timeInMillis
+
+            // Start of month
+            val monthCalendar = Calendar.getInstance().apply {
+                set(Calendar.DAY_OF_MONTH, 1)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val startOfMonth = monthCalendar.timeInMillis
+            val endOfMonth = Calendar.getInstance().apply {
+                set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
+            }.timeInMillis
 
             // Fetch transactions for the active month
-            val transactionsFlow = transactionRepository.getTransactionsFlow(startOfMonth, endOfMonth)
-            val currentMonthTransactions = transactionsFlow.first()
+            val monthTransactionsFlow = transactionRepository.getTransactionsFlow(startOfMonth, endOfMonth)
+            val monthTransactions = monthTransactionsFlow.first()
 
-            var incomeSum = 0L
-            var expenseSum = 0L
+            val todaySpending = monthTransactions.filter { it.timestamp >= startOfToday }.sumOf { it.amount }
+            val weekSpending = monthTransactions.filter { it.timestamp >= startOfWeek }.sumOf { it.amount }
+            val monthSpending = monthTransactions.sumOf { it.amount }
 
-            for (txn in currentMonthTransactions) {
-                when (txn.type) {
-                    TransactionType.INCOME -> incomeSum += txn.totalAmount
-                    TransactionType.EXPENSE -> expenseSum += txn.totalAmount
-                    else -> {} // Transfer/Refund can be handled later
-                }
-            }
+            // Top categories calculation
+            val categories = categoryRepository.getCategoriesFlow().first()
+            val categoryByName = categories.associateBy { it.name }
+            
+            val categoryGroups = monthTransactions.groupBy { it.category }
+            val topCategories = categoryGroups.map { (catName, txs) ->
+                val matchingCat = categoryByName[catName]
+                CategorySpending(
+                    categoryName = catName,
+                    amount = txs.sumOf { it.amount },
+                    color = matchingCat?.color,
+                    icon = matchingCat?.icon
+                )
+            }.sortedByDescending { it.amount }
 
-            // Fetch last 5 transactions (recent)
-            val recentTxns = transactionRepository.getPagedTransactions(limit = 5, offset = 0).let { result ->
-                when (result) {
-                    is Result.Success -> result.data
-                    else -> emptyList()
-                }
-            }
+            // Recent and Largest Expenses
+            val recentExpenses = monthTransactions.take(5)
+            val largestExpenses = monthTransactions.sortedByDescending { it.amount }.take(5)
 
-            val recentWithDetails = recentTxns.map { txn ->
-                val merchant = txn.merchantId?.let { id ->
-                    when (val res = merchantRepository.getMerchantById(id)) {
-                        is Result.Success -> res.data
-                        else -> null
-                    }
-                }
-                val splits = when (val res = transactionRepository.getSplitsForTransaction(txn.id)) {
-                    is Result.Success -> res.data
-                    else -> emptyList()
-                }
-                TransactionWithDetails(txn, merchant, splits)
-            }
-
-            // Fetch budget progress
+            // Budget Progress
             val activeBudgets = budgetRepository.getBudgetsFlow().first()
-            val categories = categoryRepository.getCategoriesFlow().first().associateBy { it.id }
+            val categoriesById = categories.associateBy { it.id }
 
             val budgetProgressList = activeBudgets.map { budget ->
-                val category = categories[budget.categoryId] ?: Category(id = budget.categoryId, name = "Unknown")
-                
-                // Calculate spent amount from transactions
-                val spent = currentMonthTransactions.sumOf { txn ->
-                    val splits = when (val res = transactionRepository.getSplitsForTransaction(txn.id)) {
-                        is Result.Success -> res.data
-                        else -> emptyList()
-                    }
-                    splits.filter { it.categoryId == budget.categoryId }.sumOf { it.amount }
-                }
+                val category = categoriesById[budget.categoryId] ?: Category(id = budget.categoryId, name = "Unknown")
+                val spent = monthTransactions
+                    .filter { it.category.equals(category.name, ignoreCase = true) }
+                    .sumOf { it.amount }
 
                 BudgetProgress(budget, category, spent)
             }
 
+            // Top Merchant calculation
+            val topMerchant = monthTransactions
+                .groupBy { it.merchant }
+                .mapValues { entry -> entry.value.sumOf { it.amount } }
+                .maxByOrNull { it.value }
+                ?.key
+
+            // Largest Expense
+            val largestExpense = monthTransactions.maxByOrNull { it.amount }
+
+            // Pending Drafts Count
+            val pendingCount = pendingTransactionRepository.getPendingTransactionsFlow().first().size
+
             Result.Success(
                 DashboardSummary(
-                    monthlyIncome = incomeSum,
-                    monthlyExpense = expenseSum,
-                    recentTransactions = recentWithDetails,
-                    budgetProgress = budgetProgressList
+                    totalExpenses = monthSpending,
+                    todaySpending = todaySpending,
+                    thisWeekSpending = weekSpending,
+                    thisMonthSpending = monthSpending,
+                    topCategories = topCategories,
+                    recentExpenses = recentExpenses,
+                    largestExpenses = largestExpenses,
+                    budgetProgress = budgetProgressList,
+                    largestExpense = largestExpense,
+                    topMerchant = topMerchant,
+                    topCategory = topCategories.firstOrNull()?.categoryName,
+                    pendingCount = pendingCount
                 )
             )
         } catch (e: Exception) {

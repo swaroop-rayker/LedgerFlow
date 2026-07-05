@@ -28,9 +28,16 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import android.content.Intent
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -39,25 +46,45 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             LedgerFlowTheme {
-                // Request Notification permission for Android 13+ (SDK 33+)
+                val permissionsToRequest = mutableListOf(Manifest.permission.RECEIVE_SMS)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    val requestPermissionLauncher = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.RequestPermission(),
-                        onResult = {}
-                    )
-                    LaunchedEffect(Unit) {
-                        requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+
+                val requestPermissionsLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestMultiplePermissions(),
+                    onResult = { permissions ->
+                        permissions.entries.forEach {
+                            timber.log.Timber.d("Permission: ${it.key} granted: ${it.value}")
+                        }
                     }
+                )
+
+                LaunchedEffect(Unit) {
+                    requestPermissionsLauncher.launch(permissionsToRequest.toTypedArray())
                 }
 
                 val navController = rememberNavController()
+                
+                // Read and route pending review notification clicks
+                val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+                val currentIntent = activity?.intent
+                LaunchedEffect(currentIntent) {
+                    if (currentIntent != null && currentIntent.hasExtra("pending_transaction_id")) {
+                        val pendingId = currentIntent.getLongExtra("pending_transaction_id", 0L)
+                        if (pendingId != 0L) {
+                            currentIntent.removeExtra("pending_transaction_id")
+                            navController.navigate(Screen.ReviewExpense(pendingId))
+                        }
+                    }
+                }
+
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
                 
                 val currentScreenName = currentRoute?.substringAfterLast('.') ?: ""
                 val showBottomBar = when (currentScreenName) {
                     "Dashboard", "TransactionList", "Reports", "BudgetSetup", "Settings" -> true
-                    // Matches fully qualified names containing the simple names
                     else -> currentRoute?.let { route ->
                         route.contains("Dashboard") || 
                         route.contains("TransactionList") || 

@@ -13,6 +13,8 @@ import com.ledgerflow.presentation.features.reports.ReportsScreen
 import com.ledgerflow.presentation.features.settings.SettingsScreen
 import com.ledgerflow.presentation.features.transactions.TransactionDetailScreen
 import com.ledgerflow.presentation.features.transactions.TransactionListScreen
+import com.ledgerflow.presentation.features.review.ReviewExpenseScreen
+import com.ledgerflow.presentation.features.review.PendingListScreen
 
 @Composable
 fun LedgerFlowNavHost(
@@ -43,6 +45,9 @@ fun LedgerFlowNavHost(
                 },
                 onNavigateToReports = {
                     navController.navigate(Screen.Reports)
+                },
+                onNavigateToPendingList = {
+                    navController.navigate(Screen.PendingList)
                 }
             )
         }
@@ -76,6 +81,19 @@ fun LedgerFlowNavHost(
         }
         composable<Screen.Settings> {
             SettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<Screen.ReviewExpense> { backStackEntry ->
+            val route = backStackEntry.toRoute<Screen.ReviewExpense>()
+            ReviewExpenseScreen(
+                pendingId = route.pendingId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<Screen.PendingList> {
+            PendingListScreen(
+                onNavigateToReview = { id -> navController.navigate(Screen.ReviewExpense(id)) },
                 onNavigateBack = { navController.popBackStack() }
             )
         }

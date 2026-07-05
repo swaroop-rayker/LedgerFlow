@@ -53,4 +53,16 @@ abstract class RepositoryModule {
     abstract fun bindPaymentMethodRepository(
         impl: com.ledgerflow.data.repository.PaymentMethodRepositoryImpl
     ): com.ledgerflow.domain.repository.PaymentMethodRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPendingTransactionRepository(
+        impl: com.ledgerflow.data.repository.PendingTransactionRepositoryImpl
+    ): com.ledgerflow.domain.repository.PendingTransactionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMerchantPreferenceRepository(
+        impl: com.ledgerflow.data.repository.MerchantPreferenceRepositoryImpl
+    ): com.ledgerflow.domain.repository.MerchantPreferenceRepository
 }

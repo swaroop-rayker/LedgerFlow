@@ -22,10 +22,10 @@ interface CategoryDao {
     @Query("SELECT * FROM categories ORDER BY name ASC")
     fun getCategoriesFlow(): Flow<List<CategoryEntity>>
 
-    @Query("UPDATE transaction_splits SET category_id = :targetCategoryId WHERE category_id = :sourceCategoryId")
+    @Query("UPDATE transactions SET category = (SELECT name FROM categories WHERE id = :targetCategoryId) WHERE category = (SELECT name FROM categories WHERE id = :sourceCategoryId)")
     suspend fun updateTransactionCategoryReferences(sourceCategoryId: Long, targetCategoryId: Long)
 
-    @Query("UPDATE categories SET parent_id = :targetCategoryId WHERE parent_id = :sourceCategoryId")
+    @Query("UPDATE subcategories SET category_id = :targetCategoryId WHERE category_id = :sourceCategoryId")
     suspend fun updateSubcategoryParentReferences(sourceCategoryId: Long, targetCategoryId: Long)
 
     @Transaction

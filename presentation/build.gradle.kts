@@ -59,4 +59,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }

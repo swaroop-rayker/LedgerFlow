@@ -9,7 +9,9 @@ object SmsParser {
     data class ParsedTransaction(
         val amountCents: Long,
         val merchantName: String,
-        val paymentMethod: String?
+        val paymentMethod: String?,
+        val referenceNumber: String?,
+        val timestamp: Long
     )
 
     /**
@@ -20,7 +22,9 @@ object SmsParser {
         return ParsedTransaction(
             amountCents = candidate.amountCents,
             merchantName = candidate.merchantName ?: "Unknown Merchant",
-            paymentMethod = candidate.paymentMode ?: candidate.accountNumber
+            paymentMethod = candidate.paymentMode ?: candidate.accountNumber,
+            referenceNumber = candidate.referenceNumber,
+            timestamp = candidate.timestamp
         )
     }
 

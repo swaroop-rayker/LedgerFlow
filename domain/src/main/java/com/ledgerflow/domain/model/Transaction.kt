@@ -5,19 +5,12 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Transaction(
     val id: Long = 0,
+    val amount: Long,
+    val merchant: String,
+    val category: String,
+    val subcategory: String? = null,
+    val paymentMethod: String? = null,
+    val reference: String? = null,
     val timestamp: Long,
-    val totalAmount: Long, // Stored in cents/paise
-    val type: TransactionType,
-    val merchantId: Long? = null,
-    val paymentMethodId: Long? = null,
-    val notes: String? = null,
-    val isRecurring: Boolean = false,
-    val recurringRuleId: Long? = null
+    val notes: String? = null
 )
-
-enum class TransactionType {
-    INCOME,
-    EXPENSE,
-    TRANSFER,
-    REFUND
-}

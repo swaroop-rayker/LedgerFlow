@@ -5,12 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,12 +23,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ledgerflow.core.common.util.CurrencyUtils
 import com.ledgerflow.core.ui.components.BaseCard
 import com.ledgerflow.core.ui.components.GroupedSectionHeader
+import com.ledgerflow.core.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,9 +39,6 @@ fun ReportsScreen(
     viewModel: ReportsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
-    // Period filter selector: 7, 14, 30 days
-    var selectedPeriodDays by remember { mutableStateOf(30) }
 
     val chartColors = listOf(
         Color(0xFF10B981), // Emerald
@@ -54,7 +55,7 @@ fun ReportsScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        text = "Analytics", 
+                        text = "Analytics Dashboard", 
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     ) 
                 },
@@ -93,96 +94,115 @@ fun ReportsScreen(
                 ) {
                     item { Spacer(modifier = Modifier.height(2.dp)) }
 
-                    // Period Selector Selector
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                .padding(4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            listOf(7, 14, 30).forEach { days ->
-                                val selected = selectedPeriodDays == days
-                                val chipColor = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
-                                val textColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(36.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(chipColor)
-                                        .clickable { selectedPeriodDays = days },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "$days Days",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = textColor
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Card: Monthly Breakdown Metrics
+                    // 1. High-Level Summary Card (Total & Average Daily Spend)
                     item {
                         BaseCard(modifier = Modifier.fillMaxWidth()) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Overview Breakdown",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "30-Day Expense Cockpit",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                                    )
+                                }
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "TOTAL EXPENSES",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = CurrencyUtils.formatCents(uiState.totalExpense),
+                                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("INCOME", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = CurrencyUtils.formatCents(uiState.totalIncome),
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("EXPENSES", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = CurrencyUtils.formatCents(uiState.totalExpense),
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("SAVINGS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = CurrencyUtils.formatCents(uiState.netSavings),
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                        color = if (uiState.netSavings >= 0) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
-                                    )
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "DAILY AVERAGE",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = CurrencyUtils.formatCents(uiState.averageDailySpend),
+                                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Card: High-fidelity visual Donut chart
+                    // 2. Daily Trend Bar Chart representation
+                    if (uiState.dailySpend.isNotEmpty()) {
+                        item {
+                            GroupedSectionHeader(title = "Daily Spend Trend")
+                            Spacer(modifier = Modifier.height(6.dp))
+                            BaseCard(modifier = Modifier.fillMaxWidth()) {
+                                val maxVal = uiState.dailySpend.maxOfOrNull { it.amount } ?: 1L
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(140.dp)
+                                        .padding(top = 16.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Bottom
+                                ) {
+                                    // Plot every 3rd day to prevent clutter on small screens
+                                    uiState.dailySpend.forEachIndexed { index, daily ->
+                                        val barHeightFraction = (daily.amount.toFloat() / maxVal.toFloat()).coerceIn(0.05f, 1f)
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight(barHeightFraction)
+                                                    .width(6.dp)
+                                                    .clip(RoundedCornerShape(3.dp))
+                                                    .background(
+                                                        if (daily.amount > 0) MaterialTheme.colorScheme.primary 
+                                                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                                    )
+                                            )
+                                            if (index % 5 == 0) {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    text = daily.dateStr.substringAfter(" "),
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Category Breakdown with Donut Canvas Chart
                     if (uiState.categorySummaries.isNotEmpty()) {
                         item {
+                            GroupedSectionHeader(title = "Category Share")
+                            Spacer(modifier = Modifier.height(6.dp))
                             BaseCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = 20.dp
@@ -191,15 +211,8 @@ fun ReportsScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(
-                                        text = "Expense Structure",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                        modifier = Modifier.align(Alignment.Start)
-                                    )
-                                    Spacer(modifier = Modifier.height(24.dp))
-
                                     Box(
-                                        modifier = Modifier.size(180.dp),
+                                        modifier = Modifier.size(160.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -212,7 +225,7 @@ fun ReportsScreen(
                                                     startAngle = startAngle,
                                                     sweepAngle = sweepAngle,
                                                     useCenter = false,
-                                                    style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round)
+                                                    style = Stroke(width = 14.dp.toPx(), cap = StrokeCap.Round)
                                                 )
                                                 startAngle += sweepAngle
                                             }
@@ -220,12 +233,12 @@ fun ReportsScreen(
 
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text(
-                                                text = "Total Expenses",
+                                                text = "Categories",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             Text(
-                                                text = CurrencyUtils.formatCents(uiState.totalExpense),
+                                                text = "${uiState.categorySummaries.size} Active",
                                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
@@ -233,75 +246,240 @@ fun ReportsScreen(
                                     }
 
                                     Spacer(modifier = Modifier.height(20.dp))
+
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        uiState.categorySummaries.forEachIndexed { idx, summary ->
+                                            val color = chartColors[idx % chartColors.size]
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(8.dp)
+                                                            .clip(CircleShape)
+                                                            .background(color)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        text = summary.categoryName,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "${CurrencyUtils.formatCents(summary.amount)} (${(summary.percentage * 100).toInt()}%)",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Header: Expense Breakdown by Category
-                    item {
-                        GroupedSectionHeader(title = "Expense Breakdown by Category")
-                    }
-
-                    if (uiState.categorySummaries.isEmpty()) {
+                    // 4. Merchant Breakdown
+                    if (uiState.merchantBreakdown.isNotEmpty()) {
                         item {
-                            BaseCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "No categorized expenses in this period.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        itemsIndexed(uiState.categorySummaries) { idx, summary ->
-                            val color = chartColors[idx % chartColors.size]
+                            GroupedSectionHeader(title = "Top Payees / Merchants")
+                            Spacer(modifier = Modifier.height(6.dp))
                             BaseCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    uiState.merchantBreakdown.forEach { item ->
+                                        Column {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = item.merchant,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = "${CurrencyUtils.formatCents(item.amount)} (${(item.percentage * 100).toInt()}%)",
+                                                    style = NumericLabel,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            LinearProgressIndicator(
+                                                progress = { item.percentage },
                                                 modifier = Modifier
-                                                    .size(10.dp)
-                                                    .clip(CircleShape)
-                                                    .background(color)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = summary.categoryName,
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.titleSmall
+                                                    .fillMaxWidth()
+                                                    .height(6.dp)
+                                                    .clip(RoundedCornerShape(3.dp)),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
                                             )
                                         }
-                                        Text(
-                                            text = "${CurrencyUtils.formatCents(summary.amount)} (${(summary.percentage * 100).toInt()}%)",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
                                     }
-                                    LinearProgressIndicator(
-                                        progress = { summary.percentage },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp)),
-                                        color = color,
-                                        trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 5. Payment Method Distribution
+                    if (uiState.paymentMethodDistribution.isNotEmpty()) {
+                        item {
+                            GroupedSectionHeader(title = "Payment Methods")
+                            Spacer(modifier = Modifier.height(6.dp))
+                            BaseCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    uiState.paymentMethodDistribution.forEach { item ->
+                                        Column {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = item.paymentMethod,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = "${CurrencyUtils.formatCents(item.amount)} (${(item.percentage * 100).toInt()}%)",
+                                                    style = NumericLabel,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            LinearProgressIndicator(
+                                                progress = { item.percentage },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(6.dp)
+                                                    .clip(RoundedCornerShape(3.dp)),
+                                                color = MaterialTheme.colorScheme.secondary,
+                                                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 6. Largest Purchases
+                    if (uiState.largestPurchases.isNotEmpty()) {
+                        item {
+                            GroupedSectionHeader(title = "Largest Purchases")
+                            Spacer(modifier = Modifier.height(6.dp))
+                            BaseCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    uiState.largestPurchases.forEach { txn ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = txn.merchant,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = txn.category,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Text(
+                                                text = CurrencyUtils.formatCents(txn.amount),
+                                                style = FinancialAmount,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 7. Recurring Merchants
+                    if (uiState.recurringMerchants.isNotEmpty()) {
+                        item {
+                            GroupedSectionHeader(title = "Frequent Merchants")
+                            Spacer(modifier = Modifier.height(6.dp))
+                            BaseCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    uiState.recurringMerchants.forEach { m ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = m.merchant,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = "${m.count} visits / transits",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Text(
+                                                text = CurrencyUtils.formatCents(m.totalAmount),
+                                                style = FinancialAmount,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 8. Budget Utilization
+                    if (uiState.budgetUtilization.isNotEmpty()) {
+                        item {
+                            GroupedSectionHeader(title = "Budget Exhaustion Share")
+                            Spacer(modifier = Modifier.height(6.dp))
+                            BaseCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    uiState.budgetUtilization.forEach { b ->
+                                        Column {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = b.categoryName,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = "${CurrencyUtils.formatCents(b.spentAmount)} / ${CurrencyUtils.formatCents(b.limitAmount)}",
+                                                    style = NumericLabel,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            LinearProgressIndicator(
+                                                progress = { b.percentage },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(6.dp)
+                                                    .clip(RoundedCornerShape(3.dp)),
+                                                color = if (b.percentage > 0.9f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -313,4 +491,3 @@ fun ReportsScreen(
         }
     }
 }
-

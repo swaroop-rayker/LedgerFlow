@@ -8,25 +8,27 @@ import com.ledgerflow.data.db.entity.*
 @Database(
     entities = [
         CategoryEntity::class,
+        SubcategoryEntity::class,
         MerchantEntity::class,
         PaymentMethodEntity::class,
         TransactionEntity::class,
-        TransactionSplitEntity::class,
-        TagEntity::class,
-        TransactionTagCrossRef::class,
         AttachmentEntity::class,
         BudgetEntity::class,
-        RecurringRuleEntity::class
+        RecurringRuleEntity::class,
+        PendingTransactionEntity::class,
+        MerchantPreferenceEntity::class
     ],
-    version = 1,
+    version = 4,
     exportSchema = false
 )
 abstract class LedgerFlowDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun categoryDao(): CategoryDao
+    abstract fun subcategoryDao(): SubcategoryDao
     abstract fun merchantDao(): MerchantDao
     abstract fun budgetDao(): BudgetDao
     abstract fun paymentMethodDao(): PaymentMethodDao
     abstract fun attachmentDao(): AttachmentDao
-    abstract fun tagDao(): TagDao
+    abstract fun pendingTransactionDao(): PendingTransactionDao
+    abstract fun merchantPreferenceDao(): MerchantPreferenceDao
 }

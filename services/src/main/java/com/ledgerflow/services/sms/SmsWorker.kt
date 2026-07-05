@@ -1,23 +1,21 @@
 package com.ledgerflow.services.sms
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.ledgerflow.data.db.dao.PendingTransactionDao
-import com.ledgerflow.data.db.entity.PendingTransactionEntity
+import com.ledgerflow.domain.model.PendingTransaction
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.runBlocking
 import timber.log.Timber
-import java.util.Calendar
-
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Intent
-import android.os.Build
-import androidx.core.app.NotificationCompat
 
 class SmsWorker(
     context: Context,
@@ -27,7 +25,8 @@ class SmsWorker(
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface SmsWorkerEntryPoint {
-        fun pendingTransactionDao(): PendingTransactionDao
+        fun savePendingTransactionUseCase(): com.ledgerflow.domain.usecase.SavePendingTransactionUseCase
+        fun suggestCategoryUseCase(): com.ledgerflow.domain.usecase.SuggestCategoryUseCase
     }
 
     companion object {
@@ -36,38 +35,71 @@ class SmsWorker(
 
     override suspend fun doWork(): Result {
         val smsBody = inputData.getString(KEY_SMS_BODY) ?: return Result.failure()
+        Timber.d("SMS received: %s", smsBody)
         
         try {
             val parsedTxn = SmsParser.parse(smsBody)
             if (parsedTxn != null) {
-                // Fetch DAO from Hilt entrypoint dynamically
+                Timber.d("SMS parsed successfully: %s", parsedTxn)
+                
                 val entryPoint = EntryPointAccessors.fromApplication(
                     applicationContext,
                     SmsWorkerEntryPoint::class.java
                 )
-                val pendingTransactionDao = entryPoint.pendingTransactionDao()
+                val saveUseCase = entryPoint.savePendingTransactionUseCase()
+                val suggestUseCase = entryPoint.suggestCategoryUseCase()
 
-                val pendingEntity = PendingTransactionEntity(
-                    timestamp = Calendar.getInstance().timeInMillis,
-                    amount = parsedTxn.amountCents,
-                    merchant = parsedTxn.merchantName,
-                    paymentMethod = parsedTxn.paymentMethod
-                )
-                
-                pendingTransactionDao.insertPendingTransaction(pendingEntity)
-                Timber.d("SMS parsed and added to pending queue successfully.")
+                val merchantName = parsedTxn.merchantName
+                val (suggestedCategory, suggestedSubcategory) = suggestUseCase(merchantName, smsBody)
 
-                // Trigger system notification
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    androidx.core.content.ContextCompat.checkSelfPermission(
-                        applicationContext,
-                        android.Manifest.permission.POST_NOTIFICATIONS
-                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                // Calculate confidence score
+                var confidence = 100
+                if (merchantName.contains("Unknown", ignoreCase = true) || 
+                    merchantName.contains("UPI", ignoreCase = true) ||
+                    merchantName.contains("Bank", ignoreCase = true)
                 ) {
-                    Timber.w("POST_NOTIFICATIONS permission not granted. Cannot post notification.")
-                } else {
-                    sendNotification(parsedTxn)
+                    confidence -= 30
                 }
+                if (suggestedCategory == "Others") {
+                    confidence -= 20
+                }
+                if (parsedTxn.paymentMethod == null) {
+                    confidence -= 15
+                }
+                confidence = confidence.coerceIn(10, 100)
+
+                val pending = PendingTransaction(
+                    amount = parsedTxn.amountCents,
+                    merchant = merchantName,
+                    category = suggestedCategory,
+                    subcategory = suggestedSubcategory,
+                    paymentMethod = parsedTxn.paymentMethod,
+                    reference = parsedTxn.referenceNumber,
+                    timestamp = parsedTxn.timestamp,
+                    confidence = confidence,
+                    status = "PENDING"
+                )
+
+                val saveResult = saveUseCase(pending)
+                if (saveResult is com.ledgerflow.domain.model.Result.Success) {
+                    val pendingId = saveResult.data
+                    Timber.d("Saved PendingTransaction: ID = %d", pendingId)
+                    
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        androidx.core.content.ContextCompat.checkSelfPermission(
+                            applicationContext,
+                            android.Manifest.permission.POST_NOTIFICATIONS
+                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Timber.w("POST_NOTIFICATIONS permission not granted. Cannot post notification.")
+                    } else {
+                        sendNotification(pendingId, pending)
+                    }
+                } else {
+                    Timber.e("Failed to save pending transaction to database.")
+                }
+            } else {
+                Timber.d("SMS rejected by parser: Did not match transaction structure.")
             }
             return Result.success()
         } catch (e: Exception) {
@@ -76,7 +108,7 @@ class SmsWorker(
         }
     }
 
-    private fun sendNotification(parsedTxn: SmsParser.ParsedTransaction) {
+    private fun sendNotification(pendingId: Long, pending: PendingTransaction) {
         val channelId = "sms_transactions_channel"
         val notificationId = 1001
 
@@ -92,25 +124,27 @@ class SmsWorker(
             manager.createNotificationChannel(channel)
         }
 
-        // Retrieve package launcher intent to open app when notification is clicked
         val intent = applicationContext.packageManager.getLaunchIntentForPackage(applicationContext.packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            // Attach ONLY the generated pending transaction ID
+            putExtra("pending_transaction_id", pendingId)
         }
+
         val pendingIntent = intent?.let {
             PendingIntent.getActivity(
                 applicationContext,
                 0,
                 it,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }
 
-        val amountFormatted = com.ledgerflow.core.common.util.CurrencyUtils.formatCents(parsedTxn.amountCents)
-        val textContent = "Detected transaction of $amountFormatted at ${parsedTxn.merchantName} via ${parsedTxn.paymentMethod ?: "Cash"}."
+        val amountFormatted = com.ledgerflow.core.common.util.CurrencyUtils.formatCents(pending.amount)
+        val textContent = "Detected transaction of $amountFormatted at ${pending.merchant}. Tap to review."
 
         val builder = NotificationCompat.Builder(applicationContext, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("New Transaction Detected")
+            .setContentTitle("New Expense Detected")
             .setContentText(textContent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)

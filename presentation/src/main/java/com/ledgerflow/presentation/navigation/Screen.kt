@@ -23,4 +23,10 @@ sealed interface Screen {
 
     @Serializable
     data object Settings : Screen
+
+    @Serializable
+    data class ReviewExpense(val pendingId: Long) : Screen
+
+    @Serializable
+    data object PendingList : Screen
 }

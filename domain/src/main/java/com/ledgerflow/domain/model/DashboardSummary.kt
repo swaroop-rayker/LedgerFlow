@@ -1,16 +1,25 @@
 package com.ledgerflow.domain.model
 
 data class DashboardSummary(
-    val monthlyIncome: Long,
-    val monthlyExpense: Long,
-    val recentTransactions: List<TransactionWithDetails>,
-    val budgetProgress: List<BudgetProgress>
+    val totalExpenses: Long,
+    val todaySpending: Long,
+    val thisWeekSpending: Long,
+    val thisMonthSpending: Long,
+    val topCategories: List<CategorySpending>,
+    val recentExpenses: List<Transaction>,
+    val largestExpenses: List<Transaction>,
+    val budgetProgress: List<BudgetProgress>,
+    val largestExpense: Transaction? = null,
+    val topMerchant: String? = null,
+    val topCategory: String? = null,
+    val pendingCount: Int = 0
 )
 
-data class TransactionWithDetails(
-    val transaction: Transaction,
-    val merchant: Merchant?,
-    val splits: List<TransactionSplit>
+data class CategorySpending(
+    val categoryName: String,
+    val amount: Long,
+    val color: String?,
+    val icon: String?
 )
 
 data class BudgetProgress(
