@@ -13,22 +13,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Dp
+
 @Composable
 fun BaseCard(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surface,
-    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+    contentPadding: Dp = 16.dp,
+    shape: Shape = RoundedCornerShape(16.dp),
+    elevation: Dp = 0.dp,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val cardModifier = if (onClick != null) {
+        modifier.clickable(onClick = onClick)
+    } else {
+        modifier
+    }
+
     Card(
-        modifier = modifier,
+        modifier = cardModifier,
         colors = CardDefaults.cardColors(containerColor = containerColor),
         border = BorderStroke(1.dp, borderColor),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        shape = shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(contentPadding)) {
             content()
         }
     }
 }
+

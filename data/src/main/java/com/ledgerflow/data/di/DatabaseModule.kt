@@ -49,8 +49,8 @@ object DatabaseModule {
                     
                     // Insert default payment methods
                     db.execSQL("INSERT INTO payment_methods (id, name, type) VALUES (1, 'Cash', 'CASH')")
-                    db.execSQL("INSERT INTO payment_methods (id, name, type) VALUES (2, 'UPI / Bank', 'BANK')")
-                    db.execSQL("INSERT INTO payment_methods (id, name, type) VALUES (3, 'Credit Card', 'CARD')")
+                    db.execSQL("INSERT INTO payment_methods (id, name, type) VALUES (2, 'UPI / Bank', 'BANK_ACCOUNT')")
+                    db.execSQL("INSERT INTO payment_methods (id, name, type) VALUES (3, 'Credit Card', 'CREDIT_CARD')")
                     
                     // Insert default merchants
                     db.execSQL("INSERT INTO merchants (id, display_name, normalized_name, is_archived, default_category_id, notes) VALUES (1, 'General Merchant', 'general merchant', 0, NULL, 'Default merchant')")

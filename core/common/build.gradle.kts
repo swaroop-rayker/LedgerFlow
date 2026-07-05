@@ -23,4 +23,5 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     api(libs.timber)
+    testImplementation(libs.junit)
 }

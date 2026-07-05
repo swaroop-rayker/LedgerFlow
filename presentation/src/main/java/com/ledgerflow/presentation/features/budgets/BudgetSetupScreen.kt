@@ -1,6 +1,8 @@
 package com.ledgerflow.presentation.features.budgets
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -8,18 +10,33 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ledgerflow.core.common.util.CurrencyUtils
 import com.ledgerflow.core.ui.components.BaseCard
+import com.ledgerflow.core.ui.components.ConfirmationDialog
+import com.ledgerflow.core.ui.components.EmptyStateView
+import com.ledgerflow.core.ui.components.GroupedSectionHeader
+import com.ledgerflow.core.ui.components.PremiumButton
+import com.ledgerflow.core.ui.components.PremiumTextField
+import com.ledgerflow.core.ui.theme.SuccessColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +48,8 @@ fun BudgetSetupScreen(
 
     var selectedCategoryId by remember { mutableStateOf(0L) }
     var budgetAmountString by remember { mutableStateOf("") }
-    var expandedDropdown by remember { mutableStateOf(false) }
+    var showBottomSheet by remember { mutableStateOf(false) }
+    var budgetToDeleteId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(uiState.isOperationSuccess) {
         if (uiState.isOperationSuccess) {
@@ -46,9 +64,8 @@ fun BudgetSetupScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        "Monthly Budgets Setup", 
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold 
+                        text = "Monthly Budgets", 
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     ) 
                 },
                 navigationIcon = {
@@ -70,7 +87,6 @@ fun BudgetSetupScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Spacer for top rhythm
             item { Spacer(modifier = Modifier.height(2.dp)) }
 
             // Error display banner
@@ -102,16 +118,15 @@ fun BudgetSetupScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Set Category limit",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
+                            text = "Set Spending Limit",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         )
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     if (uiState.categories.isEmpty()) {
                         Text(
-                            "Please configure some categories first before creating budgets.", 
+                            text = "Please configure some categories first before creating budgets.", 
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -125,89 +140,106 @@ fun BudgetSetupScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            // Category Dropdown
-                            Box(modifier = Modifier.weight(1.2f)) {
-                                val currentCatName = uiState.categories.find { it.id == selectedCategoryId }?.name ?: "Select"
+                            // Category Selection Button (triggers bottom sheet)
+                            Column(modifier = Modifier.weight(1.2f)) {
+                                Text(
+                                    text = "Category",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                                val currentCatName = uiState.categories.find { it.id == selectedCategoryId }?.name ?: "Select Category"
                                 OutlinedButton(
-                                    onClick = { expandedDropdown = true },
+                                    onClick = { showBottomSheet = true },
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
                                 ) {
-                                    Text(currentCatName, style = MaterialTheme.typography.bodyMedium)
-                                }
-                                DropdownMenu(
-                                    expanded = expandedDropdown,
-                                    onDismissRequest = { expandedDropdown = false }
-                                ) {
-                                    uiState.categories.forEach { cat ->
-                                        DropdownMenuItem(
-                                            text = { Text(cat.name) },
-                                            onClick = {
-                                                selectedCategoryId = cat.id
-                                                expandedDropdown = false
-                                            }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = currentCatName, 
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
                                         )
+                                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
                                     }
                                 }
                             }
 
-                            // Amount Input
-                            OutlinedTextField(
+                            // Amount Input (Converts Double input into Cents under the hood)
+                            PremiumTextField(
                                 value = budgetAmountString,
                                 onValueChange = { budgetAmountString = it },
-                                label = { Text("Limit in Cents") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                label = "Limit",
+                                placeholder = "0.00",
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Decimal,
+                                    imeAction = ImeAction.Done
+                                ),
                                 modifier = Modifier.weight(0.8f),
-                                singleLine = true,
-                                shape = RoundedCornerShape(8.dp)
+                                prefix = { Text("₹ ", fontWeight = FontWeight.Bold) }
                             )
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        val limitDouble = budgetAmountString.toDoubleOrNull() ?: 0.0
+                        val isValidAmount = limitDouble > 0.0
+
+                        PremiumButton(
                             onClick = {
-                                val amountCents = budgetAmountString.toLongOrNull() ?: 0L
-                                if (amountCents > 0) {
+                                if (isValidAmount) {
+                                    val amountCents = CurrencyUtils.doubleToCents(limitDouble)
                                     viewModel.setBudget(selectedCategoryId, amountCents)
                                 }
                             },
-                            shape = RoundedCornerShape(8.dp),
+                            text = "Establish Limit",
+                            icon = Icons.Default.Done,
+                            enabled = isValidAmount,
                             modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Set Budget")
-                        }
+                        )
                     }
                 }
             }
 
             // Section Header: Active Budgets
             item {
-                Text(
-                    "Configured Budgets", 
-                    style = MaterialTheme.typography.titleMedium, 
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                GroupedSectionHeader(title = "Configured Budgets")
             }
 
             if (uiState.budgets.isEmpty()) {
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                        contentAlignment = Alignment.Center
+                    BaseCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                     ) {
-                        Text(
-                            "No active budgets configured.", 
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No active budgets configured.", 
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             } else {
                 items(uiState.budgets) { budget ->
                     val categoryName = uiState.categories.find { it.id == budget.categoryId }?.name ?: "Category #${budget.categoryId}"
-                    BaseCard(modifier = Modifier.fillMaxWidth()) {
+                    BaseCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = 12.dp
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -219,6 +251,7 @@ fun BudgetSetupScreen(
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Monthly limit: ${CurrencyUtils.formatCents(budget.amount)}",
                                     style = MaterialTheme.typography.bodyMedium,
@@ -226,7 +259,7 @@ fun BudgetSetupScreen(
                                 )
                             }
                             IconButton(
-                                onClick = { viewModel.deleteBudget(budget.categoryId) },
+                                onClick = { budgetToDeleteId = budget.categoryId },
                                 colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.error)
                             ) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete Budget")
@@ -236,8 +269,170 @@ fun BudgetSetupScreen(
                 }
             }
 
-            // Spacer for bottom list rhythm
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
     }
+
+    if (showBottomSheet) {
+        CategorySelectionBottomSheet(
+            categories = uiState.categories,
+            selectedCategoryId = selectedCategoryId,
+            onCategorySelected = { catId ->
+                selectedCategoryId = catId
+                showBottomSheet = false
+            },
+            onDismissRequest = { showBottomSheet = false }
+        )
+    }
+
+    if (budgetToDeleteId != null) {
+        ConfirmationDialog(
+            onDismissRequest = { budgetToDeleteId = null },
+            onConfirm = {
+                budgetToDeleteId?.let { id ->
+                    viewModel.deleteBudget(id)
+                }
+            },
+            title = "Delete Budget Limit",
+            text = "Are you sure you want to remove this category budget limit?",
+            confirmText = "Delete",
+            isDestructive = true
+        )
+    }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategorySelectionBottomSheet(
+    categories: List<com.ledgerflow.domain.model.Category>,
+    selectedCategoryId: Long,
+    onCategorySelected: (Long) -> Unit,
+    onDismissRequest: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                text = "Select Category",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            // Search Bar
+            var searchQuery by remember { mutableStateOf("") }
+            PremiumTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = "",
+                placeholder = "Search categories..."
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Tree list of categories
+            val filteredCategories = categories.filter { 
+                it.name.contains(searchQuery, ignoreCase = true) 
+            }
+
+            var expandedParentIds by remember { mutableStateOf(emptySet<Long>()) }
+            val parentCategories = filteredCategories.filter { it.parentId == null }
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                parentCategories.forEach { parent ->
+                    val children = filteredCategories.filter { it.parentId == parent.id }
+                    val hasChildren = children.isNotEmpty()
+                    val isExpanded = expandedParentIds.contains(parent.id)
+                    val isSelected = selectedCategoryId == parent.id
+
+                    item(key = parent.id) {
+                        val rotationState by animateFloatAsState(
+                            targetValue = if (isExpanded) 180f else 0f,
+                            label = "ChevronRotation"
+                        )
+                        Surface(
+                            onClick = {
+                                if (hasChildren) {
+                                    expandedParentIds = if (isExpanded) {
+                                        expandedParentIds - parent.id
+                                    } else {
+                                        expandedParentIds + parent.id
+                                    }
+                                } else {
+                                    onCategorySelected(parent.id)
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp, horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "${parent.icon ?: "📁"}  ${parent.name}",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                                if (hasChildren) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Expand",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.rotate(rotationState)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (isExpanded && hasChildren) {
+                        children.forEach { child ->
+                            val isChildSelected = selectedCategoryId == child.id
+                            item(key = child.id) {
+                                Surface(
+                                    onClick = { onCategorySelected(child.id) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isChildSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 24.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "    ${child.icon ?: "📄"}  ${child.name}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isChildSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

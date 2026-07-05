@@ -48,7 +48,8 @@ fun LedgerFlowNavHost(
         }
         composable<Screen.TransactionList> {
             TransactionListScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateToAddTransaction = { navController.navigate(Screen.TransactionDetail(0L)) },
+                onNavigateToTransactionDetail = { id -> navController.navigate(Screen.TransactionDetail(id)) }
             )
         }
         composable<Screen.TransactionDetail> { backStackEntry ->

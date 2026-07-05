@@ -1,64 +1,120 @@
 package com.ledgerflow.services.sms
 
-import java.util.regex.Pattern
+import timber.log.Timber
+import java.util.Calendar
 
 object SmsParser {
-    // Standard Regex Patterns for banking SMS alerts (debited, spent, UPI)
-    private val debitedPattern = Pattern.compile(
-        "(?i)(?:Rs\\.?|INR|₹)\\s*([\\d,]+\\.?\\d*)\\s*(?:debited|spent|spent\\s+on|txn\\s+at)\\s*(?:from|for|on|at|using)?\\s*([^\\n]*)"
-    )
-    
-    private val upiPattern = Pattern.compile(
-        "(?i)spent\\s*Rs\\.?\\s*([\\d,]+\\.?\\d*)\\s*on\\s*([^\\n]*)\\s*(?:UPI|Ref)"
-    )
 
+    // Keep ParsedTransaction for backward compatibility
     data class ParsedTransaction(
         val amountCents: Long,
         val merchantName: String,
         val paymentMethod: String?
     )
 
+    /**
+     * Legacy parse function for backward compatibility with repository interfaces.
+     */
     fun parse(smsBody: String): ParsedTransaction? {
-        // Filter out spam, promotions, and OTPs
-        if (smsBody.contains("OTP", ignoreCase = true) || 
-            smsBody.contains("verification code", ignoreCase = true) || 
-            smsBody.contains("win cash", ignoreCase = true)
+        val candidate = parseToCandidate(smsBody) ?: return null
+        return ParsedTransaction(
+            amountCents = candidate.amountCents,
+            merchantName = candidate.merchantName ?: "Unknown Merchant",
+            paymentMethod = candidate.paymentMode ?: candidate.accountNumber
+        )
+    }
+
+    /**
+     * Modern multi-stage parsing pipeline.
+     */
+    fun parseToCandidate(smsBody: String): TransactionCandidate? {
+        Timber.d("SMS received: %s", smsBody)
+
+        // Stage 1: Normalize SMS (preserves casing but fixes spacing)
+        val normalized = SmsNormalizer.normalize(smsBody)
+        Timber.d("Normalized SMS: %s", normalized)
+
+        // Filter out OTPs, verification codes, and common spam
+        val lowerText = normalized.lowercase()
+        if (lowerText.contains("otp") || 
+            lowerText.contains("verification code") || 
+            lowerText.contains("win cash") || 
+            lowerText.contains("claim reward") || 
+            lowerText.contains("win up to") ||
+            lowerText.contains("click here")
         ) {
+            Timber.d("Parser rejected: Contains OTP, verification code, or spam content.")
             return null
         }
 
-        // Try Debit matcher
-        val debitMatcher = debitedPattern.matcher(smsBody)
-        if (debitMatcher.find()) {
-            val amountStr = debitMatcher.group(1)?.replace(",", "")
-            val amount = amountStr?.toDoubleOrNull() ?: return null
-            val merchant = debitMatcher.group(2)?.trim()?.take(50) ?: "Unknown Merchant"
-            
-            // Extract account suffix if available
-            val account = if (smsBody.contains("A/c", ignoreCase = true)) {
-                "A/c " + smsBody.substringAfter("A/c").take(6).trim()
-            } else null
-            
-            return ParsedTransaction(
-                amountCents = (amount * 100).toLong(),
-                merchantName = merchant,
-                paymentMethod = account
-            )
+        // Stage 2: Detect transaction type
+        val type = TransactionTypeDetector.detect(normalized)
+        Timber.d("Transaction type detected: %s", type)
+        if (type == TransactionType.UNKNOWN) {
+            Timber.d("Parser rejected: Unknown transaction type.")
+            return null
         }
 
-        // Try UPI matcher
-        val upiMatcher = upiPattern.matcher(smsBody)
-        if (upiMatcher.find()) {
-            val amountStr = upiMatcher.group(1)?.replace(",", "")
-            val amount = amountStr?.toDoubleOrNull() ?: return null
-            val merchant = upiMatcher.group(2)?.trim()?.take(50) ?: "Unknown Merchant"
-            return ParsedTransaction(
-                amountCents = (amount * 100).toLong(),
-                merchantName = merchant,
-                paymentMethod = "UPI"
-            )
+        // Stage 3: Extract amount
+        val amountDouble = AmountExtractor.extract(normalized)
+        if (amountDouble == null || amountDouble <= 0.0) {
+            Timber.d("Parser rejected: Failed to extract valid amount or amount is 0.")
+            return null
         }
+        val amountCents = (amountDouble * 100).toLong()
+        Timber.d("Amount extracted: %d cents (₹ %.2f)", amountCents, amountDouble)
 
-        return null
+        // Stage 4: Extract merchant/payee (using case-preserved normalized string)
+        val merchant = MerchantExtractor.extract(normalized)
+        Timber.d("Merchant extracted: %s", merchant)
+
+        // Stage 5: Extract account number
+        val account = AccountExtractor.extract(normalized)
+        Timber.d("Account extracted: %s", account)
+
+        // Stage 6: Extract reference number
+        val reference = ReferenceExtractor.extract(normalized)
+        Timber.d("Reference extracted: %s", reference)
+
+        // Stage 7: Extract payment mode
+        val paymentMode = PaymentModeExtractor.extract(normalized, type)
+        Timber.d("Payment mode extracted: %s", paymentMode)
+
+        // Stage 8: Extract date/time
+        val timestamp = DateExtractor.extract(normalized) ?: System.currentTimeMillis()
+        Timber.d("Timestamp extracted: %d", timestamp)
+
+        // Stage 9: Generate fingerprint (SHA-256 for deduplication)
+        val fingerprint = generateFingerprint(amountCents, timestamp, reference, account, merchant)
+        Timber.d("Fingerprint generated: %s", fingerprint)
+
+        val candidate = TransactionCandidate(
+            smsBody = smsBody,
+            normalizedBody = normalized,
+            type = type,
+            amountCents = amountCents,
+            merchantName = merchant,
+            accountNumber = account,
+            referenceNumber = reference,
+            paymentMode = paymentMode,
+            timestamp = timestamp,
+            fingerprint = fingerprint
+        )
+        
+        Timber.d("Transaction candidate created: %s", candidate)
+        return candidate
+    }
+
+    private fun generateFingerprint(
+        amount: Long,
+        timestamp: Long,
+        ref: String?,
+        acc: String?,
+        merchant: String?
+    ): String {
+        val raw = "$amount|$timestamp|${ref ?: ""}|${acc ?: ""}|${merchant ?: ""}"
+        return java.security.MessageDigest.getInstance("SHA-256")
+            .digest(raw.toByteArray())
+            .joinToString("") { "%02x".format(it) }
     }
 }

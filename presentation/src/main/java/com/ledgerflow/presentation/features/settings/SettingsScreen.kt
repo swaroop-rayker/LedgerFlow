@@ -2,7 +2,10 @@ package com.ledgerflow.presentation.features.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,16 +13,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ledgerflow.core.ui.components.BaseCard
+import com.ledgerflow.core.ui.components.PremiumButton
+import com.ledgerflow.core.ui.components.PremiumTextField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +39,12 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var backupPassword by remember { mutableStateOf("") }
+    var isDiagnosticsExpanded by remember { mutableStateOf(false) }
+
+    val rotationState by animateFloatAsState(
+        targetValue = if (isDiagnosticsExpanded) 180f else 0f,
+        label = "DiagnosticsChevron"
+    )
 
     // Launcher for file creation (Backup)
     val createBackupLauncher = rememberLauncherForActivityResult(
@@ -49,9 +65,8 @@ fun SettingsScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        "Settings & Audits", 
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold 
+                        text = "Settings", 
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     ) 
                 },
                 navigationIcon = {
@@ -74,7 +89,6 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Spacer for top rhythm
             Spacer(modifier = Modifier.height(2.dp))
 
             // Notification Info Message
@@ -120,8 +134,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Encrypted Backup & Recovery", 
-                        style = MaterialTheme.typography.titleSmall, 
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -132,14 +145,13 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
+                PremiumTextField(
                     value = backupPassword,
                     onValueChange = { backupPassword = it },
-                    label = { Text("Backup Password") },
+                    label = "Backup Password",
+                    placeholder = "Enter secure passphrase...",
                     visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp)
+                    leadingIcon = Icons.Default.Lock
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -152,9 +164,12 @@ fun SettingsScreen(
                             createBackupLauncher.launch("ledgerflow_backup.enc")
                         },
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
-                        Text("Export")
+                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Export Backup", style = MaterialTheme.typography.labelMedium)
                     }
 
                     OutlinedButton(
@@ -162,77 +177,98 @@ fun SettingsScreen(
                             openBackupLauncher.launch(arrayOf("application/octet-stream"))
                         },
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
-                        Text("Import & Restore")
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Import & Restore", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
 
-            // Card: Diagnostics and Integrity Audits Section
-            BaseCard(modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            // Card: Diagnostics and Integrity Audits Section (Collapsible)
+            BaseCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isDiagnosticsExpanded = !isDiagnosticsExpanded }
+                ) {
                     Icon(
                         imageVector = Icons.Default.Build,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.secondary
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Developer Diagnostics", 
-                        style = MaterialTheme.typography.titleSmall, 
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Execute SQLite page integrity PRAGMA checks and foreign key constraint validations.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = { viewModel.runDiagnostics() },
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("Run Health Audits")
-                }
-
-                if (uiState.integrityReport.isNotEmpty() || uiState.fkReport.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "Integrity Diagnostics:", 
-                        fontWeight = FontWeight.Bold, 
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    uiState.integrityReport.forEach { report ->
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "• $report", 
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (report.contains("ok", ignoreCase = true)) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+                            text = "Developer Diagnostics", 
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "Foreign Key Diagnostics:", 
-                        fontWeight = FontWeight.Bold, 
-                        style = MaterialTheme.typography.titleSmall
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Expand/Collapse",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.rotate(rotationState)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    uiState.fkReport.forEach { report ->
+                }
+
+                if (isDiagnosticsExpanded) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Execute SQLite page integrity PRAGMA checks and foreign key constraint validations.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    PremiumButton(
+                        onClick = { viewModel.runDiagnostics() },
+                        text = "Run Health Audits",
+                        icon = Icons.Default.Build,
+                        modifier = Modifier.align(Alignment.End)
+                    )
+
+                    if (uiState.integrityReport.isNotEmpty() || uiState.fkReport.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         Text(
-                            text = "• $report", 
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (report.contains("ok", ignoreCase = true)) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+                            text = "Integrity Diagnostics:", 
+                            fontWeight = FontWeight.Bold, 
+                            style = MaterialTheme.typography.titleSmall
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        uiState.integrityReport.forEach { report ->
+                            Text(
+                                text = "• $report", 
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (report.contains("ok", ignoreCase = true)) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Foreign Key Diagnostics:", 
+                            fontWeight = FontWeight.Bold, 
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        uiState.fkReport.forEach { report ->
+                            Text(
+                                text = "• $report", 
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (report.contains("ok", ignoreCase = true)) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }
@@ -245,11 +281,10 @@ fun SettingsScreen(
                         .padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(strokeWidth = 3.dp)
+                    CircularProgressIndicator(strokeWidth = 3.dp, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
-            // Spacer for end of scrolling page
             Spacer(modifier = Modifier.height(24.dp))
         }
     }

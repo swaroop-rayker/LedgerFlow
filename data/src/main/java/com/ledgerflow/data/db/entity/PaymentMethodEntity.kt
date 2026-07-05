@@ -20,7 +20,15 @@ data class PaymentMethodEntity(
     fun toDomain() = PaymentMethod(
         id = id,
         name = name,
-        type = PaymentMethodType.valueOf(type)
+        type = try {
+            PaymentMethodType.valueOf(type)
+        } catch (e: Exception) {
+            when (type) {
+                "BANK" -> PaymentMethodType.BANK_ACCOUNT
+                "CARD" -> PaymentMethodType.CREDIT_CARD
+                else -> PaymentMethodType.OTHER
+            }
+        }
     )
 
     companion object {

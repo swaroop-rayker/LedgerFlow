@@ -28,4 +28,6 @@ dependencies {
     
     // javax.inject for Clean Architecture Use Case injection
     implementation("javax.inject:javax.inject:1")
+
+    testImplementation(libs.junit)
 }

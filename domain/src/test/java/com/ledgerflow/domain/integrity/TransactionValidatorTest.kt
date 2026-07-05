@@ -2,6 +2,7 @@ package com.ledgerflow.domain.integrity
 
 import com.ledgerflow.domain.model.Transaction
 import com.ledgerflow.domain.model.TransactionSplit
+import com.ledgerflow.domain.model.TransactionType
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
@@ -14,6 +15,7 @@ class TransactionValidatorTest {
             id = 1,
             timestamp = Calendar.getInstance().timeInMillis,
             totalAmount = 1000L, // 10.00
+            type = TransactionType.EXPENSE,
             paymentMethodId = 1,
             merchantId = 1,
             notes = "Test"
@@ -32,6 +34,7 @@ class TransactionValidatorTest {
             id = 1,
             timestamp = Calendar.getInstance().timeInMillis,
             totalAmount = 1000L,
+            type = TransactionType.EXPENSE,
             paymentMethodId = 1,
             merchantId = 1,
             notes = "Test"

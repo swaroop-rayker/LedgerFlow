@@ -12,45 +12,45 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = DarkOnPrimary,
-    secondary = DarkSecondary,
-    onSecondary = DarkOnSecondary,
-    tertiary = DarkTertiary,
-    onTertiary = DarkOnTertiary,
-    error = DarkError,
-    onError = DarkOnError,
-    background = SlateDarkBackground,
-    onBackground = Color(0xFFF8FAFC),
-    surface = SlateDarkSurface,
+    primary = Color(0xFFF1F5F9),       // Light slate primary for dark background contrast
+    onPrimary = Color(0xFF0F172A),     // Dark slate text on primary
+    secondary = SecondaryColor,
+    onSecondary = Color.White,
+    tertiary = SuccessColor,
+    onTertiary = Color(0xFF0F172A),
+    error = ErrorColor,
+    onError = Color.White,
+    background = DarkBackground,
+    onBackground = Color(0xFFF1F5F9),
+    surface = DarkSurface,
     onSurface = Color(0xFFF8FAFC),
-    surfaceVariant = SlateDarkSurfaceVariant,
+    surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = Color(0xFF94A3B8),
     outline = DarkOutline
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = LightPrimary,
-    onPrimary = LightOnPrimary,
-    secondary = LightSecondary,
-    onSecondary = LightOnSecondary,
-    tertiary = LightTertiary,
-    onTertiary = LightOnTertiary,
-    error = LightError,
-    onError = LightOnError,
-    background = SlateLightBackground,
+    primary = PrimaryColor,            // Dark slate primary for light mode
+    onPrimary = Color.White,
+    secondary = SecondaryColor,
+    onSecondary = Color.White,
+    tertiary = SuccessColor,
+    onTertiary = Color.White,
+    error = ErrorColor,
+    onError = Color.White,
+    background = LightBackground,
     onBackground = Color(0xFF0F172A),
-    surface = SlateLightSurface,
-    onSurface = Color(0xFF0F172A),
-    surfaceVariant = SlateLightSurfaceVariant,
-    onSurfaceVariant = Color(0xFF475569),
+    surface = LightSurface,
+    onSurface = Color(0xFF1E293B),
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = Color(0xFF64748B),
     outline = LightOutline
 )
 
 @Composable
 fun LedgerFlowTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Enforce our custom branding identity
+    dynamicColor: Boolean = false, // Enforce custom brand colors
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
