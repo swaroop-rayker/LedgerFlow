@@ -1,138 +1,201 @@
 # LedgerFlow: Personal Financial Intelligence System
 
-LedgerFlow is a secure, privacy-first, offline-first personal financial intelligence system engineered in Kotlin and Jetpack Compose.
+LedgerFlow is a secure, privacy-first, offline-first personal financial intelligence system engineered in Kotlin, Jetpack Compose, Room, and Hilt. It captures banking notifications, normalizes transaction records, and builds secure ledger reports without relying on external cloud synchronization.
 
 ---
 
-## 1. Modular Architecture
+## 1. Modular Directory Structure
 
-The project implements a strict clean architecture module configuration to ensure maintainability and separation of concerns:
+The project implements a strict Clean Architecture layout using Gradle subprojects to isolate business logic, platform services, and user interfaces:
 
 ```
 LedgerFlow/
 │
 ├── core/
-│   ├── common/           # Precision currency math and date helpers
-│   ├── security/         # Keystore encryption wrappers and SQLCipher utilities
-│   └── ui/               # Custom Material 3 theme and design system components (BaseCard, Type, Color)
+│   ├── common/           # Precision currency math, date utilities, and MerchantNormalizer
+│   ├── security/         # Android Keystore providers, AES-256-GCM engines, and SQLCipher passphrase factories
+│   └── ui/               # Custom Material 3 branding, typography models, palette colors, and shared UI assets
 │
-├── domain/               # Pure Kotlin business rules, entities, and repository interfaces
+├── domain/               # Pure Kotlin layer: entities, use cases, and repository interfaces
 │
-├── data/                 # Room DB entities, SQLCipher encrypted clients, and Datastore repositories
+├── data/                 # Room database schemas, SQLCipher clients, migrations, and Datastore repositories
 │
-├── services/             # Background SMS broadcast receivers, WorkManager parsing, and PBKDF2 ZIP backups
+├── services/             # Background SMS broadcast receivers, WorkManager parsing, and ZIP backup implementations
 │
-├── presentation/         # ViewModels, type-safe Compose Navigation, and polished feature screens
+├── presentation/         # ViewModels, type-safe Compose Navigation paths, and responsive feature views
 │
-└── app/                  # Application runner, build properties, and Hilt modules
+└── app/                  # Main Application class, AndroidManifest, build files, and Hilt dependency modules
 ```
 
 ---
 
-## 2. System Architecture & Workings
+## 2. System Architecture & Component Mapping
 
-LedgerFlow is designed as an offline-first system prioritizing cryptography, biometric verification, and automated workflows.
+### Component Dependency Diagram
 
-### Component Dependency Architecture
+LedgerFlow follows a strict unidirectional dependency structure where inner layers have no knowledge of outer layers:
 
 ```mermaid
 graph TD
-    subgraph "Client Application (Android)"
-        subgraph presentation [Presentation Layer]
-            UI[Jetpack Compose UI]
-            VM[ViewModels / StateFlow]
-        end
-        
-        subgraph domain [Domain Layer]
-            UC[Use Cases / Business Logic]
-            RepoInterfaces[Repository Interfaces]
-        end
-        
-        subgraph data [Data Layer]
-            RepoImpls[Repository Implementations]
-            Room[Room SQLCipher Encrypted DBs]
-            DS[Encrypted Datastores]
-        end
-
-        subgraph services [Background Services]
-            SMS[SMS Broadcast Receiver]
-            Parser[SMS Regex Parser]
-            SyncWorker[WorkManager Sync Job]
-        end
+    subgraph "Application Layer (:app)"
+        App[LedgerFlowApplication]
+        DI[Hilt Modules]
     end
 
-    %% Dependencies
-    UI --> VM
-    VM --> UC
-    UC --> RepoInterfaces
-    RepoImpls --Implements--> RepoInterfaces
-    RepoImpls --> Room
-    RepoImpls --> DS
-    SyncWorker --> RepoInterfaces
-    SMS --> Parser
-    Parser --> SyncWorker
+    subgraph "Presentation Layer (:presentation)"
+        UI[Jetpack Compose Screens]
+        VM[ViewModels / StateFlow]
+    end
+
+    subgraph "Services Layer (:services)"
+        SMS[SmsReceiver / SmsWorker]
+        Backup[BackupManager]
+    end
+
+    subgraph "Data Layer (:data)"
+        RepoImpl[Repository Implementations]
+        RoomDB[SQLCipher Encrypted SQLite]
+        DS[Encrypted DataStore]
+    end
+
+    subgraph "Domain Layer (:domain)"
+        UC[Use Cases]
+        RepoInt[Repository Interfaces]
+        Models[Domain Data Models]
+    end
+
+    subgraph "Core Utilities (:core)"
+        Security[Cryptography & Keystore]
+        Common[Currency & Normalizer]
+        CoreUI[Material Theme & Colors]
+    end
+
+    %% Dependency Arrows
+    App --> DI
+    DI --> presentation
+    DI --> services
+    DI --> data
+    
+    presentation --> domain
+    presentation --> CoreUI
+    services --> domain
+    services --> Security
+    data --> domain
+    data --> Security
+    
+    domain --> Common
+    CoreUI --> Common
+    Security --> Common
 ```
 
-### Transaction Lifecyle: SMS Broadcast to Ledger Sync
+---
 
-Unlike regular financial apps, LedgerFlow captures bank transaction messages asynchronously even when the device is locked, without compromising the master ledger database encryption key.
+## 3. Data Movement & Transaction Lifecycles
+
+### Transaction Lifecycle: SMS parsing to Room Ledger
+
+LedgerFlow processes incoming transactions in a dual-tier database layout, allowing background capture when the phone is locked, and full ledger merging once the user authenticates via biometrics.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Tel as Telecom Provider
-    participant Receiver as "SMSBroadcastReceiver (Locked state)"
-    participant QueueDB as SQLCipher Pending Queue DB
-    participant SyncWorker as "WorkManager SyncWorker (Periodic)"
-    participant MainDB as "SQLCipher Main Ledger DB (Biometric Unlocked)"
+    participant SmsRec as SmsReceiver (Broadcast)
+    participant SmsWork as SmsWorker (WorkManager)
+    participant PendingDB as Pending DB (Boot-Accessible Cryptography)
+    participant MainDB as Main DB (Biometric-Protected Cryptography)
+    participant ReviewUI as Review Screen (Compose UI)
+
+    Tel->>SmsRec: Incoming Banking SMS text
+    SmsRec->>SmsWork: Queue body for parsing
+    SmsWork->>SmsWork: Parse regex (Amount, Merchant, Reference)
+    SmsWork->>SmsWork: Run MerchantNormalizer (Canonical resolve)
+    SmsWork->>PendingDB: Insert PendingTransaction record
+    Note over PendingDB: Decrypted via boot-accessible KeyStore key
+    SmsWork-->>ReviewUI: Post System Notification
     
-    Tel->>Receiver: Incoming transactional SMS
-    Receiver->>Receiver: Matches regex patterns (Bank/Amount)
-    Receiver->>QueueDB: Writes parsed data (Boot-accessible Key)
-    Note over QueueDB: Stored securely while phone is locked
+    Note over ReviewUI: User opens notification & authenticates via biometrics
+    ReviewUI->>PendingDB: Read PendingTransaction details
+    ReviewUI->>ReviewUI: Render confidence levels & merchant history
     
-    Note over MainDB: User unlocks phone with Fingerprint/PIN
-    SyncWorker->>QueueDB: Polls pending transactions
-    SyncWorker->>MainDB: Decrypts & Merges into ledger (Biometric Keystore Key)
-    SyncWorker->>QueueDB: Clears processed queue items
+    alt User Approves Transaction
+        ReviewUI->>MainDB: Write TransactionEntity (with Transaction ID reference)
+        Note over MainDB: Decrypted via biometrics-wrapped Keystore key
+        ReviewUI->>PendingDB: Mark pending transaction as APPROVED/CLEARED
+    else User Discards Transaction
+        ReviewUI->>PendingDB: Mark pending transaction as DISCARDED
+    end
 ```
 
 ---
 
-## 3. Premium UI/UX Polish
+## 4. Merchant Normalization Engine Pipeline
 
-LedgerFlow has been redesigned to reflect a premium, professional personal finance intelligence tool, focusing on visual trust, high-contrast readability, and calm colors:
+The `MerchantNormalizer` processes raw bank payee names to build clean records, matching aliases and compiling regex templates before registering preferred category predictions.
 
-*   **Custom Dark/Light Theme**: Enforces a bespoke Material 3 palette of slate blue, dark indigo, and emerald green.
-*   **Net Balance Hero Cockpit**: The Dashboard features a centered massive balance display, side-by-side green (Income) and red (Expense) indicators, and detailed progress charts for current category budgets.
-*   **Spend Analysis Reports**: A dedicated reports screen combining category and transaction date ranges to render clean percentage progress indicators and total monthly savings metrics.
-*   **Clean Inputs & Form Grouping**: Outlined forms using flat custom-shaped borders, dynamic category selector dropdowns, and split allocation validation banners.
-*   **Tree Subcategory Layouts**: Category Manager displays parent-child branches under a single scroll view utilizing structured indentations (`└─`).
-
----
-
-## 4. Core Security & Privacy Models
-
-*   **FLAG_SECURE**: Configured in `MainActivity` to block operating system screenshot capture and screen recording.
-*   **Two-Tier Encryption Database Layout**:
-    1.  **Main Ledger Database**: Decrypted via a SQLCipher factory key wrapped inside a biometric-authenticated Android Keystore key. Accessible only when the app is active and unlocked.
-    2.  **Pending Queue Database**: Decrypted via a SQLCipher factory key wrapped using a boot-accessible Keystore key. This allows the background SMS receiver worker to write parsed text transactions to the queue even when the device is locked.
-*   **Password-derived backups**: Backups compile the database files into a compressed ZIP stream encrypted using AES-256-GCM. The key is derived using PBKDF2 with 100,000 iterations and a random salt.
+```mermaid
+graph TD
+    Raw[Raw SMS Merchant Name] --> Trim[1. Trim Whitespace & Lowercase]
+    Trim --> Rules[2. Known Alias Matcher]
+    Rules -- Match Found --> Canonical[3. Map to Canonical Name]
+    Rules -- No Match --> Regex[4. Compile and Run Cleaner Regex]
+    Regex --> Cleanup[5. Strip Suffixes: Pvt, Ltd, Pay, Inc]
+    Cleanup --> TitleCase[6. Capitalize Title Words]
+    TitleCase --> Learn[7. Preference Store Lookup]
+    Canonical --> Learn
+    Learn --> Final[Normalized Merchant Name]
+```
 
 ---
 
-## 5. Development & Verifications
+## 5. Backup & Restore Architecture
+
+LedgerFlow preserves user records offline using two isolated backup pipelines:
+
+```mermaid
+graph TD
+    subgraph "Format A: Full Backup (.lfb)"
+        F1[Dump Room SQLite DB File] --> F2[Generate JSON Manifest: app version, checksum, record counts]
+        F2 --> F3[Compress DB + Manifest into ZIP]
+        F3 --> F4[Encrypt ZIP with PBKDF2 AES-GCM Key]
+        F4 --> F5[Write ledgerflow_backup.lfb]
+    end
+
+    subgraph "Format B: Portable Backup (.json)"
+        P1[Query Room Tables] --> P2[Map to Domain Objects: Expenses, Categories, Settings]
+        P2 --> P3[Serialize List to JSON Payload]
+        P3 --> P4[Write backup.json]
+    end
+```
+
+---
+
+## 6. Security Tiers & Cryptography Model
+
+LedgerFlow maintains a robust offline security configuration to guard financial records:
+
+1.  **FLAG_SECURE**: Set on the `Window` in `MainActivity` to disable screenshots, screen recorders, and previews in task managers.
+2.  **Two-Tier Keystore Wrapper**:
+    *   **Pending Queue DB Key**: Generated using Android KeyStore with authentication requirements bypassed. This allows background WorkManager tasks to write parsed SMS events even when the phone is booted but locked.
+    *   **Main Ledger DB Key**: Wrapped under a master key requiring biometric validation. Room cannot open the main database until the user performs biometric verification.
+3.  **PBKDF2 Backups**: Full ZIP packages are encrypted via AES-256-GCM. The encryption key is derived using `PBKDF2WithHmacSHA1` using 100,000 iterations and a random salt value.
+4.  **Schema Verification**: Before executing restores, the manifest's SHA-256 checksum and database version are verified, ensuring corrupt or incompatible files are aborted before replacing active database sectors.
+
+---
+
+## 7. Build, Verification & Tests
 
 To open the project and run verification tests:
 
 1.  Open Android Studio (Iguana / Koala or newer).
-2.  Select **File -> Open** and target this project folder: `d:\LedgerFlow`.
-3.  Let Gradle sync the dependency catalog defined in `gradle/libs.versions.toml`.
-4.  To run the test suite, open the terminal in Android Studio and run:
+2.  Import this project directory: `d:\LedgerFlow`.
+3.  Set the correct `$env:JAVA_HOME` pointing to JDK 17/21 in your command shell.
+4.  To run the full suite of unit and integration tests:
     ```bash
     ./gradlew test
     ```
-5.  Or navigate to individual files and run them:
-    *   [`CurrencyUtilsTest.kt`](file:///d:/LedgerFlow/core/common/src/test/java/com/ledgerflow/core/common/util/CurrencyUtilsTest.kt) - Tests precision double/cent math.
+5.  Or run tests for individual components:
+    *   [`CurrencyUtilsTest.kt`](file:///d:/LedgerFlow/core/common/src/test/java/com/ledgerflow/core/common/util/CurrencyUtilsTest.kt) - Tests double/cent precision conversions.
     *   [`SmsParserTest.kt`](file:///d:/LedgerFlow/services/src/test/java/com/ledgerflow/services/sms/SmsParserTest.kt) - Validates banking SMS regex patterns and spam exclusion filters.
-    *   [`BackupEngineTest.kt`](file:///d:/LedgerFlow/services/src/test/java/com/ledgerflow/services/backup/BackupEngineTest.kt) - Validates GCM encrypt/decrypt iterations.
+    *   [`BackupEngineTest.kt`](file:///d:/LedgerFlow/services/src/test/java/com/ledgerflow/services/backup/BackupEngineTest.kt) - Validates GCM encryption/decryption keys.
+    *   [`DatabaseMigrationTest.kt`](file:///d:/LedgerFlow/data/src/test/java/com/ledgerflow/data/db/migration/DatabaseMigrationTest.kt) - Validates Room default seeding, resets, and version migrations.

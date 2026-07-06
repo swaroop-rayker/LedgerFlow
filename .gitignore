@@ -2,6 +2,8 @@
 .gradle/
 build/
 /*/build/
+.kotlin/
+.ksp/
 
 # Android Studio / IntelliJ IDEA
 .idea/
@@ -10,12 +12,20 @@ build/
 *.iws
 .navigation/
 captures/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
 
 # Local configuration file (contains local paths, SDK location, etc.)
 local.properties
 
 # Log files
 *.log
+log/
+logs/
 
 # Keystores & sensitive credentials
 *.jks
@@ -29,3 +39,8 @@ Thumbs.db
 # Diagnostic / testing reports
 /*/build/reports/
 /*/build/test-results/
+.cxx/
+.externalNativeBuild/
+captures/
+leakcanary/
+
