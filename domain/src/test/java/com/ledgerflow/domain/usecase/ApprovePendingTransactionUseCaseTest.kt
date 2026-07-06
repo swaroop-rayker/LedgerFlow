@@ -22,6 +22,8 @@ class ApprovePendingTransactionUseCaseTest {
         override fun getTransactionsFlow(startDate: Long, endDate: Long): Flow<List<Transaction>> = flowOf(emptyList())
         override suspend fun getPagedTransactions(limit: Int, offset: Int): Result<List<Transaction>> = Result.Success(saved)
         override fun getRecentCategoriesFlow(limit: Int): Flow<List<String>> = flowOf(emptyList())
+        override suspend fun getTransactionsByMerchant(merchant: String): Result<List<Transaction>> = Result.Success(emptyList())
+        override suspend fun getTransactionsByCategory(category: String, limit: Int): Result<List<Transaction>> = Result.Success(emptyList())
     }
 
     private class FakePendingTransactionRepository : PendingTransactionRepository {
@@ -48,13 +50,28 @@ class ApprovePendingTransactionUseCaseTest {
         override suspend fun incrementUsageCount(merchant: String): Result<Unit> = Result.Success(Unit)
     }
 
+    private class FakeAuditLogRepository : AuditLogRepository {
+        val logged = mutableListOf<AuditLog>()
+        override suspend fun insertAuditLog(log: AuditLog): Result<Unit> {
+            logged.add(log)
+            return Result.Success(Unit)
+        }
+        override fun getAuditLogsFlow(): Flow<List<AuditLog>> = flowOf(logged)
+        override suspend fun getAuditLogs(): Result<List<AuditLog>> = Result.Success(logged)
+        override suspend fun clearAuditLogs(): Result<Unit> {
+            logged.clear()
+            return Result.Success(Unit)
+        }
+    }
+
     @Test
     fun testApprovePendingTransactionSavesAndDelete() = runBlocking {
         val txRepo = FakeTransactionRepository()
         val pendingRepo = FakePendingTransactionRepository()
         val prefRepo = FakeMerchantPreferenceRepository()
+        val auditRepo = FakeAuditLogRepository()
 
-        val useCase = ApprovePendingTransactionUseCase(txRepo, pendingRepo, prefRepo)
+        val useCase = ApprovePendingTransactionUseCase(txRepo, pendingRepo, prefRepo, auditRepo)
 
         val txn = Transaction(
             id = 0,
@@ -72,6 +89,11 @@ class ApprovePendingTransactionUseCaseTest {
         assertEquals(1, txRepo.saved.size)
         assertEquals("JioMart", txRepo.saved[0].merchant)
         assertEquals(42L, pendingRepo.deletedIds[0])
+
+        // Verify audit log
+        assertEquals(1, auditRepo.logged.size)
+        assertEquals("APPROVE_TRANSACTION", auditRepo.logged[0].operation)
+        assertTrue(auditRepo.logged[0].details.contains("JioMart"))
 
         val prefRes = prefRepo.getMerchantPreference("JioMart")
         assertTrue(prefRes is Result.Success)

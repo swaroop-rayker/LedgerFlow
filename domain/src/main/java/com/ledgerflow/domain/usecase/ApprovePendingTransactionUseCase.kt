@@ -1,8 +1,10 @@
 package com.ledgerflow.domain.usecase
 
+import com.ledgerflow.domain.model.AuditLog
 import com.ledgerflow.domain.model.MerchantPreference
 import com.ledgerflow.domain.model.Result
 import com.ledgerflow.domain.model.Transaction
+import com.ledgerflow.domain.repository.AuditLogRepository
 import com.ledgerflow.domain.repository.MerchantPreferenceRepository
 import com.ledgerflow.domain.repository.PendingTransactionRepository
 import com.ledgerflow.domain.repository.TransactionRepository
@@ -11,7 +13,8 @@ import javax.inject.Inject
 class ApprovePendingTransactionUseCase @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val pendingTransactionRepository: PendingTransactionRepository,
-    private val merchantPreferenceRepository: MerchantPreferenceRepository
+    private val merchantPreferenceRepository: MerchantPreferenceRepository,
+    private val auditLogRepository: AuditLogRepository
 ) {
     suspend operator fun invoke(
         pendingId: Long,
@@ -26,6 +29,15 @@ class ApprovePendingTransactionUseCase @Inject constructor(
 
         // Delete the pending record
         pendingTransactionRepository.deletePendingTransaction(pendingId)
+
+        // Log approval to Audit Logs
+        val auditDetails = "Approved pending transaction for merchant '${approvedTxn.merchant}' of amount ${approvedTxn.amount / 100.0}"
+        auditLogRepository.insertAuditLog(
+            AuditLog(
+                operation = "APPROVE_TRANSACTION",
+                details = auditDetails
+            )
+        )
 
         // Learn/update merchant preference
         val prefRes = merchantPreferenceRepository.getMerchantPreference(approvedTxn.merchant)

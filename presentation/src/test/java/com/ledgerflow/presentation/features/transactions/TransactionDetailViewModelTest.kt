@@ -45,6 +45,8 @@ class TransactionDetailViewModelTest {
         override fun getTransactionsFlow(startDate: Long, endDate: Long): Flow<List<Transaction>> = flowOf(emptyList())
         override suspend fun getPagedTransactions(limit: Int, offset: Int): Result<List<Transaction>> = Result.Success(emptyList())
         override fun getRecentCategoriesFlow(limit: Int): Flow<List<String>> = flowOf(emptyList())
+        override suspend fun getTransactionsByMerchant(merchant: String): Result<List<Transaction>> = Result.Success(emptyList())
+        override suspend fun getTransactionsByCategory(category: String, limit: Int): Result<List<Transaction>> = Result.Success(emptyList())
     }
 
     @Before

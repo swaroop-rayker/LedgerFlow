@@ -1,5 +1,6 @@
 package com.ledgerflow.presentation.features.transactions
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,48 +34,29 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TransactionListScreen(
     onNavigateToAddTransaction: () -> Unit,
     onNavigateToTransactionDetail: (Long) -> Unit,
+    onNavigateToSearch: () -> Unit,
     viewModel: TransactionListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearchActive by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    if (isSearchActive) {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = { Text("Search transactions...", style = MaterialTheme.typography.bodyMedium) },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent
-                             ),
-                            textStyle = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        Text(
-                            text = "Expenses", 
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                        )
-                    }
+                    Text(
+                        text = "Expenses", 
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
                 },
                 actions = {
-                    IconButton(onClick = { 
-                        isSearchActive = !isSearchActive 
-                        if (!isSearchActive) searchQuery = ""
-                    }) {
+                    IconButton(onClick = onNavigateToSearch) {
                         Icon(
-                            imageVector = if (isSearchActive) Icons.Default.Add else Icons.Default.Search, 
+                            imageVector = Icons.Default.Search, 
                             contentDescription = "Search",
                             modifier = Modifier.clip(CircleShape),
                             tint = MaterialTheme.colorScheme.primary
@@ -126,31 +108,35 @@ fun TransactionListScreen(
                         onPrimaryActionClick = onNavigateToAddTransaction
                     )
                 } else {
-                    val groupedTransactions = remember(uiState.transactions, searchQuery) {
+                    val groupedTransactions = remember(uiState.transactions) {
                         uiState.transactions
-                            .filter { item ->
-                                val query = searchQuery.trim()
-                                query.isEmpty() ||
-                                    item.merchant.contains(query, ignoreCase = true) ||
-                                    (item.notes?.contains(query, ignoreCase = true) == true)
-                            }
                             .groupBy { item ->
-                                val date = Date(item.timestamp)
-                                val todayStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
-                                val itemStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(date)
-                                
-                                when (itemStr) {
-                                    todayStr -> "Today"
-                                    else -> {
-                                        val calYesterday = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
-                                        val yesterdayStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(calYesterday.time)
-                                        if (itemStr == yesterdayStr) {
-                                            "Yesterday"
-                                        } else {
-                                            SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault()).format(date)
-                                        }
-                                    }
+                                val today = Calendar.getInstance().apply {
+                                    set(Calendar.HOUR_OF_DAY, 0)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
                                 }
+                                val yesterday = Calendar.getInstance().apply {
+                                    timeInMillis = today.timeInMillis
+                                    add(Calendar.DATE, -1)
+                                }
+                                val startOfWeek = Calendar.getInstance().apply {
+                                    timeInMillis = today.timeInMillis
+                                    set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                                }
+                                
+                                when {
+                                    item.timestamp >= today.timeInMillis -> "Today"
+                                    item.timestamp >= yesterday.timeInMillis -> "Yesterday"
+                                    item.timestamp >= startOfWeek.timeInMillis -> "This Week"
+                                    else -> "Earlier"
+                                }
+                            }
+                            .entries
+                            .sortedBy { entry ->
+                                val order = listOf("Today", "Yesterday", "This Week", "Earlier")
+                                order.indexOf(entry.key)
                             }
                     }
 
@@ -168,11 +154,17 @@ fun TransactionListScreen(
                             item { Spacer(modifier = Modifier.height(2.dp)) }
 
                             groupedTransactions.forEach { (dateGroup, list) ->
-                                item {
-                                    GroupedSectionHeader(title = dateGroup)
+                                stickyHeader(key = dateGroup) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(MaterialTheme.colorScheme.background)
+                                    ) {
+                                        GroupedSectionHeader(title = dateGroup)
+                                    }
                                 }
 
-                                items(list) { item ->
+                                items(list, key = { it.id }) { item ->
                                     val catIcon = when (item.category.lowercase()) {
                                         "food" -> "🍔"
                                         "transport" -> "🚗"

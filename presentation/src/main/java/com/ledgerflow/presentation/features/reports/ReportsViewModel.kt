@@ -182,4 +182,32 @@ class ReportsViewModel @Inject constructor(
             }
         }
     }
+
+    fun exportTransactionsToCsv(onExportReady: (String) -> Unit) {
+        viewModelScope.launch {
+            val calendar = Calendar.getInstance()
+            val endDate = calendar.timeInMillis
+            val startCalendar = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, -90)
+            }
+            val startDate = startCalendar.timeInMillis
+            val txList = transactionRepository.getTransactionsFlow(startDate, endDate).first()
+            
+            val csvBuilder = java.lang.StringBuilder()
+            csvBuilder.append("ID,Date,Merchant,Category,Amount,Payment Method,Notes\n")
+            
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            txList.forEach { tx ->
+                val dateStr = sdf.format(Date(tx.timestamp))
+                val amountDouble = tx.amount / 100.0
+                val cleanMerchant = tx.merchant.replace("\"", "\"\"")
+                val cleanCategory = tx.category.replace("\"", "\"\"")
+                val cleanNotes = (tx.notes ?: "").replace("\"", "\"\"")
+                val cleanPayment = (tx.paymentMethod ?: "Cash").replace("\"", "\"\"")
+                csvBuilder.append("${tx.id},\"$dateStr\",\"$cleanMerchant\",\"$cleanCategory\",$amountDouble,\"$cleanPayment\",\"$cleanNotes\"\n")
+            }
+            
+            onExportReady(csvBuilder.toString())
+        }
+    }
 }

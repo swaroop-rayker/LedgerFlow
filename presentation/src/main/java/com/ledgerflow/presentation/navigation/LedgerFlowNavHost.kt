@@ -13,8 +13,12 @@ import com.ledgerflow.presentation.features.reports.ReportsScreen
 import com.ledgerflow.presentation.features.settings.SettingsScreen
 import com.ledgerflow.presentation.features.transactions.TransactionDetailScreen
 import com.ledgerflow.presentation.features.transactions.TransactionListScreen
+import com.ledgerflow.presentation.features.transactions.ExpenseDetailsScreen
 import com.ledgerflow.presentation.features.review.ReviewExpenseScreen
 import com.ledgerflow.presentation.features.review.PendingListScreen
+import com.ledgerflow.presentation.features.developer.DeveloperSettingsScreen
+import com.ledgerflow.presentation.features.developer.DatabaseToolsScreen
+import com.ledgerflow.presentation.features.search.GlobalSearchScreen
 
 @Composable
 fun LedgerFlowNavHost(
@@ -48,19 +52,30 @@ fun LedgerFlowNavHost(
                 },
                 onNavigateToPendingList = {
                     navController.navigate(Screen.PendingList)
+                },
+                onNavigateToTransactionDetail = { id ->
+                    navController.navigate(Screen.ExpenseDetails(id))
                 }
             )
         }
         composable<Screen.TransactionList> {
             TransactionListScreen(
                 onNavigateToAddTransaction = { navController.navigate(Screen.TransactionDetail(0L)) },
-                onNavigateToTransactionDetail = { id -> navController.navigate(Screen.TransactionDetail(id)) }
+                onNavigateToTransactionDetail = { id -> navController.navigate(Screen.ExpenseDetails(id)) },
+                onNavigateToSearch = { navController.navigate(Screen.GlobalSearch) }
             )
         }
         composable<Screen.TransactionDetail> { backStackEntry ->
             val route = backStackEntry.toRoute<Screen.TransactionDetail>()
             TransactionDetailScreen(
                 transactionId = route.id,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<Screen.ExpenseDetails> { backStackEntry ->
+            val route = backStackEntry.toRoute<Screen.ExpenseDetails>()
+            ExpenseDetailsScreen(
+                transactionId = route.transactionId,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -76,11 +91,24 @@ fun LedgerFlowNavHost(
         }
         composable<Screen.Reports> {
             ReportsScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToTransactionDetail = { id -> navController.navigate(Screen.ExpenseDetails(id)) }
             )
         }
         composable<Screen.Settings> {
             SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDeveloperSettings = { navController.navigate(Screen.DeveloperSettings) }
+            )
+        }
+        composable<Screen.DeveloperSettings> {
+            DeveloperSettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDatabaseTools = { navController.navigate(Screen.DatabaseTools) }
+            )
+        }
+        composable<Screen.DatabaseTools> {
+            DatabaseToolsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -95,6 +123,12 @@ fun LedgerFlowNavHost(
             PendingListScreen(
                 onNavigateToReview = { id -> navController.navigate(Screen.ReviewExpense(id)) },
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable<Screen.GlobalSearch> {
+            GlobalSearchScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToTransactionDetail = { id -> navController.navigate(Screen.ExpenseDetails(id)) }
             )
         }
     }

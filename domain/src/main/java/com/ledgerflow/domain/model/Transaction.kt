@@ -12,5 +12,6 @@ data class Transaction(
     val paymentMethod: String? = null,
     val reference: String? = null,
     val timestamp: Long,
-    val notes: String? = null
+    val notes: String? = null,
+    val rawMerchant: String? = null
 )

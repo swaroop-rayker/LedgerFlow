@@ -16,4 +16,7 @@ interface MerchantPreferenceDao {
 
     @Query("UPDATE merchant_preferences SET usage_count = usage_count + 1, last_used = :timestamp WHERE LOWER(merchant) = LOWER(:merchant)")
     suspend fun incrementUsageCount(merchant: String, timestamp: Long)
+
+    @Query("SELECT * FROM merchant_preferences ORDER BY merchant ASC")
+    fun getMerchantPreferencesFlow(): kotlinx.coroutines.flow.Flow<List<MerchantPreferenceEntity>>
 }

@@ -29,6 +29,8 @@ class GetCategoriesWithSubcategoriesUseCaseTest {
         override fun getTransactionsFlow(startDate: Long, endDate: Long): Flow<List<com.ledgerflow.domain.model.Transaction>> = flowOf(emptyList())
         override suspend fun getPagedTransactions(limit: Int, offset: Int): Result<List<com.ledgerflow.domain.model.Transaction>> = Result.Success(emptyList())
         override fun getRecentCategoriesFlow(limit: Int): Flow<List<String>> = flowOf(recent)
+        override suspend fun getTransactionsByMerchant(merchant: String): Result<List<com.ledgerflow.domain.model.Transaction>> = Result.Success(emptyList())
+        override suspend fun getTransactionsByCategory(category: String, limit: Int): Result<List<com.ledgerflow.domain.model.Transaction>> = Result.Success(emptyList())
     }
 
     @Test

@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -28,6 +29,17 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":data"))
     
+    // Room
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    
+    // SQLCipher & SQLite
+    implementation(libs.sqlcipher.android)
+    implementation(libs.androidx.sqlite.ktx)
+    
+    // Preferences DataStore
+    implementation(libs.androidx.datastore.preferences)
+    
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
     
@@ -40,3 +52,4 @@ dependencies {
 
     testImplementation(libs.junit)
 }
+

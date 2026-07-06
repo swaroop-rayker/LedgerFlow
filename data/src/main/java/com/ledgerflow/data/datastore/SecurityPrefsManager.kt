@@ -24,6 +24,44 @@ class SecurityPrefsManager @Inject constructor(
         private val DB_KEY_IV = stringPreferencesKey("db_key_iv")
         private val ENCRYPTED_QUEUE_KEY = stringPreferencesKey("encrypted_queue_key")
         private val QUEUE_KEY_IV = stringPreferencesKey("queue_key_iv")
+        private val DB_CREATED_AT = androidx.datastore.preferences.core.longPreferencesKey("db_created_at")
+        private val DB_LAST_OPENED_AT = androidx.datastore.preferences.core.longPreferencesKey("db_last_opened_at")
+        private val SEARCH_HISTORY = stringPreferencesKey("search_history")
+        private val SAVED_SEARCHES = stringPreferencesKey("saved_searches")
+        private val DATABASE_SEEDED = androidx.datastore.preferences.core.booleanPreferencesKey("database_seeded")
+    }
+
+    suspend fun saveDatabaseSeeded(seeded: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[DATABASE_SEEDED] = seeded
+        }
+    }
+
+    suspend fun isDatabaseSeeded(): Boolean {
+        val prefs = context.dataStore.data.first()
+        return prefs[DATABASE_SEEDED] ?: false
+    }
+
+    suspend fun saveDatabaseCreatedTimestamp(timestamp: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[DB_CREATED_AT] = timestamp
+        }
+    }
+
+    suspend fun saveDatabaseLastOpenedTimestamp(timestamp: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[DB_LAST_OPENED_AT] = timestamp
+        }
+    }
+
+    suspend fun getDatabaseCreatedTimestamp(): Long {
+        val prefs = context.dataStore.data.first()
+        return prefs[DB_CREATED_AT] ?: 0L
+    }
+
+    suspend fun getDatabaseLastOpenedTimestamp(): Long {
+        val prefs = context.dataStore.data.first()
+        return prefs[DB_LAST_OPENED_AT] ?: 0L
     }
 
     /**
@@ -84,6 +122,60 @@ class SecurityPrefsManager @Inject constructor(
                 editPrefs[QUEUE_KEY_IV] = Base64.encodeToString(iv, Base64.NO_WRAP)
             }
             return rawKey
+        }
+    }
+
+    suspend fun getSearchHistory(): List<String> {
+        val prefs = context.dataStore.data.first()
+        val historyStr = prefs[SEARCH_HISTORY] ?: ""
+        if (historyStr.isEmpty()) return emptyList()
+        return historyStr.split("\n").filter { it.isNotEmpty() }
+    }
+
+    suspend fun saveSearchQuery(query: String) {
+        val currentHistory = getSearchHistory().toMutableList()
+        currentHistory.remove(query)
+        currentHistory.add(0, query)
+        if (currentHistory.size > 10) {
+            currentHistory.removeAt(currentHistory.lastIndex)
+        }
+        val historyStr = currentHistory.joinToString("\n")
+        context.dataStore.edit { editPrefs ->
+            editPrefs[SEARCH_HISTORY] = historyStr
+        }
+    }
+
+    suspend fun clearSearchHistory() {
+        context.dataStore.edit { editPrefs ->
+            editPrefs.remove(SEARCH_HISTORY)
+        }
+    }
+
+    suspend fun getSavedSearches(): List<String> {
+        val prefs = context.dataStore.data.first()
+        val savedStr = prefs[SAVED_SEARCHES] ?: ""
+        if (savedStr.isEmpty()) return emptyList()
+        return savedStr.split("\n").filter { it.isNotEmpty() }
+    }
+
+    suspend fun saveSearch(query: String) {
+        val current = getSavedSearches().toMutableList()
+        if (!current.contains(query)) {
+            current.add(0, query)
+            val savedStr = current.joinToString("\n")
+            context.dataStore.edit { editPrefs ->
+                editPrefs[SAVED_SEARCHES] = savedStr
+            }
+        }
+    }
+
+    suspend fun deleteSavedSearch(query: String) {
+        val current = getSavedSearches().toMutableList()
+        if (current.remove(query)) {
+            val savedStr = current.joinToString("\n")
+            context.dataStore.edit { editPrefs ->
+                editPrefs[SAVED_SEARCHES] = savedStr
+            }
         }
     }
 }

@@ -17,4 +17,7 @@ interface TransactionRepository {
     suspend fun getPagedTransactions(limit: Int, offset: Int): Result<List<Transaction>>
 
     fun getRecentCategoriesFlow(limit: Int): Flow<List<String>>
+
+    suspend fun getTransactionsByMerchant(merchant: String): Result<List<Transaction>>
+    suspend fun getTransactionsByCategory(category: String, limit: Int): Result<List<Transaction>>
 }

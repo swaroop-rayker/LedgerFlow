@@ -30,8 +30,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import android.content.Intent
 
+import javax.inject.Inject
+import androidx.compose.runtime.collectAsState
+import com.ledgerflow.core.common.util.DatabaseRecoveryState
+import com.ledgerflow.presentation.features.developer.DatabaseRecoveryScreen
+import com.ledgerflow.domain.repository.DatabaseRecoveryRepository
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var databaseRecoveryRepository: DatabaseRecoveryRepository
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -46,6 +55,19 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             LedgerFlowTheme {
+                val incompatibilityInfo by DatabaseRecoveryState.incompatibilityInfo.collectAsState()
+                
+                if (incompatibilityInfo != null) {
+                    DatabaseRecoveryScreen(
+                        info = incompatibilityInfo!!,
+                        repository = databaseRecoveryRepository,
+                        onResetSuccess = {
+                            DatabaseRecoveryState.clear()
+                            // Force app recreation to re-open the database fresh
+                            recreate()
+                        }
+                    )
+                } else {
                 val permissionsToRequest = mutableListOf(Manifest.permission.RECEIVE_SMS)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -142,4 +164,5 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
 }

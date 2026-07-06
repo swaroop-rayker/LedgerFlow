@@ -9,10 +9,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +39,7 @@ import com.ledgerflow.core.ui.theme.*
 @Composable
 fun ReportsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToTransactionDetail: (Long) -> Unit,
     viewModel: ReportsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -52,6 +56,7 @@ fun ReportsScreen(
 
     Scaffold(
         topBar = {
+            val context = LocalContext.current
             TopAppBar(
                 title = { 
                     Text(
@@ -62,6 +67,25 @@ fun ReportsScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        viewModel.exportTransactionsToCsv { csvContent ->
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, csvContent)
+                                type = "text/csv"
+                            }
+                            val shareIntent = Intent.createChooser(sendIntent, "Export Transactions CSV")
+                            context.startActivity(shareIntent)
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Export CSV",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -375,7 +399,9 @@ fun ReportsScreen(
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     uiState.largestPurchases.forEach { txn ->
                                         Row(
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { onNavigateToTransactionDetail(txn.id) },
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {

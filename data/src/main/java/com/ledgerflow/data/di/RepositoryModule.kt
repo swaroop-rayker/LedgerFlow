@@ -65,4 +65,34 @@ abstract class RepositoryModule {
     abstract fun bindMerchantPreferenceRepository(
         impl: com.ledgerflow.data.repository.MerchantPreferenceRepositoryImpl
     ): com.ledgerflow.domain.repository.MerchantPreferenceRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDatabaseToolsRepository(
+        impl: com.ledgerflow.data.repository.DatabaseToolsRepositoryImpl
+    ): com.ledgerflow.domain.repository.DatabaseToolsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindGlobalSearchRepository(
+        impl: com.ledgerflow.data.repository.GlobalSearchRepositoryImpl
+    ): com.ledgerflow.domain.repository.GlobalSearchRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAttachmentRepository(
+        impl: com.ledgerflow.data.repository.AttachmentRepositoryImpl
+    ): com.ledgerflow.domain.repository.AttachmentRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDatabaseRecoveryRepository(
+        impl: com.ledgerflow.data.repository.DatabaseRecoveryRepositoryImpl
+    ): com.ledgerflow.domain.repository.DatabaseRecoveryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAuditLogRepository(
+        impl: com.ledgerflow.data.repository.AuditLogRepositoryImpl
+    ): com.ledgerflow.domain.repository.AuditLogRepository
 }

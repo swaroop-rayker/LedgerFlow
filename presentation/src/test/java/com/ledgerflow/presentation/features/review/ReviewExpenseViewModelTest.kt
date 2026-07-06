@@ -41,6 +41,8 @@ class ReviewExpenseViewModelTest {
         override fun getTransactionsFlow(startDate: Long, endDate: Long): Flow<List<Transaction>> = flowOf(emptyList())
         override suspend fun getPagedTransactions(limit: Int, offset: Int): Result<List<Transaction>> = Result.Success(emptyList())
         override fun getRecentCategoriesFlow(limit: Int): Flow<List<String>> = flowOf(emptyList())
+        override suspend fun getTransactionsByMerchant(merchant: String): Result<List<Transaction>> = Result.Success(emptyList())
+        override suspend fun getTransactionsByCategory(category: String, limit: Int): Result<List<Transaction>> = Result.Success(emptyList())
     }
 
     private class FakePendingTransactionRepository(var pt: PendingTransaction?) : PendingTransactionRepository {
@@ -55,6 +57,13 @@ class ReviewExpenseViewModelTest {
         override suspend fun saveMerchantPreference(preference: MerchantPreference): Result<Unit> = Result.Success(Unit)
         override suspend fun getMerchantPreference(merchant: String): Result<MerchantPreference?> = Result.Success(null)
         override suspend fun incrementUsageCount(merchant: String): Result<Unit> = Result.Success(Unit)
+    }
+
+    private class FakeAuditLogRepository : AuditLogRepository {
+        override suspend fun insertAuditLog(log: AuditLog): Result<Unit> = Result.Success(Unit)
+        override fun getAuditLogsFlow(): Flow<List<AuditLog>> = flowOf(emptyList())
+        override suspend fun getAuditLogs(): Result<List<AuditLog>> = Result.Success(emptyList())
+        override suspend fun clearAuditLogs(): Result<Unit> = Result.Success(Unit)
     }
 
     @Before
@@ -81,7 +90,7 @@ class ReviewExpenseViewModelTest {
         )
         val getPtUseCase = GetPendingTransactionByIdUseCase(ptRepo)
         val checkDupUseCase = CheckDuplicateTransactionUseCase(txRepo)
-        val approveUseCase = ApprovePendingTransactionUseCase(txRepo, ptRepo, FakeMerchantPreferenceRepository())
+        val approveUseCase = ApprovePendingTransactionUseCase(txRepo, ptRepo, FakeMerchantPreferenceRepository(), FakeAuditLogRepository())
         val deletePtUseCase = DeletePendingTransactionUseCase(ptRepo)
 
         val viewModel = ReviewExpenseViewModel(

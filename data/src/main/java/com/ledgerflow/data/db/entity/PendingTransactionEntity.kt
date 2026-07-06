@@ -19,7 +19,8 @@ data class PendingTransactionEntity(
     val confidence: Int,
     val status: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
-    @ColumnInfo(name = "updated_at") val updatedAt: Long
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "raw_merchant") val rawMerchant: String? = null
 ) {
     fun toDomain() = PendingTransaction(
         id = id,
@@ -34,7 +35,8 @@ data class PendingTransactionEntity(
         confidence = confidence,
         status = status,
         createdAt = createdAt,
-        updatedAt = updatedAt
+        updatedAt = updatedAt,
+        rawMerchant = rawMerchant
     )
 
     companion object {
@@ -51,7 +53,8 @@ data class PendingTransactionEntity(
             confidence = domain.confidence,
             status = domain.status,
             createdAt = domain.createdAt,
-            updatedAt = domain.updatedAt
+            updatedAt = domain.updatedAt,
+            rawMerchant = domain.rawMerchant
         )
     }
 }

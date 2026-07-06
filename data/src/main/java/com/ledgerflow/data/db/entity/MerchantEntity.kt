@@ -28,15 +28,46 @@ data class MerchantEntity(
     @ColumnInfo(name = "normalized_name") val normalizedName: String,
     @ColumnInfo(name = "is_archived") val isArchived: Boolean,
     @ColumnInfo(name = "default_category_id") val defaultCategoryId: Long?,
-    val notes: String?
+    val notes: String?,
+
+    @ColumnInfo(name = "canonical_name", defaultValue = "''") val canonicalName: String = "",
+    @ColumnInfo(name = "logo") val logo: String? = null,
+    @ColumnInfo(name = "icon") val icon: String? = null,
+    @ColumnInfo(name = "preferred_category") val preferredCategory: String? = null,
+    @ColumnInfo(name = "preferred_subcategory") val preferredSubcategory: String? = null,
+    @ColumnInfo(name = "confidence_rules") val confidenceRules: String? = null,
+    @ColumnInfo(name = "enabled", defaultValue = "1") val enabled: Boolean = true,
+    @ColumnInfo(name = "created_by", defaultValue = "'SYSTEM'") val createdBy: String = "SYSTEM",
+    @ColumnInfo(name = "is_system", defaultValue = "1") val system: Boolean = true,
+    @ColumnInfo(name = "is_user", defaultValue = "0") val user: Boolean = false,
+    @ColumnInfo(name = "created_at", defaultValue = "0") val createdAt: Long = 0L,
+    @ColumnInfo(name = "updated_at", defaultValue = "0") val updatedAt: Long = 0L,
+    @ColumnInfo(name = "usage_count", defaultValue = "0") val usageCount: Int = 0,
+    @ColumnInfo(name = "last_used", defaultValue = "0") val lastUsed: Long = 0L
 ) {
-    fun toDomain() = Merchant(
+    fun toDomain(aliases: List<String> = emptyList(), regexPatterns: List<String> = emptyList()) = Merchant(
         id = id,
         displayName = displayName,
         normalizedName = normalizedName,
         isArchived = isArchived,
         defaultCategoryId = defaultCategoryId,
-        notes = notes
+        notes = notes,
+        canonicalName = canonicalName,
+        aliases = aliases,
+        regexPatterns = regexPatterns,
+        logo = logo,
+        icon = icon,
+        preferredCategory = preferredCategory,
+        preferredSubcategory = preferredSubcategory,
+        confidenceRules = confidenceRules,
+        enabled = enabled,
+        createdBy = createdBy,
+        system = system,
+        user = user,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        usageCount = usageCount,
+        lastUsed = lastUsed
     )
 
     companion object {
@@ -46,7 +77,21 @@ data class MerchantEntity(
             normalizedName = domain.normalizedName,
             isArchived = domain.isArchived,
             defaultCategoryId = domain.defaultCategoryId,
-            notes = domain.notes
+            notes = domain.notes,
+            canonicalName = domain.canonicalName,
+            logo = domain.logo,
+            icon = domain.icon,
+            preferredCategory = domain.preferredCategory,
+            preferredSubcategory = domain.preferredSubcategory,
+            confidenceRules = domain.confidenceRules,
+            enabled = domain.enabled,
+            createdBy = domain.createdBy,
+            system = domain.system,
+            user = domain.user,
+            createdAt = domain.createdAt,
+            updatedAt = domain.updatedAt,
+            usageCount = domain.usageCount,
+            lastUsed = domain.lastUsed
         )
     }
 }

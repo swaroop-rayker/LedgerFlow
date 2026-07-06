@@ -34,20 +34,23 @@ class DashboardViewModel @Inject constructor(
     fun loadDashboardSummary() {
         viewModelScope.launch {
             _uiState.update { DashboardUiState.Loading }
-            when (val result = getDashboardSummaryUseCase()) {
-                is Result.Success -> {
-                    _uiState.update { DashboardUiState.Success(result.data) }
+            getDashboardSummaryUseCase()
+                .collect { result ->
+                    when (result) {
+                        is Result.Success -> {
+                            _uiState.update { DashboardUiState.Success(result.data) }
+                        }
+                        is Result.Failure.DatabaseError -> {
+                            _uiState.update { DashboardUiState.Error("Database error: ${result.exception.localizedMessage}") }
+                        }
+                        is Result.Failure.ValidationError -> {
+                            _uiState.update { DashboardUiState.Error(result.message) }
+                        }
+                        else -> {
+                            _uiState.update { DashboardUiState.Error("An unknown error occurred.") }
+                        }
+                    }
                 }
-                is Result.Failure.DatabaseError -> {
-                    _uiState.update { DashboardUiState.Error("Database error: ${result.exception.localizedMessage}") }
-                }
-                is Result.Failure.ValidationError -> {
-                    _uiState.update { DashboardUiState.Error(result.message) }
-                }
-                else -> {
-                    _uiState.update { DashboardUiState.Error("An unknown error occurred.") }
-                }
-            }
         }
     }
 }

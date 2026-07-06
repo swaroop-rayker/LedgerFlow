@@ -65,4 +65,22 @@ class TransactionRepositoryImpl @Inject constructor(
     override fun getRecentCategoriesFlow(limit: Int): Flow<List<String>> {
         return transactionDao.getRecentCategoriesFlow(limit)
     }
+
+    override suspend fun getTransactionsByMerchant(merchant: String): Result<List<Transaction>> = withContext(ioDispatcher) {
+        try {
+            val entities = transactionDao.getTransactionsByMerchant(merchant)
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure.DatabaseError(e)
+        }
+    }
+
+    override suspend fun getTransactionsByCategory(category: String, limit: Int): Result<List<Transaction>> = withContext(ioDispatcher) {
+        try {
+            val entities = transactionDao.getTransactionsByCategory(category, limit)
+            Result.Success(entities.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.Failure.DatabaseError(e)
+        }
+    }
 }

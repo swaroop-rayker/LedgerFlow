@@ -16,5 +16,6 @@ data class PendingTransaction(
     val confidence: Int = 100,
     val status: String = "PENDING",
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val rawMerchant: String? = null
 )

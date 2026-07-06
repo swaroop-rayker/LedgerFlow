@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface MerchantDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertMerchant(merchant: MerchantEntity)
+    suspend fun insertMerchant(merchant: MerchantEntity): Long
 
     @Query("SELECT * FROM merchants WHERE id = :merchantId")
     suspend fun getMerchantById(merchantId: Long): MerchantEntity?
@@ -23,4 +23,15 @@ interface MerchantDao {
 
     @Query("UPDATE merchants SET is_archived = 1 WHERE id = :merchantId")
     suspend fun archiveMerchant(merchantId: Long)
+
+    @androidx.room.Transaction
+    @Query("SELECT * FROM merchants")
+    suspend fun getMerchantsWithRelations(): List<com.ledgerflow.data.db.entity.MerchantWithRelations>
+
+    @androidx.room.Transaction
+    @Query("SELECT * FROM merchants")
+    fun getMerchantsWithRelationsFlow(): Flow<List<com.ledgerflow.data.db.entity.MerchantWithRelations>>
+
+    @Query("SELECT * FROM merchants WHERE display_name LIKE '%' || :query || '%' OR canonical_name LIKE '%' || :query || '%'")
+    suspend fun searchMerchants(query: String): List<MerchantEntity>
 }

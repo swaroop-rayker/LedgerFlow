@@ -226,7 +226,7 @@ fun ReviewExpenseScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "₹ " + CurrencyUtils.formatCents((uiState.amount * 100).toLong()),
+                                text = CurrencyUtils.formatCents((uiState.amount * 100).toLong()),
                                 style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.ExtraBold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -284,7 +284,15 @@ fun ReviewExpenseScreen(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { viewModel.onPaymentMethodChanged(method) },
-                                    label = { Text(method) }
+                                    label = {
+                                        Text(
+                                            text = method,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                letterSpacing = 0.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        )
+                                    }
                                 )
                             }
                         }

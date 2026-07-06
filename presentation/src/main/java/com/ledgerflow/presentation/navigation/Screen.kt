@@ -29,4 +29,16 @@ sealed interface Screen {
 
     @Serializable
     data object PendingList : Screen
+
+    @Serializable
+    data object DeveloperSettings : Screen
+
+    @Serializable
+    data object DatabaseTools : Screen
+
+    @Serializable
+    data object GlobalSearch : Screen
+
+    @Serializable
+    data class ExpenseDetails(val transactionId: Long) : Screen
 }

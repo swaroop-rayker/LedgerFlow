@@ -15,7 +15,8 @@ data class TransactionEntity(
     @ColumnInfo(name = "payment_method") val paymentMethod: String?,
     val reference: String?,
     val timestamp: Long,
-    val notes: String?
+    val notes: String?,
+    @ColumnInfo(name = "raw_merchant") val rawMerchant: String? = null
 ) {
     fun toDomain() = Transaction(
         id = id,
@@ -26,7 +27,8 @@ data class TransactionEntity(
         paymentMethod = paymentMethod,
         reference = reference,
         timestamp = timestamp,
-        notes = notes
+        notes = notes,
+        rawMerchant = rawMerchant
     )
 
     companion object {
@@ -39,7 +41,8 @@ data class TransactionEntity(
             paymentMethod = domain.paymentMethod,
             reference = domain.reference,
             timestamp = domain.timestamp,
-            notes = domain.notes
+            notes = domain.notes,
+            rawMerchant = domain.rawMerchant
         )
     }
 }

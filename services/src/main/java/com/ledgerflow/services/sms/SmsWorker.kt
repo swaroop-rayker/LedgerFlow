@@ -49,14 +49,15 @@ class SmsWorker(
                 val saveUseCase = entryPoint.savePendingTransactionUseCase()
                 val suggestUseCase = entryPoint.suggestCategoryUseCase()
 
-                val merchantName = parsedTxn.merchantName
-                val (suggestedCategory, suggestedSubcategory) = suggestUseCase(merchantName, smsBody)
+                val rawMerchant = parsedTxn.merchantName
+                val canonicalMerchant = com.ledgerflow.core.common.util.MerchantNormalizer.normalize(rawMerchant)
+                val (suggestedCategory, suggestedSubcategory) = suggestUseCase(canonicalMerchant, smsBody)
 
                 // Calculate confidence score
                 var confidence = 100
-                if (merchantName.contains("Unknown", ignoreCase = true) || 
-                    merchantName.contains("UPI", ignoreCase = true) ||
-                    merchantName.contains("Bank", ignoreCase = true)
+                if (rawMerchant.contains("Unknown", ignoreCase = true) || 
+                    rawMerchant.contains("UPI", ignoreCase = true) ||
+                    rawMerchant.contains("Bank", ignoreCase = true)
                 ) {
                     confidence -= 30
                 }
@@ -70,14 +71,15 @@ class SmsWorker(
 
                 val pending = PendingTransaction(
                     amount = parsedTxn.amountCents,
-                    merchant = merchantName,
+                    merchant = canonicalMerchant,
                     category = suggestedCategory,
                     subcategory = suggestedSubcategory,
                     paymentMethod = parsedTxn.paymentMethod,
                     reference = parsedTxn.referenceNumber,
                     timestamp = parsedTxn.timestamp,
                     confidence = confidence,
-                    status = "PENDING"
+                    status = "PENDING",
+                    rawMerchant = rawMerchant
                 )
 
                 val saveResult = saveUseCase(pending)

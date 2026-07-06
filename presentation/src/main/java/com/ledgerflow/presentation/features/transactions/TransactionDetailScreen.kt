@@ -223,7 +223,15 @@ fun TransactionDetailScreen(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { viewModel.onPaymentMethodChanged(method) },
-                                label = { Text(method) }
+                                label = {
+                                    Text(
+                                        text = method,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            letterSpacing = 0.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    )
+                                }
                             )
                         }
                     }

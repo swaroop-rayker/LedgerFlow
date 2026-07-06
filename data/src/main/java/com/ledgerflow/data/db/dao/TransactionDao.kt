@@ -26,4 +26,13 @@ interface TransactionDao {
 
     @Query("SELECT DISTINCT category FROM transactions ORDER BY timestamp DESC LIMIT :limit")
     fun getRecentCategoriesFlow(limit: Int): Flow<List<String>>
+
+    @Query("SELECT * FROM transactions WHERE merchant LIKE '%' || :query || '%' OR (notes IS NOT NULL AND notes LIKE '%' || :query || '%') ORDER BY timestamp DESC")
+    suspend fun searchTransactions(query: String): List<TransactionEntity>
+
+    @Query("SELECT * FROM transactions WHERE merchant = :merchant ORDER BY timestamp DESC")
+    suspend fun getTransactionsByMerchant(merchant: String): List<TransactionEntity>
+
+    @Query("SELECT * FROM transactions WHERE category = :category ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getTransactionsByCategory(category: String, limit: Int): List<TransactionEntity>
 }
