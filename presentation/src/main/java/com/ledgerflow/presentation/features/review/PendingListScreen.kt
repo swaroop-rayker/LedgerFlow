@@ -146,11 +146,22 @@ fun PendingListScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
+                                    val isCredit = pending.amount < 0
+                                    val amountText = if (isCredit) {
+                                        "+" + CurrencyUtils.formatCents(-pending.amount)
+                                    } else {
+                                        "-" + CurrencyUtils.formatCents(pending.amount)
+                                    }
+                                    val amountColor = if (isCredit) {
+                                        Color(0xFF2E7D32) // Forest Green for Inflow
+                                    } else {
+                                        MaterialTheme.colorScheme.error // Red for Outflow
+                                    }
                                     Text(
-                                        text = "₹" + CurrencyUtils.formatCents(pending.amount),
+                                        text = amountText,
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.error
+                                        color = amountColor
                                     )
                                     IconButton(
                                         onClick = { viewModel.discardPendingTransaction(pending.id) }

@@ -28,7 +28,7 @@ data class PendingTransactionEntity(
         merchant = merchant,
         category = category,
         subcategory = subcategory,
-        paymentMethod = paymentMethod,
+        paymentMethod = if (paymentMethod == "Credit") "Credit Card" else paymentMethod,
         reference = reference,
         timestamp = timestamp,
         notes = notes,

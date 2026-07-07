@@ -16,14 +16,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
+import com.ledgerflow.core.ui.theme.Spacing
+import com.ledgerflow.core.ui.theme.CornerRadius
 
 @Composable
 fun BaseCard(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surface,
-    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-    contentPadding: Dp = 16.dp,
-    shape: Shape = RoundedCornerShape(16.dp),
+    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+    contentPadding: Dp = Spacing.l,
+    shape: Shape = RoundedCornerShape(CornerRadius.l),
     elevation: Dp = 0.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit

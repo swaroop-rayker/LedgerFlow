@@ -1,14 +1,15 @@
 package com.ledgerflow.presentation.features.search
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,8 +35,8 @@ import com.ledgerflow.core.ui.components.BaseCard
 import com.ledgerflow.core.ui.components.EmptyStateView
 import com.ledgerflow.core.ui.components.GroupedSectionHeader
 import com.ledgerflow.domain.model.Transaction
-import com.ledgerflow.domain.model.Category
-import com.ledgerflow.domain.model.Merchant
+import com.ledgerflow.core.ui.theme.Spacing
+import com.ledgerflow.core.ui.theme.CornerRadius
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -45,7 +46,26 @@ fun GlobalSearchScreen(
     viewModel: GlobalSearchViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val highlightColor = MaterialTheme.colorScheme.primaryContainer
+    val highlightColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+
+    var selectedPaymentFilter by remember { mutableStateOf<String?>(null) }
+    var selectedAmountFilter by remember { mutableStateOf<String?>(null) } // "> 100", "> 500"
+
+    // Dynamically filter search results in-memory
+    val filteredSearchResults = remember(uiState.searchResults, selectedPaymentFilter, selectedAmountFilter) {
+        val raw = uiState.searchResults ?: return@remember null
+        val txs = raw.transactions.filter { txn ->
+            val matchesPayment = selectedPaymentFilter == null || txn.paymentMethod.equals(selectedPaymentFilter, ignoreCase = true)
+            
+            val matchesAmount = when (selectedAmountFilter) {
+                "> ₹100" -> txn.amount > 10000L // 10000 paise/cents
+                "> ₹500" -> txn.amount > 50000L
+                else -> true
+            }
+            matchesPayment && matchesAmount
+        }
+        raw.copy(transactions = txs)
+    }
 
     Scaffold(
         topBar = {
@@ -54,7 +74,7 @@ fun GlobalSearchScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Navigate Back",
+                            contentDescription = "Back",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -88,7 +108,7 @@ fun GlobalSearchScreen(
                         IconButton(onClick = { viewModel.updateQuery("") }) {
                             Icon(
                                 imageVector = Icons.Filled.Clear,
-                                contentDescription = "Clear Input",
+                                contentDescription = "Clear",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -105,8 +125,39 @@ fun GlobalSearchScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = Spacing.l)
         ) {
+            // Filter chips panel (Payment method & amount filters)
+            if (uiState.query.trim().isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = Spacing.s),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.s)
+                ) {
+                    // Payment Method Filter
+                    listOf("Cash", "UPI", "Credit Card", "Debit Card", "Net Banking", "Wallet", "Bank Transfer", "Others").forEach { method ->
+                        val isSelected = selectedPaymentFilter == method
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedPaymentFilter = if (isSelected) null else method },
+                            label = { Text(method, maxLines = 1, style = MaterialTheme.typography.labelMedium) }
+                        )
+                    }
+
+                    // Amount Filter
+                    listOf("> ₹100", "> ₹500").forEach { amountLabel ->
+                        val isSelected = selectedAmountFilter == amountLabel
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedAmountFilter = if (isSelected) null else amountLabel },
+                            label = { Text(amountLabel, maxLines = 1, style = MaterialTheme.typography.labelMedium) }
+                        )
+                    }
+                }
+            }
+
             if (uiState.isLoading) {
                 LinearProgressIndicator(
                     modifier = Modifier
@@ -128,27 +179,28 @@ fun GlobalSearchScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             EmptyStateView(
-                                title = "Unified Global Search",
-                                description = "Type to search across transactions, categories, payees, and notes.",
+                                title = "Global Search Desk",
+                                description = "Query transaction histories, payees, notes, or categories.",
                                 iconEmoji = "🔎"
                             )
                         }
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                            verticalArrangement = Arrangement.spacedBy(Spacing.s)
                         ) {
                             if (uiState.savedSearches.isNotEmpty()) {
                                 item {
-                                    GroupedSectionHeader(title = "Saved Searches")
+                                    GroupedSectionHeader(title = "Pinned Searches")
                                 }
                                 items(uiState.savedSearches) { saved ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
+                                            .clip(RoundedCornerShape(CornerRadius.m))
+                                            .background(MaterialTheme.colorScheme.surface)
                                             .clickable { viewModel.updateQuery(saved) }
-                                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                                            .padding(vertical = Spacing.s, horizontal = Spacing.m),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -156,19 +208,19 @@ fun GlobalSearchScreen(
                                             Icon(
                                                 imageVector = Icons.Filled.Star,
                                                 contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
+                                                tint = Color(0xFFFFC107),
                                                 modifier = Modifier.size(20.dp)
                                             )
-                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Spacer(modifier = Modifier.width(Spacing.s))
                                             Text(
                                                 text = saved,
-                                                style = MaterialTheme.typography.bodyLarge
+                                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
                                             )
                                         }
                                         IconButton(onClick = { viewModel.deleteSavedSearch(saved) }) {
                                             Icon(
                                                 imageVector = Icons.Filled.Delete,
-                                                contentDescription = "Delete Saved Search",
+                                                contentDescription = "Delete",
                                                 tint = MaterialTheme.colorScheme.error
                                             )
                                         }
@@ -183,9 +235,9 @@ fun GlobalSearchScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        GroupedSectionHeader(title = "Recent Searches")
+                                        GroupedSectionHeader(title = "Recent Search Trail")
                                         TextButton(onClick = { viewModel.clearSearchHistory() }) {
-                                            Text("Clear All", color = MaterialTheme.colorScheme.primary)
+                                            Text("Clear History", color = MaterialTheme.colorScheme.primary)
                                         }
                                     }
                                 }
@@ -193,15 +245,14 @@ fun GlobalSearchScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .clip(RoundedCornerShape(CornerRadius.m))
+                                            .background(MaterialTheme.colorScheme.surface)
                                             .clickable { viewModel.updateQuery(recent) }
-                                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                                            .padding(vertical = Spacing.m, horizontal = Spacing.m),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = "🕒",
-                                            fontSize = 16.sp
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(text = "🕒", fontSize = 16.sp)
+                                        Spacer(modifier = Modifier.width(Spacing.s))
                                         Text(
                                             text = recent,
                                             style = MaterialTheme.typography.bodyLarge,
@@ -220,7 +271,7 @@ fun GlobalSearchScreen(
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
-                val results = uiState.searchResults
+                val results = filteredSearchResults
                 if (results == null && !uiState.isLoading) {
                     if (uiState.errorMessage != null) {
                         EmptyStateView(
@@ -237,29 +288,29 @@ fun GlobalSearchScreen(
                     if (isEmpty && !uiState.isLoading) {
                         EmptyStateView(
                             title = "No Matches Found",
-                            description = "Refine search keywords or try different payees.",
+                            description = "Refine search keywords or change filter options.",
                             iconEmoji = "🔍"
                         )
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(Spacing.s)
                         ) {
                             if (results.merchants.isNotEmpty()) {
                                 stickyHeader(key = "header_merchants") {
                                     Box(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
-                                        GroupedSectionHeader(title = "Payees / Merchants")
+                                        GroupedSectionHeader(title = "Payees")
                                     }
                                 }
                                 items(results.merchants) { merchant ->
                                     BaseCard(
                                         modifier = Modifier.fillMaxWidth(),
                                         onClick = {},
-                                        contentPadding = 12.dp
+                                        contentPadding = Spacing.m
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text("🏪", fontSize = 20.sp)
-                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Spacer(modifier = Modifier.width(Spacing.s))
                                             Text(
                                                 text = highlightText(merchant.displayName, uiState.query, highlightColor),
                                                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
@@ -279,11 +330,11 @@ fun GlobalSearchScreen(
                                     BaseCard(
                                         modifier = Modifier.fillMaxWidth(),
                                         onClick = {},
-                                        contentPadding = 12.dp
+                                        contentPadding = Spacing.m
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(category.icon ?: "📁", fontSize = 20.sp)
-                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Spacer(modifier = Modifier.width(Spacing.s))
                                             Text(
                                                 text = highlightText(category.name, uiState.query, highlightColor),
                                                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
@@ -299,7 +350,7 @@ fun GlobalSearchScreen(
                                         GroupedSectionHeader(title = "Expenses")
                                     }
                                 }
-                                items(results.transactions) { tx ->
+                                items(results.transactions, key = { it.id }) { tx ->
                                     val catIcon = when (tx.category.lowercase()) {
                                         "food" -> "🍔"
                                         "transport" -> "🚗"
@@ -318,7 +369,7 @@ fun GlobalSearchScreen(
                                     BaseCard(
                                         modifier = Modifier.fillMaxWidth(),
                                         onClick = { onNavigateToTransactionDetail(tx.id) },
-                                        contentPadding = 12.dp
+                                        contentPadding = Spacing.m
                                     ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -331,14 +382,14 @@ fun GlobalSearchScreen(
                                             ) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(44.dp)
-                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .size(42.dp)
+                                                        .clip(RoundedCornerShape(CornerRadius.s))
                                                         .background(MaterialTheme.colorScheme.surfaceVariant),
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Text(text = catIcon, style = MaterialTheme.typography.titleMedium)
                                                 }
-                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Spacer(modifier = Modifier.width(Spacing.s))
                                                 Column {
                                                     Text(
                                                         text = highlightText(tx.merchant, uiState.query, highlightColor),
@@ -349,16 +400,27 @@ fun GlobalSearchScreen(
                                                         Text(
                                                             text = highlightText(tx.notes ?: "", uiState.query, highlightColor),
                                                             style = MaterialTheme.typography.bodyMedium,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                                             maxLines = 1
                                                         )
                                                     }
                                                 }
                                             }
+                                            val isCredit = tx.amount < 0
+                                            val amountText = if (isCredit) {
+                                                "+" + CurrencyUtils.formatCents(-tx.amount)
+                                            } else {
+                                                "-" + CurrencyUtils.formatCents(tx.amount)
+                                            }
+                                            val amountColor = if (isCredit) {
+                                                Color(0xFF2E7D32) // Forest Green for Inflow
+                                            } else {
+                                                MaterialTheme.colorScheme.primary // Outflow
+                                            }
                                             Text(
-                                                text = CurrencyUtils.formatCents(tx.amount),
+                                                text = amountText,
                                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                                color = MaterialTheme.colorScheme.primary
+                                                color = amountColor
                                             )
                                         }
                                     }
@@ -384,7 +446,7 @@ private fun highlightText(text: String, query: String, highlightColor: Color): A
                 break
             }
             append(text.substring(startIdx, idx))
-            pushStyle(SpanStyle(background = highlightColor))
+            pushStyle(SpanStyle(background = highlightColor, fontWeight = FontWeight.Bold))
             append(text.substring(idx, idx + trimmedQuery.length))
             pop()
             startIdx = idx + trimmedQuery.length

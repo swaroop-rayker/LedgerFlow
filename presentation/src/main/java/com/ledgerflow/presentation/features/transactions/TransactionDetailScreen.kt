@@ -1,17 +1,22 @@
 package com.ledgerflow.presentation.features.transactions
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -23,8 +28,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ledgerflow.core.ui.components.BaseCard
 import com.ledgerflow.core.ui.components.PremiumTextField
-import com.ledgerflow.presentation.components.CategorySelector
-import com.ledgerflow.presentation.components.SubcategorySelector
+import com.ledgerflow.presentation.components.CategoryPickerBottomSheet
+import com.ledgerflow.core.ui.theme.Spacing
+import com.ledgerflow.core.ui.theme.CornerRadius
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +44,7 @@ fun TransactionDetailScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var amountText by remember { mutableStateOf("") }
+    var showCategoryPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.isSaved) {
         if (uiState.isSaved) {
@@ -48,7 +55,7 @@ fun TransactionDetailScreen(
     val selectedCategoryTree = remember(categoriesState, uiState.category) {
         categoriesState.find { it.category.name.equals(uiState.category, ignoreCase = true) }
     }
-    val activeSubcategories = selectedCategoryTree?.subcategories ?: emptyList()
+    val categoryIcon = selectedCategoryTree?.category?.icon ?: "📁"
 
     Scaffold(
         topBar = {
@@ -87,28 +94,29 @@ fun TransactionDetailScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = Spacing.l),
+            verticalArrangement = Arrangement.spacedBy(Spacing.l)
         ) {
-            item { Spacer(modifier = Modifier.height(2.dp)) }
+            item { Spacer(modifier = Modifier.height(Spacing.xxs)) }
 
             uiState.errorMessage?.let { error ->
                 item {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(CornerRadius.m),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = error,
                             color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(Spacing.l),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
             }
 
+            // Amount field redesigned
             item {
                 BaseCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
@@ -123,7 +131,7 @@ fun TransactionDetailScreen(
                                 fontWeight = FontWeight.Bold
                             )
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(Spacing.s))
                         
                         TextField(
                             value = amountText,
@@ -166,6 +174,57 @@ fun TransactionDetailScreen(
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
+                        
+                        Spacer(modifier = Modifier.height(Spacing.s))
+
+                        // Credit / Debit selector
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(CornerRadius.m))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(CornerRadius.s))
+                                    .background(if (!uiState.isCredit) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .clickable { viewModel.onDirectionChanged(false) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Debit (Outflow)",
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (!uiState.isCredit) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(CornerRadius.s))
+                                    .background(if (uiState.isCredit) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .clickable { viewModel.onDirectionChanged(true) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Credit (Inflow)",
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (uiState.isCredit) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -181,33 +240,51 @@ fun TransactionDetailScreen(
                 )
             }
 
+            // Redesigned Category Picker Row Card
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                     Text(
                         text = "Category (Mandatory)",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    CategorySelector(
-                        categories = categoriesState,
-                        selectedCategoryName = uiState.category,
-                        onCategorySelected = { viewModel.onCategoryChanged(it) }
-                    )
-                }
-            }
-
-            if (activeSubcategories.isNotEmpty()) {
-                item {
-                    SubcategorySelector(
-                        subcategories = activeSubcategories,
-                        selectedSubcategoryName = uiState.subcategory,
-                        onSubcategorySelected = { viewModel.onSubcategoryChanged(it) }
-                    )
+                    
+                    BaseCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showCategoryPicker = true },
+                        contentPadding = Spacing.m
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(CornerRadius.s)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(categoryIcon, fontSize = 18.sp)
+                                }
+                                Spacer(modifier = Modifier.width(Spacing.s))
+                                Column {
+                                    Text(
+                                        text = uiState.category + if (uiState.subcategory != null) " • ${uiState.subcategory}" else "",
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+                                    )
+                                }
+                            }
+                            Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Select Category")
+                        }
+                    }
                 }
             }
 
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
                     Text(
                         text = "Payment Method",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -215,10 +292,12 @@ fun TransactionDetailScreen(
                     )
                     
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.s)
                     ) {
-                        listOf("UPI / Bank", "Credit Card", "Cash").forEach { method ->
+                        listOf("Cash", "UPI", "Credit Card", "Debit Card", "Net Banking", "Wallet", "Bank Transfer", "Others").forEach { method ->
                             val isSelected = uiState.paymentMethod == method
                             FilterChip(
                                 selected = isSelected,
@@ -226,6 +305,7 @@ fun TransactionDetailScreen(
                                 label = {
                                     Text(
                                         text = method,
+                                        maxLines = 1,
                                         style = MaterialTheme.typography.bodyMedium.copy(
                                             letterSpacing = 0.sp,
                                             fontWeight = FontWeight.Medium
@@ -260,7 +340,23 @@ fun TransactionDetailScreen(
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(32.dp)) }
+            item { Spacer(modifier = Modifier.height(Spacing.xl)) }
         }
+    }
+
+    if (showCategoryPicker) {
+        CategoryPickerBottomSheet(
+            categories = categoriesState,
+            selectedCategoryName = uiState.category,
+            selectedSubcategoryName = uiState.subcategory,
+            onCategorySelected = { cat, sub ->
+                viewModel.onCategoryChanged(cat)
+                viewModel.onSubcategoryChanged(sub)
+                showCategoryPicker = false
+            },
+            onAddCategory = { _, _, _, _ -> },
+            onUpdateCategory = {},
+            onDismissRequest = { showCategoryPicker = false }
+        )
     }
 }

@@ -38,9 +38,9 @@ class SmsWorker(
         Timber.d("SMS received: %s", smsBody)
         
         try {
-            val parsedTxn = SmsParser.parse(smsBody)
-            if (parsedTxn != null) {
-                Timber.d("SMS parsed successfully: %s", parsedTxn)
+            val candidate = SmsParser.parseToCandidate(smsBody)
+            if (candidate != null) {
+                Timber.d("SMS parsed candidate: %s", candidate)
                 
                 val entryPoint = EntryPointAccessors.fromApplication(
                     applicationContext,
@@ -49,7 +49,7 @@ class SmsWorker(
                 val saveUseCase = entryPoint.savePendingTransactionUseCase()
                 val suggestUseCase = entryPoint.suggestCategoryUseCase()
 
-                val rawMerchant = parsedTxn.merchantName
+                val rawMerchant = candidate.merchantName ?: "Unknown Merchant"
                 val canonicalMerchant = com.ledgerflow.core.common.util.MerchantNormalizer.normalize(rawMerchant)
                 val (suggestedCategory, suggestedSubcategory) = suggestUseCase(canonicalMerchant, smsBody)
 
@@ -64,19 +64,33 @@ class SmsWorker(
                 if (suggestedCategory == "Others") {
                     confidence -= 20
                 }
-                if (parsedTxn.paymentMethod == null) {
+                val rawPayment = candidate.paymentMode ?: candidate.accountNumber
+                if (rawPayment == null) {
                     confidence -= 15
                 }
                 confidence = confidence.coerceIn(10, 100)
 
+                val mappedPayment = when {
+                    rawPayment == null -> "Cash"
+                    rawPayment.equals("UPI", ignoreCase = true) -> "UPI"
+                    rawPayment.equals("Card", ignoreCase = true) || rawPayment.equals("Credit", ignoreCase = true) -> "Credit Card"
+                    rawPayment.equals("Wallet", ignoreCase = true) -> "Wallet"
+                    rawPayment.equals("ATM", ignoreCase = true) || rawPayment.equals("Cash Withdrawal", ignoreCase = true) -> "Cash"
+                    rawPayment.equals("IMPS", ignoreCase = true) || rawPayment.equals("NEFT", ignoreCase = true) || rawPayment.equals("RTGS", ignoreCase = true) || rawPayment.equals("Bank Transfer", ignoreCase = true) -> "Bank Transfer"
+                    rawPayment.equals("Net Banking", ignoreCase = true) -> "Net Banking"
+                    else -> "Others"
+                }
+
+                val amount = if (candidate.type == TransactionType.CREDIT) -candidate.amountCents else candidate.amountCents
+
                 val pending = PendingTransaction(
-                    amount = parsedTxn.amountCents,
+                    amount = amount,
                     merchant = canonicalMerchant,
                     category = suggestedCategory,
                     subcategory = suggestedSubcategory,
-                    paymentMethod = parsedTxn.paymentMethod,
-                    reference = parsedTxn.referenceNumber,
-                    timestamp = parsedTxn.timestamp,
+                    paymentMethod = mappedPayment,
+                    reference = candidate.referenceNumber,
+                    timestamp = candidate.timestamp,
                     confidence = confidence,
                     status = "PENDING",
                     rawMerchant = rawMerchant

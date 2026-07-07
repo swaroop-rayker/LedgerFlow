@@ -26,7 +26,8 @@ data class TransactionDetailUiState(
     val reference: String = "",
     val notes: String = "",
     val isSaved: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isCredit: Boolean = false
 )
 
 @HiltViewModel
@@ -78,6 +79,10 @@ class TransactionDetailViewModel @Inject constructor(
         }
     }
 
+    fun onDirectionChanged(isCredit: Boolean) {
+        _uiState.update { it.copy(isCredit = isCredit) }
+    }
+
     fun onAmountChanged(amount: Double) {
         _uiState.update { it.copy(amount = amount) }
     }
@@ -121,9 +126,10 @@ class TransactionDetailViewModel @Inject constructor(
             }
 
             val centsAmount = (state.amount * 100).toLong()
+            val finalAmount = if (state.isCredit) -centsAmount else centsAmount
 
             val transaction = Transaction(
-                amount = centsAmount,
+                amount = finalAmount,
                 merchant = state.merchant.trim(),
                 category = state.category,
                 subcategory = state.subcategory,

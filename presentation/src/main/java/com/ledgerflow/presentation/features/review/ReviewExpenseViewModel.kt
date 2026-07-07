@@ -27,7 +27,7 @@ data class ReviewExpenseUiState(
     val merchant: String = "",
     val category: String = "Others",
     val subcategory: String? = null,
-    val paymentMethod: String = "UPI / Bank",
+    val paymentMethod: String = "Cash",
     val reference: String = "",
     val notes: String = "",
     val confidence: Int = 100,
@@ -37,7 +37,8 @@ data class ReviewExpenseUiState(
     val isDiscarded: Boolean = false,
     val isPostponed: Boolean = false,
     val errorMessage: String? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val isCredit: Boolean = false
 )
 
 @HiltViewModel
@@ -105,18 +106,21 @@ class ReviewExpenseViewModel @Inject constructor(
                     val pending = res.data
                     if (pending != null) {
                         Timber.d("Loaded PendingTransaction details: %s", pending)
+                        val isCredit = pending.amount < 0
+                        val displayAmount = if (isCredit) -pending.amount else pending.amount
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
                                 pendingTransaction = pending,
-                                amount = pending.amount / 100.0,
+                                amount = displayAmount / 100.0,
                                 merchant = pending.merchant,
                                 category = pending.category,
                                 subcategory = pending.subcategory,
-                                paymentMethod = pending.paymentMethod ?: "UPI / Bank",
+                                paymentMethod = pending.paymentMethod ?: "Cash",
                                 reference = pending.reference ?: "",
                                 notes = pending.notes ?: "",
-                                confidence = pending.confidence
+                                confidence = pending.confidence,
+                                isCredit = isCredit
                             )
                         }
                         checkDuplicate()
@@ -163,6 +167,10 @@ class ReviewExpenseViewModel @Inject constructor(
         _uiState.update { it.copy(subcategory = subcategory) }
     }
 
+    fun onDirectionChanged(isCredit: Boolean) {
+        _uiState.update { it.copy(isCredit = isCredit) }
+    }
+
     fun onPaymentMethodChanged(paymentMethod: String) {
         _uiState.update { it.copy(paymentMethod = paymentMethod) }
     }
@@ -200,8 +208,11 @@ class ReviewExpenseViewModel @Inject constructor(
                 else -> {}
             }
 
+            val centsAmount = (state.amount * 100).toLong()
+            val finalAmount = if (state.isCredit) -centsAmount else centsAmount
+
             val approvedTxn = Transaction(
-                amount = (state.amount * 100).toLong(),
+                amount = finalAmount,
                 merchant = state.merchant.trim(),
                 category = state.category,
                 subcategory = state.subcategory,

@@ -61,6 +61,24 @@ class CategoryManagerViewModel @Inject constructor(
         }
     }
 
+    fun updateCategory(category: Category) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            when (val res = categoryRepository.saveCategory(category)) {
+                is Result.Success -> {
+                    _uiState.update { it.copy(isLoading = false, errorMessage = null) }
+                }
+                is Result.Failure.ValidationError -> {
+                    _uiState.update { it.copy(isLoading = false, errorMessage = res.message) }
+                }
+                is Result.Failure.DatabaseError -> {
+                    _uiState.update { it.copy(isLoading = false, errorMessage = "Database error: ${res.exception.localizedMessage}") }
+                }
+                else -> {}
+            }
+        }
+    }
+
     fun deleteCategory(categoryId: Long) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }

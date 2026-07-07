@@ -19,6 +19,8 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ledgerflow.core.ui.theme.LedgerFlowTheme
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import com.ledgerflow.presentation.navigation.LedgerFlowNavHost
 import com.ledgerflow.presentation.navigation.Screen
 import dagger.hilt.android.AndroidEntryPoint
@@ -133,6 +135,7 @@ class MainActivity : ComponentActivity() {
                                     
                                     NavigationBarItem(
                                         selected = isSelected,
+                                        alwaysShowLabel = false,
                                         onClick = {
                                             if (!isSelected) {
                                                 navController.navigate(screen) {
@@ -145,7 +148,18 @@ class MainActivity : ComponentActivity() {
                                             }
                                         },
                                         icon = { Icon(icon, contentDescription = label) },
-                                        label = { Text(label) }
+                                        label = {
+                                            Text(
+                                                text = label,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                overflow = TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontSize = 10.sp,
+                                                    letterSpacing = (-0.5).sp
+                                                )
+                                            )
+                                        }
                                     )
                                 }
                             }

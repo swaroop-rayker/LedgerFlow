@@ -1,34 +1,32 @@
 package com.ledgerflow.presentation.features.dashboard
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.animation.core.*
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,11 +57,20 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val scrollState = rememberLazyListState()
+    
+    val isFabExpanded by remember {
+        derivedStateOf {
+            scrollState.firstVisibleItemIndex == 0 && scrollState.firstVisibleItemScrollOffset < 100
+        }
+    }
 
-    val greeting = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
-        in 0..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        else -> "Good evening"
+    val greeting = remember {
+        when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
+            in 0..11 -> "Good morning"
+            in 12..16 -> "Good afternoon"
+            else -> "Good evening"
+        }
     }
 
     Scaffold(
@@ -72,10 +79,14 @@ fun DashboardScreen(
                 title = { 
                     Column {
                         Text(
-                            text = greeting,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = greeting.uppercase(),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "LedgerFlow", 
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
@@ -104,14 +115,31 @@ fun DashboardScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            FloatingActionButton(
                 onClick = onNavigateToAddTransaction,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(16.dp),
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Add Expense") }
-            )
+                shape = RoundedCornerShape(CornerRadius.l)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = Spacing.l),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Expense")
+                    AnimatedVisibility(
+                        visible = isFabExpanded,
+                        enter = fadeIn() + expandHorizontally(),
+                        exit = fadeOut() + shrinkHorizontally()
+                    ) {
+                        Text(
+                            text = "Add Expense",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(start = Spacing.s)
+                        )
+                    }
+                }
+            }
         }
     ) { innerPadding ->
         Box(
@@ -136,49 +164,54 @@ fun DashboardScreen(
                 is DashboardUiState.Success -> {
                     val summary = state.summary
 
+                    var showBudgetsSection by remember { mutableStateOf(true) }
+                    var showCategoriesSection by remember { mutableStateOf(true) }
+                    var showRecentSection by remember { mutableStateOf(true) }
+
                     LazyColumn(
+                        state = scrollState,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                            .padding(horizontal = Spacing.l),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.l)
                     ) {
-                        item { Spacer(modifier = Modifier.height(2.dp)) }
+                        item { Spacer(modifier = Modifier.height(Spacing.xxs)) }
 
-                        // 1. Premium Expense Hero Widget
+                        // 1. Premium Wallet-Style Card
                         item {
                             val cardBgGradient = Brush.verticalGradient(
                                 colors = listOf(
                                     MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
                                 )
                             )
                             
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp),
-                                shape = RoundedCornerShape(24.dp),
+                                    .height(210.dp),
+                                shape = RoundedCornerShape(CornerRadius.xl),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .background(cardBgGradient)
-                                        .padding(20.dp)
+                                        .padding(Spacing.xl)
                                 ) {
                                     Column(modifier = Modifier.fillMaxSize()) {
                                         Text(
-                                            text = "TOTAL EXPENSES",
+                                            text = "TOTAL SPENT THIS MONTH",
                                             style = MaterialTheme.typography.labelSmall.copy(
-                                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
                                                 fontWeight = FontWeight.Bold,
                                                 letterSpacing = 1.sp
                                             )
                                         )
-                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Spacer(modifier = Modifier.height(Spacing.xs))
                                         Text(
-                                            text = CurrencyUtils.formatCents(summary.totalExpenses),
+                                            text = CurrencyUtils.formatCents(summary.thisMonthSpending),
                                             style = FinancialTotal,
                                             color = MaterialTheme.colorScheme.onPrimary
                                         )
@@ -204,7 +237,7 @@ fun DashboardScreen(
                                             }
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text(
-                                                    text = "Week",
+                                                    text = "This Week",
                                                     style = MaterialTheme.typography.labelSmall.copy(
                                                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
                                                         fontWeight = FontWeight.Bold
@@ -218,14 +251,14 @@ fun DashboardScreen(
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
                                                 Text(
-                                                    text = "Month",
+                                                    text = "Total Logs",
                                                     style = MaterialTheme.typography.labelSmall.copy(
                                                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
                                                         fontWeight = FontWeight.Bold
                                                     )
                                                 )
                                                 Text(
-                                                    text = CurrencyUtils.formatCents(summary.thisMonthSpending),
+                                                    text = "${summary.recentExpenses.size} items",
                                                     style = FinancialAmount,
                                                     color = MaterialTheme.colorScheme.onPrimary
                                                 )
@@ -241,33 +274,34 @@ fun DashboardScreen(
                             item {
                                 Card(
                                     colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
                                     ),
-                                    shape = RoundedCornerShape(16.dp),
+                                    shape = RoundedCornerShape(CornerRadius.l),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.15f)),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { onNavigateToPendingList() }
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(16.dp),
+                                        modifier = Modifier.padding(Spacing.l),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
                                             text = "📝",
                                             style = MaterialTheme.typography.titleMedium
                                         )
-                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Spacer(modifier = Modifier.width(Spacing.s))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = "Pending Review Drafts",
+                                                text = "Drafts Pending Review",
                                                 fontWeight = FontWeight.Bold,
                                                 style = MaterialTheme.typography.titleSmall,
                                                 color = MaterialTheme.colorScheme.onErrorContainer
                                             )
                                             Text(
-                                                text = "You have ${summary.pendingCount} auto-detected expense drafts to approve or discard.",
+                                                text = "You have ${summary.pendingCount} auto-detected drafts.",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onErrorContainer
+                                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
                                             )
                                         }
                                         Text(
@@ -280,13 +314,13 @@ fun DashboardScreen(
                             }
                         }
 
-                        // 1.5. Premium Quick Actions Pill Row
+                        // 1.5. Quick Actions Pill Row
                         item {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.s)
                             ) {
                                 ActionChip(
                                     label = "Add Expense",
@@ -294,8 +328,8 @@ fun DashboardScreen(
                                     onClick = onNavigateToAddTransaction
                                 )
                                 ActionChip(
-                                    label = "Setup Budget",
-                                    icon = Icons.Default.Info,
+                                    label = "Budgets",
+                                    icon = Icons.Default.DateRange,
                                     onClick = onNavigateToBudgetSetup
                                 )
                                 ActionChip(
@@ -305,15 +339,44 @@ fun DashboardScreen(
                                 )
                                 ActionChip(
                                     label = "Analytics",
-                                    icon = Icons.Default.Settings,
+                                    icon = Icons.Default.Info,
                                     onClick = onNavigateToReports
                                 )
                                 if (summary.pendingCount > 0) {
                                     ActionChip(
                                         label = "Drafts (${summary.pendingCount})",
-                                        icon = Icons.Default.Star,
+                                        icon = Icons.Default.Edit,
                                         onClick = onNavigateToPendingList
                                     )
+                                }
+                            }
+                        }
+
+                        // 1.7. Trend Chart Widget
+                        item {
+                            BaseCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "SPENDING TREND",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 1.sp
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "Last 5 Logs",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(Spacing.m))
+                                    DashboardCanvasChart(summary.recentExpenses.take(5))
                                 }
                             }
                         }
@@ -322,39 +385,17 @@ fun DashboardScreen(
                         item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.s)
                             ) {
-                                // Largest Expense
+                                // Top Merchant Card
                                 Card(
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    shape = RoundedCornerShape(CornerRadius.l),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                                 ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text("Largest Expense", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = summary.largestExpense?.let { CurrencyUtils.formatCents(it.amount) } ?: "₹0.00",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                        )
-                                        Text(
-                                            text = summary.largestExpense?.merchant ?: "None",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-
-                                // Top Merchant
-                                Card(
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text("Top Merchant", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Column(modifier = Modifier.padding(Spacing.m)) {
+                                        Text("Top Payee", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = summary.topMerchant ?: "None",
@@ -363,20 +404,21 @@ fun DashboardScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            text = "Highest spent",
+                                            text = "Highest volume",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                         )
                                     }
                                 }
 
-                                // Top Category
+                                // Top Category Card
                                 Card(
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    shape = RoundedCornerShape(CornerRadius.l),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
                                 ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
+                                    Column(modifier = Modifier.padding(Spacing.m)) {
                                         Text("Top Category", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
@@ -388,196 +430,219 @@ fun DashboardScreen(
                                         Text(
                                             text = "Max allocation",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                         )
                                     }
                                 }
                             }
                         }
 
-                        // 2. Budgets Section
+                        // 2. Budgets Section (Collapsible)
                         if (summary.budgetProgress.isNotEmpty()) {
                             item {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showBudgetsSection = !showBudgetsSection }
+                                        .padding(vertical = Spacing.xs),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    GroupedSectionHeader(title = "Monthly Budgets", modifier = Modifier.weight(1f))
+                                    GroupedSectionHeader(title = "Budgets Gauges", modifier = Modifier.weight(1f))
+                                    Icon(
+                                        imageVector = if (showBudgetsSection) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            if (showBudgetsSection) {
+                                item {
+                                    BaseCard(modifier = Modifier.fillMaxWidth()) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.m)) {
+                                            summary.budgetProgress.forEach { progress ->
+                                                val fraction = if (progress.budget.amount > 0) {
+                                                    (progress.spentAmount.toFloat() / progress.budget.amount.toFloat()).coerceIn(0f, 1f)
+                                                } else {
+                                                    0f
+                                                }
+                                                val categoryColor = CuratedColors.getOrDefault(progress.category.color, MaterialTheme.colorScheme.primary)
+                                                
+                                                Column {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = "${progress.category.icon ?: "📁"} ${progress.category.name}", 
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            style = MaterialTheme.typography.bodyMedium
+                                                        )
+                                                        Text(
+                                                            text = "${CurrencyUtils.formatCents(progress.spentAmount)} of ${CurrencyUtils.formatCents(progress.budget.amount)}",
+                                                            style = NumericLabel,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(Spacing.xs))
+                                                    
+                                                    val progressColor = when {
+                                                        fraction > 0.9f -> MaterialTheme.colorScheme.error
+                                                        fraction > 0.75f -> WarningColor
+                                                        else -> categoryColor
+                                                    }
+
+                                                    LinearProgressIndicator(
+                                                        progress = { fraction },
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(8.dp)
+                                                            .clip(CircleShape),
+                                                        color = progressColor,
+                                                        trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. Top Categories Section (Collapsible)
+                        if (summary.topCategories.isNotEmpty()) {
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showCategoriesSection = !showCategoriesSection }
+                                        .padding(vertical = Spacing.xs),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    GroupedSectionHeader(title = "Top Allocations", modifier = Modifier.weight(1f))
+                                    Icon(
+                                        imageVector = if (showCategoriesSection) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            if (showCategoriesSection) {
+                                item {
+                                    BaseCard(modifier = Modifier.fillMaxWidth()) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.s)) {
+                                            summary.topCategories.forEach { categorySpending ->
+                                                val catIcon = categorySpending.icon ?: "📁"
+                                                val progress = if (summary.totalExpenses > 0) {
+                                                    categorySpending.amount.toFloat() / summary.totalExpenses.toFloat()
+                                                } else 0f
+                                                val displayColor = CuratedColors.getOrDefault(categorySpending.color, MaterialTheme.colorScheme.primary)
+                                                
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "$catIcon ${categorySpending.categoryName}",
+                                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                        modifier = Modifier.width(130.dp),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .height(8.dp)
+                                                            .clip(CircleShape)
+                                                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxHeight()
+                                                                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                                                .background(displayColor)
+                                                        )
+                                                    }
+                                                    
+                                                    Spacer(modifier = Modifier.width(Spacing.s))
+                                                    
+                                                    Text(
+                                                        text = CurrencyUtils.formatCents(categorySpending.amount),
+                                                        style = NumericLabel,
+                                                        modifier = Modifier.width(80.dp),
+                                                        textAlign = TextAlign.End
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. Recent Activity Section (Collapsible)
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showRecentSection = !showRecentSection }
+                                    .padding(vertical = Spacing.xs),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                GroupedSectionHeader(title = "Recent Activity", modifier = Modifier.weight(1f))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = "See All",
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier
-                                            .clickable { onNavigateToBudgetSetup() }
-                                            .padding(8.dp)
+                                            .clickable { onNavigateToTransactionList() }
+                                            .padding(end = Spacing.s)
+                                    )
+                                    Icon(
+                                        imageVector = if (showRecentSection) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
-
-                            item {
-                                BaseCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentPadding = 8.dp
-                                ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        summary.budgetProgress.forEach { progress ->
-                                            val fraction = if (progress.budget.amount > 0) {
-                                                (progress.spentAmount.toFloat() / progress.budget.amount.toFloat()).coerceIn(0f, 1f)
-                                            } else {
-                                                0f
-                                            }
-                                            
-                                            Column(modifier = Modifier.padding(8.dp)) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text = "${progress.category.icon ?: "📁"} ${progress.category.name}", 
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        style = MaterialTheme.typography.titleSmall
-                                                    )
-                                                    Text(
-                                                        text = "${CurrencyUtils.formatCents(progress.spentAmount)} of ${CurrencyUtils.formatCents(progress.budget.amount)}",
-                                                        style = NumericLabel,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                
-                                                val progressColor = when {
-                                                    fraction > 0.9f -> MaterialTheme.colorScheme.error
-                                                    fraction > 0.75f -> WarningColor
-                                                    else -> SuccessColor
-                                                }
-
-                                                LinearProgressIndicator(
-                                                    progress = { fraction },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(6.dp)
-                                                        .clip(RoundedCornerShape(3.dp)),
-                                                    color = progressColor,
-                                                    trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         }
 
-                        // 3. Top Categories Section
-                        if (summary.topCategories.isNotEmpty()) {
-                            item {
-                                GroupedSectionHeader(title = "Top Categories")
-                            }
-
-                            item {
-                                BaseCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentPadding = 12.dp
-                                ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        summary.topCategories.forEach { categorySpending ->
-                                            val catIcon = categorySpending.icon ?: "📁"
-                                            val progress = if (summary.totalExpenses > 0) {
-                                                categorySpending.amount.toFloat() / summary.totalExpenses.toFloat()
-                                            } else 0f
-                                            
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = "$catIcon ${categorySpending.categoryName}",
-                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                                    modifier = Modifier.width(120.dp),
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                
-                                                Box(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .height(8.dp)
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                                                ) {
-                                                    val colorHex = categorySpending.color ?: "#3B82F6"
-                                                    val displayColor = try { Color(android.graphics.Color.parseColor(colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary }
-                                                    
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .fillMaxHeight()
-                                                            .fillMaxWidth(progress.coerceIn(0f, 1f))
-                                                            .background(displayColor)
-                                                    )
-                                                }
-                                                
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                
-                                                Text(
-                                                    text = CurrencyUtils.formatCents(categorySpending.amount),
-                                                    style = NumericLabel,
-                                                    modifier = Modifier.width(80.dp),
-                                                    textAlign = TextAlign.End
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // 4. Recent Activity Section
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                GroupedSectionHeader(title = "Recent Expenses", modifier = Modifier.weight(1f))
-                                Text(
-                                    text = "View All",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier
-                                        .clickable { onNavigateToTransactionList() }
-                                        .padding(8.dp)
-                                )
-                            }
-                        }
-
-                        if (summary.recentExpenses.isEmpty()) {
-                            item {
-                                BaseCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 16.dp),
-                                        contentAlignment = Alignment.Center
+                        if (showRecentSection) {
+                            if (summary.recentExpenses.isEmpty()) {
+                                item {
+                                    BaseCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
                                     ) {
-                                        Text(
-                                            text = "No expenses logged yet.", 
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = Spacing.l),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "No expenses logged yet.", 
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                            )
+                                        }
                                     }
                                 }
-                            }
-                        } else {
-                            items(summary.recentExpenses) { txn ->
-                                ExpenseRow(transaction = txn, onClick = { onNavigateToTransactionDetail(txn.id) })
+                            } else {
+                                items(summary.recentExpenses.take(5), key = { it.id }) { txn ->
+                                    ExpenseRow(transaction = txn, onClick = { onNavigateToTransactionDetail(txn.id) })
+                                }
                             }
                         }
 
-                        item { Spacer(modifier = Modifier.height(24.dp)) }
+                        item { Spacer(modifier = Modifier.height(80.dp)) }
                     }
                 }
             }
@@ -603,9 +668,9 @@ private fun ExpenseRow(transaction: Transaction, onClick: () -> Unit) {
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(42.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.1f)),
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.08f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -615,7 +680,7 @@ private fun ExpenseRow(transaction: Transaction, onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.error
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(Spacing.s))
                 Column {
                     Text(
                         text = transaction.merchant, 
@@ -627,16 +692,27 @@ private fun ExpenseRow(transaction: Transaction, onClick: () -> Unit) {
                     Text(
                         text = "${transaction.category} • ${transaction.paymentMethod ?: "Expense"}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+            val isCredit = transaction.amount < 0
+            val amountText = if (isCredit) {
+                "+" + CurrencyUtils.formatCents(-transaction.amount)
+            } else {
+                "-" + CurrencyUtils.formatCents(transaction.amount)
+            }
+            val amountColor = if (isCredit) {
+                Color(0xFF2E7D32) // Forest Green for Inflow
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
             Text(
-                text = CurrencyUtils.formatCents(transaction.amount),
+                text = amountText,
                 style = FinancialAmount,
-                color = MaterialTheme.colorScheme.onSurface
+                color = amountColor
             )
         }
     }
@@ -650,29 +726,39 @@ private fun ActionChip(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
-        modifier = Modifier.height(40.dp)
+        shape = RoundedCornerShape(CornerRadius.m),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+        modifier = Modifier.height(44.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = Spacing.m, vertical = Spacing.s),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(18.dp)
             )
             Text(
                 text = label,
+                maxLines = 1,
+                softWrap = false,
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }
+}
+
+@Composable
+fun DashboardCanvasChart(recentExpenses: List<Transaction>) {
+    com.ledgerflow.presentation.components.PolishedSpendChart(
+        transactions = recentExpenses,
+        modifier = Modifier.fillMaxWidth().height(220.dp)
+    )
 }
 
 @Composable
@@ -707,37 +793,37 @@ fun DashboardSkeleton() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = Spacing.l),
+        verticalArrangement = Arrangement.spacedBy(Spacing.l)
     ) {
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(Spacing.xxs))
         
         // Hero card skeleton
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(200.dp)
-                .clip(RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(CornerRadius.xl))
                 .background(shimmerBrush)
         )
         
         // Row of stats skeleton
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.m)
         ) {
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(80.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(CornerRadius.l))
                     .background(shimmerBrush)
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(80.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(CornerRadius.l))
                     .background(shimmerBrush)
             )
         }
@@ -747,7 +833,7 @@ fun DashboardSkeleton() {
             modifier = Modifier
                 .width(120.dp)
                 .height(24.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(CornerRadius.s))
                 .background(shimmerBrush)
         )
         
@@ -757,7 +843,7 @@ fun DashboardSkeleton() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(72.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(CornerRadius.l))
                     .background(shimmerBrush)
             ) {}
         }

@@ -11,13 +11,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +30,7 @@ import com.ledgerflow.core.ui.components.EmptyStateView
 import com.ledgerflow.core.ui.components.PremiumButton
 import com.ledgerflow.core.ui.components.PremiumTextField
 import com.ledgerflow.domain.model.Category
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,12 +45,15 @@ fun CategoryManagerScreen(
 
     var showAddSheet by remember { mutableStateOf(false) }
     var showMergeSheet by remember { mutableStateOf(false) }
-    var categoryToDelete by remember { mutableStateOf<Category?>(null) }
+    var categoryToEdit by remember { mutableStateOf<Category?>(null) }
+    var selectedCategoryForActions by remember { mutableStateOf<Category?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
+    var categoryToDelete by remember { mutableStateOf<Category?>(null) }
     var expandedParentIds by remember { mutableStateOf(emptySet<Long>()) }
     var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
 
-    // main list filter
     val filteredCategories = remember(uiState.categories, searchQuery) {
         if (searchQuery.isBlank()) {
             uiState.categories
@@ -61,7 +62,6 @@ fun CategoryManagerScreen(
         }
     }
 
-    // Auto-expand parents if they contain matching children under search
     LaunchedEffect(searchQuery, uiState.categories) {
         if (searchQuery.isNotBlank()) {
             val matchingChildParentIds = uiState.categories
@@ -73,6 +73,7 @@ fun CategoryManagerScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -183,17 +184,18 @@ fun CategoryManagerScreen(
                             )
                             Surface(
                                 onClick = {
-                                    selectedCategoryId = if (isSelected) null else parent.id
                                     if (hasChildren) {
                                         expandedParentIds = if (isExpanded) {
                                             expandedParentIds - parent.id
                                         } else {
                                             expandedParentIds + parent.id
                                         }
+                                    } else {
+                                        selectedCategoryForActions = parent
                                     }
                                 },
                                 shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent,
+                                color = Color.Transparent,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp)
@@ -222,19 +224,15 @@ fun CategoryManagerScreen(
                                     Text(
                                         text = "${parent.icon ?: "📁"}  ${parent.name}",
                                         style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    if (isSelected) {
-                                        IconButton(
-                                            onClick = { categoryToDelete = parent },
-                                            colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                            modifier = Modifier.size(36.dp)
-                                        ) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(18.dp))
-                                        }
+                                    IconButton(
+                                        onClick = { selectedCategoryForActions = parent },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = "Actions", modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -242,11 +240,10 @@ fun CategoryManagerScreen(
 
                         if (isExpanded && hasChildren) {
                             items(children) { child ->
-                                val isChildSelected = selectedCategoryId == child.id
                                 Surface(
-                                    onClick = { selectedCategoryId = if (isChildSelected) null else child.id },
+                                    onClick = { selectedCategoryForActions = child },
                                     shape = RoundedCornerShape(8.dp),
-                                    color = if (isChildSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent,
+                                    color = Color.Transparent,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(48.dp)
@@ -269,20 +266,16 @@ fun CategoryManagerScreen(
                                         Text(
                                             text = "${child.icon ?: "📄"}  ${child.name}",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = if (isChildSelected) FontWeight.Bold else FontWeight.Normal,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f)
                                         )
-                                        if (isChildSelected) {
-                                            IconButton(
-                                                onClick = { categoryToDelete = child },
-                                                colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(18.dp))
-                                            }
+                                        IconButton(
+                                            onClick = { selectedCategoryForActions = child },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(Icons.Default.MoreVert, contentDescription = "Actions", modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -320,17 +313,50 @@ fun CategoryManagerScreen(
         )
     }
 
+    // Context Action Bottom Sheet
+    if (selectedCategoryForActions != null) {
+        val cat = selectedCategoryForActions!!
+        CategoryActionsBottomSheet(
+            category = cat,
+            categories = uiState.categories,
+            onEdit = { categoryToEdit = cat },
+            onPinToggle = { 
+                viewModel.updateCategory(cat.copy(isPinned = !cat.isPinned))
+            },
+            onMerge = { targetId -> 
+                viewModel.mergeCategories(cat.id, targetId)
+            },
+            onDelete = { categoryToDelete = cat },
+            onDismissRequest = { selectedCategoryForActions = null }
+        )
+    }
+
     // Dialog: Delete Confirmation
     if (categoryToDelete != null) {
+        val cat = categoryToDelete!!
         ConfirmationDialog(
             onDismissRequest = { categoryToDelete = null },
             onConfirm = {
-                categoryToDelete?.let { cat ->
-                    viewModel.deleteCategory(cat.id)
+                val name = cat.name
+                val parentId = cat.parentId
+                val color = cat.color
+                val icon = cat.icon
+                viewModel.deleteCategory(cat.id)
+                categoryToDelete = null
+                
+                scope.launch {
+                    val result = snackbarHostState.showSnackbar(
+                        message = "Category '$name' deleted",
+                        actionLabel = "Undo",
+                        duration = SnackbarDuration.Long
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.addCategory(name, parentId, color, icon)
+                    }
                 }
             },
             title = "Delete Category",
-            text = "Are you sure you want to delete '${categoryToDelete?.name}'? Note: Categories referenced by transactions cannot be deleted.",
+            text = "Are you sure you want to delete '${cat.name}'? Note: Categories referenced by transactions cannot be deleted.",
             confirmText = "Delete",
             isDestructive = true
         )
@@ -572,6 +598,107 @@ fun MergeCategoriesBottomSheet(
                 containerColor = MaterialTheme.colorScheme.error,
                 contentColor = MaterialTheme.colorScheme.onError,
                 modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryActionsBottomSheet(
+    category: Category,
+    categories: List<Category>,
+    onEdit: () -> Unit,
+    onPinToggle: () -> Unit,
+    onMerge: (Long) -> Unit,
+    onDelete: () -> Unit,
+    onDismissRequest: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "Manage ${category.name}",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 4.dp)
+            )
+
+            // Pin / Favorite
+            ListItem(
+                headlineContent = { Text(if (category.isPinned) "Remove from Favorites" else "Add to Favorites") },
+                leadingContent = { 
+                    Icon(
+                        imageVector = Icons.Default.Star, 
+                        contentDescription = null, 
+                        tint = if (category.isPinned) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    ) 
+                },
+                modifier = Modifier.clickable {
+                    onPinToggle()
+                    onDismissRequest()
+                }
+            )
+
+            // Edit
+            ListItem(
+                headlineContent = { Text("Edit Details & Style") },
+                leadingContent = { Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable {
+                    onEdit()
+                    onDismissRequest()
+                }
+            )
+
+            // Merge
+            var showMergeDropdown by remember { mutableStateOf(false) }
+            Box(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    headlineContent = { Text("Merge into Another") },
+                    leadingContent = { Icon(Icons.Default.Share, contentDescription = null) },
+                    modifier = Modifier.clickable { showMergeDropdown = true }
+                )
+                DropdownMenu(
+                    expanded = showMergeDropdown,
+                    onDismissRequest = { showMergeDropdown = false }
+                ) {
+                    val mergeTargets = categories.filter { it.id != category.id && (it.parentId == null) == (category.parentId == null) }
+                    if (mergeTargets.isEmpty()) {
+                        DropdownMenuItem(text = { Text("No merge targets available") }, onClick = {})
+                    } else {
+                        mergeTargets.forEach { target ->
+                            DropdownMenuItem(
+                                text = { Text("Merge with: ${target.name}") },
+                                onClick = {
+                                    onMerge(target.id)
+                                    showMergeDropdown = false
+                                    onDismissRequest()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+
+            // Delete
+            ListItem(
+                headlineContent = { Text("Delete Category", color = MaterialTheme.colorScheme.error) },
+                leadingContent = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                modifier = Modifier.clickable {
+                    onDelete()
+                    onDismissRequest()
+                }
             )
         }
     }
