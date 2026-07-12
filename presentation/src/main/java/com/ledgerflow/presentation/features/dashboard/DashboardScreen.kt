@@ -42,6 +42,9 @@ import com.ledgerflow.core.ui.theme.*
 import com.ledgerflow.domain.model.Category
 import com.ledgerflow.domain.model.Transaction
 import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -689,8 +692,10 @@ private fun ExpenseRow(transaction: Transaction, onClick: () -> Unit) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    val sdf = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+                    val dateStr = sdf.format(Date(transaction.timestamp))
                     Text(
-                        text = "${transaction.category} • ${transaction.paymentMethod ?: "Expense"}",
+                        text = "${transaction.category} • ${transaction.paymentMethod ?: "Expense"} • $dateStr",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         maxLines = 1,

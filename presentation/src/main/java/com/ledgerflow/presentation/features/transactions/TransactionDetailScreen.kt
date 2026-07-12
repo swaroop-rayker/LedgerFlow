@@ -37,6 +37,7 @@ import com.ledgerflow.core.ui.theme.CornerRadius
 fun TransactionDetailScreen(
     transactionId: Long,
     onNavigateBack: () -> Unit,
+    onNavigateToMultiCategorySplit: () -> Unit,
     viewModel: TransactionDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -111,6 +112,45 @@ fun TransactionDetailScreen(
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.padding(Spacing.l),
                             style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+
+            // Multi-Category Split Entry Point Banner
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
+                    shape = RoundedCornerShape(CornerRadius.m),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToMultiCategorySplit() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(Spacing.l),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Text("🥞", fontSize = 24.sp, modifier = Modifier.padding(end = Spacing.s))
+                            Column {
+                                Text(
+                                    text = "Multi-Category Split",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Split single total payment across multiple categories using manual entry or OCR.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = "Navigate to split",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }

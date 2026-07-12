@@ -38,6 +38,9 @@ import com.ledgerflow.core.ui.theme.CornerRadius
 import com.ledgerflow.domain.model.Transaction
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -284,21 +287,15 @@ fun TransactionListScreen(
                                                 }
                                             }
                                             true
-                                        } else if (value == SwipeToDismissBoxValue.StartToEnd) {
-                                            viewModel.duplicateTransaction(item)
-                                            scope.launch {
-                                                snackbarHostState.showSnackbar("Transaction duplicated")
-                                            }
-                                            false // Don't dismiss fully
                                         } else false
                                     }
                                 )
 
                                 SwipeToDismissBox(
                                     state = swipeDismissState,
+                                    enableDismissFromStartToEnd = false,
                                     backgroundContent = {
                                         val color = when (swipeDismissState.dismissDirection) {
-                                            SwipeToDismissBoxValue.StartToEnd -> Color(0xFF10B981) // Emerald Green for Duplicate
                                             SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.error // Red for Delete
                                             else -> Color.Transparent
                                         }
@@ -308,14 +305,10 @@ fun TransactionListScreen(
                                                 .clip(RoundedCornerShape(CornerRadius.m))
                                                 .background(color)
                                                 .padding(horizontal = Spacing.l),
-                                            contentAlignment = if (swipeDismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
-                                                Alignment.CenterStart
-                                            } else Alignment.CenterEnd
+                                            contentAlignment = Alignment.CenterEnd
                                         ) {
                                             Icon(
-                                                imageVector = if (swipeDismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
-                                                    Icons.Default.Add
-                                                } else Icons.Default.Delete,
+                                                imageVector = Icons.Default.Delete,
                                                 contentDescription = null,
                                                 tint = Color.White
                                             )
@@ -420,28 +413,32 @@ fun TransactionListScreen(
                                                             overflow = TextOverflow.Ellipsis
                                                         )
                                                         Spacer(modifier = Modifier.height(2.dp))
-                                                        Row(
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = "${item.category}${if (!item.subcategory.isNullOrBlank()) " • ${item.subcategory}" else ""}",
-                                                                style = MaterialTheme.typography.bodySmall,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                                            )
-                                                            val notesText = item.notes
-                                                            if (!notesText.isNullOrBlank()) {
-                                                                Text("•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                                                                Text(
-                                                                    text = notesText,
-                                                                    style = MaterialTheme.typography.bodySmall,
-                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                                    maxLines = 1,
-                                                                    overflow = TextOverflow.Ellipsis,
-                                                                    modifier = Modifier.weight(1f, fill = false)
-                                                                )
-                                                            }
-                                                        }
+                                                         Row(
+                                                              verticalAlignment = Alignment.CenterVertically,
+                                                              horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                          ) {
+                                                              val sdf = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+                                                              val dateStr = sdf.format(Date(item.timestamp))
+                                                              Text(
+                                                                  text = "${item.category}${if (!item.subcategory.isNullOrBlank()) " • ${item.subcategory}" else ""} • $dateStr",
+                                                                  style = MaterialTheme.typography.bodySmall,
+                                                                  color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                                                  maxLines = 1,
+                                                                  overflow = TextOverflow.Ellipsis
+                                                              )
+                                                              val notesText = item.notes
+                                                              if (!notesText.isNullOrBlank()) {
+                                                                  Text("•", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                                                  Text(
+                                                                      text = notesText,
+                                                                      style = MaterialTheme.typography.bodySmall,
+                                                                      color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                                      maxLines = 1,
+                                                                      overflow = TextOverflow.Ellipsis,
+                                                                      modifier = Modifier.weight(1f, fill = false)
+                                                                  )
+                                                              }
+                                                          }                                                    
                                                     }
                                                 }
                                                 

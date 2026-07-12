@@ -52,6 +52,9 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     
+    // Google ML Kit (Local OCR)
+    implementation(libs.google.mlkit.text.recognition)
+    
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

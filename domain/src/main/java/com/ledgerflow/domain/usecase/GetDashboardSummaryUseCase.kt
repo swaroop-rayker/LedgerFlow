@@ -79,7 +79,7 @@ class GetDashboardSummaryUseCase @Inject constructor(
                 }.sortedByDescending { it.amount }
 
                 // Recent and Largest Expenses
-                val recentExpenses = monthTransactions.take(5)
+                val recentExpenses = monthTransactions.sortedByDescending { it.timestamp }.take(5)
                 val largestExpenses = monthTransactions.sortedByDescending { it.amount }.take(5)
 
                 // Budget Progress

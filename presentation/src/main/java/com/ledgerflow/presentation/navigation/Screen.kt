@@ -41,4 +41,7 @@ sealed interface Screen {
 
     @Serializable
     data class ExpenseDetails(val transactionId: Long) : Screen
+
+    @Serializable
+    data object MultiCategorySplit : Screen
 }

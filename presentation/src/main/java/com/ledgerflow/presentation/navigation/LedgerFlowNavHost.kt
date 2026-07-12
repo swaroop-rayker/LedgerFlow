@@ -14,6 +14,7 @@ import com.ledgerflow.presentation.features.settings.SettingsScreen
 import com.ledgerflow.presentation.features.transactions.TransactionDetailScreen
 import com.ledgerflow.presentation.features.transactions.TransactionListScreen
 import com.ledgerflow.presentation.features.transactions.ExpenseDetailsScreen
+import com.ledgerflow.presentation.features.transactions.MultiCategorySplitScreen
 import com.ledgerflow.presentation.features.review.ReviewExpenseScreen
 import com.ledgerflow.presentation.features.review.PendingListScreen
 import com.ledgerflow.presentation.features.developer.DeveloperSettingsScreen
@@ -69,6 +70,12 @@ fun LedgerFlowNavHost(
             val route = backStackEntry.toRoute<Screen.TransactionDetail>()
             TransactionDetailScreen(
                 transactionId = route.id,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToMultiCategorySplit = { navController.navigate(Screen.MultiCategorySplit) }
+            )
+        }
+        composable<Screen.MultiCategorySplit> {
+            MultiCategorySplitScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
