@@ -1,6 +1,6 @@
 # LedgerFlow — Engineering Specification
 
-**Version:** 0.3.0
+**Version:** 0.4.0
 **Status:** Stack **LOCKED** — Native Kotlin + Jetpack Compose. Phase 0 unblocked.
 **Platform:** Android-only, native.
 **Owner:** Swar
@@ -372,7 +372,8 @@ All amounts: `Long` minor units. All timestamps: UTC epoch millis + a separate `
 -- ── Ledger core ────────────────────────────────────────────────────────────
 ledger_entry(
   id TEXT PK,                        -- UUIDv7 (time-sortable)
-  ledger TEXT NOT NULL,              -- 'DEBIT' | 'CREDIT'   ← partition key, NEVER null
+  ledger TEXT NOT NULL CHECK (ledger IN ('DEBIT','CREDIT')),
+                                     -- partition key (ADR-0002), NEVER null
   amount_minor INTEGER NOT NULL,     -- always positive, ALWAYS base currency (§5.8)
   currency TEXT NOT NULL,            -- ISO-4217, == app_meta.baseCurrency in v1
   original_amount_minor INTEGER NULL, -- foreign spend only
@@ -402,6 +403,18 @@ INDEX(ledger, local_date DESC)
 INDEX(ledger, category_id, local_date)
 INDEX(ledger, merchant_id, local_date)
 INDEX(source_ref_id)
+-- Every index LEADS with `ledger`, so the partition is real in the B-tree:
+-- a debit query never traverses credit rows. This is what makes the single
+-- -table choice perform identically to two separate tables (ADR-0002).
+
+-- ── Ledger isolation views (ADR-0002) ──────────────────────────────────────
+-- DAOs read from these, never from ledger_entry directly. The predicate is
+-- part of the object, so a read path cannot omit it. Writes still target the
+-- base table via ApproveTransactionUseCase alone (Law 1).
+VIEW debit_entries  AS SELECT * FROM ledger_entry
+                       WHERE ledger = 'DEBIT'  AND deleted_at IS NULL
+VIEW credit_entries AS SELECT * FROM ledger_entry
+                       WHERE ledger = 'CREDIT' AND deleted_at IS NULL
 
 line_item(
   id TEXT PK,
@@ -527,6 +540,17 @@ The result is a plain `@Index(unique = true)` that Room can declare, export, and
 
 **`daily_rollup` sentinels.** See the inline comment above: `''` means "this dimension does not apply", never `NULL`.
 
+**Ledger isolation is enforced at four levels (ADR-0002).** Law 2 is not left to reviewer attention:
+
+| Level | Mechanism | Catches |
+|---|---|---|
+| Schema | `CHECK (ledger IN ('DEBIT','CREDIT'))`, `NOT NULL` | null or garbage partition values |
+| Physical | every index leads with `ledger` | cross-ledger traversal; makes the partition real, not notional |
+| Read path | `debit_entries` / `credit_entries` `@DatabaseView`s; DAOs never `SELECT` from `ledger_entry` | any read query that forgets the filter — the predicate is part of the object |
+| Test | `LedgerIsolationTest` reflects over every DAO `@Query` and fails any statement naming `ledger_entry` without binding a ledger discriminator | raw queries, new DAOs, anything bypassing the views |
+
+When a migration alters `ledger_entry`, both views must be dropped and recreated **in the same migration**. Room's schema validation will fail otherwise, which is the desired failure mode.
+
 ### 6.2 Money type
 ```kotlin
 @JvmInline value class Money(val minor: Long) {
@@ -639,30 +663,23 @@ This is friction. It is intentional. It is the single control that makes "data p
 ### 7.6 Optional app lock
 Biometric / device-credential gate on app open (`BiometricPrompt`, `DEVICE_CREDENTIAL` fallback). **This gates UI access only — it never gates the DEK**, so biometric re-enrollment can never lock the user out of their data.
 
-### 7.7 Key rotation — pending ADR-0009
+### 7.7 Key rotation — **ADR-0009**
 
-The spec had no answer for "the recovery phrase was exposed, or the user wants a new one". It needs one: a recovery factor that can never be changed is a recovery factor that stays compromised forever.
+A recovery factor that can never be changed is a recovery factor that stays compromised forever. Two constraints shape the design:
 
-The constraint that shapes the design is that **`PRAGMA rekey` is not crash-atomic**. It rewrites every page in place; a process death or battery pull midway leaves a database encrypted with two different keys and no way to tell which pages are which. It must not be used as the rotation mechanism.
+- **`PRAGMA rekey` is not crash-atomic.** It rewrites every page in place; a process death midway leaves a database encrypted under two different keys with no way to tell which pages are which, and no rollback. It is never used.
+- **Rotating a *factor* is not the same as rotating the *DEK*.** The multi-wrap design in §7.2 exists precisely so these separate. Re-wrapping the DEK under new words touches one small file. Rewriting the database is only necessary if the DEK itself is suspect. Conflating them would make the common case needlessly slow and crash-sensitive.
 
-The intended shape, to be confirmed by ADR-0009:
+| Scenario | What changes | Cost |
+|---|---|---|
+| Words exposed / user wants new words | the **wrap** only — DEK unchanged | milliseconds |
+| DEK or database file compromised | every page of the database | full rebuild |
 
-```
-1. Generate the new factor (new 24 words) and confirm it through the same
-   word challenge as onboarding — no skip, per §7.4.
-2. Write a verified .lfbk snapshot under the OLD phrase.        ← rollback point
-3. Create a NEW database file keyed by the NEW DEK wrap, in databases/.
-4. Copy content across (attach + INSERT SELECT, or restore from the snapshot).
-5. Verify: row-level equality against the source, plus the canary.
-6. Atomically swap: rename new -> live, old -> .rotating.old.
-7. Re-wrap the DEK for KEK-A and KEK-B; rewrite the wrapped-blob files.
-8. Only after a successful reopen of the live DB: delete .rotating.old
-   and shred any backups readable by the old phrase, prompting first.
-```
+**1. Phrase rotation (common).** Generate a new mnemonic → word challenge (no skip, §7.4) → unwrap the DEK with the current factor → derive the new KEK-B → write `wrapped_dek_phrase.bin.tmp`, fsync, **verify by unwrapping back to the live DEK**, atomic rename → bump `app_meta.dekWrapVersion` → write and verify a fresh `.lfbk` under the new phrase. The database is never opened for writing.
 
-Every step before 6 is discardable; every step after 6 is idempotent on retry. A crash at any point leaves either the old database or the new one intact, never a hybrid. Rotation of the *phrase* implies re-encrypting existing `.lfbk` files or accepting that older backups still open with the old phrase — the ADR must state which, because a user who rotates after a leak will reasonably assume their old backups are dead.
+**2. DEK rotation (device compromise).** Verified `.lfbk` snapshot (rollback point) → new DEK, wrapped under KEK-A and KEK-B → `ATTACH` a sidecar file keyed by the new DEK and `SELECT sqlcipher_export()` → verify the sidecar (`integrity_check`, `foreign_key_check`, canary, per-table row equality) → atomic swap `live → .rotating.old`, `sidecar → live` → commit the wrapped blobs → reopen successfully, **then** delete `.rotating.old`. Everything before the swap is discardable; everything after is idempotent on retry. On next launch, a `.rotating.old` beside a healthy live database means cleanup was interrupted — resume; beside an unopenable one means the swap was interrupted — roll back.
 
-Open until ADR-0009 lands. Do not implement before then.
+**Rotation cannot un-leak existing backups.** `.lfbk` files are encrypted with a phrase-derived key (§5.9), so every copy already written remains decryptable with the **old** words, forever. Rotation protects future backups only. The flow therefore ends on an explicit screen listing where backups are known to have been written, instructing the user to destroy them. Rotating silently and letting the user assume otherwise would be worse than not offering rotation at all.
 
 ---
 
@@ -838,15 +855,15 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | ADR | Decision | Status |
 |---|---|---|
 | 0001 | Flutter vs Native Compose | ✅ **Accepted** — Native Kotlin + Compose (§2) |
-| 0002 | Separate tables vs partitioned single table for DEBIT/CREDIT ledgers | Open — write before P0 |
+| 0002 | Separate tables vs partitioned single table for DEBIT/CREDIT ledgers | ✅ **Accepted** — one `ledger_entry` partitioned by a mandatory `ledger` column, read through per-ledger `@DatabaseView`s (§6.1) |
 | 0003 | Key hierarchy & recovery model | ✅ **Accepted** — multi-wrap, phrase-primary (§7.2) |
 | 0004 | XLSX generation library on Android | Open — needed by P5 |
 | 0005 | Charting library | Open — needed by P3 |
 | 0006 | Rollup strategy: incremental triggers vs worker-driven rebuild | Open — needed by P3 |
 | 0007 | Ingest source strategy & Play distribution | ✅ **Accepted** — dual co-equal sources, flavour split at P1 (§3.1) |
 | 0008 | Currency model | ✅ **Accepted** — single base currency, manual FX capture (§5.8) |
-| 0009 | SQLCipher key rotation procedure | Open — **write before P0**; §7.7 |
-| 0010 | Crypto library selection (Argon2id, BIP-39 wordlist, HKDF, Tink vs hand-rolled AES-GCM) | Open — **write before P0** |
+| 0009 | SQLCipher key rotation procedure | ✅ **Accepted** — two procedures: phrase re-wrap vs DEK sidecar rebuild (§7.7) |
+| 0010 | Crypto library selection (Argon2id, BIP-39 wordlist, HKDF, Tink vs hand-rolled AES-GCM) | ✅ **Accepted** — platform primitives, hand-rolled RFC constructions, **zero new dependencies** |
 
 **ADR-0003 is not reopened.** The kickoff listed it as a blocking decision, but §14 has it Accepted and §7.2 specifies it. The *design* — multi-wrapped DEK, phrase-primary — is settled and stays settled. What was genuinely open is the **library and implementation** choice underneath it, which is a different decision with different trade-offs (binary size, native dependencies, maintenance status) and therefore gets its own record: **ADR-0010**. Amending an accepted ADR to smuggle in a new decision is how decision logs stop being trustworthy.
 

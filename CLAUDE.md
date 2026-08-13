@@ -125,7 +125,7 @@ Debug builds use `applicationIdSuffix ".debug"` and coexist with release install
 
 **Room**
 - Every DAO returns `Flow<T>` for reads, `suspend` for writes.
-- Every query touching `ledger_entry` takes a `ledger: LedgerType` parameter. No overload omits it.
+- **Reads go through the `debit_entries` / `credit_entries` views, never `ledger_entry` directly** (ADR-0002). Any query that does name the base table takes a `ledger: LedgerType` parameter — no overload omits it. `LedgerIsolationTest` fails the build otherwise.
 - `@Transaction` on any multi-write operation. Approval is a single transaction: insert entry + line items + update pending status + update rollups.
 - Schema JSONs in `core/database/schemas/` are **committed**. Changing one without a migration fails CI.
 
