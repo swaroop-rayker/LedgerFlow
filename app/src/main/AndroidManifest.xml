@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      allowBackup=false is mandatory (SPEC.md §7.5). Android Auto Backup copies
+      the encrypted database but cannot copy the Keystore key, so a restore onto
+      a new device yields an undecryptable database. LedgerFlow ships its own
+      phrase-derived .lfbk backup instead, which is device-independent.
+    -->
+    <application
+        android:name=".LedgerFlowApplication"
+        android:allowBackup="false" />
+
+</manifest>
