@@ -1,4 +1,8 @@
 pluginManagement {
+    // Convention plugins. An included build rather than buildSrc: buildSrc
+    // invalidates the whole build's configuration cache on any change to it.
+    includeBuild("build-logic")
+
     repositories {
         google {
             content {
@@ -41,3 +45,33 @@ dependencyResolutionManagement {
 rootProject.name = "LedgerFlow"
 
 include(":app")
+
+// :core:model depends on nothing and is pure Kotlin. :feature:* may depend on
+// :core:* only -- never on another feature (CLAUDE.md §3).
+include(
+    ":core:model",
+    ":core:common",
+    ":core:crypto",
+    ":core:database",
+    ":core:datastore",
+    ":core:domain",
+    ":core:data",
+    ":core:designsystem",
+    ":core:ui",
+    ":core:testing",
+)
+
+include(
+    ":feature:onboarding",
+    ":feature:dashboard",
+    ":feature:inbox",
+    ":feature:entry",
+    ":feature:ledger",
+    ":feature:analytics",
+    ":feature:budget",
+    ":feature:categories",
+    ":feature:ingest",
+    ":feature:ocr",
+    ":feature:export",
+    ":feature:settings",
+)

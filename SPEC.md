@@ -91,7 +91,8 @@ Revisiting this decision requires a new ADR superseding ADR-0001 and a full rewr
 | Setting | Value | Rationale |
 |---|---|---|
 | `minSdk` | **26** (Android 8.0) | Notification channels, `java.time` desugaring, Keystore AES-GCM maturity. Covers ~97% of devices. |
-| `targetSdk` / `compileSdk` | **36** (Android 16), bump to 37 on stable release | Edge-to-edge enforcement, new foreground-service rules. |
+| `compileSdk` | **37** (Android 17) | Forced, not chosen: AndroidX (Compose BOM 2026.08.00, lifecycle 2.11.0) is built against 37 and AGP refuses to compile against an older platform. |
+| `targetSdk` | **36** (Android 16), bump to 37 at P5 | Compiling against newer APIs is independent of opting in to new runtime behaviour. The `targetSdk` bump carries edge-to-edge enforcement and new foreground-service rules, so it gets its own testing pass rather than riding along with a dependency upgrade. |
 | Language | Kotlin (latest stable), JVM target 17, core library desugaring **on** | |
 | Build | Gradle Kotlin DSL + Version Catalog (`libs.versions.toml`) + Convention Plugins | Reproducible, no version drift. |
 | ABI | `arm64-v8a` primary, `armeabi-v7a` fallback, App Bundle splits | |

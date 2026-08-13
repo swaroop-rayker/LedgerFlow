@@ -16,8 +16,13 @@ ksp = "2.3.11"
 jvmTarget = "17"
 
 # SDK levels (SPEC.md §3)
+# compileSdk is 37 because AndroidX (Compose BOM 2026.08.00, lifecycle 2.11.0)
+# is now built against it and AGP refuses to compile against an older platform.
+# targetSdk deliberately stays at 36: compiling against newer APIs is separate
+# from opting in to new runtime behaviour, and the targetSdk bump to 37 is its
+# own piece of work with its own testing (SPEC.md §3, P5).
 minSdk = "26"
-compileSdk = "36"
+compileSdk = "37"
 targetSdk = "36"
 
 # AndroidX
@@ -43,6 +48,9 @@ hiltAndroidx = "1.4.0"
 coroutines = "1.11.0"
 serializationJson = "1.11.0"
 
+# Core library desugaring (SPEC.md §3)
+desugarJdkLibs = "2.1.5"
+
 # Static analysis
 detekt = "1.23.8"
 
@@ -55,6 +63,9 @@ truth = "1.4.5"
 benchmark = "1.4.1"
 
 [libraries]
+# ── Toolchain ─────────────────────────────────────────────────────────────
+android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+
 # ── AndroidX core ─────────────────────────────────────────────────────────
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
