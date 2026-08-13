@@ -1,46 +1,54 @@
-# Gradle files
-.gradle/
-build/
-/*/build/
-.kotlin/
-.ksp/
-
-# Android Studio / IntelliJ IDEA
-.idea/
-*.iml
-*.ipr
-*.iws
-.navigation/
-captures/
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/gradle.xml
-.idea/assetWizardSettings.xml
-.idea/dictionaries
-.idea/libraries
-
-# Local configuration file (contains local paths, SDK location, etc.)
+# ── NEVER COMMIT THESE ────────────────────────────────────────────────────
+# Committing signing material means rotating the key, which means you can
+# never update an already-installed app. The `guards` CI job greps for these.
+keystore.properties
 local.properties
-
-# Log files
-*.log
-log/
-logs/
-
-# Keystores & sensitive credentials
 *.jks
 *.keystore
-*.pepk
+*.p12
+google-services.json
+play-service-account.json
+secrets.properties
 
-# OS files
+# ── Build output ──────────────────────────────────────────────────────────
+build/
+*/build/
+.gradle/
+.kotlin/
+local.build/
+captures/
+out/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+mapping.txt
+*.hprof
+
+# ── Android Studio / IntelliJ ─────────────────────────────────────────────
+.idea/*
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+!.idea/icon.png
+*.iml
+.navigation/
+.externalNativeBuild/
+.cxx/
+
+# ── Roborazzi / screenshot scratch (goldens ARE committed, via LFS) ───────
+**/build/outputs/roborazzi/
+**/screenshots/diff/
+**/screenshots/actual/
+
+# ── Macrobenchmark output ─────────────────────────────────────────────────
+benchmark/build/outputs/
+
+# ── OS noise ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Diagnostic / testing reports
-/*/build/reports/
-/*/build/test-results/
-.cxx/
-.externalNativeBuild/
-captures/
-leakcanary/
-
+# ── Local scratch ─────────────────────────────────────────────────────────
+/scratch/
+*.log

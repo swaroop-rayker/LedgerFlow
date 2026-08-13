@@ -1,37 +1,304 @@
-name: LedgerFlow CI
+# LedgerFlow CI
+#
+# Design note: the `instrumented` job is where BUG4 (backup/restore) and BUG8
+# (schema migration) are actually caught. If it becomes flaky, FIX THE FLAKE.
+# Do not add `continue-on-error` — that turns the durability guarantees in
+# SPEC.md §7 into decoration.
+#
+# Pin action versions when you first run this; the majors below are a starting
+# point, not a guarantee.
+
+name: ci
 
 on:
-  push:
-    branches: [ main, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
+  JAVA_VERSION: '17'
 
 jobs:
-  build_and_test:
+  # ══════════════════════════════════════════════════════════════════════
+  # Cheap, fast failures first. No Gradle, no JDK — pure git hygiene.
+  # ══════════════════════════════════════════════════════════════════════
+  guards:
+    name: guards (secrets, case, schema, versionCode)
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history for tag + diff comparisons
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
+      - name: Fail if signing material was committed
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(keystore\.properties|local\.properties|\.jks$|\.keystore$|google-services\.json)'; then
+            echo "::error::Signing/secret material is tracked in git. Remove it and rotate."
+            exit 1
+          fi
+          echo "OK: no secret material tracked."
 
-    - name: Grant Execute Permission for Gradlew
-      run: chmod +x gradlew
+      - name: Fail on case-only filename collisions
+        # Windows is case-insensitive; Linux CI is not. Two files differing only
+        # by case resolve fine locally and explode on the runner.
+        run: |
+          set -euo pipefail
+          DUPES=$(git ls-files | tr 'A-Z' 'a-z' | sort | uniq -d || true)
+          if [ -n "$DUPES" ]; then
+            echo "::error::Case-only filename collisions (breaks Linux CI):"
+            echo "$DUPES"
+            exit 1
+          fi
+          echo "OK: no case collisions."
 
-    - name: Check Code Style (Ktlint)
-      run: ./gradlew ktlintCheck --continue
+      - name: Fail on CRLF in source
+        run: |
+          set -euo pipefail
+          if git grep -Il $'\r$' -- '*.kt' '*.kts' '*.xml' '*.yml' >/dev/null 2>&1; then
+            echo "::error::CRLF line endings in source. Check .gitattributes and core.autocrlf."
+            git grep -Il $'\r$' -- '*.kt' '*.kts' '*.xml' '*.yml'
+            exit 1
+          fi
+          echo "OK: LF endings."
 
-    - name: Run Static Analysis (Detekt)
-      run: ./gradlew detekt
+      - name: Room schema immutability guard (BUG8)
+        run: bash scripts/guard-schema.sh
 
-    - name: Run Android Lint Checks
-      run: ./gradlew lintDebug
+      - name: versionCode monotonicity guard (BUG3)
+        run: bash scripts/guard-version.sh
 
-    - name: Run Unit Tests
-      run: ./gradlew testDebugUnitTest
+  # ══════════════════════════════════════════════════════════════════════
+  static-analysis:
+    name: static analysis
+    runs-on: ubuntu-latest
+    needs: guards
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Banned-API check
+        # These map 1:1 to the Seven Laws in CLAUDE.md §2.
+        run: |
+          set -euo pipefail
+          FAIL=0
+          # check <message> <pattern> <pathspec>...
+          #
+          # The message comes FIRST so that an arbitrary number of pathspecs can
+          # follow. The previous signature was (pattern, glob, message), which
+          # silently dropped every pathspec after the second: the cacheDir check
+          # passed four arguments, so ':!*test*' was never applied as an
+          # exclusion and was printed as the error message instead.
+          #
+          # Pathspecs are quoted ("$@") — unquoted $2 was subject to word
+          # splitting and globbing by the runner's shell before git ever saw it.
+          #
+          # Patterns use POSIX character classes ([[:space:]]), not PCRE \s,
+          # because `git grep -E` is POSIX ERE and does not portably honour \s.
+          check() {
+            local msg="$1"; shift
+            local pattern="$1"; shift
+            if git grep -nI -E "$pattern" -- "$@" >/dev/null 2>&1; then
+              echo "::error::$msg"
+              git grep -nI -E "$pattern" -- "$@"
+              FAIL=1
+            fi
+          }
+          # Docs, workflows and guard scripts are excluded from the identifier
+          # bans: they must be able to NAME a banned API in order to ban it.
+          # Matching the call form `…(` keeps prose and comments clean too.
+          check 'Destructive migration is banned outside dev source sets (Law 4).' \
+                'fallbackToDestructiveMigration[A-Za-z]*[[:space:]]*\(' \
+                ':!*/dev/*' ':!.github/*' ':!scripts/*' ':!docs/*' ':!*.md'
+          check 'cacheDir is OS-clearable. Persistent data belongs in filesDir (Law 5, BUG2).' \
+                '\.cacheDir' \
+                ':!*imageloading*' ':!*test*' ':!*Test*' \
+                ':!.github/*' ':!scripts/*' ':!docs/*' ':!*.md'
+          check 'Money must be Long minor units (Law 3).' \
+                '(Float|Double)[[:space:]]*(=|\)|,).*(amount|price|total|balance)' \
+                'core/model'
+          check 'No INTERNET permission in release (Law 6).' \
+                '<uses-permission[^>]*android\.permission\.INTERNET' \
+                'app/src/release'
+          exit $FAIL
+
+      - run: ./gradlew detekt lintSmsFullDebug lintPlaySafeDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: lint-reports, path: '**/build/reports/**' }
+
+  # ══════════════════════════════════════════════════════════════════════
+  unit-test:
+    name: unit tests (${{ matrix.flavour }})
+    runs-on: ubuntu-latest
+    needs: guards
+    strategy:
+      fail-fast: false
+      matrix:
+        flavour: [SmsFull, PlaySafe]   # BOTH flavours ship. Both get tested.
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: true }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: ./gradlew test${{ matrix.flavour }}DebugUnitTest --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: unit-test-results-${{ matrix.flavour }}
+          path: '**/build/reports/tests/**'
+
+  # ══════════════════════════════════════════════════════════════════════
+  # BUG5 — UI overlap/misalignment. JVM-only, no emulator, fast.
+  # ══════════════════════════════════════════════════════════════════════
+  screenshot:
+    name: screenshot diffs (BUG5)
+    runs-on: ubuntu-latest
+    needs: guards
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: true }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: ./gradlew verifyRoborazziSmsFullDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: screenshot-diffs
+          path: '**/build/outputs/roborazzi/**'
+
+  # ══════════════════════════════════════════════════════════════════════
+  # THE JOB THAT MATTERS. Migration chain + backup round-trip + draft
+  # survival. Never make this non-blocking.
+  # ══════════════════════════════════════════════════════════════════════
+  instrumented:
+    name: instrumented (API ${{ matrix.api }})
+    runs-on: ubuntu-latest
+    needs: [static-analysis, unit-test]
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]   # minSdk floor and current target. Nightly adds 34.
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: true }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.api }}
+
+      - name: Instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: ${{ matrix.api >= 30 && 'google_apis' || 'default' }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            ./gradlew :core:database:connectedSmsFullDebugAndroidTest --stacktrace
+            ./gradlew :core:crypto:connectedSmsFullDebugAndroidTest   --stacktrace
+            ./gradlew :feature:ingest:connectedSmsFullDebugAndroidTest --stacktrace
+            ./gradlew connectedSmsFullDebugAndroidTest --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: instrumented-reports-api${{ matrix.api }}
+          path: '**/build/reports/androidTests/**'
+
+  # ══════════════════════════════════════════════════════════════════════
+  compose-stability:
+    name: compose stability report
+    runs-on: ubuntu-latest
+    needs: guards
+    continue-on-error: true   # advisory: informs review, doesn't block
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew assembleSmsFullRelease -Pledgerflow.enableComposeCompilerReports=true
+      - uses: actions/upload-artifact@v4
+        with: { name: compose-reports, path: '**/build/compose_compiler/**' }
+
+  # ══════════════════════════════════════════════════════════════════════
+  assemble:
+    name: assemble + size budget
+    runs-on: ubuntu-latest
+    needs: [static-analysis, unit-test]
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: true }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: ./gradlew assembleSmsFullDebug assemblePlaySafeDebug --stacktrace
+
+      - name: APK size budget (SPEC.md §11 — 15 MB)
+        run: |
+          set -euo pipefail
+          LIMIT=$((15 * 1024 * 1024))
+          for f in $(find . -path '*/outputs/apk/*/debug/*.apk'); do
+            SIZE=$(stat -c%s "$f")
+            echo "$f -> $((SIZE / 1024)) KiB"
+            if [ "$SIZE" -gt "$LIMIT" ]; then
+              echo "::error::$f exceeds the 15 MB budget."
+              exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-apks
+          path: '**/outputs/apk/**/*.apk'
+          retention-days: 14
+
+  # ══════════════════════════════════════════════════════════════════════
+  # Single required status check for branch protection.
+  # ══════════════════════════════════════════════════════════════════════
+  pr-gate:
+    name: pr-gate
+    runs-on: ubuntu-latest
+    needs: [guards, static-analysis, unit-test, screenshot, instrumented, assemble]
+    if: always()
+    steps:
+      - name: Verify all gates passed
+        run: |
+          if echo '${{ join(needs.*.result, ' ') }}' | grep -qE 'failure|cancelled'; then
+            echo "::error::One or more required gates failed."
+            exit 1
+          fi
+          echo "All gates green."

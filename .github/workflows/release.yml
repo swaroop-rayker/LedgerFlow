@@ -1,0 +1,131 @@
+# LedgerFlow release
+#
+# Triggered by: git tag v1.4.0 && git push origin v1.4.0
+#
+# CRITICAL: RELEASE_KEYSTORE_BASE64 is the only thing that lets you ship an
+# update to an already-installed app. If it is lost, every existing install is
+# orphaned — users must uninstall (destroying local data) to move to a new key.
+# Keep an offline copy outside GitHub. This is BUG3's root cause.
+
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  JAVA_VERSION: '17'
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+
+      # ── Guards run again against the tagged commit, not just the PR ──
+      - name: Re-run guards against tag
+        run: |
+          bash scripts/guard-schema.sh
+          bash scripts/guard-version.sh
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 is not set. Cannot produce a shippable build."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          cat > keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Build signed artifacts (both flavours)
+        run: |
+          ./gradlew \
+            assembleSmsFullRelease \
+            bundlePlaySafeRelease \
+            assemblePlaySafeRelease \
+            --stacktrace
+
+      - name: Verify signature
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          for f in $(find . -path '*/release/*.apk'); do
+            "$APKSIGNER" verify --verbose "$f"
+          done
+
+      # ── The release build must survive the same durability gates ──
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - name: Durability suite against RELEASE build
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            ./gradlew :core:database:connectedSmsFullReleaseAndroidTest --stacktrace
+            ./gradlew :core:crypto:connectedSmsFullReleaseAndroidTest   --stacktrace
+
+      - name: Collect artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find . -path '*/release/*.apk' -exec cp {} dist/ \;
+          find . -path '*/release/*.aab' -exec cp {} dist/ \;
+          # mapping.txt is MANDATORY — without it, R8-obfuscated crash reports
+          # from the diagnostics screen (BUG7) are unreadable forever.
+          find . -name mapping.txt -path '*release*' | while read -r m; do
+            MODULE=$(echo "$m" | cut -d/ -f2)
+            cp "$m" "dist/mapping-${MODULE}-${GITHUB_REF_NAME}.txt"
+          done
+          find . -name 'baseline-prof.txt' -exec cp {} dist/ \; || true
+          ls -la dist/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true   # from Conventional Commits
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
+
+      # ── Runs even on failure. Signing material never persists. ──
+      - name: Scrub signing material
+        if: always()
+        run: |
+          rm -f keystore.properties "$RUNNER_TEMP/release.jks" || true
+          echo "Signing material scrubbed."

@@ -1,0 +1,47 @@
+# LedgerFlow — Windows 11 dev box, Linux CI runners.
+# Without this file, CRLF endings and a lost exec bit will break CI in ways
+# that look like parser bugs. Set `git config --global core.autocrlf false`
+# on the dev box and let this file own line endings.
+
+* text=auto eol=lf
+
+# Windows-native scripts must keep CRLF or they won't run
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
+
+# Gradle wrapper: LF + executable bit (see `git update-index --chmod=+x gradlew`)
+gradlew         text eol=lf
+gradlew.bat     text eol=crlf
+gradle/wrapper/gradle-wrapper.jar binary
+
+# ── Golden test fixtures: byte-exact, never normalized ────────────────────
+# Parser regexes are anchor-sensitive. A CRLF conversion here produces
+# tests that pass on Windows and fail on CI (or worse, vice versa).
+testdata/**            -text
+**/testdata/**         -text
+
+# ── Binary assets ─────────────────────────────────────────────────────────
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.webp          binary
+*.pdf           binary
+*.ttf           binary
+*.otf           binary
+*.jks           binary
+*.keystore      binary
+*.apk           binary
+*.aab           binary
+
+# ── Git LFS: golden images bloat the repo and produce useless diffs ───────
+testdata/receipts/**   filter=lfs diff=lfs merge=lfs -text
+**/screenshots/**      filter=lfs diff=lfs merge=lfs -text
+
+# ── Diff hints ────────────────────────────────────────────────────────────
+*.kt            diff=java
+*.kts           diff=java
+*.md            diff=markdown
+
+# ── Committed Room schemas: immutable once shipped. Never auto-merge. ─────
+core/database/schemas/**/*.json  merge=binary
