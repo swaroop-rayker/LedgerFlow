@@ -47,6 +47,10 @@ internal fun Project.configureAndroidLibrary(extension: LibraryExtension) = with
 
     defaultConfig {
         minSdk = libs.int("minSdk")
+        // Set centrally so every module can carry instrumented tests. The
+        // migration chain and the backup round-trip -- the two blocking gates
+        // in SPEC.md §15.4 -- are instrumented, so this is not optional.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {

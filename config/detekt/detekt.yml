@@ -102,9 +102,19 @@ style:
     ignoreAnnotated: ['Composable', 'Preview']
     ignorePropertyDeclaration: true
     ignoreCompanionObjectPropertyDeclaration: true
+    # Enum constructor arguments are wire values and ordinals -- inherently
+    # literal. Naming a constant to pass to an enum constructor just moves the
+    # number one line away.
+    ignoreEnums: true
   ReturnCount:
     active: true
     max: 3
+    # Guard clauses do not count. Parsers and unlock flows legitimately have
+    # one early return per distinct failure mode, and each of ours maps to a
+    # specific UnlockFailure the Recovery screen acts on. Forcing them into a
+    # single exit point would produce nested code that is harder to audit --
+    # the opposite of what this rule is for.
+    excludeGuardClauses: true
   ForbiddenComment:
     # TODOs are allowed; an unexplained one is not. Every TODO carries a
     # reference so the corpus of deferred work stays auditable.
