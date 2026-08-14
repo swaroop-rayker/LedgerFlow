@@ -1,0 +1,113 @@
+# LedgerFlow detekt ruleset.
+#
+# buildUponDefaultConfig = true, so this file carries only deviations from
+# detekt's defaults. Rules here map to the Seven Laws and the conventions in
+# CLAUDE.md §5 -- each override exists for a stated reason, not for taste.
+#
+# ── KNOWN LIMITATION: type resolution is not available ─────────────────────
+# Several rules below need type resolution to fire. detekt 1.23.8 creates its
+# type-resolving Android variant tasks only when it detects the Kotlin Android
+# plugin -- which AGP 9 forbids us from applying, because AGP provides Kotlin
+# itself. The plain `detekt` task therefore runs WITHOUT type resolution and
+# silently skips those rules. Verified empirically: a `value!!.length` probe
+# passed `:app:detekt` cleanly.
+#
+# Affected (kept active so they start working the moment detekt supports AGP 9,
+# but understood to be inert today):
+#     UnsafeCallOnNullableType, UnsafeCast, IgnoredReturnValue,
+#     ImplicitDefaultLocale, InjectDispatcher, SuspendFunWithFlowReturnType
+#
+# The `!!` and cacheDir bans are enforced meanwhile by the `bannedApiCheck`
+# Gradle task (root build.gradle.kts) and the banned-API step in ci.yml, both
+# of which are regex-based and do not need type resolution. Crude, but they
+# actually run. Revisit when detekt supports AGP 9.
+
+build:
+  # Any finding fails the build. A warning nobody has to act on is a warning
+  # that accumulates until the report is meaningless.
+  maxIssues: 0
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+complexity:
+  LongMethod:
+    active: true
+    threshold: 60
+  LongParameterList:
+    active: true
+    functionThreshold: 7
+    constructorThreshold: 10
+    # UiState/Event data classes and Room entities legitimately carry many
+    # properties; splitting them would be worse than the smell.
+    ignoreAnnotated: ['Composable', 'Entity', 'Immutable']
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 20
+    thresholdInClasses: 20
+    ignoreAnnotatedFunctions: ['Composable']
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+  SwallowedException:
+    active: true
+  ThrowingExceptionsWithoutMessageOrCause:
+    active: true
+
+potential-bugs:
+  # CLAUDE.md §2 Law 7 / §5: `!!` is a build error outside tests. Use
+  # requireNotNull(x) { "why" } or handle the null. A NullPointerException in a
+  # BroadcastReceiver or Worker is BUG7.
+  UnsafeCallOnNullableType:
+    active: true
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      - '**/*Test.kt'
+  UnsafeCast:
+    active: true
+  IgnoredReturnValue:
+    active: true
+  ImplicitDefaultLocale:
+    active: true
+
+coroutines:
+  # No GlobalScope -- structured concurrency only (CLAUDE.md §5).
+  GlobalCoroutineUsage:
+    active: true
+  # Dispatchers are injected (@IoDispatcher), never hardcoded, or the code is
+  # untestable.
+  InjectDispatcher:
+    active: true
+  SuspendFunWithFlowReturnType:
+    active: true
+
+naming:
+  FunctionNaming:
+    active: true
+    # @Composable functions are PascalCase by convention.
+    ignoreAnnotated: ['Composable']
+  TopLevelPropertyNaming:
+    active: true
+
+style:
+  MagicNumber:
+    active: true
+    ignoreAnnotated: ['Composable', 'Preview']
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+  ReturnCount:
+    active: true
+    max: 3
+  ForbiddenComment:
+    # TODOs are allowed; an unexplained one is not. Every TODO carries a
+    # reference so the corpus of deferred work stays auditable.
+    active: false
+  UnusedPrivateMember:
+    active: true
+  MaxLineLength:
+    active: true
+    maxLineLength: 120
+    excludeCommentStatements: true

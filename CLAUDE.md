@@ -89,6 +89,7 @@ LedgerFlow/
 .\gradlew verifyRoborazziDebug            # screenshot diff check
 .\gradlew recordRoborazziDebug            # re-record golden screenshots (review diffs!)
 .\gradlew detekt lintSmsFullDebug         # static analysis
+.\gradlew bannedApiCheck                  # `!!` / cacheDir bans (Laws 5 & 7)
 .\gradlew :benchmark:connectedBenchmarkAndroidTest  # macrobenchmark
 .\gradlew generateBaselineProfile         # regenerate shipped baseline profile
 .\gradlew assemblePlaySafeDebug           # Play-eligible flavour (no RECEIVE_SMS)

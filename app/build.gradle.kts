@@ -4,6 +4,13 @@ plugins {
     // AGP 9+ has built-in Kotlin support. Applying org.jetbrains.kotlin.android
     // alongside it is an error: https://kotl.in/gradle/agp-built-in-kotlin
     alias(libs.plugins.android.application)
+    alias(libs.plugins.detekt)
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    parallel = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
 }
 
 val versionProps = Properties().apply {

@@ -1,6 +1,7 @@
 package com.ledgerflow.buildlogic
 
 import com.android.build.api.dsl.LibraryExtension
+import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalog
@@ -52,6 +53,10 @@ internal fun Project.configureAndroidLibrary(extension: LibraryExtension) = with
         val java = JavaVersion.toVersion(libs.int("jvmTarget"))
         sourceCompatibility = java
         targetCompatibility = java
+        // SPEC.md §3. Not strictly required for java.time at minSdk 26, but it
+        // also backports the newer collection/stream APIs, and turning it on
+        // later is a bigger change than having it on from the start.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     flavorDimensions += FLAVOR_DIMENSION
@@ -62,6 +67,14 @@ internal fun Project.configureAndroidLibrary(extension: LibraryExtension) = with
     }
 
     configureJvmToolchain()
+
+    // Explicit API mode on :core:* only (CLAUDE.md §5). Public API in a core
+    // module is consumed by other modules, so implicit visibility and inferred
+    // public return types are how a module's surface grows by accident.
+    // Features are leaves -- the ceremony would not buy anything there.
+    if (path.startsWith(":core")) {
+        configureExplicitApi()
+    }
 }
 
 /**
@@ -77,9 +90,39 @@ internal fun Project.configureAndroidLibrary(extension: LibraryExtension) = with
  */
 private fun Project.configureJvmToolchain() {
     val target = libs.int("jvmTarget")
-    val kotlinExtension = (this as ExtensionAware).extensions.findByName("kotlin")
-        ?: error("No `kotlin` extension on $path -- did the Android plugin apply?")
+    val kotlinExtension = kotlinExtension()
     kotlinExtension.javaClass
         .getMethod("jvmToolchain", Int::class.javaPrimitiveType)
         .invoke(kotlinExtension, target)
+}
+
+/** Strict explicit API mode. Reflective for the same reason as the toolchain. */
+private fun Project.configureExplicitApi() {
+    val kotlinExtension = kotlinExtension()
+    kotlinExtension.javaClass
+        .getMethod("explicitApi")
+        .invoke(kotlinExtension)
+}
+
+private fun Project.kotlinExtension(): Any =
+    (this as ExtensionAware).extensions.findByName("kotlin")
+        ?: error("No `kotlin` extension on $path -- did the Android plugin apply?")
+
+/**
+ * Detekt, configured from the single root ruleset.
+ *
+ * Typed access is safe here, unlike the Kotlin extension above: DetektExtension
+ * comes from the detekt plugin this build declares, so the compile-time and
+ * runtime types are the same artifact.
+ */
+internal fun Project.configureDetekt() {
+    pluginManager.apply("io.gitlab.arturbosch.detekt")
+    extensions.configure(DetektExtension::class.java) {
+        buildUponDefaultConfig = true
+        parallel = true
+        val ruleset = rootProject.file("config/detekt/detekt.yml")
+        if (ruleset.exists()) {
+            config.setFrom(ruleset)
+        }
+    }
 }

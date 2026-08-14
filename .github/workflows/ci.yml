@@ -126,6 +126,15 @@ jobs:
           check 'Money must be Long minor units (Law 3).' \
                 '(Float|Double)[[:space:]]*(=|\)|,).*(amount|price|total|balance)' \
                 'core/model'
+          # `!!` is a build error outside tests (CLAUDE.md §5, BUG7). Enforced
+          # by grep rather than by detekt: detekt's UnsafeCallOnNullableType
+          # needs type resolution, and detekt 1.23.8 only creates its
+          # type-resolving Android tasks when the Kotlin Android plugin is
+          # applied -- which AGP 9 forbids. Mirrors the `bannedApiCheck` Gradle
+          # task so local and CI failures match.
+          check 'Non-null assertion `!!` is banned outside tests (Law 7, BUG7). Use requireNotNull(x) { "why" }.' \
+                '[[:alnum:]_)\]]!!' \
+                '*.kt' ':!*/test/*' ':!*/androidTest/*' ':!*Test.kt'
           check 'No INTERNET permission in release (Law 6).' \
                 '<uses-permission[^>]*android\.permission\.INTERNET' \
                 'app/src/release'

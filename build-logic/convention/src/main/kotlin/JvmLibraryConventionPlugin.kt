@@ -1,8 +1,10 @@
+import com.ledgerflow.buildlogic.configureDetekt
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.kotlin.dsl.configure
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
 /**
  * Pure-Kotlin JVM module. Used by `:core:model`, which by the dependency rule
@@ -18,5 +20,13 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
                 languageVersion.set(JavaLanguageVersion.of(17))
             }
         }
+
+        // Typed here, unlike the Android modules: this module applies the
+        // Kotlin Gradle Plugin directly, so the extension really is KGP's type.
+        extensions.configure<KotlinJvmProjectExtension> {
+            explicitApi()
+        }
+
+        configureDetekt()
     }
 }

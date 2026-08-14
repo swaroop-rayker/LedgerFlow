@@ -75,3 +75,7 @@ include(
     ":feature:export",
     ":feature:settings",
 )
+
+// Macrobenchmark + baseline profile generation. Requires a physical device, so
+// it is exercised by the self-hosted CI runner rather than the PR gate.
+include(":benchmark")
