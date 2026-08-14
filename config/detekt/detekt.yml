@@ -46,6 +46,10 @@ complexity:
     active: true
     thresholdInFiles: 20
     thresholdInClasses: 20
+    # Protocol implementations (BIP-39, the .lfbk container) are naturally a
+    # cohesive object with many small private helpers. Splitting them to satisfy
+    # a counter would scatter one specification across several files.
+    thresholdInObjects: 20
     ignoreAnnotatedFunctions: ['Composable']
 
 exceptions:

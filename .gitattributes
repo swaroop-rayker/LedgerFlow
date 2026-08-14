@@ -21,6 +21,11 @@ gradle/wrapper/gradle-wrapper.jar binary
 testdata/**            -text
 **/testdata/**         -text
 
+# The BIP-39 wordlist is a golden fixture in the strictest sense: its bytes
+# feed the key derivation, and a line-ending renormalisation would change its
+# SHA-256 and (worse) could change derived keys. Treat it as binary.
+core/crypto/src/main/resources/bip39/** -text
+
 # ── Binary assets ─────────────────────────────────────────────────────────
 *.png           binary
 *.jpg           binary
