@@ -52,3 +52,8 @@ desktop.ini
 # ── Local scratch ─────────────────────────────────────────────────────────
 /scratch/
 *.log
+
+# Generated: Room schemas are synced here so MigrationTestHelper can read them
+# from the test APK's assets. The committed source of truth is
+# core/database/schemas/ (see core/database/build.gradle.kts).
+core/database/src/androidTest/assets/
