@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ledgerflow.core.crypto.Dek
+import com.ledgerflow.core.database.migration.LedgerFlowMigrations
 import net.zetetic.database.sqlcipher.SQLiteDatabaseHook
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
@@ -37,12 +38,22 @@ public object LedgerFlowDatabaseFactory {
         // String would leave the key in the JVM string pool until GC.
         val factory = SupportOpenHelperFactory(dek.bytes(), PragmaHook, false)
 
-        return Room.databaseBuilder(context, LedgerFlowDatabase::class.java, databaseName)
+        val builder = Room
+            .databaseBuilder(context, LedgerFlowDatabase::class.java, databaseName)
             .openHelperFactory(factory)
             // WAL is required for the ON_STOP checkpoint discipline (BUG2).
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .addCallback(ForeignKeysCallback)
-            .build()
+
+        // The full chain, and nothing else. With no fallback configured, a
+        // missing migration fails the open loudly -- an upgrade that refuses is
+        // recoverable, an upgrade that wipes is not.
+        //
+        // Added one at a time rather than with a spread: `addMigrations` is
+        // vararg, and spreading copies the array on every database open.
+        LedgerFlowMigrations.forEach { builder.addMigrations(it) }
+
+        return builder.build()
     }
 
     private fun loadNativeLibrary() {

@@ -49,7 +49,7 @@ class MigrationHarnessTest {
      * it, and validate a live database against it.
      */
     @Test
-    fun v1_schemaIsCreatedAndValidatesAgainstTheCommittedJson() {
+    fun currentSchemaIsCreatedAndValidatesAgainstTheCommittedJson() {
         helper.createDatabase(TEST_DB, LedgerFlowDatabase.VERSION).close()
 
         val database = helper.runMigrationsAndValidate(
@@ -69,7 +69,7 @@ class MigrationHarnessTest {
      * rows is not evidence a migration preserved anything.
      */
     @Test
-    fun v1_seededDataSurvivesReopen() {
+    fun seededDataSurvivesReopenAtTheCurrentVersion() {
         helper.createDatabase(TEST_DB, LedgerFlowDatabase.VERSION).use { db ->
             db.insert(
                 "app_meta",
@@ -112,7 +112,7 @@ class MigrationHarnessTest {
 
     /** Foreign keys must be enforceable on a harness-created database too. */
     @Test
-    fun v1_foreignKeyCheckPassesOnAFreshSchema() {
+    fun foreignKeyCheckPassesOnAFreshSchema() {
         val database = helper.createDatabase(TEST_DB, LedgerFlowDatabase.VERSION)
 
         database.query("PRAGMA foreign_key_check").use { cursor ->

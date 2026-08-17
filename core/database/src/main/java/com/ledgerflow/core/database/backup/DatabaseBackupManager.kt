@@ -7,8 +7,12 @@ import com.ledgerflow.core.crypto.lfbk.LfbkResult
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
+import com.ledgerflow.core.database.entity.CategoryGroupEntity
+import com.ledgerflow.core.database.entity.CategoryGroupMemberEntity
+import com.ledgerflow.core.database.entity.DraftEntryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
+import com.ledgerflow.core.database.entity.MerchantAliasEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
 import com.ledgerflow.core.model.EntrySource
@@ -176,6 +180,22 @@ public class DatabaseBackupManager(
                 row.kind.name, row.categoryId, row.subcategoryId,
             )
         },
+        // Schema v2. Unsaved drafts are included deliberately -- see DraftEntryRow.
+        drafts = database.draftEntryDao().all().map { row ->
+            DraftEntryRow(
+                row.id, row.ledger.name, row.editingEntryId, row.editingEntryKey,
+                row.payloadJson, row.payloadVersion, row.createdAt, row.updatedAt,
+            )
+        },
+        merchantAliases = database.merchantAliasDao().all().map { row ->
+            MerchantAliasRow(row.id, row.merchantId, row.alias, row.normalizedAlias)
+        },
+        categoryGroups = database.categoryGroupDao().all().map { row ->
+            CategoryGroupRow(row.id, row.name, row.colorArgb, row.ledgerScope.name)
+        },
+        categoryGroupMembers = database.categoryGroupDao().allMembers().map { row ->
+            CategoryGroupMemberRow(row.groupId, row.categoryId)
+        },
     )
 
     private fun toRow(entry: LedgerEntryEntity) = LedgerEntryRow(
@@ -213,6 +233,38 @@ public class DatabaseBackupManager(
         database.paymentMethodDao().insertAll(payload.paymentMethods.map(::toPaymentMethod))
         payload.ledgerEntries.forEach { database.ledgerEntryDao().insertEntry(toEntry(it)) }
         database.ledgerEntryDao().insertLineItems(payload.lineItems.map(::toLineItem))
+
+        // v2, and still in FK order: aliases and drafts reference merchants and
+        // entries, group members reference both a group and a category.
+        database.merchantAliasDao().insertAll(
+            payload.merchantAliases.map {
+                MerchantAliasEntity(it.id, it.merchantId, it.alias, it.normalizedAlias)
+            },
+        )
+        database.draftEntryDao().insertAll(
+            payload.drafts.map {
+                DraftEntryEntity(
+                    id = it.id,
+                    ledger = LedgerType.valueOf(it.ledger),
+                    editingEntryId = it.editingEntryId,
+                    editingEntryKey = it.editingEntryKey,
+                    payloadJson = it.payloadJson,
+                    payloadVersion = it.payloadVersion,
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt,
+                )
+            },
+        )
+        database.categoryGroupDao().insertAll(
+            payload.categoryGroups.map {
+                CategoryGroupEntity(it.id, it.name, it.colorArgb, LedgerType.valueOf(it.ledgerScope))
+            },
+        )
+        database.categoryGroupDao().insertAllMembers(
+            payload.categoryGroupMembers.map {
+                CategoryGroupMemberEntity(it.groupId, it.categoryId)
+            },
+        )
     }
 
     private fun toCategory(row: CategoryRow) = CategoryEntity(

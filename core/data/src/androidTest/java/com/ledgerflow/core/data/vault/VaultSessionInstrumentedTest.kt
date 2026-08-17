@@ -45,17 +45,28 @@ class VaultSessionInstrumentedTest {
         context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
     }
 
+    /**
+     * Each test opens several databases -- the point of most of them is that a
+     * *second* session behaves like the next process launch. Every one holds a
+     * native SQLCipher connection pool, and leaving them open accumulates until
+     * the instrumentation process dies with a bare "Process crashed".
+     */
     @After
     fun tearDown() {
+        opened.forEach { runCatching { it.requireDatabase().close() } }
+        opened.clear()
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
         context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
     }
 
+    private val opened = mutableListOf<VaultSession>()
+
     private fun session(): VaultSession {
         val store = FileWrappedDekStore(keyDirectory)
         val dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
         return VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO)
+            .also { opened += it }
     }
 
     private fun mnemonic(): List<String> = Bip39.generate(SecureRandom())

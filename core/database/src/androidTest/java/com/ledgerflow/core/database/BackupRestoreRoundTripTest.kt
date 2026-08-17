@@ -16,8 +16,12 @@ import com.ledgerflow.core.database.backup.DatabaseBackupManager
 import com.ledgerflow.core.database.backup.RestoreResult
 import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
+import com.ledgerflow.core.database.entity.CategoryGroupEntity
+import com.ledgerflow.core.database.entity.CategoryGroupMemberEntity
+import com.ledgerflow.core.database.entity.DraftEntryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
+import com.ledgerflow.core.database.entity.MerchantAliasEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
 import com.ledgerflow.core.model.EntrySource
@@ -155,6 +159,41 @@ class BackupRestoreRoundTripTest {
             ),
         )
         database.ledgerEntryDao().insertEntryWithLineItems(creditEntry(), emptyList())
+
+        // ── Schema v2 ─────────────────────────────────────────────────────
+        //
+        // "Every row of every table" has to keep meaning that as tables are
+        // added, or the gate silently narrows with each migration.
+        database.merchantAliasDao().insertAll(
+            listOf(
+                MerchantAliasEntity("ali-1", "mer-1", "BBAZAAR", "bbazaar"),
+                MerchantAliasEntity("ali-2", "mer-1", "Big Bazar", "big bazar"),
+            ),
+        )
+        database.draftEntryDao().insertAll(
+            listOf(
+                // A new-entry draft and an edit-draft: the two slots the unique
+                // index distinguishes.
+                DraftEntryEntity(
+                    id = "draft-new", ledger = LedgerType.DEBIT, editingEntryId = null,
+                    editingEntryKey = "", payloadJson = """{"amount":"12.5"}""",
+                    payloadVersion = 1, createdAt = 1_760_000_000_100L,
+                    updatedAt = 1_760_000_000_200L,
+                ),
+                DraftEntryEntity(
+                    id = "draft-edit", ledger = LedgerType.DEBIT,
+                    editingEntryId = "entry-debit", editingEntryKey = "entry-debit",
+                    payloadJson = """{"note":"half typed"}""", payloadVersion = 1,
+                    createdAt = 1_760_000_000_300L, updatedAt = 1_760_000_000_400L,
+                ),
+            ),
+        )
+        database.categoryGroupDao().insertAll(
+            listOf(CategoryGroupEntity("grp-1", "Essentials", 0x006E8BFF, LedgerType.DEBIT)),
+        )
+        database.categoryGroupDao().insertAllMembers(
+            listOf(CategoryGroupMemberEntity("grp-1", "cat-groceries")),
+        )
     }
 
     /** Includes foreign-currency fields so the FX columns are covered too. */
@@ -186,6 +225,10 @@ class BackupRestoreRoundTripTest {
         val debits: List<LedgerEntryEntity>,
         val credits: List<LedgerEntryEntity>,
         val lineItems: List<LineItemEntity>,
+        val drafts: List<DraftEntryEntity>,
+        val merchantAliases: List<MerchantAliasEntity>,
+        val categoryGroups: List<CategoryGroupEntity>,
+        val categoryGroupMembers: List<CategoryGroupMemberEntity>,
     )
 
     private fun snapshot(db: LedgerFlowDatabase): Snapshot = runBlocking {
@@ -197,6 +240,10 @@ class BackupRestoreRoundTripTest {
             debits = db.ledgerEntryDao().allForLedger(LedgerType.DEBIT),
             credits = db.ledgerEntryDao().allForLedger(LedgerType.CREDIT),
             lineItems = db.ledgerEntryDao().allLineItems(),
+            drafts = db.draftEntryDao().all(),
+            merchantAliases = db.merchantAliasDao().all(),
+            categoryGroups = db.categoryGroupDao().all(),
+            categoryGroupMembers = db.categoryGroupDao().allMembers(),
         )
     }
 
@@ -242,6 +289,11 @@ class BackupRestoreRoundTripTest {
         assertThat(after.debits).containsExactlyElementsIn(before.debits)
         assertThat(after.credits).containsExactlyElementsIn(before.credits)
         assertThat(after.lineItems).containsExactlyElementsIn(before.lineItems)
+        assertThat(after.drafts).containsExactlyElementsIn(before.drafts)
+        assertThat(after.merchantAliases).containsExactlyElementsIn(before.merchantAliases)
+        assertThat(after.categoryGroups).containsExactlyElementsIn(before.categoryGroups)
+        assertThat(after.categoryGroupMembers)
+            .containsExactlyElementsIn(before.categoryGroupMembers)
 
         // The canary must survive, or the unlock flow would route a perfectly
         // good restore to the Recovery screen forever.

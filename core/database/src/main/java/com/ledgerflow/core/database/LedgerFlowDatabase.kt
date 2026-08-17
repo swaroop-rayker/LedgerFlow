@@ -5,15 +5,22 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.ledgerflow.core.database.dao.AppMetaDao
 import com.ledgerflow.core.database.dao.CategoryDao
+import com.ledgerflow.core.database.dao.CategoryGroupDao
+import com.ledgerflow.core.database.dao.DraftEntryDao
 import com.ledgerflow.core.database.dao.LedgerEntryDao
+import com.ledgerflow.core.database.dao.MerchantAliasDao
 import com.ledgerflow.core.database.dao.MerchantDao
 import com.ledgerflow.core.database.dao.PaymentMethodDao
 import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
+import com.ledgerflow.core.database.entity.CategoryGroupEntity
+import com.ledgerflow.core.database.entity.CategoryGroupMemberEntity
 import com.ledgerflow.core.database.entity.CreditEntryView
 import com.ledgerflow.core.database.entity.DebitEntryView
+import com.ledgerflow.core.database.entity.DraftEntryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
+import com.ledgerflow.core.database.entity.MerchantAliasEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
 
@@ -37,6 +44,11 @@ import com.ledgerflow.core.database.entity.PaymentMethodEntity
         PaymentMethodEntity::class,
         LedgerEntryEntity::class,
         LineItemEntity::class,
+        // v2 (SPEC.md §6.1.2, D-06).
+        DraftEntryEntity::class,
+        MerchantAliasEntity::class,
+        CategoryGroupEntity::class,
+        CategoryGroupMemberEntity::class,
     ],
     views = [
         DebitEntryView::class,
@@ -53,9 +65,16 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun merchantDao(): MerchantDao
     public abstract fun paymentMethodDao(): PaymentMethodDao
     public abstract fun ledgerEntryDao(): LedgerEntryDao
+    public abstract fun draftEntryDao(): DraftEntryDao
+    public abstract fun merchantAliasDao(): MerchantAliasDao
+    public abstract fun categoryGroupDao(): CategoryGroupDao
 
     public companion object {
-        public const val VERSION: Int = 1
+        /**
+         * v2 adds `draft_entry` (BUG6), `merchant_alias`, and the two
+         * category-group tables. Purely additive — see `MIGRATION_1_2`.
+         */
+        public const val VERSION: Int = 2
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

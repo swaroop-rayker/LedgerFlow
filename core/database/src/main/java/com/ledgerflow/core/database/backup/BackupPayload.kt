@@ -29,11 +29,23 @@ public data class BackupPayload(
     val paymentMethods: List<PaymentMethodRow>,
     val ledgerEntries: List<LedgerEntryRow>,
     val lineItems: List<LineItemRow>,
+    // ── Schema v2 ────────────────────────────────────────────────────────────
+    //
+    // Defaulted to empty so a backup written by a v1 install still deserializes.
+    // Without the defaults, every `.lfbk` a user already holds would fail to
+    // parse the moment they updated -- which is the P4 catastrophe §7 exists to
+    // prevent, caused by an upgrade rather than by a bug.
+    val drafts: List<DraftEntryRow> = emptyList(),
+    val merchantAliases: List<MerchantAliasRow> = emptyList(),
+    val categoryGroups: List<CategoryGroupRow> = emptyList(),
+    val categoryGroupMembers: List<CategoryGroupMemberRow> = emptyList(),
 ) {
     /** Total rows, for the post-restore equality assertion and diagnostics. */
     public val rowCount: Int
         get() = appMeta.size + categories.size + merchants.size +
-            paymentMethods.size + ledgerEntries.size + lineItems.size
+            paymentMethods.size + ledgerEntries.size + lineItems.size +
+            drafts.size + merchantAliases.size + categoryGroups.size +
+            categoryGroupMembers.size
 }
 
 @Serializable
@@ -112,4 +124,48 @@ public data class LineItemRow(
     val kind: String,
     val categoryId: String?,
     val subcategoryId: String?,
+)
+
+/**
+ * Unsaved form state, backed up like everything else (§6.1.2).
+ *
+ * It is tempting to exclude drafts as scratch. They are not: a draft is work the
+ * user has done and not yet saved, and a restore that silently drops it is a
+ * restore that loses data. More practically, "which tables are in the backup" is
+ * a list that rots -- excluding one here means the round-trip test quietly stops
+ * covering it, which is how a table ends up outside the durability guarantee
+ * without anyone deciding that.
+ */
+@Serializable
+public data class DraftEntryRow(
+    val id: String,
+    val ledger: String,
+    val editingEntryId: String?,
+    val editingEntryKey: String,
+    val payloadJson: String,
+    val payloadVersion: Int,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+public data class MerchantAliasRow(
+    val id: String,
+    val merchantId: String,
+    val alias: String,
+    val normalizedAlias: String,
+)
+
+@Serializable
+public data class CategoryGroupRow(
+    val id: String,
+    val name: String,
+    val colorArgb: Int?,
+    val ledgerScope: String,
+)
+
+@Serializable
+public data class CategoryGroupMemberRow(
+    val groupId: String,
+    val categoryId: String,
 )

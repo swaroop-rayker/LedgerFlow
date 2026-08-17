@@ -74,8 +74,20 @@ class TaxonomyRepositoryInstrumentedTest {
         paymentMethods = DefaultPaymentMethodRepository(session, ids, clock, Dispatchers.IO)
     }
 
+    /**
+     * Closing the database is not tidiness -- it is what keeps this suite from
+     * crashing the instrumentation process.
+     *
+     * Every test opens a SQLCipher database, and each one holds a native
+     * connection pool. Left open across ~30 tests in one process they
+     * accumulate, and the run dies partway with a bare "Process crashed" and an
+     * empty failure element. That surfaced here exactly once before being
+     * tracked down, which is how it earns this comment: the symptom looks like
+     * flake and the cause is a leak.
+     */
     @After
     fun tearDown() {
+        runCatching { session.requireDatabase().close() }
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
         context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
