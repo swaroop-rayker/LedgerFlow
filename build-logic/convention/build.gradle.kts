@@ -27,6 +27,10 @@ dependencies {
 
 gradlePlugin {
     plugins {
+        register("androidApplication") {
+            id = "ledgerflow.android.application"
+            implementationClass = "AndroidApplicationConventionPlugin"
+        }
         register("androidLibrary") {
             id = "ledgerflow.android.library"
             implementationClass = "AndroidLibraryConventionPlugin"

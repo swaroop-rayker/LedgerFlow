@@ -1,7 +1,9 @@
 package com.ledgerflow.buildlogic
 
+import com.android.build.api.dsl.ApplicationExtension
 import com.android.build.api.dsl.LibraryExtension
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
+import java.util.Properties
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalog
@@ -26,12 +28,20 @@ internal fun VersionCatalog.int(alias: String): Int =
  * The split lands at Phase 0, not P5 -- retrofitting it into a coupled codebase
  * is exactly the pain being avoided.
  */
-internal enum class LedgerFlowFlavor {
+internal enum class LedgerFlowFlavor(
+    /**
+     * Only meaningful on `:app`; library flavours have no application id.
+     * Kept on the enum anyway so the two flavour lists cannot drift apart --
+     * a flavour that exists for libraries but not for the application is a
+     * configuration failure that surfaces as an unresolvable dependency.
+     */
+    val applicationIdSuffix: String?,
+) {
     /** SMS + notification ingest. Sideload / internal testing only. */
-    smsFull,
+    smsFull(applicationIdSuffix = null),
 
     /** Notification + OCR + manual. No Play-restricted permissions. */
-    playSafe,
+    playSafe(applicationIdSuffix = ".playsafe"),
 }
 
 internal const val FLAVOR_DIMENSION = "ingest"
@@ -80,6 +90,70 @@ internal fun Project.configureAndroidLibrary(extension: LibraryExtension) = with
         configureExplicitApi()
     }
 }
+
+/**
+ * Shared configuration for `:app`.
+ *
+ * The mirror of [configureAndroidLibrary], and deliberately a separate function
+ * rather than a `CommonExtension` generalisation of it: on AGP 9 `CommonExtension`
+ * no longer exposes `flavorDimensions`, `productFlavors` or
+ * `isCoreLibraryDesugaringEnabled`, so anything unifying the two would have to
+ * give up exactly the settings that matter here. The concrete extension types
+ * are bound instead, and the shared *values* live in one place (the version
+ * catalog and [LedgerFlowFlavor]) rather than the shared code doing so.
+ */
+internal fun Project.configureAndroidApplication(extension: ApplicationExtension) =
+    with(extension) {
+        compileSdk = libs.int("compileSdk")
+
+        val version = rootProject.file("version.properties").let { file ->
+            Properties().apply { file.inputStream().use(::load) }
+        }
+
+        defaultConfig {
+            minSdk = libs.int("minSdk")
+            targetSdk = libs.int("targetSdk")
+            // BUG3: a single monotonic counter, committed, guarded by
+            // scripts/guard-version.sh against the last release tag.
+            versionCode = version.getProperty("versionCode").toInt()
+            versionName = version.getProperty("versionName")
+            testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
+
+        compileOptions {
+            val java = JavaVersion.toVersion(libs.int("jvmTarget"))
+            sourceCompatibility = java
+            targetCompatibility = java
+            // Must match the library convention: AAR metadata records that every
+            // :core/:feature module was built with desugaring, and a consumer
+            // with it off fails the metadata check.
+            isCoreLibraryDesugaringEnabled = true
+        }
+
+        buildTypes {
+            getByName("debug") {
+                // Debug and release coexist as separate apps with separate data.
+                // This is BUG1's countermeasure -- do not remove it.
+                applicationIdSuffix = ".debug"
+            }
+            getByName("release") {
+                isMinifyEnabled = true
+                isShrinkResources = true
+            }
+        }
+
+        flavorDimensions += FLAVOR_DIMENSION
+        productFlavors {
+            LedgerFlowFlavor.entries.forEach { flavor ->
+                create(flavor.name) {
+                    dimension = FLAVOR_DIMENSION
+                    flavor.applicationIdSuffix?.let { applicationIdSuffix = it }
+                }
+            }
+        }
+
+        configureJvmToolchain()
+    }
 
 /**
  * Sets the Kotlin JVM toolchain.

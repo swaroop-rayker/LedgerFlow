@@ -4,12 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.feature.onboarding.OnboardingScreen
 import com.ledgerflow.feature.onboarding.OnboardingViewModel
+import dagger.hilt.android.AndroidEntryPoint
 
 /**
  * Single Activity (SPEC.md §9.3).
@@ -21,9 +22,8 @@ import com.ledgerflow.feature.onboarding.OnboardingViewModel
  * which is BUG5's countermeasure -- retrofitting insets later is the expensive
  * path.
  */
+@AndroidEntryPoint
 public class MainActivity : ComponentActivity() {
-
-    private val onboardingViewModel: OnboardingViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -31,6 +31,12 @@ public class MainActivity : ComponentActivity() {
 
         setContent {
             LfTheme {
+                // hiltViewModel() rather than by viewModels(): scoping moves to
+                // the nav back stack entry once the NavHost lands, and starting
+                // from the activity-scoped delegate would mean every screen
+                // sharing one ViewModel until someone noticed.
+                val onboardingViewModel: OnboardingViewModel = hiltViewModel()
+
                 // collectAsStateWithLifecycle, never bare collectAsState
                 // (CLAUDE.md §5): the latter keeps collecting while the app is
                 // backgrounded.

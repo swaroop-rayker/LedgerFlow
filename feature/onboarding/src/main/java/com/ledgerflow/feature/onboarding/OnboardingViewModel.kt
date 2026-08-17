@@ -3,7 +3,10 @@ package com.ledgerflow.feature.onboarding
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.crypto.bip39.Bip39
+import com.ledgerflow.feature.onboarding.di.ChallengeRandom
+import dagger.hilt.android.lifecycle.HiltViewModel
 import java.security.SecureRandom
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,9 +26,10 @@ import kotlin.random.Random
  * own precondition is met. There is no `skipTo`, no `goToStep`, and no way for
  * a screen to jump the queue.
  */
-public class OnboardingViewModel(
-    private val random: SecureRandom = SecureRandom(),
-    private val challengeRandom: Random = Random.Default,
+@HiltViewModel
+public class OnboardingViewModel @Inject constructor(
+    private val random: SecureRandom,
+    @param:ChallengeRandom private val challengeRandom: Random,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(OnboardingUiState())

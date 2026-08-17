@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.onboarding
 
 import com.google.common.truth.Truth.assertThat
+import java.security.SecureRandom
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -32,7 +33,15 @@ class OnboardingViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = OnboardingViewModel(challengeRandom = Random(42))
+    // Constructed directly, not through Hilt: a ViewModel that can only be
+    // built by the DI container is a ViewModel whose tests need a container.
+    // The seeded challengeRandom is what makes the challenge positions
+    // reproducible; the phrase RNG is left real because nothing here asserts
+    // against a specific mnemonic.
+    private fun viewModel() = OnboardingViewModel(
+        random = SecureRandom(),
+        challengeRandom = Random(42),
+    )
 
     @Test
     fun startsAtCurrencySelectionWithInrDefault() {
