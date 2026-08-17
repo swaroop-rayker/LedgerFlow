@@ -1,7 +1,7 @@
 # LedgerFlow — Engineering Specification
 
-**Version:** 0.4.0
-**Status:** Stack **LOCKED** — Native Kotlin + Jetpack Compose. Phase 0 unblocked.
+**Version:** 0.5.0
+**Status:** Stack **LOCKED** — Native Kotlin + Jetpack Compose. Phase 0 complete; P1 in progress.
 **Platform:** Android-only, native.
 **Owner:** Swar
 **Dev environment:** Windows 11 + Android Studio, on-device testing (Android 16 / API 36, forward to Android 17 / API 37).
@@ -20,7 +20,7 @@ A production-grade, offline-first, encrypted personal ledger for Android that in
 | **P1** | **Human-in-the-loop.** No automated source ever commits to the ledger. Everything lands in an Inbox as `PENDING`. | Schema-level: `ledger_entry` rows can only be created via `ApproveTransactionUseCase`. Enforced by a lint rule + instrumentation test. |
 | **P2** | **Ledger isolation.** DEBIT and CREDIT are two disjoint ledgers. They never net, sum, or offset each other. | Every DAO query carries a mandatory `ledger` param. A test asserts zero queries return mixed-ledger rows. |
 | **P3** | **Offline-first, zero-cloud.** No network permission in the base build. All OCR/parsing is on-device. | `AndroidManifest` declares no `INTERNET` permission in `release`. |
-| **P4** | **Data is sacred.** Losing user data is a P0 incident, not a bug. Undecryptable data == lost data. | Dual-wrapped encryption key + mandatory recovery passphrase (§7). |
+| **P4** | **Data is sacred.** Losing user data is a P0 incident, not a bug. Undecryptable data == lost data. | Multi-wrapped encryption key + mandatory 24-word recovery phrase (§7). |
 | **P5** | **Money is integers.** All amounts are `Long` minor units (paise/cents). Floating-point money is a build failure. | Custom lint rule bans `Float`/`Double` in `:core:model`. |
 | **P6** | **Every migration is reversible-by-backup.** No destructive migration ships. Ever. | `fallbackToDestructiveMigration()` is banned in release source sets. |
 
@@ -81,8 +81,12 @@ Revisiting this decision requires a new ADR superseding ADR-0001 and a full rewr
 |---|---|---|---|
 | D-01 | Flutter vs Native Compose | **Native Kotlin + Compose** | §2 |
 | D-02 | Single-currency vs multi-currency | **Single base currency, currency-aware schema, manual FX capture. No conversion engine.** | §5.8 |
-| D-03 | Recovery: passphrase vs 24-word vs both | **24-word phrase mandatory (primary + backup key). Passphrase optional, device-local convenience only.** | §7.2–7.4 |
+| D-03 | Recovery: passphrase vs 24-word vs both | **24-word phrase mandatory (primary + backup key).** The "passphrase optional, device-local" half is superseded by **D-05** — it is dropped, not merely optional. | §7.2–7.4 |
 | D-04 | Play-safe flavour: P1 or P5 | **Neither. Notification ingest is promoted to a co-equal first-class source, shipped in P2 alongside SMS, present in *both* flavours.** | §3.1, §5.2 |
+| D-05 | KEK-C (optional passphrase wrap): implement at P1 or drop | **Dropped. KEK-A + KEK-B permanently; no Argon2id dependency. Extension point stays reserved.** ADR-0011. | §7.2 |
+| D-06 | `draft_entry`: singleton draft vs one row per in-flight entry | **One row per in-flight entry, keyed by a client-generated UUIDv7.** A singleton silently destroys work, which is BUG6 wearing a different hat. | §6.1, §6.1.2 |
+| D-07 | Recovery Kit: plaintext, password-protected PDF, or plaintext + confirmation | **Plaintext, gated behind an explicit "this file is your master key" confirmation.** A PDF password reintroduces a weak user-chosen secret into the recovery path. | §7.2 |
+| D-08 | `app_meta.canary`: keep or drop | **Keep.** It cannot detect a wrong key (SQLCipher's HMAC does that first) but it is the only check that catches a DEK/database *mismatch* after restore or a partially-applied rotation. | §7.3 |
 
 ---
 
@@ -148,7 +152,7 @@ DataSource (Room DAO | SmsReceiver | MlKitOcr | DataStore)
 
 :core:model                   — pure Kotlin. Entities, value classes (Money, LedgerType). NO Android deps.
 :core:common                  — Result types, dispatchers, date utils, formatters
-:core:crypto                  — KeyManager, DEK/KEK wrapping, recovery passphrase, backup cipher
+:core:crypto                  — KeyManager, DEK/KEK wrapping, recovery phrase, backup cipher
 :core:database                — Room entities, DAOs, migrations, schema JSONs, SQLCipher init
 :core:datastore               — encrypted preferences (settings, onboarding flags)
 :core:domain                  — repository interfaces + use cases
@@ -157,7 +161,7 @@ DataSource (Room DAO | SmsReceiver | MlKitOcr | DataStore)
 :core:ui                      — shared composites (AmountText, CategoryPicker, DateRangeBar, EmptyState)
 :core:testing                 — fakes, fixtures, MigrationTestHelper harness, Compose test rules
 
-:feature:onboarding           — first-run, recovery passphrase setup, permission priming
+:feature:onboarding           — first-run, recovery phrase setup, Recovery screen, permission priming
 :feature:dashboard            — home, recent, quick stats, budget rings
 :feature:inbox                — pending SMS/OCR review queue, approve/discard
 :feature:entry                — add/edit entry (manual), line-item editor
@@ -264,11 +268,13 @@ Fast-path sheet: amount keypad (large, thumb-reachable) → category → subcate
 
 Supports both ledgers (segmented control DEBIT | CREDIT at the top). Supports multi-line-item entry manually (same editor as OCR review).
 
+**Manual entry does not route through the Inbox.** Law 1 says only `ApproveTransactionUseCase` may insert into `ledger_entry`, so manual entry calls it — but directly, with `source = MANUAL` and `source_ref_id = NULL`, rather than first writing a `pending_transaction` row and immediately approving it. The law exists so that *automated* sources cannot commit without a human; the Save tap on a form the human just filled in **is** that human act. Round-tripping it through a review queue the user would leave in the same gesture is ceremony that adds a table write, a second state to reason about, and a row in the Inbox that was never pending on anything. `pending_transaction` therefore stays out of schema v2 and lands with the ingest pipeline in P2, which is the first thing that actually needs it. In-flight form state lives in `draft_entry` (§6.1.2), which is a different concern: recovering unsaved work, not gating a commit.
+
 ### 5.5 Ledgers, Categories, Merchants
 
 - **Debit ledger** and **Credit ledger** are fully separate: separate lists, separate category trees, separate analytics screens, separate budgets (budgets are debit-only). No screen ever displays a net figure combining them.
 - **Categories:** two levels (category → subcategory), user-creatable, editable, soft-deletable (re-assign flow required before delete). Icon + color per category. System seed set ships pre-populated, all editable.
-- **Category groups:** many-to-many grouping over categories for analytics rollups (e.g. group "Essentials" = Groceries + Utilities + Rent).
+- **Category groups:** many-to-many grouping over categories for analytics rollups (e.g. group "Essentials" = Groceries + Utilities + Rent). **The tables ship in schema v2 at P1; the group CRUD *UI* is deferred to P3.** Their only consumer is analytics rollups (§5.6), so building the management screen at P1 would ship a surface with no observable effect for two phases. Carrying the tables early is nearly free and saves a second migration; carrying the UI early is not.
 - **Merchants:** canonical merchant + alias table. SMS `merchantRaw` and OCR headers normalize (uppercase, strip punctuation/legal suffixes/store codes) then fuzzy-match (Jaro-Winkler ≥ 0.88) against aliases. Unmatched → new merchant proposed at review time; user can merge merchants later.
 - **Payment methods:** user-defined instances of types `{DEBIT_CARD, CREDIT_CARD, UPI, CASH, NETBANKING, WALLET, OTHER}` with label, issuer, last4. SMS `accountLast4` auto-selects the matching instrument.
 
@@ -436,6 +442,25 @@ line_item(
 )
 INDEX(entry_id), INDEX(normalized_name)
 
+-- ── In-flight entry state (BUG6) ───────────────────────────────────────────
+-- The entry form persists here on every field change, debounced 300 ms. This
+-- is NOT the ledger: nothing here has been saved by the user, and nothing here
+-- is visible to analytics, rollups or any ledger query. See §6.1.2.
+draft_entry(
+  id TEXT PK,                        -- UUIDv7, generated when the form opens
+  ledger TEXT NOT NULL CHECK (ledger IN ('DEBIT','CREDIT')),
+  editing_entry_id TEXT NULL REFERENCES ledger_entry(id) ON DELETE CASCADE,
+                                     -- NULL  = a new, never-saved entry
+                                     -- set   = an in-flight edit of that entry
+  editing_entry_key TEXT NOT NULL,   -- COALESCE(editing_entry_id, '')  ← §6.1.1
+  payload_json TEXT NOT NULL,        -- the whole form state, including line items
+  payload_version INTEGER NOT NULL,  -- form-state format version
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)
+UNIQUE(ledger, editing_entry_key)
+INDEX(updated_at DESC)
+
 -- ── Taxonomy ───────────────────────────────────────────────────────────────
 category(
   id TEXT PK, parent_id TEXT NULL REFERENCES category(id),
@@ -556,6 +581,20 @@ The result is a plain `@Index(unique = true)` that Room can declare, export, and
 
 When a migration alters `ledger_entry`, both views must be dropped and recreated **in the same migration**. Room's schema validation will fail otherwise, which is the desired failure mode.
 
+### 6.1.2 `draft_entry` — design notes (**D-06**, closes Q6)
+
+**One row per in-flight entry, not a singleton.** The singleton is simpler and matches the "Resume unsaved entry?" phrasing in §8/BUG6(b), but it has a failure mode that disqualifies it: starting a second entry silently destroys the first. That is *precisely* BUG6 — in-progress expense data vanishing without the user acting to discard it — reintroduced by the mechanism meant to prevent it. A singleton also cannot represent an in-flight **edit** of an existing entry, which is equally state that must survive process death.
+
+**Uniqueness is scoped, not unlimited.** Unbounded drafts would accumulate into a list nobody curates. `UNIQUE(ledger, editing_entry_key)` allows exactly: one new-entry draft per ledger (the two ledgers are separate books with separate forms), and one edit-draft per existing entry. Starting a new entry when a new-entry draft already exists therefore *resumes* it; choosing "start fresh" discards the old one **behind an explicit confirmation** — an act of the user, which is the entire distinction from the singleton.
+
+`editing_entry_key` follows the `category.parent_key` pattern from §6.1.1 for the same reason: SQLite treats `NULL`s as distinct in a unique index, so a nullable `editing_entry_id` in the constraint would let unlimited new-entry drafts collide-free and make the index decorative. `editing_entry_id` remains the real nullable FK, carrying `ON DELETE CASCADE`.
+
+**The payload is JSON, not typed columns.** A draft is partial and invalid by definition — an amount mid-keystroke, no category chosen yet, a line item with a blank name. Mirroring `ledger_entry` as typed columns would require every one of them to be nullable, which forfeits the constraint value that motivated typing them. Against that, the draft is never queried by any dimension: no filter, no aggregate, no join. The decisive argument is the write path — the multi-line-item editor means a typed model needs a `draft_line_item` child table, so every 300 ms debounce tick becomes a multi-row delete-and-reinsert transaction. As one JSON column it is a single-row upsert, which is what keeps the form off the StrictMode `penaltyDeath` tripwire (§11).
+
+`ledger` is a real column and is **authoritative**; it is deliberately absent from `payload_json` so the two can never disagree. `payload_version` guards form-state format changes: a draft whose version is unrecognised is not offered for resume and is never deserialized, but the row is retained rather than deleted — the app does not destroy user input to tidy up after itself.
+
+**Retention.** A draft is deleted when its entry is saved or the user explicitly discards it. Orphans — the app was killed and the user never returned — are purged at 30 days by a single `DELETE` on app open. `draft_entry` participates in `.lfbk` backup like every other table; the backup is a whole-database logical export and a per-table inclusion list is exactly the kind of thing that rots silently.
+
 ### 6.2 Money type
 ```kotlin
 @JvmInline value class Money(val minor: Long) {
@@ -576,23 +615,23 @@ Room `TypeConverter` maps `Money ↔ Long`. Display formatting via `NumberFormat
 
 ### 7.2 Key hierarchy — **multi-wrapped DEK** — **D-03**
 
-**Decision: 24-word recovery phrase is the primary and mandatory recovery factor. A user passphrase is optional, device-local, and never protects backups.**
+**Decision: 24-word recovery phrase is the primary and mandatory recovery factor. The optional passphrase wrap (KEK-C) is dropped — see D-05 / ADR-0011.**
 
 ```
         ┌─────────────────────────────────────────┐
         │  DEK  (32 random bytes, generated once) │  ← the only thing that decrypts data
         └───────────────┬─────────────────────────┘
                         │ wrapped independently by each factor
-      ┌─────────────────┼──────────────────────────┐
-      ▼                 ▼                          ▼
- KEK-A: Keystore   KEK-B: recovery phrase     KEK-C: passphrase (OPTIONAL, P1)
- AES-256-GCM       HKDF-SHA256(BIP-39 seed)   Argon2id(pass, salt)
- StrongBox if avail  256-bit entropy           m=64MiB, t=3, p=4
- userAuth = FALSE   MANDATORY                  opt-in, device-local only
-      │                 │                          │
-      ▼                 ▼                          ▼
- wrapped_dek_ks.bin  wrapped_dek_phrase.bin   wrapped_dek_pass.bin
- (filesDir — contents are wrapped, safe at rest)
+      ┌─────────────────┴────────────┐            ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+      ▼                              ▼              (KEK-C: RESERVED, NOT SHIPPED)
+ KEK-A: Keystore              KEK-B: recovery phrase │ slot kept so adding it   │
+ AES-256-GCM                  HKDF-SHA256(BIP-39 seed) later is additive and
+ StrongBox if avail           256-bit entropy        │ needs no format change.  │
+ userAuth = FALSE             MANDATORY                        ADR-0011
+      │                              │              └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
+      ▼                              ▼                          ┆
+ wrapped_dek_ks.bin           wrapped_dek_phrase.bin      wrapped_dek_pass.bin
+ (filesDir — contents are wrapped, safe at rest)          (never written)
 ```
 
 **Why the phrase is primary, not the passphrase:** effective security of a multi-wrapped key equals the **weakest** wrap. A human-chosen 12-character passphrase is nowhere near 256 bits. Making the passphrase the recovery factor would silently downgrade the whole scheme to whatever the user typed at 11 p.m. during onboarding. The generated phrase has fixed, known entropy and cannot be weak.
@@ -601,10 +640,10 @@ Room `TypeConverter` maps `Money ↔ Long`. Display formatting via `NumberFormat
 
 | Artifact | Protected by | Attacker needs |
 |---|---|---|
-| On-device DB | KEK-A (Keystore) or KEK-C (passphrase, if enabled) | Physical device + unlock. Passphrase weakness is acceptable here — the device itself is the outer boundary. |
-| `.lfbk` backup file | **KEK-B (phrase) only. Never the passphrase.** | 256-bit phrase. A leaked backup file is computationally useless. |
+| On-device DB | KEK-A (Keystore) | Physical device + device unlock. The device itself is the outer boundary. |
+| `.lfbk` backup file | **KEK-B (phrase) only.** | 256-bit phrase. A leaked backup file is computationally useless. |
 
-This means a user can pick a convenient passphrase for daily recovery-on-this-device without weakening the file that might end up in Google Drive or a WhatsApp chat.
+The separation still matters even with KEK-C dropped: it is what forbids any future device-local convenience factor from ever touching the backup path. A file that may end up in Google Drive or a WhatsApp chat is protected by 256 bits of generated entropy or it is not protected.
 
 **Key derivation — pinned byte-for-byte.** "HKDF-SHA256(24-word phrase seed)" is ambiguous: "seed" could mean the 256-bit BIP-39 *entropy* or the 512-bit BIP-39 *seed*. These are different values, and choosing differently in a later version renders every existing backup permanently undecryptable — precisely the P4 catastrophe this section exists to prevent. The derivation is therefore fixed:
 
@@ -627,9 +666,13 @@ keyCheck    HKDF-SHA256(ikm = seed, salt = container.salt[16],
 - `info` strings are versioned. Changing one is a breaking format change and requires a `formatVersion` bump in §5.9.
 - **A golden test vector is committed** in `:core:crypto`: one fixed known mnemonic → expected `seed`, `KEK-B`, `backupKey`, and `keyCheck`, as hex. This test is what stops a refactor from silently changing the derivation. It must never be "re-recorded" to match new output — if it fails, the code is wrong, not the fixture.
 
-**KEK-C is deferred to P1.** It ships as a designed-in extension point in P0, not as working code. Rationale: KEK-A already provides frictionless daily unlock and KEK-B already provides complete recovery, so KEK-C's entire value is the narrow case of "Keystore was invalidated *and* the user would rather not type 24 words". Against that, it is the only component in the hierarchy likely to pull a native `.so` (Argon2id at m=64 MiB) into a 15 MB APK budget that SQLCipher is already taxing, and each additional wrap adds a path through the unlock state machine and a re-wrap case on recovery — both places where a bug loses data. P0 ships KEK-A + KEK-B; the wrapped-blob format reserves the `wrapped_dek_pass.bin` slot and `app_meta.dekWrapVersion` accounts for it. See ADR-0010.
+**KEK-C is dropped — D-05, ADR-0011.** The P0 deferral is resolved as "do not ship it". KEK-A already provides frictionless daily unlock and KEK-B already provides complete recovery, so KEK-C's entire value was the narrow case of "Keystore was invalidated *and* the user would rather not type 24 words". Against that it wanted either a native `.so` per ABI (Argon2id at m=64 MiB) against a 15 MB budget SQLCipher is already taxing, or a pure-Java implementation whose only speed lever is the memory parameter that *is* its security. The decisive cost was neither: a third wrap adds a branch to the §7.3 unlock state machine, to §7.4 onboarding, and to **both** §7.7 rotation procedures, and every one of those branches is a place where a wrap goes stale and the failure is shaped like data loss. `wrapped_dek_pass.bin` and `app_meta.dekWrapVersion` keep the slot reserved, so reintroducing it later is additive and needs no format change. Full reasoning and reversal triggers in ADR-0011.
 
-**Recovery Kit:** at onboarding the app generates the phrase and offers a one-tap **"Save Recovery Kit"** → writes a plain-text `.txt` + a printable PDF to a user-chosen SAF location, containing the 24 words, the install date, and restore instructions. Prompts to store it in a password manager. Also displayed on screen for manual transcription.
+**The cost is accepted explicitly and paid in interaction design.** A user whose Keystore is invalidated types 24 words. The Recovery screen (§7.3) is therefore a first-class surface, not a fallback: BIP-39 autocomplete, per-word validation, checksum verified before any KDF work, visible progress, no dead ends. Friction we declined to remove with a passphrase gets removed there instead.
+
+**Recovery Kit — plaintext, behind an explicit confirmation (D-07, closes Q8).** At onboarding the app generates the phrase and offers a one-tap **"Save Recovery Kit"** → writes a plain-text `.txt` + a printable PDF to a user-chosen SAF location, containing the 24 words, the install date, and restore instructions. Also displayed on screen for manual transcription, and the user is prompted to store it in a password manager.
+
+The file is **not** encrypted, and the tap that writes it is gated behind a dialog that says so in those terms — that this file is the master key to every backup, that it is being written to shared storage which may be cloud-synced, and where it is going. The rejected alternative was a password-protected PDF: it reintroduces a user-chosen secret into the recovery path, which is exactly what D-03 forbids for the backup path and for the same reason, and PDF password encryption is weak on its own terms. Encrypting the kit also creates a regress — the thing that protects the thing that protects everything — whose answer is always another secret the user can forget. Plaintext plus informed consent is the honest version of a trade-off that cannot be engineered away.
 
 ### 7.3 Unlock flow (self-healing)
 ```
@@ -637,15 +680,16 @@ keyCheck    HKDF-SHA256(ikm = seed, salt = container.salt[16],
    ✅ → open DB → verify canary row in app_meta decrypts to known value → proceed.
 2. ❌ KeyPermanentlyInvalidatedException / UnrecoverableKeyException / canary mismatch:
    → show RECOVERY screen (never a crash, never a wipe prompt)
-   → if KEK-C exists: offer passphrase entry first (lower friction)
-   → else / on failure: 24-word phrase entry (with word autocomplete from the BIP-39 list
-     and checksum validation before any expensive KDF work)
+   → 24-word phrase entry (word autocomplete from the BIP-39 list, per-word
+     validation, and checksum validation before any expensive KDF work)
    → unwrap DEK → regenerate KEK-A in Keystore → re-wrap → overwrite wrapped_dek_ks.bin
    → proceed. User loses nothing.
 3. ❌ Neither factor available:
    → offer restore from .lfbk backup file (needs the phrase)
    → offer "start fresh" ONLY behind an explicit type-the-word-DELETE dialog. Never automatic.
 ```
+
+**The canary stays — D-08, closes Q9.** The objection was correct on its own terms: SQLCipher fails the database open with an HMAC error on a wrong key, so the canary cannot detect the case it superficially appears aimed at. What it does detect is a *mismatch* between a correctly-opened database and the DEK that was expected to open it — a `.lfbk` restored alongside the wrong wrapped blob, or a §7.7 DEK rotation whose page-swap and blob-commit steps did not both land. Both of those open cleanly and then serve wrong or partial data, which is the failure mode with no other detector in the system. It costs one row read on a path that is already doing a database open, and step 2 above already routes its failure somewhere safe. Cheap defence-in-depth against a silent failure is worth keeping; the honest correction is to stop describing it as wrong-key detection, which this paragraph does.
 
 ### 7.4 Onboarding hard gate
 
@@ -656,14 +700,14 @@ The user **cannot** reach the main app until they have:
 4. Either saved the Recovery Kit to a SAF location **or** explicitly dismissed the offer after a warning dialog.
 5. Granted a SAF tree URI for automatic backups **or** explicitly declined with a warning dialog.
 
-Optional passphrase setup is offered **after** step 3, clearly labelled "convenience only — this device". Min 12 chars, zxcvbn score ≥ 3. Can be added or removed later in Settings without touching the phrase.
+There is no optional-passphrase step. It was specified here and is removed by D-05 / ADR-0011; the gate is five steps, not six.
 
 This is friction. It is intentional. It is the single control that makes "data permanently unrecoverable" structurally impossible.
 
 ### 7.5 Android Auto Backup
 `android:allowBackup="false"` and `android:dataExtractionRules` deny-all.
 
-**Reason:** Auto Backup / D2D transfer copies the *encrypted DB file* but **cannot** copy the Keystore key. Restoring onto a new device yields an undecryptable database and the exact failure mode you named. LedgerFlow ships its own passphrase-derived `.lfbk` backup instead, which is device-independent by construction.
+**Reason:** Auto Backup / D2D transfer copies the *encrypted DB file* but **cannot** copy the Keystore key. Restoring onto a new device yields an undecryptable database and the exact failure mode you named. LedgerFlow ships its own phrase-derived `.lfbk` backup instead, which is device-independent by construction.
 
 ### 7.6 Optional app lock
 Biometric / device-credential gate on app open (`BiometricPrompt`, `DEVICE_CREDENTIAL` fallback). **This gates UI access only — it never gates the DEK**, so biometric re-enrollment can never lock the user out of their data.
@@ -832,8 +876,8 @@ The unbundled variant is incompatible with "no `INTERNET` permission in release"
 
 | Phase | Scope | Exit criteria |
 |---|---|---|
-| **P0 — Foundation** | Modules, version catalog, DI, theme, encrypted Room + SQLCipher, key management (§7.2, **KEK-A + KEK-B only** — KEK-C deferred), 24-word phrase onboarding + word challenge + Recovery Kit, base-currency selection, backup/restore round-trip | See §13.1 — the criteria are restated there because the original "verified on a second device" is not achievable in the stated dev environment. |
-| **P1 — Manual core** | Manual entry, categories/subcategories, merchants, payment methods, both ledgers, Ledger list with filters, CSV export, **`TransactionIngestSource` abstraction + `smsFull`/`playSafe` flavour skeleton (both compiling, both installable)** | Can fully use the app without SMS/OCR. Both flavours build in CI. |
+| **P0 — Foundation** | Modules, version catalog, DI, theme, encrypted Room + SQLCipher, key management (§7.2, **KEK-A + KEK-B only** — KEK-C since dropped, ADR-0011), 24-word phrase onboarding + word challenge + Recovery Kit, base-currency selection, backup/restore round-trip | See §13.1 — the criteria are restated there because the original "verified on a second device" is not achievable in the stated dev environment. |
+| **P1 — Manual core** | Unlock flow wired (§7.3), Hilt, `:core:domain` + `:core:data`, schema v2, manual entry with draft persistence, categories/subcategories, merchants, payment methods, both ledgers, Ledger list with filters + Paging 3, CSV export, **`TransactionIngestSource` abstraction + `smsFull`/`playSafe` flavour skeleton (both compiling, both installable)** | Can fully use the app without SMS/OCR. Both flavours build in CI. |
 | **P2 — Automated ingest** | Shared rule engine, `ParseIngestWorker`, cross-source dedupe, Inbox, notification actions, approve/discard — **plus both capture adapters: SMS receiver (`smsFull`) and `NotificationIngestService` (both flavours)** | 50-SMS + 50-notification golden corpus passing. Dedupe test: same UPI txn via both sources → exactly one pending row. |
 | **P3 — Analytics** | Rollup table + worker, all chart views, filters, period comparison, budgets + alerts | 5Y query < 300 ms. |
 | **P4 — OCR** | CameraX, file/PDF import, line-item extraction, review editor, category memory, attachments | ≥90% recall on receipt corpus. |
@@ -869,6 +913,7 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | 0008 | Currency model | ✅ **Accepted** — single base currency, manual FX capture (§5.8) |
 | 0009 | SQLCipher key rotation procedure | ✅ **Accepted** — two procedures: phrase re-wrap vs DEK sidecar rebuild (§7.7) |
 | 0010 | Crypto library selection (Argon2id, BIP-39 wordlist, HKDF, Tink vs hand-rolled AES-GCM) | ✅ **Accepted** — platform primitives, hand-rolled RFC constructions, **zero new dependencies** |
+| 0011 | KEK-C (optional passphrase wrap): implement at P1 or drop | ✅ **Accepted** — **dropped**; KEK-A + KEK-B permanently, no Argon2id, slot stays reserved (§7.2) |
 
 **ADR-0003 is not reopened.** The kickoff listed it as a blocking decision, but §14 has it Accepted and §7.2 specifies it. The *design* — multi-wrapped DEK, phrase-primary — is settled and stays settled. What was genuinely open is the **library and implementation** choice underneath it, which is a different decision with different trade-offs (binary size, native dependencies, maintenance status) and therefore gets its own record: **ADR-0010**. Amending an accepted ADR to smuggle in a new decision is how decision logs stop being trustworthy.
 
@@ -983,8 +1028,8 @@ Automation stops at the boundary of real-device behaviour. `TESTING.md` remains 
 
 Added in v0.3.0 — gaps found during the Phase 0 spec audit and deliberately *not* decided unilaterally:
 
-6. **`draft_entry` has no schema.** §8/BUG6 requires drafts to persist to "a `draft_entry` Room row", but §6.1 defines no such table. Needed at P1, when manual entry lands. Open sub-question: one draft row per in-flight entry keyed by a client-generated id (supports several half-finished entries), or a single singleton draft (simpler, matches "Resume unsaved entry?" phrasing, but silently discards the previous draft if a second is started)?
+6. ~~**`draft_entry` has no schema.**~~ **CLOSED — D-06.** One row per in-flight entry, keyed by a client-generated UUIDv7, uniqueness scoped by `UNIQUE(ledger, editing_entry_key)`, form state carried as a versioned JSON payload. Table in §6.1, reasoning in §6.1.2. Lands in schema v2.
 7. **`pending_line_item` is elided** as `(...)` in §6.1. It needs a real definition before P2/P4. Presumably mirrors `line_item` minus `entry_id`, plus `pending_id` — but "presumably" is not a schema.
-8. **Recovery Kit is written in plaintext.** §7.2 saves the 24 words as a `.txt` and a printable PDF to a user-chosen SAF location. That is the master secret for every backup, written unencrypted to shared storage — likely Downloads, possibly cloud-synced. It is also the single most usable recovery path, and encrypting it creates the "what protects the thing that protects everything" regress. Options: plaintext as specified; password-protected PDF (user picks a password, which reintroduces a weak secret); or plaintext plus a prominent warning and a "you are saving this to shared storage" confirmation. **This is a deliberate security/usability trade-off and belongs to the product owner, not to me.**
-9. **Is `app_meta.canary` load-bearing?** SQLCipher already fails the database open with an HMAC error on a wrong key, so the canary cannot detect the case it appears to be aimed at. It *does* still catch a DEK/database mismatch after a restore, and a partially-applied rotation (§7.7). Keep it as cheap defence-in-depth, or drop it as false reassurance?
+8. ~~**Recovery Kit is written in plaintext.**~~ **CLOSED — D-07.** Plaintext as originally specified, gated behind an explicit confirmation naming what the file is and where it is going. The password-protected PDF was rejected for reintroducing a user-chosen secret into the recovery path. Reasoning in §7.2.
+9. ~~**Is `app_meta.canary` load-bearing?**~~ **CLOSED — D-08.** Kept, with its purpose restated honestly: it detects a DEK/database *mismatch* (bad restore, half-applied rotation), not a wrong key — SQLCipher's HMAC gets there first. Reasoning in §7.3.
 10. **Confirm the APK budget at P4.** §11 now records 15 MB as provisional pending a real measurement with bundled ML Kit. The number needs to be either defended or moved on evidence.

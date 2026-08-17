@@ -12,7 +12,7 @@ These are settled. Do not relitigate them, do not "helpfully" suggest alternativ
 |---|---|
 | **Stack** | Native Kotlin + Jetpack Compose. Not Flutter. Not XML Views. |
 | **Currency** | One base currency per install (default INR), chosen at onboarding. `amount_minor` is **always** base currency. Foreign spend stores `original_amount_minor` + `original_currency` + `fx_rate_micro`, all user-entered. **No FX lookup, no conversion engine, no `INTERNET`.** |
-| **Recovery** | 24-word BIP-39 phrase is mandatory and primary. It wraps the DEK *and* encrypts `.lfbk` backups. A user passphrase is **optional, device-local, and must never protect a backup file** — it would silently downgrade backup security to whatever the user typed. |
+| **Recovery** | 24-word BIP-39 phrase is mandatory and primary. It wraps the DEK *and* encrypts `.lfbk` backups. The optional passphrase wrap (KEK-C) is **dropped** — ADR-0011. Two factors: Keystore and phrase. Do not reintroduce a user-chosen secret anywhere on the key path; it would silently downgrade the scheme to whatever the user typed. |
 | **Ingest** | SMS **and** notification listening are co-equal first-class sources, both shipped in P2, sharing one rule engine and one dedupe layer. Notification ingest is in **both** product flavours; SMS is `smsFull` only. |
 
 Everything downstream of a capture adapter is **source-agnostic**. If you find yourself writing `if (source == SMS)` outside `:feature:ingest`'s adapter package, you've broken the abstraction.
@@ -153,16 +153,16 @@ Debug builds use `applicationIdSuffix ".debug"` and coexist with release install
 ## 7. Danger Zones — read before touching
 
 ### `:core:crypto`
-The DEK is multi-wrapped: Android Keystore (KEK-A), 24-word recovery phrase (KEK-B, mandatory), optional passphrase (KEK-C — **deferred to P1**, see `SPEC.md` §7.2). This is what prevents permanent data loss on factory reset or device migration.
+The DEK is multi-wrapped by two factors: Android Keystore (KEK-A) and the 24-word recovery phrase (KEK-B, mandatory). This is what prevents permanent data loss on factory reset or device migration. KEK-C (optional passphrase) is **dropped** — ADR-0011. The `wrapped_dek_pass.bin` slot and `KekId.PASSPHRASE` stay reserved and unwritten; that is deliberate, not an oversight.
 
 - **Never** change the phrase→key derivation. It is pinned byte-for-byte in `SPEC.md` §7.2 and locked by committed golden test vectors. If that test fails, **the code is wrong — do not re-record the fixture.** Re-recording it silently orphans every backup a user has ever made.
 - **Never** write a `.lfbk` whose header isn't passed as GCM AAD (`SPEC.md` §5.9). An unauthenticated header lets an attacker steer the restore path.
 - **Never** make the Keystore path the only wrap.
 - **Never** set `setUserAuthenticationRequired(true)` on the DEK-wrapping key — biometric re-enrollment would nuke the user's data.
-- **Never** encrypt a `.lfbk` backup with KEK-C. Backups are phrase-derived only. The passphrase exists so the user doesn't have to type 24 words to recover *on this device*; it must never become the weakest link protecting a file that could leave the device.
+- **Never** add a third wrap without a superseding ADR. Backups are phrase-derived only, and a device-local convenience factor must never become the weakest link protecting a file that could leave the device.
 - **Never** add a "skip" or "remind me later" to the onboarding word challenge.
 - **Never** wipe the database on a decryption failure. Route to the Recovery screen instead (`SPEC.md` §7.3).
-- Validate the BIP-39 checksum **before** running Argon2id/HKDF — otherwise a typo costs the user a 64 MiB KDF round and looks like a hang.
+- Validate the BIP-39 checksum **before** running PBKDF2/HKDF — otherwise a typo costs the user 2048 HMAC-SHA512 rounds and looks like a hang.
 - Any change here requires the backup→wipe→restore round-trip test to pass **before** the commit.
 
 ### `:feature:ingest`
@@ -226,7 +226,7 @@ Targets live in `SPEC.md` §11. Practical rules while coding:
 | Wiping the DB when decryption fails | Recovery screen |
 | Fetching an FX rate | user-entered `fx_rate_micro`, or require base amount at review |
 | Summing mixed currencies in analytics | `amount_minor` is always base currency — there is nothing to mix |
-| Encrypting `.lfbk` with the passphrase | phrase-derived key only |
+| Encrypting `.lfbk` with any user-chosen secret | phrase-derived key only |
 | `if (source == SMS)` outside an adapter | source-agnostic pipeline |
 | Reading a notification before the allowlist check | filter first, then touch the body |
 | Shipping only `smsFull` | both flavours build and test on every PR |
