@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      A minimal launch theme only. The real theming is Compose (LfTheme); this
+      exists so the window has a background matching surfaceBase before the
+      first frame, instead of flashing white on a dark-themed app.
+    -->
+    <style name="Theme.LedgerFlow" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/lf_surface_base</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+</resources>

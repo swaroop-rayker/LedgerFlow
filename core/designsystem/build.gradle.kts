@@ -6,3 +6,8 @@ plugins {
 android {
     namespace = "com.ledgerflow.core.designsystem"
 }
+
+dependencies {
+    testImplementation(libs.junit4)
+    testImplementation(libs.truth)
+}

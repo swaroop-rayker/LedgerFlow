@@ -4,6 +4,7 @@ plugins {
     // AGP 9+ has built-in Kotlin support. Applying org.jetbrains.kotlin.android
     // alongside it is an error: https://kotl.in/gradle/agp-built-in-kotlin
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.detekt)
 }
 
@@ -27,6 +28,23 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = versionProps.getProperty("versionCode").toInt()
         versionName = versionProps.getProperty("versionName")
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get().toInt())
+        targetCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get().toInt())
+        // Must match the library convention plugin: AAR metadata records that
+        // every :core/:feature module was built with desugaring, and a consumer
+        // that has it off fails the metadata check.
+        //
+        // TODO(step7): this duplicates AndroidConventions.configureAndroidLibrary.
+        //  :app deserves its own `ledgerflow.android.application` convention
+        //  plugin rather than a hand-maintained copy that can drift.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     buildTypes {
@@ -58,4 +76,20 @@ android {
 
 kotlin {
     jvmToolchain(libs.versions.jvmTarget.get().toInt())
+}
+
+dependencies {
+    implementation(project(":core:designsystem"))
+    implementation(project(":feature:onboarding"))
+
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+
+    coreLibraryDesugaring(libs.android.desugar.jdk.libs)
 }

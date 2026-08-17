@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors LfDarkColors.surfaceBase (SPEC.md §9.1). Kept in sync by hand;
+         it exists only for the pre-Compose launch window. -->
+    <color name="lf_surface_base">#FF15171C</color>
+</resources>

@@ -9,6 +9,22 @@
     -->
     <application
         android:name=".LedgerFlowApplication"
-        android:allowBackup="false" />
+        android:allowBackup="false"
+        android:label="LedgerFlow"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LedgerFlow">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.LedgerFlow"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
 
 </manifest>

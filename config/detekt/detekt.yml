@@ -121,6 +121,16 @@ style:
     active: false
   UnusedPrivateMember:
     active: true
+    # @Preview composables are invoked by the IDE and by the screenshot-test
+    # runner, never from code. CLAUDE.md §5 *requires* one on every top-level
+    # screen, so flagging them as dead code would put the ruleset and the
+    # conventions in direct conflict.
+    ignoreAnnotated:
+      - 'Preview'
+      - 'PreviewLightDark'
+      - 'PreviewFontScale'
+      - 'PreviewScreenSizes'
+      - 'PreviewDynamicColors'
   MaxLineLength:
     active: true
     maxLineLength: 120
