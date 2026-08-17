@@ -1,5 +1,8 @@
 package com.ledgerflow.feature.onboarding
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,8 +15,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -23,9 +28,12 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfDialog
+import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 
 /**
  * The onboarding gate (SPEC.md §7.4).
@@ -41,7 +49,14 @@ public fun OnboardingScreen(
     onEvent: (OnboardingEvent) -> Unit,
     onGeneratePhrase: () -> Unit,
     modifier: Modifier = Modifier,
+    kitFileName: (RecoveryKitFormat) -> String = { "LedgerFlow-Recovery-Kit.${it.extension}" },
 ) {
+    // SAF, wired for real. Phase 0 emitted these events with empty URIs, which
+    // meant the two gate steps that write to the filesystem did not.
+    val chooseBackupTree = rememberBackupTreeLauncher(onEvent)
+    RecoveryKitPicker(state, onEvent, kitFileName)
+    state.kitConfirmFormat?.let { RecoveryKitConfirmDialog(it, onEvent) }
+
     LfScaffold(modifier = modifier) { padding ->
         Column(
             modifier = Modifier
@@ -56,11 +71,73 @@ public fun OnboardingScreen(
                 OnboardingStep.PhraseDisplay -> PhraseDisplayStep(state, onEvent)
                 OnboardingStep.WordChallenge -> WordChallengeStep(state, onEvent)
                 OnboardingStep.RecoveryKit -> RecoveryKitStep(onEvent)
-                OnboardingStep.BackupLocation -> BackupLocationStep(onEvent)
-                OnboardingStep.Complete -> CompleteStep()
+                OnboardingStep.BackupLocation -> BackupLocationStep(
+                    onEvent = onEvent,
+                    onChooseFolder = { chooseBackupTree() },
+                )
+                OnboardingStep.Complete -> CompleteStep(state)
             }
+            state.errorMessage?.let { ErrorFooter(it, onEvent) }
         }
     }
+}
+
+/**
+ * Opens the document picker once per confirmed request.
+ *
+ * Keyed on the format so a config change during the picker does not re-launch
+ * it, and the ViewModel is told immediately that the request was consumed --
+ * which is what stops a second picker appearing behind the first.
+ */
+@Composable
+private fun RecoveryKitPicker(
+    state: OnboardingUiState,
+    onEvent: (OnboardingEvent) -> Unit,
+    kitFileName: (RecoveryKitFormat) -> String,
+) {
+    val format = state.kitPickerRequest ?: state.kitConfirmFormat ?: RecoveryKitFormat.Text
+    val createKit = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(format.mimeType),
+    ) { uri -> onEvent(OnboardingEvent.RecoveryKitFileChosen(uri?.toString())) }
+
+    state.kitPickerRequest?.let { requested ->
+        LaunchedEffect(requested) {
+            createKit.launch(kitFileName(requested))
+            onEvent(OnboardingEvent.RecoveryKitPickerLaunched)
+        }
+    }
+}
+
+@Composable
+private fun rememberBackupTreeLauncher(onEvent: (OnboardingEvent) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        // Without persisting it, the grant dies with the process and the nightly
+        // BackupWorker wakes up to a SecurityException -- the silent-backup-failure
+        // shape of BUG4. The moment of the grant is the only point where the
+        // flags are still valid to take.
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        onEvent(OnboardingEvent.BackupLocationGranted(uri.toString()))
+    }
+    return { launcher.launch(null) }
+}
+
+@Composable
+private fun ErrorFooter(message: String, onEvent: (OnboardingEvent) -> Unit) {
+    Text(text = message, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
+    LfButton(
+        text = "Dismiss",
+        onClick = { onEvent(OnboardingEvent.ErrorDismissed) },
+        style = LfButtonStyle.Text,
+    )
 }
 
 @Composable
@@ -215,13 +292,17 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
 private fun RecoveryKitStep(onEvent: (OnboardingEvent) -> Unit) {
     StepHeading(
         title = "Save your Recovery Kit",
-        body = "A file containing your 24 words and instructions for restoring your " +
-            "data. Save it somewhere only you can reach — a password manager is ideal.",
+        body = "Your 24 words plus instructions for restoring your data. The text " +
+            "file is what goes in a password manager; the PDF is what you print.",
     )
     LfButton(
-        text = "Save Recovery Kit",
-        // The SAF picker is wired at the app layer; the URI comes back as an event.
-        onClick = { onEvent(OnboardingEvent.RecoveryKitSaved("")) },
+        text = "Save as text file",
+        onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text)) },
+    )
+    LfButton(
+        text = "Save as PDF",
+        onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Pdf)) },
+        style = LfButtonStyle.Tonal,
     )
     LfButton(
         text = "Skip — I've written them down",
@@ -230,17 +311,48 @@ private fun RecoveryKitStep(onEvent: (OnboardingEvent) -> Unit) {
     )
 }
 
+/**
+ * The D-07 confirmation.
+ *
+ * The Recovery Kit is written in plaintext, and that decision was made on the
+ * basis that the user is *told* so at the moment it matters. This dialog is that
+ * telling — it is the entire mitigation, so it says what the file is, what it
+ * grants, and where it is going, in those words.
+ */
 @Composable
-private fun BackupLocationStep(onEvent: (OnboardingEvent) -> Unit) {
+private fun RecoveryKitConfirmDialog(
+    format: RecoveryKitFormat,
+    onEvent: (OnboardingEvent) -> Unit,
+) {
+    LfDialog(
+        title = "This file is your master key",
+        body = "The ${format.label()} contains your 24 words in plain text — it is not " +
+            "encrypted. Anyone who opens it can read every backup this app will ever " +
+            "write. You're about to save it to shared storage, which may sync to the " +
+            "cloud. Store it the way you'd store a spare house key.",
+        confirmText = "I understand — save it",
+        emphasis = LfDialogEmphasis.Warning,
+        onConfirm = { onEvent(OnboardingEvent.RecoveryKitConfirmed) },
+        onDismiss = { onEvent(OnboardingEvent.RecoveryKitCancelled) },
+    )
+}
+
+private fun RecoveryKitFormat.label(): String = when (this) {
+    RecoveryKitFormat.Text -> "text file"
+    RecoveryKitFormat.Pdf -> "PDF"
+}
+
+@Composable
+private fun BackupLocationStep(
+    onEvent: (OnboardingEvent) -> Unit,
+    onChooseFolder: () -> Unit,
+) {
     StepHeading(
         title = "Where should backups go?",
         body = "LedgerFlow writes an encrypted backup every night. Only your recovery " +
             "phrase can open it, so the location doesn't need to be private.",
     )
-    LfButton(
-        text = "Choose a folder",
-        onClick = { onEvent(OnboardingEvent.BackupLocationGranted("")) },
-    )
+    LfButton(text = "Choose a folder", onClick = onChooseFolder)
     LfButton(
         text = "Not now",
         onClick = { onEvent(OnboardingEvent.BackupLocationDeclined) },
@@ -249,10 +361,14 @@ private fun BackupLocationStep(onEvent: (OnboardingEvent) -> Unit) {
 }
 
 @Composable
-private fun CompleteStep() {
+private fun CompleteStep(state: OnboardingUiState) {
     StepHeading(
-        title = "You're set up",
-        body = "Your ledger is encrypted and recoverable.",
+        title = if (state.isWorking) "Setting up your ledger" else "You're set up",
+        body = if (state.isWorking) {
+            "Generating your encryption key and creating the database."
+        } else {
+            "Your ledger is encrypted and recoverable."
+        },
     )
 }
 

@@ -1,6 +1,10 @@
 package com.ledgerflow.feature.onboarding
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.domain.usecase.InitializeVaultUseCase
+import com.ledgerflow.core.domain.vault.RecoveryKitFormat
+import com.ledgerflow.core.testing.vault.FakeRecoveryKitRepository
+import com.ledgerflow.core.testing.vault.FakeVaultRepository
 import java.security.SecureRandom
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
@@ -33,15 +37,25 @@ class OnboardingViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private lateinit var vault: FakeVaultRepository
+    private lateinit var kit: FakeRecoveryKitRepository
+
     // Constructed directly, not through Hilt: a ViewModel that can only be
     // built by the DI container is a ViewModel whose tests need a container.
     // The seeded challengeRandom is what makes the challenge positions
     // reproducible; the phrase RNG is left real because nothing here asserts
     // against a specific mnemonic.
-    private fun viewModel() = OnboardingViewModel(
-        random = SecureRandom(),
-        challengeRandom = Random(42),
-    )
+    private fun viewModel(): OnboardingViewModel {
+        vault = FakeVaultRepository()
+        kit = FakeRecoveryKitRepository()
+        return OnboardingViewModel(
+            initializeVault = InitializeVaultUseCase(vault),
+            recoveryKit = kit,
+            random = SecureRandom(),
+            challengeRandom = Random(42),
+            io = dispatcher,
+        )
+    }
 
     @Test
     fun startsAtCurrencySelectionWithInrDefault() {
@@ -200,5 +214,144 @@ class OnboardingViewModelTest {
         assertThat(OnboardingStep.BaseCurrency.next()).isEqualTo(OnboardingStep.PhraseDisplay)
         assertThat(OnboardingStep.WordChallenge.next()).isEqualTo(OnboardingStep.RecoveryKit)
         assertThat(OnboardingStep.Complete.next()).isEqualTo(OnboardingStep.Complete)
+    }
+
+    // ── The vault is created at the END of the gate, not partway through ────
+
+    private fun atRecoveryKit(): OnboardingViewModel {
+        val vm = startedChallenge()
+        val mnemonic = vm.state.value.mnemonic
+        vm.state.value.challengePositions.forEachIndexed { index, position ->
+            vm.onEvent(OnboardingEvent.ChallengeAnswerChanged(index, mnemonic[position - 1]))
+        }
+        vm.onEvent(OnboardingEvent.ChallengeSubmitted)
+        return vm
+    }
+
+    /**
+     * The gate must not be escapable by force-stopping.
+     *
+     * `VaultRepository.openOnLaunch` treats an existing phrase wrap as "setup
+     * finished", so if the vault were created when the word challenge passed, a
+     * user who killed the app on the Recovery Kit step would relaunch straight
+     * into the ledger -- having skipped steps 4 and 5 of §7.4. Nothing may touch
+     * disk until the whole gate is satisfied.
+     */
+    @Test
+    fun vaultIsNotCreatedUntilTheFinalGateStep() = runTest(dispatcher) {
+        val vm = atRecoveryKit()
+        dispatcher.scheduler.advanceUntilIdle()
+        assertThat(vault.initializeRequests).isEmpty()
+
+        vm.onEvent(OnboardingEvent.RecoveryKitDismissed)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertThat(vault.initializeRequests).isEmpty()
+
+        vm.onEvent(OnboardingEvent.BackupLocationDeclined)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertThat(vault.initializeRequests).hasSize(1)
+    }
+
+    @Test
+    fun initialize_carriesTheChosenCurrencyPhraseAndBackupTree() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(OnboardingEvent.CurrencySelected("SGD"))
+        vm.generatePhraseAndContinue()
+        dispatcher.scheduler.advanceUntilIdle()
+        vm.onEvent(OnboardingEvent.PhraseAcknowledged)
+        val mnemonic = vm.state.value.mnemonic
+        vm.state.value.challengePositions.forEachIndexed { index, position ->
+            vm.onEvent(OnboardingEvent.ChallengeAnswerChanged(index, mnemonic[position - 1]))
+        }
+        vm.onEvent(OnboardingEvent.ChallengeSubmitted)
+        vm.onEvent(OnboardingEvent.RecoveryKitDismissed)
+        vm.onEvent(OnboardingEvent.BackupLocationGranted("content://tree/backups"))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val request = vault.initializeRequests.single()
+        assertThat(request.baseCurrency).isEqualTo("SGD")
+        assertThat(request.mnemonic).isEqualTo(mnemonic)
+        assertThat(request.backupTreeUri).isEqualTo("content://tree/backups")
+    }
+
+    // ── Recovery Kit (D-07) ─────────────────────────────────────────────────
+
+    /**
+     * The kit is plaintext, so the confirmation dialog *is* the mitigation.
+     * A picker that opened straight from the button would skip it.
+     */
+    @Test
+    fun recoveryKit_pickerOnlyOpensAfterTheWarningIsAccepted() = runTest(dispatcher) {
+        val vm = atRecoveryKit()
+
+        vm.onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text))
+        assertThat(vm.state.value.kitConfirmFormat).isEqualTo(RecoveryKitFormat.Text)
+        assertThat(vm.state.value.kitPickerRequest).isNull()
+
+        vm.onEvent(OnboardingEvent.RecoveryKitConfirmed)
+        assertThat(vm.state.value.kitConfirmFormat).isNull()
+        assertThat(vm.state.value.kitPickerRequest).isEqualTo(RecoveryKitFormat.Text)
+    }
+
+    @Test
+    fun recoveryKit_cancellingTheWarningOpensNoPicker() = runTest(dispatcher) {
+        val vm = atRecoveryKit()
+
+        vm.onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Pdf))
+        vm.onEvent(OnboardingEvent.RecoveryKitCancelled)
+
+        assertThat(vm.state.value.kitConfirmFormat).isNull()
+        assertThat(vm.state.value.kitPickerRequest).isNull()
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.RecoveryKit)
+    }
+
+    @Test
+    fun recoveryKit_writesTheMnemonicAndAdvances() = runTest(dispatcher) {
+        val vm = atRecoveryKit()
+        val mnemonic = vm.state.value.mnemonic
+
+        vm.onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Pdf))
+        vm.onEvent(OnboardingEvent.RecoveryKitFileChosen("content://docs/kit.pdf"))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val (uri, format, words) = kit.written.single()
+        assertThat(uri).isEqualTo("content://docs/kit.pdf")
+        assertThat(format).isEqualTo(RecoveryKitFormat.Pdf)
+        assertThat(words).isEqualTo(mnemonic)
+        assertThat(vm.state.value.recoveryKitSaved).isTrue()
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.BackupLocation)
+    }
+
+    /**
+     * A failed write that advanced anyway would leave the user believing they
+     * hold a Recovery Kit they do not hold -- and they would stop transcribing
+     * on the strength of it.
+     */
+    @Test
+    fun recoveryKit_failedWriteDoesNotAdvanceOrClaimSuccess() = runTest(dispatcher) {
+        val vm = atRecoveryKit()
+        kit.succeeds = false
+
+        vm.onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text))
+        vm.onEvent(OnboardingEvent.RecoveryKitFileChosen("content://docs/kit.txt"))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(vm.state.value.recoveryKitSaved).isFalse()
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.RecoveryKit)
+        assertThat(vm.state.value.errorMessage).isNotNull()
+    }
+
+    /** Backing out of the system picker is not an answer to the step. */
+    @Test
+    fun recoveryKit_cancellingThePickerLeavesTheStepUnanswered() = runTest(dispatcher) {
+        val vm = atRecoveryKit()
+
+        vm.onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text))
+        vm.onEvent(OnboardingEvent.RecoveryKitFileChosen(null))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(kit.written).isEmpty()
+        assertThat(vm.state.value.step).isEqualTo(OnboardingStep.RecoveryKit)
+        assertThat(vm.state.value.errorMessage).isNull()
     }
 }

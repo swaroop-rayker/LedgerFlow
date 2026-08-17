@@ -1,0 +1,72 @@
+package com.ledgerflow.core.data.di
+
+import android.content.Context
+import com.ledgerflow.core.crypto.DekManager
+import com.ledgerflow.core.crypto.FileWrappedDekStore
+import com.ledgerflow.core.crypto.WrappedDekStore
+import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
+import com.ledgerflow.core.crypto.keystore.KeystoreKek
+import com.ledgerflow.core.data.vault.Bip39PhraseValidator
+import com.ledgerflow.core.data.vault.RecoveryKitWriter
+import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.domain.vault.RecoveryKitRepository
+import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
+import com.ledgerflow.core.domain.vault.VaultRepository
+import dagger.Binds
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import java.io.File
+import java.security.SecureRandom
+import javax.inject.Singleton
+
+/** Constructs `:core:crypto`, which has no DI of its own by design. */
+@Module
+@InstallIn(SingletonComponent::class)
+public object CryptoModule {
+
+    /**
+     * Wrapped-DEK blobs live in `filesDir/keys` (Law 5).
+     *
+     * Not `cacheDir`: the OS reclaims it, and a reclaimed
+     * `wrapped_dek_phrase.bin` is a vault that only the 24 words can reopen --
+     * for a user who has done nothing wrong.
+     */
+    @Provides
+    @Singleton
+    public fun wrappedDekStore(@ApplicationContext context: Context): WrappedDekStore =
+        // The lambda matters: `context.filesDir` stats the data directory, and
+        // this provider runs during graph construction on the main thread.
+        FileWrappedDekStore { File(context.filesDir, KEY_DIRECTORY) }
+
+    @Provides
+    @Singleton
+    public fun keystoreKek(): KeystoreKek = AndroidKeystoreKek()
+
+    @Provides
+    @Singleton
+    public fun dekManager(
+        store: WrappedDekStore,
+        keystoreKek: KeystoreKek,
+        random: SecureRandom,
+    ): DekManager = DekManager(store, keystoreKek, random)
+
+    private const val KEY_DIRECTORY = "keys"
+}
+
+/** Binds the domain ports to their `:core:data` implementations. */
+@Module
+@InstallIn(SingletonComponent::class)
+public interface VaultModule {
+
+    @Binds
+    public fun vaultRepository(impl: VaultSession): VaultRepository
+
+    @Binds
+    public fun recoveryPhraseValidator(impl: Bip39PhraseValidator): RecoveryPhraseValidator
+
+    @Binds
+    public fun recoveryKitRepository(impl: RecoveryKitWriter): RecoveryKitRepository
+}

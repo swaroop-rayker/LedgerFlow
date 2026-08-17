@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.onboarding
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 
 /**
  * The onboarding gate (SPEC.md §7.4).
@@ -66,6 +67,29 @@ public data class OnboardingUiState(
     val phraseRevealed: Boolean = false,
     val recoveryKitSaved: Boolean = false,
     val backupLocationGranted: Boolean = false,
+
+    /**
+     * The D-07 confirmation is showing for this format.
+     *
+     * The kit is written in plaintext, so the tap that creates it is gated
+     * behind a dialog naming what the file is and where it is going. Non-null
+     * means "asked, not yet answered".
+     */
+    val kitConfirmFormat: RecoveryKitFormat? = null,
+
+    /**
+     * The user confirmed; the SAF picker should be launched for this format.
+     *
+     * A state field rather than a one-shot channel because `Activity` result
+     * launchers are a composition-scoped resource: the screen consumes this and
+     * immediately reports it consumed, which survives a config change without
+     * either dropping the request or firing it twice.
+     */
+    val kitPickerRequest: RecoveryKitFormat? = null,
+
+    /** Persistable SAF tree for nightly backups, or null if declined. */
+    val backupTreeUri: String? = null,
+
     val isWorking: Boolean = false,
     val errorMessage: String? = null,
 ) {
@@ -82,7 +106,20 @@ public sealed interface OnboardingEvent {
     public data object PhraseAcknowledged : OnboardingEvent
     public data class ChallengeAnswerChanged(val index: Int, val answer: String) : OnboardingEvent
     public data object ChallengeSubmitted : OnboardingEvent
-    public data class RecoveryKitSaved(val uri: String) : OnboardingEvent
+
+    /** "Save as text"/"Save as PDF" tapped. Opens the D-07 confirmation. */
+    public data class RecoveryKitRequested(val format: RecoveryKitFormat) : OnboardingEvent
+
+    /** The D-07 warning was accepted. Only now does a picker open. */
+    public data object RecoveryKitConfirmed : OnboardingEvent
+    public data object RecoveryKitCancelled : OnboardingEvent
+
+    /** The screen has launched the picker; clears the request so it fires once. */
+    public data object RecoveryKitPickerLaunched : OnboardingEvent
+
+    /** SAF returned a document URI, or null if the user backed out of the picker. */
+    public data class RecoveryKitFileChosen(val uri: String?) : OnboardingEvent
+
     public data object RecoveryKitDismissed : OnboardingEvent
     public data class BackupLocationGranted(val uri: String) : OnboardingEvent
     public data object BackupLocationDeclined : OnboardingEvent

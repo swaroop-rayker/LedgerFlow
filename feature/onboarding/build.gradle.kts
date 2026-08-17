@@ -11,6 +11,7 @@ dependencies {
     // the crypto core directly rather than through a repository.
     implementation(project(":core:crypto"))
 
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit4)
     testImplementation(libs.truth)
     testImplementation(libs.kotlinx.coroutines.test)

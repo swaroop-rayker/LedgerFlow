@@ -21,7 +21,13 @@ class AndroidRoomConventionPlugin : Plugin<Project> {
         }
 
         dependencies {
-            add("implementation", libs.findLibrary("androidx-room-runtime").get())
+            // `api`, not `implementation`: LedgerFlowDatabase extends RoomDatabase
+            // and the DAOs are part of this module's public surface, so a consumer
+            // cannot even name the type without room-runtime on its own compile
+            // classpath. Hiding it produces a "Cannot access RoomDatabase which is
+            // a supertype of LedgerFlowDatabase" error at the consumer, which
+            // reads as a mysterious classpath problem rather than as what it is.
+            add("api", libs.findLibrary("androidx-room-runtime").get())
             add("implementation", libs.findLibrary("androidx-room-ktx").get())
             add("ksp", libs.findLibrary("androidx-room-compiler").get())
             add("androidTestImplementation", libs.findLibrary("androidx-room-testing").get())

@@ -1,7 +1,29 @@
 plugins {
     id("ledgerflow.android.library")
+    id("ledgerflow.android.hilt")
 }
 
 android {
     namespace = "com.ledgerflow.core.data"
+}
+
+dependencies {
+    // The layer where Android, crypto and Room types are allowed to meet the
+    // domain ports -- and the only one. Everything above sees :core:domain.
+    api(project(":core:domain"))
+    implementation(project(":core:model"))
+    implementation(project(":core:common"))
+    implementation(project(":core:crypto"))
+    implementation(project(":core:database"))
+
+    implementation(libs.androidx.lifecycle.process)
+
+    testImplementation(libs.junit4)
+    testImplementation(libs.truth)
+    testImplementation(libs.kotlinx.coroutines.test)
+
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.truth)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }

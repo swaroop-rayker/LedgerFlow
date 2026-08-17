@@ -5,10 +5,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,7 +52,22 @@ public fun LfScaffold(
     Scaffold(
         modifier = modifier,
         topBar = topBar,
-        bottomBar = bottomBar,
+        bottomBar = {
+            // `contentWindowInsets` covers the *content* slot only -- Material3
+            // hands a custom bottomBar the raw bottom edge and expects the bar to
+            // consume its own insets. Found on device: the Recovery screen's
+            // pinned "Unlock" button rendered underneath the gesture navigation
+            // bar. Doing it here means no screen has to remember (BUG5).
+            Box(
+                Modifier.windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(
+                        WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal,
+                    ),
+                ),
+            ) {
+                bottomBar()
+            }
+        },
         containerColor = LfTheme.colors.surfaceBase,
         contentColor = LfTheme.colors.textPrimary,
         contentWindowInsets = WindowInsets.safeDrawing,

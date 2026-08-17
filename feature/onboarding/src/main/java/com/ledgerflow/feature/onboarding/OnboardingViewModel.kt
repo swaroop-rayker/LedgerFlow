@@ -2,11 +2,19 @@ package com.ledgerflow.feature.onboarding
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.crypto.bip39.Bip39
+import com.ledgerflow.core.domain.usecase.InitializeVaultUseCase
+import com.ledgerflow.core.domain.vault.RecoveryKitFormat
+import com.ledgerflow.core.domain.vault.RecoveryKitRepository
+import com.ledgerflow.core.domain.vault.VaultInitRequest
+import com.ledgerflow.core.domain.vault.VaultOutcome
 import com.ledgerflow.feature.onboarding.di.ChallengeRandom
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.security.SecureRandom
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,8 +36,11 @@ import kotlin.random.Random
  */
 @HiltViewModel
 public class OnboardingViewModel @Inject constructor(
+    private val initializeVault: InitializeVaultUseCase,
+    private val recoveryKit: RecoveryKitRepository,
     private val random: SecureRandom,
     @param:ChallengeRandom private val challengeRandom: Random,
+    @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(OnboardingUiState())
@@ -68,17 +79,23 @@ public class OnboardingViewModel @Inject constructor(
             OnboardingEvent.ChallengeSubmitted ->
                 ifAt(OnboardingStep.WordChallenge, step) { submitChallenge() }
 
-            is OnboardingEvent.RecoveryKitSaved ->
-                ifAt(OnboardingStep.RecoveryKit, step) { completeRecoveryKit(saved = true) }
-
-            OnboardingEvent.RecoveryKitDismissed ->
-                ifAt(OnboardingStep.RecoveryKit, step) { completeRecoveryKit(saved = false) }
+            is OnboardingEvent.RecoveryKitRequested,
+            OnboardingEvent.RecoveryKitConfirmed,
+            OnboardingEvent.RecoveryKitCancelled,
+            OnboardingEvent.RecoveryKitPickerLaunched,
+            is OnboardingEvent.RecoveryKitFileChosen,
+            OnboardingEvent.RecoveryKitDismissed,
+            -> onRecoveryKitEvent(event, step)
 
             is OnboardingEvent.BackupLocationGranted ->
-                ifAt(OnboardingStep.BackupLocation, step) { completeBackupLocation(granted = true) }
+                ifAt(OnboardingStep.BackupLocation, step) {
+                    completeBackupLocation(granted = true, treeUri = event.uri)
+                }
 
             OnboardingEvent.BackupLocationDeclined ->
-                ifAt(OnboardingStep.BackupLocation, step) { completeBackupLocation(granted = false) }
+                ifAt(OnboardingStep.BackupLocation, step) {
+                    completeBackupLocation(granted = false, treeUri = null)
+                }
 
             // Safe from any step: it clears a message, it does not advance.
             OnboardingEvent.ErrorDismissed -> _state.update { it.copy(errorMessage = null) }
@@ -89,15 +106,62 @@ public class OnboardingViewModel @Inject constructor(
         if (current == required) action()
     }
 
+    /**
+     * The Recovery Kit sub-flow (D-07): request -> warn -> pick -> write.
+     *
+     * Split out of [onEvent] because six of its branches belong to one
+     * interaction. The two housekeeping events -- cancel and picker-launched --
+     * are deliberately *not* step-guarded: both only clear transient state, and
+     * a picker result arriving after the step advanced must still be allowed to
+     * tidy up rather than leaving a stale dialog behind.
+     */
+    private fun onRecoveryKitEvent(event: OnboardingEvent, step: OnboardingStep) {
+        when (event) {
+            is OnboardingEvent.RecoveryKitRequested ->
+                ifAt(OnboardingStep.RecoveryKit, step) {
+                    _state.update { it.copy(kitConfirmFormat = event.format) }
+                }
+
+            OnboardingEvent.RecoveryKitConfirmed ->
+                ifAt(OnboardingStep.RecoveryKit, step) {
+                    _state.update {
+                        it.copy(kitConfirmFormat = null, kitPickerRequest = it.kitConfirmFormat)
+                    }
+                }
+
+            OnboardingEvent.RecoveryKitCancelled ->
+                _state.update { it.copy(kitConfirmFormat = null) }
+
+            OnboardingEvent.RecoveryKitPickerLaunched ->
+                _state.update { it.copy(kitPickerRequest = null) }
+
+            is OnboardingEvent.RecoveryKitFileChosen ->
+                ifAt(OnboardingStep.RecoveryKit, step) { writeRecoveryKit(event.uri) }
+
+            OnboardingEvent.RecoveryKitDismissed ->
+                ifAt(OnboardingStep.RecoveryKit, step) { completeRecoveryKit(saved = false) }
+
+            else -> Unit
+        }
+    }
+
     private fun selectCurrency(code: String) {
         _state.update { it.copy(selectedCurrency = code) }
     }
+
+    /** Filename offered to the SAF picker, so the screen does not invent one. */
+    public fun suggestedKitFileName(format: RecoveryKitFormat): String =
+        recoveryKit.suggestedFileName(format)
 
     /** Generates the phrase and moves to the display step. */
     public fun generatePhraseAndContinue() {
         viewModelScope.launch {
             _state.update { it.copy(isWorking = true) }
-            val mnemonic = Bip39.generate(random)
+            // `viewModelScope` is Dispatchers.Main.immediate, so this needs an
+            // explicit hop: generating a mnemonic loads the 2048-word list from
+            // the APK the first time, and that is a main-thread disk read.
+            // StrictMode caught it; it had been here unnoticed since Phase 0.
+            val mnemonic = withContext(io) { Bip39.generate(random) }
             _state.update {
                 it.copy(
                     mnemonic = mnemonic,
@@ -164,15 +228,80 @@ public class OnboardingViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Writes the kit, then advances only if the bytes actually landed.
+     *
+     * A failed write that silently advanced would leave the user believing they
+     * have a Recovery Kit they do not have -- which is worse than never offering
+     * one, because they would stop transcribing on the strength of it.
+     */
+    private fun writeRecoveryKit(uri: String?) {
+        // Null means they backed out of the system picker. Not an error, not a
+        // dismissal of the step -- just nothing happened.
+        if (uri == null) return
+        val format = _state.value.kitConfirmFormat ?: RecoveryKitFormat.Text
+        viewModelScope.launch {
+            _state.update { it.copy(isWorking = true) }
+            val written = recoveryKit.write(uri, format, _state.value.mnemonic)
+            _state.update { it.copy(isWorking = false) }
+            if (written) {
+                completeRecoveryKit(saved = true)
+            } else {
+                _state.update {
+                    it.copy(errorMessage = "Couldn't write the Recovery Kit to that location.")
+                }
+            }
+        }
+    }
+
     private fun completeRecoveryKit(saved: Boolean) {
         _state.update {
             it.copy(recoveryKitSaved = saved, step = OnboardingStep.BackupLocation)
         }
     }
 
-    private fun completeBackupLocation(granted: Boolean) {
+    /**
+     * The last gate step, and the point at which the vault is actually created.
+     *
+     * Nothing has been written to disk before now -- no DEK, no wrapped blobs, no
+     * database. That is deliberate: `VaultRepository.openOnLaunch` treats an
+     * existing phrase wrap as "onboarding completed", so initialising earlier
+     * (say, when the word challenge passes) would mean an app killed at this
+     * step relaunches straight past steps 4 and 5. The gate would be bypassable
+     * by force-stopping, which is exactly the kind of hole §7.4 exists to close.
+     *
+     * The cost is that a user killed mid-gate is issued a new phrase. That is the
+     * right trade: a phrase they wrote down but never confirmed protects nothing.
+     */
+    private fun completeBackupLocation(granted: Boolean, treeUri: String?) {
         _state.update {
-            it.copy(backupLocationGranted = granted, step = OnboardingStep.Complete)
+            it.copy(
+                backupLocationGranted = granted,
+                backupTreeUri = treeUri,
+                step = OnboardingStep.Complete,
+                isWorking = true,
+            )
+        }
+        viewModelScope.launch {
+            val outcome = initializeVault(
+                VaultInitRequest(
+                    mnemonic = _state.value.mnemonic,
+                    baseCurrency = _state.value.selectedCurrency,
+                    backupTreeUri = treeUri,
+                ),
+            )
+            _state.update {
+                it.copy(
+                    isWorking = false,
+                    errorMessage = when (outcome) {
+                        VaultOutcome.Unlocked -> null
+                        // Nothing was destroyed; the phrase is still on screen and
+                        // the vault simply does not exist yet.
+                        else -> "Couldn't finish setting up your ledger. " +
+                            "Your recovery phrase is unchanged — try again."
+                    },
+                )
+            }
         }
     }
 }

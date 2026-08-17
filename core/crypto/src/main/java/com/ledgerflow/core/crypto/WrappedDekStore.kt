@@ -22,7 +22,24 @@ public interface WrappedDekStore {
  * and the fsync is what makes the rename meaningful rather than merely
  * ordered-in-the-page-cache.
  */
-public class FileWrappedDekStore(private val directory: File) : WrappedDekStore {
+public class FileWrappedDekStore(
+    directoryProvider: () -> File,
+) : WrappedDekStore {
+
+    /** Convenience for tests and callers that already hold a resolved path. */
+    public constructor(directory: File) : this({ directory })
+
+    /**
+     * Resolved on first use, not at construction.
+     *
+     * `Context.getFilesDir()` stats the data directory, and this object is built
+     * during Hilt graph construction -- which happens on the main thread when the
+     * first ViewModel is created. StrictMode caught exactly that as a
+     * `DiskReadViolation`, which is the tripwire doing its job; deferring the
+     * lookup to the first read or write puts it on the IO dispatcher where the
+     * rest of the unlock flow already runs.
+     */
+    private val directory: File by lazy(directoryProvider)
 
     override fun read(kekId: KekId): ByteArray? =
         file(kekId).takeIf { it.isFile }?.let { runCatching { it.readBytes() }.getOrNull() }
