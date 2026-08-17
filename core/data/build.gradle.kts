@@ -17,6 +17,10 @@ dependencies {
     implementation(project(":core:database"))
 
     implementation(libs.androidx.lifecycle.process)
+    // room-ktx supplies RoomDatabase.withTransaction, the suspend-safe
+    // transaction wrapper. runInTransaction takes a blocking lambda and
+    // suspend DAO calls cannot run inside it.
+    implementation(libs.androidx.room.ktx)
 
     testImplementation(libs.junit4)
     testImplementation(libs.truth)

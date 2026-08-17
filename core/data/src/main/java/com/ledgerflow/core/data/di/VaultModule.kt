@@ -6,9 +6,15 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.WrappedDekStore
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.keystore.KeystoreKek
+import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
+import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
+import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.RecoveryKitWriter
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantRepository
+import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
 import com.ledgerflow.core.domain.vault.RecoveryKitRepository
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.VaultRepository
@@ -69,4 +75,19 @@ public interface VaultModule {
 
     @Binds
     public fun recoveryKitRepository(impl: RecoveryKitWriter): RecoveryKitRepository
+}
+
+/** Categories, merchants and payment methods (SPEC.md §5.5). */
+@Module
+@InstallIn(SingletonComponent::class)
+public interface TaxonomyModule {
+
+    @Binds
+    public fun categoryRepository(impl: DefaultCategoryRepository): CategoryRepository
+
+    @Binds
+    public fun merchantRepository(impl: DefaultMerchantRepository): MerchantRepository
+
+    @Binds
+    public fun paymentMethodRepository(impl: DefaultPaymentMethodRepository): PaymentMethodRepository
 }

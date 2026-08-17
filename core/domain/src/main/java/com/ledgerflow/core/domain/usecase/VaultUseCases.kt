@@ -36,12 +36,23 @@ public class ObserveVaultStateUseCase @Inject constructor(
     public operator fun invoke(): StateFlow<VaultState> = vault.state
 }
 
-/** First run (SPEC.md §7.4), once the entire gate has been satisfied. */
+/**
+ * First run (SPEC.md §7.4), once the entire gate has been satisfied.
+ *
+ * Seeding the starter taxonomy belongs here rather than inside the vault: the
+ * vault's job is keys and an open database, and it has no business knowing what
+ * a category is. Seeding runs only on a successful create, so a failed
+ * initialisation leaves nothing half-written.
+ */
 public class InitializeVaultUseCase @Inject constructor(
     private val vault: VaultRepository,
+    private val seedDefaultTaxonomy: SeedDefaultTaxonomyUseCase,
 ) {
-    public suspend operator fun invoke(request: VaultInitRequest): VaultOutcome =
-        vault.initialize(request)
+    public suspend operator fun invoke(request: VaultInitRequest): VaultOutcome {
+        val outcome = vault.initialize(request)
+        if (outcome is VaultOutcome.Unlocked) seedDefaultTaxonomy()
+        return outcome
+    }
 }
 
 /**

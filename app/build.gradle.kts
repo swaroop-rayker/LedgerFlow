@@ -4,6 +4,8 @@ plugins {
     id("ledgerflow.android.application")
     id("ledgerflow.android.compose")
     id("ledgerflow.android.hilt")
+    // Type-safe Navigation Compose routes are @Serializable (SPEC.md §9.3).
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -21,8 +23,14 @@ dependencies {
     // domain ports get bound to their implementations (CLAUDE.md §3).
     implementation(project(":core:data"))
     implementation(project(":feature:onboarding"))
+    implementation(project(":feature:dashboard"))
+    implementation(project(":feature:ledger"))
+    implementation(project(":feature:analytics"))
+    implementation(project(":feature:settings"))
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

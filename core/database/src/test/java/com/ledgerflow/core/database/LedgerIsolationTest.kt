@@ -39,19 +39,43 @@ class LedgerIsolationTest {
             ?: error("DAO source directory not found from ${File("").absolutePath}")
     }
 
-    /** Every double-quoted literal that looks like SQL. */
+    /**
+     * Every double-quoted literal that looks like SQL.
+     *
+     * `UPDATE` and `DELETE` are matched as well as `FROM`. The original filter
+     * looked for `FROM` alone, which was enough while every DAO query was a
+     * `SELECT` -- but an `UPDATE ledger_entry SET category_id = ...` has no
+     * `FROM` clause, so the first write query against the base table would have
+     * walked straight past a guard everyone believed was watching. Widened when
+     * category re-assignment and merchant merging introduced exactly that shape.
+     */
     private fun sqlLiterals(): List<SqlLiteral> {
         val stringLiteral = Regex("\"((?:[^\"\\\\]|\\\\.)*)\"")
+        val statement = Regex("""\b(FROM|UPDATE|DELETE)\b""", RegexOption.IGNORE_CASE)
         return daoSourceDir.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .flatMap { file ->
-                stringLiteral.findAll(file.readText())
+                stringLiteral.findAll(joinConcatenations(file.readText()))
                     .map { it.groupValues[1] }
-                    .filter { it.contains("FROM", ignoreCase = true) }
+                    .filter { statement.containsMatchIn(it) }
                     .map { SqlLiteral(file.name, it) }
             }
             .toList()
     }
+
+    /**
+     * Splices `"a " + "b"` back into one literal before scanning.
+     *
+     * A query long enough to wrap gets split across two literals by ktlint's
+     * line length, and the scanner saw each half alone -- so
+     * `"UPDATE ledger_entry SET ... " + "WHERE ledger = :ledger"` looked like an
+     * unguarded statement in its first half and a harmless fragment in its
+     * second. Left unjoined this guard produces false positives on correct code,
+     * which is the fastest route to someone "fixing" it by deleting the
+     * assertion.
+     */
+    private fun joinConcatenations(source: String): String =
+        source.replace(Regex("\"\\s*\\+\\s*\""), "")
 
     @Test
     fun sqlLiterals_areDiscoverable() {

@@ -24,9 +24,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -81,6 +84,19 @@ public class VaultSession @Inject constructor(
     internal fun requireDatabase(): LedgerFlowDatabase = requireNotNull(database) {
         "Vault is locked; no database is open. Callers must observe VaultState first."
     }
+
+    /**
+     * The database as it comes and goes, for repositories exposing cold `Flow`s.
+     *
+     * Emits null while locked rather than throwing, so a screen observing
+     * categories during a recovery does not crash -- it simply sees nothing until
+     * the vault opens, and then rebinds. A repository that captured a DAO at
+     * construction could not do that, because the DAO does not exist yet when
+     * Hilt builds the graph.
+     */
+    internal fun whenUnlocked(): Flow<LedgerFlowDatabase?> =
+        state.map { if (it is VaultState.Unlocked) database else null }
+            .distinctUntilChanged()
 
     override suspend fun openOnLaunch() {
         mutex.withLock {

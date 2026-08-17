@@ -2,7 +2,12 @@ package com.ledgerflow.feature.onboarding
 
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.usecase.InitializeVaultUseCase
+import com.ledgerflow.core.domain.usecase.SeedDefaultTaxonomyUseCase
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
+import com.ledgerflow.core.domain.vault.RecoveryReason
+import com.ledgerflow.core.domain.vault.VaultOutcome
+import com.ledgerflow.core.testing.taxonomy.FakeCategoryRepository
+import com.ledgerflow.core.testing.taxonomy.FakePaymentMethodRepository
 import com.ledgerflow.core.testing.vault.FakeRecoveryKitRepository
 import com.ledgerflow.core.testing.vault.FakeVaultRepository
 import java.security.SecureRandom
@@ -39,6 +44,8 @@ class OnboardingViewModelTest {
 
     private lateinit var vault: FakeVaultRepository
     private lateinit var kit: FakeRecoveryKitRepository
+    private lateinit var seedCategories: FakeCategoryRepository
+    private lateinit var seedPaymentMethods: FakePaymentMethodRepository
 
     // Constructed directly, not through Hilt: a ViewModel that can only be
     // built by the DI container is a ViewModel whose tests need a container.
@@ -48,8 +55,16 @@ class OnboardingViewModelTest {
     private fun viewModel(): OnboardingViewModel {
         vault = FakeVaultRepository()
         kit = FakeRecoveryKitRepository()
+        seedCategories = FakeCategoryRepository()
+        seedPaymentMethods = FakePaymentMethodRepository()
         return OnboardingViewModel(
-            initializeVault = InitializeVaultUseCase(vault),
+            initializeVault = InitializeVaultUseCase(
+                vault = vault,
+                seedDefaultTaxonomy = SeedDefaultTaxonomyUseCase(
+                    seedCategories,
+                    seedPaymentMethods,
+                ),
+            ),
             recoveryKit = kit,
             random = SecureRandom(),
             challengeRandom = Random(42),
@@ -272,6 +287,36 @@ class OnboardingViewModelTest {
         assertThat(request.baseCurrency).isEqualTo("SGD")
         assertThat(request.mnemonic).isEqualTo(mnemonic)
         assertThat(request.backupTreeUri).isEqualTo("content://tree/backups")
+    }
+
+    /**
+     * An app whose first screen is an empty category picker asks the user to do
+     * setup work before they can record a single expense. The starter taxonomy
+     * has to be there the moment the gate closes.
+     */
+    @Test
+    fun completingTheGateSeedsTheStarterTaxonomy() = runTest(dispatcher) {
+        val vm = atRecoveryKit()
+        vm.onEvent(OnboardingEvent.RecoveryKitDismissed)
+        vm.onEvent(OnboardingEvent.BackupLocationDeclined)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(seedCategories.seedCalls).isEqualTo(1)
+        assertThat(seedPaymentMethods.seedCalls).isEqualTo(1)
+    }
+
+    /** A vault that failed to open has no database to seed into. */
+    @Test
+    fun aFailedInitializationSeedsNothing() = runTest(dispatcher) {
+        val vm = atRecoveryKit()
+        vault.initializeResult = VaultOutcome.Failed(RecoveryReason.DatabaseUnopenable)
+
+        vm.onEvent(OnboardingEvent.RecoveryKitDismissed)
+        vm.onEvent(OnboardingEvent.BackupLocationDeclined)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(seedCategories.seedCalls).isEqualTo(0)
+        assertThat(vm.state.value.errorMessage).isNotNull()
     }
 
     // ── Recovery Kit (D-07) ─────────────────────────────────────────────────

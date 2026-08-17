@@ -21,6 +21,7 @@ import com.ledgerflow.feature.onboarding.OnboardingScreen
 import com.ledgerflow.feature.onboarding.OnboardingViewModel
 import com.ledgerflow.feature.onboarding.recovery.RecoveryScreen
 import com.ledgerflow.feature.onboarding.recovery.RecoveryViewModel
+import com.ledgerflow.navigation.LedgerFlowShell
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -86,7 +87,7 @@ private fun LedgerFlowApp() {
             RecoveryScreen(state = state, onEvent = viewModel::onEvent)
         }
 
-        AppRoute.Ready -> UnlockedPlaceholder()
+        AppRoute.Ready -> LedgerFlowShell()
     }
 }
 
@@ -106,30 +107,3 @@ private fun LoadingScreen() {
     }
 }
 
-/**
- * Proof the database opened, and nothing more.
- *
- * Replaced by the real shell -- NavHost, bottom bar, FAB -- in the next step.
- * Kept deliberately blunt so it cannot be mistaken for a finished screen.
- */
-@Composable
-private fun UnlockedPlaceholder() {
-    LfScaffold { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(LfTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            Text(
-                text = "Vault unlocked",
-                style = LfTheme.typography.displayL,
-                color = LfTheme.colors.textPrimary,
-            )
-            Text(
-                text = "The database is open and the canary verified. The ledger, " +
-                    "entry form and navigation arrive in the next steps.",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textSecondary,
-            )
-        }
-    }
-}

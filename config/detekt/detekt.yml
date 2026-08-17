@@ -50,6 +50,13 @@ complexity:
     # cohesive object with many small private helpers. Splitting them to satisfy
     # a counter would scatter one specification across several files.
     thresholdInObjects: 20
+    # A Room DAO is a namespace of SQL statements, not a class with behaviour.
+    # The rule measures cohesion, and a DAO's cohesion is "these queries hit the
+    # same table" -- which is exactly why they belong together. Splitting
+    # CategoryDao into a reader and a writer to satisfy a counter would put the
+    # duplicate-name check and the insert it guards in different files, which is
+    # the opposite of what this rule is for.
+    thresholdInInterfaces: 20
     ignoreAnnotatedFunctions: ['Composable']
 
 exceptions:
