@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
@@ -25,13 +26,32 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 @Composable
 public fun LfActionRow(
     modifier: Modifier = Modifier,
+    alignment: LfActionAlignment = LfActionAlignment.Center,
     content: @Composable () -> Unit,
 ) {
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(
+            LfTheme.spacing.sm,
+            when (alignment) {
+                LfActionAlignment.Center -> Alignment.CenterHorizontally
+                LfActionAlignment.End -> Alignment.End
+            },
+        ),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
         content()
     }
 }
+
+/**
+ * Where the controls sit on each line.
+ *
+ * [Center] is the default because of how wrapping looks: when a third action
+ * drops to its own line, a left-aligned one hangs off the bottom corner of the
+ * card looking like a mistake, where a centred one reads as deliberate.
+ *
+ * [End] is for dialogs, where convention puts the confirming action on the
+ * trailing edge and users reach for it there.
+ */
+public enum class LfActionAlignment { Center, End }

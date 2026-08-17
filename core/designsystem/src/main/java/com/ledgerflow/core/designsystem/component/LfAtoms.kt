@@ -1,5 +1,6 @@
 package com.ledgerflow.core.designsystem.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -80,8 +82,15 @@ public fun LfScaffold(
     )
 }
 
-/** Button emphasis. Destructive is visually distinct, never just "red text". */
-public enum class LfButtonStyle { Filled, Tonal, Text }
+/**
+ * Button emphasis. Destructive is visually distinct, never just "red text".
+ *
+ * [Outlined] is the row-action style: a hairline border and a raised fill, so a
+ * cluster of actions inside a card reads as controls rather than as a line of
+ * coloured words. [Text] stays for the cases where an action genuinely is
+ * secondary chrome -- "Done", "Dismiss", "OK" next to a message.
+ */
+public enum class LfButtonStyle { Filled, Tonal, Outlined, Text }
 
 @Composable
 public fun LfButton(
@@ -100,6 +109,26 @@ public fun LfButton(
             onClick = onClick,
             modifier = modifier.defaultMinSize(minHeight = spacing.minTouchTarget),
             enabled = enabled && !loading,
+        ) {
+            ButtonLabel(text = text, color = colors.accent)
+        }
+        return
+    }
+
+    if (style == LfButtonStyle.Outlined) {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = modifier.defaultMinSize(minHeight = spacing.minTouchTarget),
+            enabled = enabled && !loading,
+            shape = RoundedCornerShape(spacing.cornerMedium),
+            border = BorderStroke(1.dp, colors.outline),
+            colors = ButtonDefaults.outlinedButtonColors(
+                // A fill, faint but present: on the dark theme a border alone
+                // against surfaceRaised is nearly invisible, and the control
+                // still reads as text.
+                containerColor = colors.surfaceOverlay,
+                contentColor = colors.accent,
+            ),
         ) {
             ButtonLabel(text = text, color = colors.accent)
         }

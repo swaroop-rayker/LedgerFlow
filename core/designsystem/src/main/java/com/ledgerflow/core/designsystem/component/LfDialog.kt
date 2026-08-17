@@ -68,7 +68,11 @@ public fun LfDialog(
             // LfActionRow, not Row: a dialog is the narrowest container in the
             // app, and "Move and delete" beside "Cancel" overflows it at any
             // font scale above 1.0 (BUG9). Whole buttons wrap; labels never do.
-            LfActionRow {
+            //
+            // End-aligned rather than centred: dialog convention puts the
+            // confirming action on the trailing edge, and that is where a user
+            // reaches without reading.
+            LfActionRow(alignment = LfActionAlignment.End) {
                 dismissText?.let {
                     LfButton(text = it, onClick = onDismiss, style = LfButtonStyle.Text)
                 }

@@ -56,22 +56,46 @@ class Bug9_ControlLabelsNeverWrapTest {
         return results.first()
     }
 
-    /** The exact shape that shipped the bug: three actions in a card-width row. */
+    /**
+     * The exact shape that shipped the bug: three actions in a card-width row,
+     * in the outlined style the category cards actually use.
+     */
     @Test
     fun threeActionsInANarrowRowKeepTheirLabelsWhole() {
         composeRule.setContent {
             LfTheme {
                 Box(Modifier.width(NARROW_CARD.dp)) {
                     LfActionRow {
-                        LfButton(text = "Rename", style = LfButtonStyle.Text, onClick = {})
-                        LfButton(text = "Add sub", style = LfButtonStyle.Text, onClick = {})
-                        LfButton(text = "Delete", style = LfButtonStyle.Text, onClick = {})
+                        LfButton(text = "Rename", style = LfButtonStyle.Outlined, onClick = {})
+                        LfButton(text = "Add sub", style = LfButtonStyle.Outlined, onClick = {})
+                        LfButton(text = "Delete", style = LfButtonStyle.Outlined, onClick = {})
                     }
                 }
             }
         }
 
         listOf("Rename", "Add sub", "Delete").forEach { label ->
+            assertThat(layoutOf(label).lineCount).isEqualTo(1)
+        }
+    }
+
+    /** Every style carries the contract, not just the one that first broke. */
+    @Test
+    fun everyButtonStyleKeepsItsLabelOnOneLine() {
+        composeRule.setContent {
+            LfTheme {
+                Box(Modifier.width(NARROW_CARD.dp)) {
+                    LfActionRow {
+                        LfButton(text = "Filled one", onClick = {})
+                        LfButton(text = "Tonal one", style = LfButtonStyle.Tonal, onClick = {})
+                        LfButton(text = "Outlined one", style = LfButtonStyle.Outlined, onClick = {})
+                        LfButton(text = "Text one", style = LfButtonStyle.Text, onClick = {})
+                    }
+                }
+            }
+        }
+
+        listOf("Filled one", "Tonal one", "Outlined one", "Text one").forEach { label ->
             assertThat(layoutOf(label).lineCount).isEqualTo(1)
         }
     }

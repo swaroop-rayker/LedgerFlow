@@ -20,6 +20,7 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
+import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
@@ -202,16 +203,19 @@ private fun CategoryRow(
                     modifier = Modifier.weight(1f),
                 )
             }
+            // Separates the name from its actions, so the buttons read as a
+            // distinct region of the card rather than as more of the same block.
+            LfDivider()
             LfActionRow {
                 LfButton(
                     text = "Rename",
-                    style = LfButtonStyle.Text,
+                    style = LfButtonStyle.Outlined,
                     onClick = { onEvent(CategoriesEvent.RenameCategory(category.id, category.name)) },
                 )
                 if (!isChild) {
                     LfButton(
                         text = "Add sub",
-                        style = LfButtonStyle.Text,
+                        style = LfButtonStyle.Outlined,
                         onClick = {
                             onEvent(CategoriesEvent.AddCategory(category.id, category.name))
                         },
@@ -222,7 +226,7 @@ private fun CategoryRow(
                 if (!category.isSystem) {
                     LfButton(
                         text = "Delete",
-                        style = LfButtonStyle.Text,
+                        style = LfButtonStyle.Outlined,
                         onClick = { onEvent(CategoriesEvent.DeleteCategory(category.id, category.name)) },
                     )
                 }
@@ -254,10 +258,11 @@ private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -
                         style = LfTheme.typography.bodyL,
                         color = LfTheme.colors.textPrimary,
                     )
+                    LfDivider()
                     LfActionRow {
                         LfButton(
                             text = "Rename",
-                            style = LfButtonStyle.Text,
+                            style = LfButtonStyle.Outlined,
                             onClick = {
                                 onEvent(
                                     CategoriesEvent.RenameMerchant(merchant.id, merchant.canonicalName),
@@ -266,7 +271,7 @@ private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -
                         )
                         LfButton(
                             text = "Merge",
-                            style = LfButtonStyle.Text,
+                            style = LfButtonStyle.Outlined,
                             onClick = {
                                 onEvent(
                                     CategoriesEvent.StartMergeMerchant(
@@ -278,7 +283,7 @@ private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -
                         )
                         LfButton(
                             text = "Hide",
-                            style = LfButtonStyle.Text,
+                            style = LfButtonStyle.Outlined,
                             onClick = { onEvent(CategoriesEvent.DeleteMerchant(merchant.id)) },
                         )
                     }
@@ -316,11 +321,12 @@ private fun PaymentMethodList(methods: List<PaymentMethod>, onEvent: (Categories
                         style = LfTheme.typography.label,
                         color = LfTheme.colors.textTertiary,
                     )
+                    LfDivider()
                     LfActionRow {
                         if (!method.isDefault) {
                             LfButton(
                                 text = "Make default",
-                                style = LfButtonStyle.Text,
+                                style = LfButtonStyle.Outlined,
                                 onClick = {
                                     onEvent(CategoriesEvent.SetDefaultPaymentMethod(method.id))
                                 },
@@ -328,7 +334,7 @@ private fun PaymentMethodList(methods: List<PaymentMethod>, onEvent: (Categories
                         }
                         LfButton(
                             text = "Remove",
-                            style = LfButtonStyle.Text,
+                            style = LfButtonStyle.Outlined,
                             onClick = { onEvent(CategoriesEvent.DeletePaymentMethod(method.id)) },
                         )
                     }

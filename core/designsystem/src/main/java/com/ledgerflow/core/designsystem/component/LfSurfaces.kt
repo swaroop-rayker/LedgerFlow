@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
@@ -87,6 +89,24 @@ public fun LfEmptyState(
             LfButton(text = actionLabel, onClick = onAction)
         }
     }
+}
+
+/**
+ * A hairline rule.
+ *
+ * Its job in a card is to separate content from the actions beneath it, so the
+ * buttons read as a distinct region rather than as more of the same block. Uses
+ * the `outline` token, the same colour that draws every card's own edge, so
+ * dividers and borders never disagree by a shade.
+ */
+@Composable
+public fun LfDivider(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(LfTheme.colors.outline),
+    )
 }
 
 /**
