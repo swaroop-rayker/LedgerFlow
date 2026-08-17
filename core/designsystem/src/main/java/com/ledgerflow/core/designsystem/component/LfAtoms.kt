@@ -116,22 +116,7 @@ public fun LfButton(
     }
 
     if (style == LfButtonStyle.Outlined) {
-        OutlinedButton(
-            onClick = onClick,
-            modifier = modifier.defaultMinSize(minHeight = spacing.minTouchTarget),
-            enabled = enabled && !loading,
-            shape = RoundedCornerShape(spacing.cornerMedium),
-            border = BorderStroke(1.dp, colors.outline),
-            colors = ButtonDefaults.outlinedButtonColors(
-                // A fill, faint but present: on the dark theme a border alone
-                // against surfaceRaised is nearly invisible, and the control
-                // still reads as text.
-                containerColor = colors.surfaceOverlay,
-                contentColor = colors.accent,
-            ),
-        ) {
-            ButtonLabel(text = text, color = colors.accent)
-        }
+        OutlinedRowAction(text, onClick, modifier, enabled && !loading)
         return
     }
 
@@ -164,6 +149,48 @@ public fun LfButton(
         } else {
             ButtonLabel(text = text, color = LocalContentColor.current)
         }
+    }
+}
+
+/**
+ * The row-action button: bordered, faintly filled, and never narrow.
+ *
+ * The minimum *width* is the point. Row actions sit in a wrapping cluster, and a
+ * short label alone on the second line ("Delete", "Hide") reads as a stray tag
+ * beside the two wider controls above it. `defaultMinSize` only ever grows the
+ * button, so a longer label keeps its natural width and nothing is clipped
+ * (BUG9).
+ */
+@Composable
+private fun OutlinedRowAction(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    enabled: Boolean,
+) {
+    val spacing = LfTheme.spacing
+    val colors = LfTheme.colors
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.defaultMinSize(
+            minWidth = spacing.actionMinWidth,
+            minHeight = spacing.minTouchTarget,
+        ),
+        enabled = enabled,
+        shape = RoundedCornerShape(spacing.cornerMedium),
+        border = BorderStroke(1.dp, colors.outline),
+        // Material's default is 24dp a side, generous for a compact action and
+        // enough on its own to push a second control off the line inside an
+        // indented subcategory card. The minimum width covers the cramped case.
+        contentPadding = PaddingValues(horizontal = spacing.md, vertical = spacing.sm),
+        colors = ButtonDefaults.outlinedButtonColors(
+            // A fill, faint but present: on the dark theme a border alone against
+            // surfaceRaised is nearly invisible and the control still reads as text.
+            containerColor = colors.surfaceOverlay,
+            contentColor = colors.accent,
+        ),
+    ) {
+        ButtonLabel(text = text, color = colors.accent)
     }
 }
 

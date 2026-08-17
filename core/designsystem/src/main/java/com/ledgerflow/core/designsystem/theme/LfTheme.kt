@@ -101,6 +101,39 @@ public data class LfSpacing(
     val xxl: Dp = 48.dp,
     /** Minimum touch target (§9.6). Not negotiable. */
     val minTouchTarget: Dp = 48.dp,
+
+    /**
+     * Minimum width for a row action.
+     *
+     * A short label like "Delete" or "Hide" otherwise renders as a tight pill,
+     * and looks especially unintended when it is the one control that wrapped
+     * onto its own line beneath two wider ones. This is a *minimum*: a button
+     * whose label needs more keeps its natural width, so widening can never
+     * clip anything (BUG9).
+     *
+     * **112, not 128.** A card's inner width on a 360dp phone is ~261dp, so two
+     * actions plus their 8dp gap have ~126dp each. 128 missed that by two
+     * device pixels and silently stacked all three actions one per line, which
+     * made the card twice as tall — a minimum width chosen at the boundary is a
+     * layout that flips on a rounding error. This leaves real headroom.
+     */
+    val actionMinWidth: Dp = 112.dp,
+
+    /**
+     * Width one segment of `LfSegmentedControl` needs at font scale 1.0.
+     *
+     * Below this the control stacks its options vertically instead of dividing
+     * the row. A segment cannot grow to fit its label the way a button can --
+     * the cells split a fixed width -- so without the switch the label has no
+     * option but to break mid-word, which is BUG9.
+     *
+     * Measured, not guessed: on a 360dp phone a screen-padded control gives
+     * ~101dp per option across three, and "Categories" needs ~78dp of that at
+     * font scale 1.15. 96 tripped at 1.15 and stacked a row that fitted
+     * perfectly well; 72 keeps it horizontal there and still stacks at 2.0,
+     * where the same option would need ~144dp.
+     */
+    val segmentMinWidth: Dp = 72.dp,
     val cornerSmall: Dp = 8.dp,
     val cornerMedium: Dp = 16.dp,
     val cornerLarge: Dp = 24.dp,
