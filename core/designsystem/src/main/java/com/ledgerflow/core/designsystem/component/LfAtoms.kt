@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -25,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -99,7 +101,7 @@ public fun LfButton(
             modifier = modifier.defaultMinSize(minHeight = spacing.minTouchTarget),
             enabled = enabled && !loading,
         ) {
-            Text(text = text, style = LfTheme.typography.bodyL, color = colors.accent)
+            ButtonLabel(text = text, color = colors.accent)
         }
         return
     }
@@ -131,9 +133,35 @@ public fun LfButton(
                 color = colors.onAccent,
             )
         } else {
-            Text(text = text, style = LfTheme.typography.bodyL)
+            ButtonLabel(text = text, color = LocalContentColor.current)
         }
     }
+}
+
+/**
+ * A button's label. **Never wraps** (BUG9).
+ *
+ * Found on device: three text buttons in a row inside a card overflowed it, and
+ * the last one broke mid-word -- "Delete" rendered as "Delet" above a lone "e".
+ * A control's label is a single short phrase; breaking one across lines is never
+ * the right answer, and it gets worse as the font scale grows (§9.6 requires
+ * 2.0x without truncation or overlap).
+ *
+ * `softWrap = false` makes the button measure at its natural width, which pushes
+ * the decision where it belongs: the *container* wraps whole controls onto the
+ * next line (`FlowRow`), rather than the label wrapping inside a control. There
+ * is deliberately no ellipsis either -- a "Delet…" button is no more usable than
+ * a broken one.
+ */
+@Composable
+private fun ButtonLabel(text: String, color: Color) {
+    Text(
+        text = text,
+        style = LfTheme.typography.bodyL,
+        color = color,
+        maxLines = 1,
+        softWrap = false,
+    )
 }
 
 @Composable

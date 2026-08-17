@@ -29,16 +29,6 @@ internal fun EntryPlaceholder(onBack: () -> Unit) {
 }
 
 @Composable
-internal fun CategoriesPlaceholder(onBack: () -> Unit) {
-    Placeholder(
-        title = "Categories",
-        body = "Category and subcategory management, merchants and payment " +
-            "methods arrive with :feature:categories.",
-        onBack = onBack,
-    )
-}
-
-@Composable
 internal fun ExportPlaceholder(onBack: () -> Unit) {
     Placeholder(
         title = "Export",
@@ -58,3 +48,4 @@ private fun Placeholder(title: String, body: String, onBack: () -> Unit) {
         LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Text)
     }
 }
+

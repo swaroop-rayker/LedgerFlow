@@ -122,6 +122,7 @@ Debug builds use `applicationIdSuffix ".debug"` and coexist with release install
 - `LazyColumn` always has `key` and `contentType`.
 - Preview annotations on every top-level screen: `@PreviewScreenSizes @PreviewFontScale @PreviewLightDark`.
 - Zero hardcoded colours, dimensions, or type sizes. Everything comes from `LfTheme`.
+- **A control's label never wraps** (BUG9). Buttons/chips render their label `maxLines = 1, softWrap = false`, with no ellipsis. Two or more actions go in an `LfActionRow` (`FlowRow`) so the *container* wraps whole controls — a bare `Row` of three actions inside a card is the defect, and it shows up as "Delet / e".
 - Insets: `enableEdgeToEdge()` + `Scaffold` + `WindowInsets.safeDrawing`. Never hardcode bar padding.
 
 **Room**
@@ -222,6 +223,7 @@ Targets live in `SPEC.md` §11. Practical rules while coding:
 | Hardcoded colours/dp/sp | `LfTheme` tokens |
 | `!!` | `requireNotNull` with a message |
 | Business logic in a Composable | ViewModel + use case |
+| A `Row` of 3 action buttons in a card | `LfActionRow`; labels never wrap (BUG9) |
 | Silently dropping an unparsed bank SMS | `PENDING` with `confidence = 0` |
 | Wiping the DB when decryption fails | Recovery screen |
 | Fetching an FX rate | user-entered `fx_rate_micro`, or require base amount at review |

@@ -26,6 +26,7 @@ dependencies {
     implementation(project(":feature:dashboard"))
     implementation(project(":feature:ledger"))
     implementation(project(":feature:analytics"))
+    implementation(project(":feature:categories"))
     implementation(project(":feature:settings"))
 
     implementation(libs.androidx.activity.compose)

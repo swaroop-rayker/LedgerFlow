@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -18,6 +20,8 @@ import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.feature.analytics.AnalyticsScreen
+import com.ledgerflow.feature.categories.CategoriesScreen
+import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.dashboard.DashboardScreen
 import com.ledgerflow.feature.ledger.LedgerScreen
 import com.ledgerflow.feature.settings.MoreScreen
@@ -81,7 +85,13 @@ internal fun LedgerFlowShell(
             }
             composable<Destination.Entry> { EntryPlaceholder(navController::popBackStack) }
             composable<Destination.Categories> {
-                CategoriesPlaceholder(navController::popBackStack)
+                val viewModel: CategoriesViewModel = hiltViewModel()
+                val state by viewModel.state.collectAsStateWithLifecycle()
+                CategoriesScreen(
+                    state = state,
+                    onEvent = viewModel::onEvent,
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable<Destination.Export> { ExportPlaceholder(navController::popBackStack) }
         }

@@ -19,4 +19,10 @@ dependencies {
 
     testImplementation(libs.junit4)
     testImplementation(libs.truth)
+
+    // BUG9's regression test measures a real TextLayoutResult, which needs a
+    // composition on a device rather than a JVM stub.
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.truth)
 }
