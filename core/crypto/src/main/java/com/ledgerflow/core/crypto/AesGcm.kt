@@ -58,6 +58,33 @@ public object AesGcm {
         return Sealed(nonce = nonce, ciphertext = cipher.doFinal(plaintext))
     }
 
+    /**
+     * Encrypts with a caller-supplied nonce.
+     *
+     * `internal` deliberately: nonce reuse is the one catastrophic GCM misuse,
+     * and the public API gives callers no way to make that mistake. This exists
+     * for the `.lfbk` container alone, where the header is the AAD *and*
+     * contains the nonce, so the nonce must exist before encryption begins.
+     *
+     * The caller is responsible for generating [nonce] freshly from
+     * [SecureRandom] for every single call. Never derive it, never reuse it,
+     * never count.
+     */
+    internal fun encryptWithNonce(
+        key: ByteArray,
+        plaintext: ByteArray,
+        nonce: ByteArray,
+        aad: ByteArray,
+    ): Sealed {
+        require(nonce.size == NONCE_LENGTH) {
+            "Nonce must be $NONCE_LENGTH bytes, was ${nonce.size}"
+        }
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key.asSecretKey(), GCMParameterSpec(TAG_LENGTH_BITS, nonce))
+        if (aad.isNotEmpty()) cipher.updateAAD(aad)
+        return Sealed(nonce = nonce.copyOf(), ciphertext = cipher.doFinal(plaintext))
+    }
+
     /** Encrypts with a [SecretKey] that never leaves the Keystore. */
     public fun encrypt(
         key: SecretKey,

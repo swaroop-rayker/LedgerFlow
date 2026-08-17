@@ -1,6 +1,7 @@
 plugins {
     id("ledgerflow.android.library")
     id("ledgerflow.android.room")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -24,7 +25,7 @@ android {
 // is generated and gitignored; `schemas/` stays the committed source of truth
 // that scripts/guard-schema.sh checks. Testing migrations against the
 // *committed* schemas is the correct thing to do regardless.
-val syncRoomSchemasToTestAssets by tasks.registering(Sync::class) {
+val syncRoomSchemasToTestAssets = tasks.register<Sync>("syncRoomSchemasToTestAssets") {
     description = "Copies committed Room schemas into androidTest assets for MigrationTestHelper."
     from(layout.projectDirectory.dir("schemas"))
     into(layout.projectDirectory.dir("src/androidTest/assets"))
@@ -43,6 +44,7 @@ dependencies {
     implementation(libs.androidx.room.paging)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit4)
     testImplementation(libs.truth)

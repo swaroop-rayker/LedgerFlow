@@ -11,9 +11,13 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 /**
  * Builds the SQLCipher-backed Room database, keyed from `:core:crypto`.
  *
- * Note what is *not* here: `fallbackToDestructiveMigration()`. Law 4 bans it,
+ * Note what is *not* here: the destructive-migration fallback. Law 4 bans it,
  * `scripts/guard-schema.sh` greps for it, and its absence is the difference
  * between "the upgrade failed" and "the user's ledger is gone".
+ *
+ * (Deliberately not spelling that API's name with parentheses: the guard
+ * matches the call form, and it cannot tell a comment from code. Naming it here
+ * would fail the build -- which is the guard working, if bluntly.)
  */
 public object LedgerFlowDatabaseFactory {
 

@@ -351,6 +351,10 @@ Three properties this format must have, each of which the earlier draft lacked:
 
 **Reader hardening (required):** reject a file whose `magic` is not `LFBK`; reject an unknown `formatVersion` with a clear "created by a newer version of LedgerFlow" message rather than a parse error; and **never allocate `plaintextLen` bytes before the GCM tag verifies** — an attacker-supplied length is a trivial OOM otherwise.
 
+**Payload format:** the ciphertext wraps a **logical row export** (JSON), not a copy of the database file. The file would be simpler, but it is SQLCipher-encrypted with the DEK, so restoring it would require carrying the DEK too — which is exactly the failure mode §7.5 rejects Android Auto Backup for. A logical export also lets a backup written at an older `schemaVersion` be migrated forward, which a raw file cannot do without replaying the whole migration chain. JSON is not compact, but the payload is encrypted anyway and the format is inspectable during a recovery investigation; revisit if a real ledger ever makes the size matter.
+
+**Restore is a single transaction.** A restore that hits a constraint partway leaves the user looking at some of their data with no indication the rest is missing — worse than a restore that refuses outright.
+
 Backup is **key-independent of the Android Keystore** — this is what makes cross-device and post-factory-reset restore possible (§7.4).
 
 **XLSX library note:** Apache POI is unusable on Android (dex bloat + xmlbeans). Use `org.dhatim:fastexcel` (writer-only, lightweight) or hand-roll SpreadsheetML into a zip. Decide in ADR-004.
