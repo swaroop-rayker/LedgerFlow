@@ -85,6 +85,11 @@ public fun EntryScreen(
     LaunchedEffect(state.savedEntryId) {
         if (state.savedEntryId != null) onDone()
     }
+    // Cancel decides in the ViewModel whether it parks the form or leaves, so
+    // the screen only reacts to the answer.
+    LaunchedEffect(state.dismissed) {
+        if (state.dismissed) onDone()
+    }
 
     EntryDialogs(state, onEvent)
 
@@ -101,7 +106,7 @@ public fun EntryScreen(
 
     LfScaffold(
         modifier = modifier,
-        bottomBar = { SaveBar(state, onEvent, onDone) },
+        bottomBar = { SaveBar(state, onEvent) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -509,10 +514,14 @@ private fun LineItemCard(line: EntryLineItem, onEvent: (EntryEvent) -> Unit) {
 }
 
 @Composable
-private fun SaveBar(state: EntryUiState, onEvent: (EntryEvent) -> Unit, onDone: () -> Unit) {
+private fun SaveBar(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     Column(modifier = Modifier.padding(LfTheme.spacing.md)) {
         LfActionRow {
-            LfButton(text = "Cancel", style = LfButtonStyle.Text, onClick = onDone)
+            LfButton(
+                text = "Cancel",
+                style = LfButtonStyle.Text,
+                onClick = { onEvent(EntryEvent.CancelRequested) },
+            )
             LfButton(
                 text = "Save",
                 enabled = state.canSave,

@@ -247,6 +247,78 @@ class EntryViewModelTest {
         collector.cancel()
     }
 
+    /**
+     * Opening a draft is a read.
+     *
+     * It used to mark the form dirty, so the debounce rewrote a row whose
+     * content had not changed -- bumping `updated_at` and reshuffling the
+     * shelf, which meant glancing at an entry promoted it above ones you had
+     * actually worked on more recently.
+     */
+    @Test
+    fun openingADraft_doesNotRewriteIt() = runTest(dispatcher) {
+        drafts.seed("draft-a", LedgerType.DEBIT, """{"amountMinor":4250}""")
+        val subject = collected()
+        advanceUntilIdle()
+
+        subject.onEvent(EntryEvent.DraftOpened("draft-a"))
+        advanceTimeBy(DEBOUNCE_MS * 4)
+        advanceUntilIdle()
+
+        assertThat(drafts.saves).isEmpty()
+    }
+
+    /** ...but a real edit after opening one still lands, on the same row. */
+    @Test
+    fun editingAnOpenedDraft_updatesThatSameRow() = runTest(dispatcher) {
+        drafts.seed("draft-a", LedgerType.DEBIT, """{"amountMinor":4250}""")
+        val subject = collected()
+        advanceUntilIdle()
+        subject.onEvent(EntryEvent.DraftOpened("draft-a"))
+        advanceUntilIdle()
+
+        subject.type("99")
+        advanceTimeBy(DEBOUNCE_MS + 1)
+        advanceUntilIdle()
+
+        assertThat(drafts.saves).hasSize(1)
+        assertThat(drafts.find("draft-a")?.payloadJson).contains("\"amountMinor\":9900")
+    }
+
+    // ── Cancel backs out one level ──────────────────────────────────────────
+
+    /**
+     * Cancel used to leave immediately, so typing an amount after "Start
+     * another" and tapping Cancel dropped you on the home screen -- two steps
+     * from the entry you were mid-way through, with nothing saying where it
+     * went. It had not been lost; nothing said so.
+     */
+    @Test
+    fun cancel_withContent_parksTheEntryAndStaysOnTheScreen() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("125")
+        advanceUntilIdle()
+
+        subject.onEvent(EntryEvent.CancelRequested)
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.dismissed).isFalse()
+        assertThat(subject.state.value.amountMinor).isEqualTo(0L)
+        assertThat(subject.state.value.unsaved.map { it.amountMinor }).contains(125_00L)
+    }
+
+    @Test
+    fun cancel_onAnEmptyForm_leaves() = runTest(dispatcher) {
+        val subject = collected()
+        advanceUntilIdle()
+
+        subject.onEvent(EntryEvent.CancelRequested)
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.dismissed).isTrue()
+        assertThat(drafts.saves).isEmpty()
+    }
+
     @Test
     fun startFresh_discardsTheDraftAndEmptiesTheForm() = runTest(dispatcher) {
         drafts.seed("draft-a", LedgerType.DEBIT, """{"amountMinor":4250}""")

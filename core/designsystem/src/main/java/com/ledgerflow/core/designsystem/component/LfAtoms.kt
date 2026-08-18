@@ -121,8 +121,15 @@ public fun LfScaffold(
  * cluster of actions inside a card reads as controls rather than as a line of
  * coloured words. [Text] stays for the cases where an action genuinely is
  * secondary chrome -- "Done", "Dismiss", "OK" next to a message.
+ *
+ * [Inline] is [Text] at label size, for two or three actions that have to share
+ * one line inside a narrow card. Three `bodyL` labels need roughly 300dp and a
+ * category card offers about 280, so they wrapped to a third line and made the
+ * card taller than the content in it. The touch target stays 48dp -- what
+ * shrinks is the type and the horizontal padding, never the tappable area
+ * (§9.6).
  */
-public enum class LfButtonStyle { Filled, Tonal, Outlined, Text }
+public enum class LfButtonStyle { Filled, Tonal, Outlined, Text, Inline }
 
 @Composable
 public fun LfButton(
@@ -136,13 +143,23 @@ public fun LfButton(
     val spacing = LfTheme.spacing
     val colors = LfTheme.colors
 
-    if (style == LfButtonStyle.Text) {
+    if (style == LfButtonStyle.Text || style == LfButtonStyle.Inline) {
+        val inline = style == LfButtonStyle.Inline
         TextButton(
             onClick = onClick,
             modifier = modifier.defaultMinSize(minHeight = spacing.minTouchTarget),
             enabled = enabled && !loading,
+            contentPadding = if (inline) {
+                PaddingValues(horizontal = spacing.sm, vertical = spacing.xs)
+            } else {
+                ButtonDefaults.TextButtonContentPadding
+            },
         ) {
-            ButtonLabel(text = text, color = colors.accent)
+            ButtonLabel(
+                text = text,
+                color = colors.accent,
+                style = if (inline) LfTheme.typography.label else LfTheme.typography.bodyL,
+            )
         }
         return
     }
@@ -242,10 +259,14 @@ private fun OutlinedRowAction(
  * a broken one.
  */
 @Composable
-private fun ButtonLabel(text: String, color: Color) {
+private fun ButtonLabel(
+    text: String,
+    color: Color,
+    style: androidx.compose.ui.text.TextStyle = LfTheme.typography.bodyL,
+) {
     Text(
         text = text,
-        style = LfTheme.typography.bodyL,
+        style = style,
         color = color,
         maxLines = 1,
         softWrap = false,

@@ -110,6 +110,13 @@ public data class EntryUiState(
     /** Set once the entry is committed; the shell navigates away on it. */
     val savedEntryId: String? = null,
 
+    /**
+     * Set when Cancel has nothing left to back out of and the screen should
+     * close. Cancel on a form with content parks it instead — see the
+     * ViewModel's `cancel`.
+     */
+    val dismissed: Boolean = false,
+
     /** A refusal, in words the user can act on. */
     val message: String? = null,
 ) {
@@ -235,6 +242,9 @@ public sealed interface EntryEvent {
     public data object NewDraftStarted : EntryEvent
 
     public data object SaveRequested : EntryEvent
+
+    /** Back out: parks a form with content, closes an empty one. */
+    public data object CancelRequested : EntryEvent
 
     /** "Start fresh" over a resumed draft — behind a confirmation (§6.1.2). */
     public data object DiscardRequested : EntryEvent

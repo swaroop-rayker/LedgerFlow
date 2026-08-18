@@ -1,13 +1,22 @@
 package com.ledgerflow.feature.categories
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -15,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.compose.ui.unit.dp
+import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
@@ -165,17 +176,63 @@ private fun CategoryList(tree: List<CategoryTree>, onEvent: (CategoriesEvent) ->
         ),
     ) {
         tree.forEach { branch ->
-            // Stable keys and a contentType per row shape (CLAUDE.md §5): without
-            // them every edit recomposes the whole list instead of one row.
-            item(key = branch.parent.id, contentType = "parent") {
-                CategoryRow(branch.parent, isChild = false, onEvent = onEvent)
+            // Keyed per branch rather than per row: the connector rail has to
+            // measure against the height of the children it spans, so a branch
+            // is one item. Stable keys and a contentType still apply (CLAUDE.md
+            // §5) -- without them every edit recomposes the whole list.
+            item(key = branch.parent.id, contentType = "branch") {
+                CategoryBranch(branch, onEvent)
             }
-            items(
-                count = branch.children.size,
-                key = { branch.children[it].id },
-                contentType = { "child" },
-            ) { index ->
-                CategoryRow(branch.children[index], isChild = true, onEvent = onEvent)
+        }
+    }
+}
+
+/**
+ * One category and its subcategories, joined by a connector rail.
+ *
+ * **Compact by design.** The first version gave every row a card with 16dp
+ * padding, a divider, and a row of 112dp-minimum outlined buttons — about
+ * 140dp per category, so three categories filled a phone screen and the tree
+ * structure was invisible under the chrome. The actions now sit on the name's
+ * own line as text buttons, which drops a row to roughly its touch-target
+ * height and lets the indentation do the work of showing what belongs to what.
+ *
+ * The rail is a hairline in `outline` with a short stub into each child, so the
+ * hierarchy reads at a glance rather than being inferred from indentation
+ * alone. Colours are unchanged — this is layout and weight, not palette.
+ */
+@Composable
+private fun CategoryBranch(branch: CategoryTree, onEvent: (CategoriesEvent) -> Unit) {
+    val spacing = LfTheme.spacing
+
+    Column(modifier = Modifier.padding(bottom = spacing.sm)) {
+        CategoryRow(branch.parent, isChild = false, onEvent = onEvent)
+
+        if (branch.children.isEmpty()) return@Column
+
+        // IntrinsicSize.Min so the rail can fill the exact height of the
+        // children beside it; without it `fillMaxHeight` has nothing to
+        // measure against and the line collapses.
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            Box(
+                modifier = Modifier
+                    .padding(start = spacing.md)
+                    .width(RAIL_THICKNESS.dp)
+                    .fillMaxHeight()
+                    .background(LfTheme.colors.outline),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                branch.children.forEach { child ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .width(spacing.md)
+                                .height(RAIL_THICKNESS.dp)
+                                .background(LfTheme.colors.outline),
+                        )
+                        CategoryRow(child, isChild = true, onEvent = onEvent)
+                    }
+                }
             }
         }
     }
@@ -187,49 +244,63 @@ private fun CategoryRow(
     isChild: Boolean,
     onEvent: (CategoriesEvent) -> Unit,
 ) {
-    LfCard(
-        modifier = Modifier.padding(start = if (isChild) LfTheme.spacing.lg else LfTheme.spacing.xs),
+    val spacing = LfTheme.spacing
+    val shape = RoundedCornerShape(spacing.cornerSmall)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = spacing.xs)
+            .background(LfTheme.colors.surfaceRaised, shape)
+            .border(1.dp, LfTheme.colors.outline, shape)
+            .padding(horizontal = spacing.md, vertical = spacing.sm),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                LfCategoryDot(name = category.name, colorArgb = category.colorArgb)
-                Text(
-                    text = category.name,
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.textPrimary,
-                    modifier = Modifier.weight(1f),
+        // Name on its own line, actions beneath — the shape in the sketch.
+        //
+        // The first attempt put the name *inside* the action `FlowRow`, which
+        // made it compete with the buttons for line space: "Food & Dining" plus
+        // three labels does not fit, so the row wrapped in the middle of the
+        // actions and the card ended up taller than the one it replaced. The
+        // name is a heading, not a control; it gets its own line.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LfCategoryDot(name = category.name, colorArgb = category.colorArgb)
+            Text(
+                text = category.name,
+                style = if (isChild) LfTheme.typography.bodyM else LfTheme.typography.bodyL,
+                color = LfTheme.colors.textPrimary,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        // Still a FlowRow (BUG9): at font scale 2.0 three labels do not fit one
+        // line, and whole controls wrap rather than words breaking.
+        LfActionRow(alignment = LfActionAlignment.End) {
+            LfButton(
+                text = "Rename",
+                style = LfButtonStyle.Inline,
+                onClick = { onEvent(CategoriesEvent.RenameCategory(category.id, category.name)) },
+            )
+            if (!isChild) {
+                LfButton(
+                    text = "Add sub",
+                    style = LfButtonStyle.Inline,
+                    onClick = { onEvent(CategoriesEvent.AddCategory(category.id, category.name)) },
                 )
             }
-            // Separates the name from its actions, so the buttons read as a
-            // distinct region of the card rather than as more of the same block.
-            LfDivider()
-            LfActionRow {
-                LfButton(
-                    text = "Rename",
-                    style = LfButtonStyle.Outlined,
-                    onClick = { onEvent(CategoriesEvent.RenameCategory(category.id, category.name)) },
-                )
-                if (!isChild) {
-                    LfButton(
-                        text = "Add sub",
-                        style = LfButtonStyle.Outlined,
-                        onClick = {
-                            onEvent(CategoriesEvent.AddCategory(category.id, category.name))
-                        },
-                    )
-                }
-                LfButton(
-                    text = "Delete",
-                    style = LfButtonStyle.Outlined,
-                    onClick = { onEvent(CategoriesEvent.DeleteCategory(category.id, category.name)) },
-                )
-            }
+            LfButton(
+                text = "Delete",
+                style = LfButtonStyle.Inline,
+                onClick = { onEvent(CategoriesEvent.DeleteCategory(category.id, category.name)) },
+            )
         }
     }
 }
+
+/** Hairline. Thin enough to read as a connector rather than as a border. */
+private const val RAIL_THICKNESS = 1
 
 @Composable
 private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -> Unit) {

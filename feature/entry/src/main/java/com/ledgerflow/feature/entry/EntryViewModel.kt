@@ -183,6 +183,7 @@ public class EntryViewModel @Inject constructor(
             EntryEvent.DraftDiscardDismissed,
             EntryEvent.NewDraftStarted,
             EntryEvent.SaveRequested,
+            EntryEvent.CancelRequested,
             EntryEvent.DiscardRequested,
             EntryEvent.DiscardConfirmed,
             EntryEvent.DiscardDismissed,
@@ -204,6 +205,7 @@ public class EntryViewModel @Inject constructor(
             EntryEvent.NewDraftStarted -> startNewDraft()
 
             EntryEvent.SaveRequested -> save()
+            EntryEvent.CancelRequested -> cancel()
             EntryEvent.DiscardRequested -> form.update { it.copy(confirmingDiscard = true) }
             EntryEvent.DiscardConfirmed -> startFresh()
             EntryEvent.DiscardDismissed -> form.update { it.copy(confirmingDiscard = false) }
@@ -429,6 +431,29 @@ public class EntryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Backs out one level rather than off the screen.
+     *
+     * Cancel used to leave immediately, which after "Start another" meant
+     * typing an amount and tapping Cancel dropped you on the home screen --
+     * two steps away from the entry you were mid-way through, with no visible
+     * sign of where it went. It had not been lost (the debounce had already
+     * written it), but nothing said so.
+     *
+     * So Cancel on a form with something in it parks that entry on the shelf
+     * and clears the form, staying put: the shelf visibly gains the card, which
+     * is the feedback the old behaviour lacked. Cancel on an empty form has
+     * nothing to park and leaves.
+     */
+    private fun cancel() {
+        val current = form.value
+        if (!current.dirty && current.amountMinor == 0L) {
+            form.update { it.copy(dismissed = true) }
+            return
+        }
+        startNewDraft()
+    }
+
     // ── Saving ──────────────────────────────────────────────────────────────
 
     private fun save() {
@@ -460,24 +485,6 @@ public class EntryViewModel @Inject constructor(
             }
         }
     }
-
-    private fun Form.toRequest(): ApprovalRequest = ApprovalRequest(
-        ledger = ledger,
-        amount = Money(amountMinor),
-        occurredAt = occurredAt,
-        assignment = EntryAssignment(
-            categoryId = categoryId,
-            subcategoryId = subcategoryId,
-            merchantId = merchantId,
-            paymentMethodId = paymentMethodId,
-        ),
-        note = note.trim().ifEmpty { null },
-        // §5.4: manual entry does not route through pending_transaction, so
-        // there is nothing for source_ref_id to point at.
-        lineItems = lineItems
-            .filter { it.name.isNotBlank() || it.amountMinor != 0L }
-            .map { NewLineItem(name = it.name, total = Money(it.amountMinor)) },
-    )
 
     // ── State plumbing ──────────────────────────────────────────────────────
 
@@ -516,6 +523,7 @@ private data class Form(
     val choosingDate: Boolean = false,
     val confirmingDiscard: Boolean = false,
     val discardingDraftId: String? = null,
+    val dismissed: Boolean = false,
     val resumedFromDraft: Boolean = false,
     val dirty: Boolean = false,
     val isRestoring: Boolean = true,
@@ -567,6 +575,7 @@ private fun Form.toUiState(
         picker = picker,
         choosingDate = choosingDate,
         confirmingDiscard = confirmingDiscard,
+        dismissed = dismissed,
         resumedFromDraft = resumedFromDraft,
         isRestoring = isRestoring,
         formGeneration = formGeneration,
@@ -575,6 +584,24 @@ private fun Form.toUiState(
         message = message,
     )
 }
+
+private fun Form.toRequest(): ApprovalRequest = ApprovalRequest(
+    ledger = ledger,
+    amount = Money(amountMinor),
+    occurredAt = occurredAt,
+    assignment = EntryAssignment(
+        categoryId = categoryId,
+        subcategoryId = subcategoryId,
+        merchantId = merchantId,
+        paymentMethodId = paymentMethodId,
+    ),
+    note = note.trim().ifEmpty { null },
+    // §5.4: manual entry does not route through pending_transaction, so
+    // there is nothing for source_ref_id to point at.
+    lineItems = lineItems
+        .filter { it.name.isNotBlank() || it.amountMinor != 0L }
+        .map { NewLineItem(name = it.name, total = Money(it.amountMinor)) },
+)
 
 /**
  * A combination, labelled with what it will fill in.
@@ -624,10 +651,17 @@ private fun EntryDraftPayload.toForm(draft: EntryDraft, now: Long, currencyCode:
             amountMinor = it.amountMinor,
         )
     },
-    // A resumed draft is already worth persisting: the user may switch
-    // ledger or close the app without touching a field, and the row they
-    // came back to must not be the one thing that fails to survive.
-    dirty = true,
+    // **Not dirty.** Opening a draft is a read. Marking it dirty made the
+    // debounce rewrite a row whose content had not changed, which bumped
+    // `updated_at` and reshuffled the shelf -- so glancing at an entry
+    // promoted it above ones you had actually worked on more recently.
+    //
+    // The earlier reasoning ("a resumed draft is worth persisting so it
+    // survives") was left over from the one-draft-per-ledger design, where
+    // the form was the only place a resumed draft lived. It already has a
+    // row now, and `draftId` below means the next real edit updates that
+    // row rather than creating another.
+    dirty = false,
     resumedFromDraft = true,
     isRestoring = false,
 )
