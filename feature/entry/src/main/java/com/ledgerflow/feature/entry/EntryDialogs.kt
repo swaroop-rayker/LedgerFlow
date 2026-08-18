@@ -21,6 +21,7 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
@@ -36,6 +37,7 @@ internal fun EntryDialogs(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     state.picker?.let { PickerDialog(it, state, onEvent) }
     if (state.choosingDate) DateDialog(state, onEvent)
     if (state.confirmingDiscard) DiscardDialog(onEvent)
+    state.discardingDraft?.let { DiscardDraftDialog(it, onEvent) }
 }
 
 @Composable
@@ -131,6 +133,28 @@ private fun DiscardDialog(onEvent: (EntryEvent) -> Unit) {
         emphasis = LfDialogEmphasis.Warning,
         onConfirm = { onEvent(EntryEvent.DiscardConfirmed) },
         onDismiss = { onEvent(EntryEvent.DiscardDismissed) },
+    )
+}
+
+/**
+ * Discarding one card off the unsaved shelf.
+ *
+ * The control is a small icon beside other small controls, and what it destroys
+ * is work the user typed and never saved. BUG6 is about losing that, and an
+ * accidental tap loses it exactly as thoroughly as a process death does -- so
+ * it is confirmed, and the confirmation names the amount rather than saying
+ * "this item".
+ */
+@Composable
+private fun DiscardDraftDialog(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
+    LfDialog(
+        title = "Discard ${MoneyFormat.symbolised(draft.amountMinor, draft.currencyCode)}?",
+        body = "This unsaved entry goes for good. It was never saved anywhere " +
+            "else, so there is nothing to undo it with.",
+        confirmText = "Discard it",
+        emphasis = LfDialogEmphasis.Warning,
+        onConfirm = { onEvent(EntryEvent.DraftDiscardConfirmed) },
+        onDismiss = { onEvent(EntryEvent.DraftDiscardDismissed) },
     )
 }
 

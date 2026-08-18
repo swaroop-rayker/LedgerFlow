@@ -98,7 +98,7 @@ public class EntryViewModel @Inject constructor(
 
     public val state: StateFlow<EntryUiState> =
         combine(form, ledgerScoped, currency) { form, scoped, currencyCode ->
-            form.toUiState(scoped, currencyCode)
+            form.toUiState(scoped, currencyCode, clock.nowMillis())
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -178,7 +178,9 @@ public class EntryViewModel @Inject constructor(
             -> onLineItemEvent(event)
 
             is EntryEvent.DraftOpened,
-            is EntryEvent.DraftDiscarded,
+            is EntryEvent.DraftDiscardRequested,
+            EntryEvent.DraftDiscardConfirmed,
+            EntryEvent.DraftDiscardDismissed,
             EntryEvent.NewDraftStarted,
             EntryEvent.SaveRequested,
             EntryEvent.DiscardRequested,
@@ -194,7 +196,11 @@ public class EntryViewModel @Inject constructor(
     private fun onDraftEvent(event: EntryEvent) {
         when (event) {
             is EntryEvent.DraftOpened -> openDraft(event.id)
-            is EntryEvent.DraftDiscarded -> discardDraft(event.id)
+            is EntryEvent.DraftDiscardRequested -> form.update {
+                it.copy(discardingDraftId = event.id)
+            }
+            EntryEvent.DraftDiscardConfirmed -> form.value.discardingDraftId?.let(::discardDraft)
+            EntryEvent.DraftDiscardDismissed -> form.update { it.copy(discardingDraftId = null) }
             EntryEvent.NewDraftStarted -> startNewDraft()
 
             EntryEvent.SaveRequested -> save()
@@ -326,7 +332,12 @@ public class EntryViewModel @Inject constructor(
             if (outgoing.dirty) persist(outgoing)
             // A fresh form in the other book. The outgoing one is not lost --
             // it was just written, and it is in that book's stack.
-            form.value = Form(ledger = ledger, occurredAt = clock.nowMillis())
+            form.value = Form(
+                ledger = ledger,
+                occurredAt = clock.nowMillis(),
+                isRestoring = false,
+                formGeneration = outgoing.formGeneration + 1,
+            )
         }
     }
 
@@ -363,12 +374,18 @@ public class EntryViewModel @Inject constructor(
         viewModelScope.launch {
             val outgoing = form.value
             if (outgoing.dirty) persist(outgoing)
-            form.value = Form(ledger = outgoing.ledger, occurredAt = clock.nowMillis())
+            form.value = Form(
+                ledger = outgoing.ledger,
+                occurredAt = clock.nowMillis(),
+                isRestoring = false,
+                formGeneration = outgoing.formGeneration + 1,
+            )
         }
     }
 
     private fun discardDraft(id: String) {
         viewModelScope.launch {
+            form.update { it.copy(discardingDraftId = null) }
             drafts.discard(id)
             if (form.value.draftId == id) {
                 form.value = Form(ledger = form.value.ledger, occurredAt = clock.nowMillis())
@@ -432,6 +449,8 @@ public class EntryViewModel @Inject constructor(
                         ledger = current.ledger,
                         occurredAt = clock.nowMillis(),
                         savedEntryId = result.value.id,
+                        isRestoring = false,
+                        formGeneration = current.formGeneration + 1,
                     )
                 }
 
@@ -496,9 +515,11 @@ private data class Form(
     val picker: EntryPicker? = null,
     val choosingDate: Boolean = false,
     val confirmingDiscard: Boolean = false,
+    val discardingDraftId: String? = null,
     val resumedFromDraft: Boolean = false,
     val dirty: Boolean = false,
     val isRestoring: Boolean = true,
+    val formGeneration: Int = 0,
     val isSaving: Boolean = false,
     val savedEntryId: String? = null,
     val message: String? = null,
@@ -514,36 +535,46 @@ private data class LedgerScoped(
     val unsaved: List<EntryDraft>,
 )
 
-private fun Form.toUiState(scoped: LedgerScoped, currencyCode: String) = EntryUiState(
-    ledger = ledger,
-    amountText = amountText,
-    amountMinor = amountMinor,
-    currencyCode = currencyCode,
-    categoryId = categoryId,
-    subcategoryId = subcategoryId,
-    merchantId = merchantId,
-    paymentMethodId = paymentMethodId,
-    note = note,
-    occurredAt = occurredAt,
-    lineItems = lineItems,
-    tree = scoped.tree,
-    merchants = scoped.merchants,
-    paymentMethods = scoped.paymentMethods,
-    combos = scoped.combos.mapNotNull { it.toChip(scoped) },
+private fun Form.toUiState(
+    scoped: LedgerScoped,
+    currencyCode: String,
+    now: Long,
+): EntryUiState {
     // The form's own draft is not offered back to it as something to open.
-    unsaved = scoped.unsaved
+    val unsavedCards = scoped.unsaved
         .filter { it.id != draftId }
-        .mapNotNull { it.toCard(currencyCode) },
-    openDraftId = draftId,
-    picker = picker,
-    choosingDate = choosingDate,
-    confirmingDiscard = confirmingDiscard,
-    resumedFromDraft = resumedFromDraft,
-    isRestoring = isRestoring,
-    isSaving = isSaving,
-    savedEntryId = savedEntryId,
-    message = message,
-)
+        .mapNotNull { it.toCard(currencyCode, now) }
+
+    return EntryUiState(
+        ledger = ledger,
+        amountText = amountText,
+        amountMinor = amountMinor,
+        currencyCode = currencyCode,
+        categoryId = categoryId,
+        subcategoryId = subcategoryId,
+        merchantId = merchantId,
+        paymentMethodId = paymentMethodId,
+        note = note,
+        occurredAt = occurredAt,
+        lineItems = lineItems,
+        tree = scoped.tree,
+        merchants = scoped.merchants,
+        paymentMethods = scoped.paymentMethods,
+        combos = scoped.combos.mapNotNull { it.toChip(scoped) },
+        unsaved = unsavedCards,
+        openDraftId = draftId,
+        discardingDraft = unsavedCards.firstOrNull { it.id == discardingDraftId },
+        picker = picker,
+        choosingDate = choosingDate,
+        confirmingDiscard = confirmingDiscard,
+        resumedFromDraft = resumedFromDraft,
+        isRestoring = isRestoring,
+        formGeneration = formGeneration,
+        isSaving = isSaving,
+        savedEntryId = savedEntryId,
+        message = message,
+    )
+}
 
 /**
  * A combination, labelled with what it will fill in.
@@ -628,7 +659,7 @@ private fun Form.toPayload() = EntryDraftPayload(
  * A draft this build cannot read is dropped from the stack rather than shown as
  * a blank card, and the row stays on disk untouched (§6.1.2).
  */
-private fun EntryDraft.toCard(currencyCode: String): EntryDraftCard? {
+private fun EntryDraft.toCard(currencyCode: String, now: Long): EntryDraftCard? {
     val payload = payloadIfReadable(EntryDraftCodec.VERSION)?.let(EntryDraftCodec::decode)
         ?: return null
 
@@ -639,8 +670,32 @@ private fun EntryDraft.toCard(currencyCode: String): EntryDraftCard? {
         note = payload.note.ifBlank { null },
         lineItemCount = payload.lineItems.count { it.name.isNotBlank() },
         updatedAt = updatedAt,
+        age = relativeAge(now - updatedAt),
     )
 }
+
+/**
+ * "just now", "12m", "3h", "2d" -- coarse on purpose.
+ *
+ * A draft's age answers one question ("is this from this shopping trip or last
+ * week?"), and a precise timestamp on a card this size is noise. Capped at the
+ * 30-day retention, past which the sweep has taken it anyway.
+ */
+private fun relativeAge(elapsedMillis: Long): String {
+    val minutes = elapsedMillis / MILLIS_PER_MINUTE
+    val hours = minutes / MINUTES_PER_HOUR
+    val days = hours / HOURS_PER_DAY
+    return when {
+        minutes < 1L -> "just now"
+        minutes < MINUTES_PER_HOUR -> "${minutes}m"
+        hours < HOURS_PER_DAY -> "${hours}h"
+        else -> "${days}d"
+    }
+}
+
+private const val MILLIS_PER_MINUTE = 60_000L
+private const val MINUTES_PER_HOUR = 60L
+private const val HOURS_PER_DAY = 24L
 
 /**
  * A stored amount, rendered back into the field's text.

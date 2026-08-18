@@ -71,6 +71,16 @@ public data class EntryUiState(
     val confirmingDiscard: Boolean = false,
 
     /**
+     * The stack card awaiting a discard confirmation.
+     *
+     * Discarding from the stack is one tap on a small control next to other
+     * small controls, and what it destroys is unsaved work. It gets the same
+     * confirmation "start fresh" does — BUG6 is about losing typing, and an
+     * accidental tap loses it just as thoroughly as a process death.
+     */
+    val discardingDraft: EntryDraftCard? = null,
+
+    /**
      * True when this form was restored from a draft rather than started empty.
      *
      * Surfaced to the user (§6.1.2): resuming silently would leave someone
@@ -87,6 +97,13 @@ public data class EntryUiState(
      * put the keyboard over the resume notice.
      */
     val isRestoring: Boolean = true,
+
+    /**
+     * Bumped whenever the form is replaced wholesale — a new draft, a ledger
+     * switch, a save. The screen keys its focus effect on it, so each fresh
+     * form gets the caret without the effect re-running on every keystroke.
+     */
+    val formGeneration: Int = 0,
 
     val isSaving: Boolean = false,
 
@@ -147,6 +164,8 @@ public data class EntryDraftCard(
     val note: String?,
     val lineItemCount: Int,
     val updatedAt: Long,
+    /** Already relative ("2m ago"), resolved against the injected clock. */
+    val age: String,
 )
 
 /** A repeat-expense chip: a combination already used, resolved to names (§5.4). */
@@ -207,8 +226,10 @@ public sealed interface EntryEvent {
     /** Load an unsaved entry from the stack into the form. */
     public data class DraftOpened(val id: String) : EntryEvent
 
-    /** Throw one away from the stack, without opening it. */
-    public data class DraftDiscarded(val id: String) : EntryEvent
+    /** Ask to throw one away. Confirmed separately — it is unsaved work. */
+    public data class DraftDiscardRequested(val id: String) : EntryEvent
+    public data object DraftDiscardConfirmed : EntryEvent
+    public data object DraftDiscardDismissed : EntryEvent
 
     /** Park what is in the form and start another entry. */
     public data object NewDraftStarted : EntryEvent

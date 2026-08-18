@@ -3,6 +3,7 @@ package com.ledgerflow.core.designsystem.icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.ui.graphics.Color
@@ -14,7 +15,7 @@ import androidx.compose.ui.unit.dp
 /**
  * The app's icon set.
  *
- * Four come from `material-icons-core`, which the version catalog already
+ * Five come from `material-icons-core`, which the version catalog already
  * carries. The bar chart does not: charting icons live in
  * `material-icons-extended`, which is a very large artifact to pull in for one
  * glyph against a 15 MB budget (SPEC.md §11) that ML Kit still has to fit into
@@ -29,6 +30,9 @@ public object LfIcons {
     public val Ledger: ImageVector = Icons.AutoMirrored.Filled.List
     public val More: ImageVector = Icons.Filled.Menu
     public val Add: ImageVector = Icons.Filled.Add
+
+    /** Dismiss. Never used for a destructive action without a confirmation. */
+    public val Close: ImageVector = Icons.Filled.Close
 
     /** Three ascending bars on a 24dp grid, matching the core set's weight. */
     public val Analytics: ImageVector by lazy {

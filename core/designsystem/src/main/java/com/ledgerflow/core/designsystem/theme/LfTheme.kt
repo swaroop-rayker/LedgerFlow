@@ -135,6 +135,15 @@ public data class LfSpacing(
      */
     val segmentMinWidth: Dp = 72.dp,
 
+    /**
+     * Width of one card in a horizontally-scrolling peek row.
+     *
+     * Sized so a second card is always partly visible on a 360dp screen. That
+     * sliver is the entire affordance -- a row of cards that happens to fit
+     * exactly reads as a complete list, and nobody swipes it.
+     */
+    val peekCardWidth: Dp = 172.dp,
+
     val cornerSmall: Dp = 8.dp,
     val cornerMedium: Dp = 16.dp,
     val cornerLarge: Dp = 24.dp,

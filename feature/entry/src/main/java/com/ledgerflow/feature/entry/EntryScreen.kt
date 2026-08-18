@@ -1,29 +1,41 @@
 package com.ledgerflow.feature.entry
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
 import com.ledgerflow.core.designsystem.component.LfAmountTone
@@ -33,10 +45,12 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDivider
+import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.LedgerType
 import java.time.Instant
@@ -75,11 +89,11 @@ public fun EntryScreen(
     EntryDialogs(state, onEvent)
 
     val amountFocus = remember { FocusRequester() }
-    LaunchedEffect(state.isRestoring) {
-        // Waits for the draft read, then decides once. Keyed on `Unit` this
-        // ran at first composition -- before the restore had landed, when
-        // `resumedFromDraft` is still false -- so it always focused and put the
-        // keyboard over the notice explaining the resume.
+    // Keyed on the form generation as well as the restore, so "Start another"
+    // and a ledger switch put the caret back in the amount. Without it the
+    // shelf hands you an empty form you then have to tap into, which defeats
+    // the point of parking one entry to begin the next.
+    LaunchedEffect(state.isRestoring, state.formGeneration) {
         if (!state.isRestoring && !state.resumedFromDraft) {
             runCatching { amountFocus.requestFocus() }
         }
@@ -117,7 +131,14 @@ public fun EntryScreen(
 
             if (state.resumedFromDraft) ResumeNotice(onEvent)
             if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
-            if (state.unsaved.isNotEmpty()) UnsavedStack(state, onEvent)
+            // Also shown with an empty shelf once the form has an amount, so
+            // "Start another" exists *before* there is a second draft. Gated on
+            // `unsaved` alone it only appeared once something was already
+            // parked -- which is the one state from which you can never park
+            // anything.
+            if (state.unsaved.isNotEmpty() || state.amountMinor > 0L) {
+                UnsavedStack(state, onEvent)
+            }
 
             DetailRows(state, onEvent)
 
@@ -203,60 +224,136 @@ private fun ComboChips(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 }
 
 /**
- * The unsaved-entry stack (ADR-0013), newest first.
+ * The unsaved-entry stack (ADR-0013) — a horizontal shelf, newest first.
  *
  * D-06 allowed one draft per book because unbounded drafts would "accumulate
  * into a list nobody curates". This is that list, and it is why the constraint
  * could go: they only pile up unseen if nothing shows them. The same shape
  * serves the Inbox at P2 -- but over `pending_transaction`, which is a
  * different table on purpose (§5.4): one gates a commit, this recovers typing.
+ *
+ * **Horizontal, not a vertical list.** The first build stacked full-width cards
+ * inline, and it was reported as confusing for a structural reason: every
+ * parked entry pushed the amount field and the whole form further down, so the
+ * more drafts you had the further you scrolled to do the thing you opened the
+ * screen for. The stack read as an obstruction rather than a shelf. A row is
+ * the same height whatever the count, sits under the amount without displacing
+ * anything, and reads the way a queue should.
+ *
+ * The card width is chosen so the next one always peeks past the screen edge.
+ * A row whose cards happen to end flush with the margin reads as a complete
+ * list and nobody swipes it.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-        Text(
-            text = "Unsaved (${state.unsaved.size})",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textSecondary,
-        )
-        state.unsaved.forEach { draft ->
-            LfCard {
-                Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                    Text(
-                        text = MoneyFormat.symbolised(draft.amountMinor, draft.currencyCode),
-                        style = LfTheme.typography.amountM,
-                        color = LfTheme.colors.textPrimary,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                    draft.subtitle()?.let {
-                        Text(
-                            text = it,
-                            style = LfTheme.typography.bodyM,
-                            color = LfTheme.colors.textSecondary,
-                        )
-                    }
-                    LfDivider()
-                    LfActionRow {
-                        LfButton(
-                            text = "Open",
-                            style = LfButtonStyle.Outlined,
-                            onClick = { onEvent(EntryEvent.DraftOpened(draft.id)) },
-                        )
-                        LfButton(
-                            text = "Discard",
-                            style = LfButtonStyle.Outlined,
-                            onClick = { onEvent(EntryEvent.DraftDiscarded(draft.id)) },
-                        )
-                    }
-                }
-            }
-        }
-        LfActionRow {
+    val spacing = LfTheme.spacing
+
+    Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+        // FlowRow, not Row. At font scale 2.0 "Start another" does not fit
+        // beside the count, and `softWrap = false` turns that into a clipped
+        // "Start anoth" -- BUG9's documented residual case. The remedy is the
+        // one the design system already uses everywhere: the container wraps
+        // the whole control onto the next line, never the word.
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        ) {
+            Text(
+                modifier = Modifier.align(Alignment.CenterVertically),
+                text = if (state.unsaved.isEmpty()) {
+                    "Working on this one"
+                } else {
+                    "Unsaved · ${state.unsaved.size}"
+                },
+                style = LfTheme.typography.label,
+                color = LfTheme.colors.textSecondary,
+                maxLines = 1,
+                softWrap = false,
+            )
+            // In the header, not in the row. As the trailing tile it was the
+            // item that peeked past the screen edge -- so the one action always
+            // available was the one always half cut off, and it got worse with
+            // every draft added. Here it is fixed, full width for its label,
+            // and the cards do the peeking, which is what peeking is for.
             LfButton(
                 text = "Start another",
-                style = LfButtonStyle.Outlined,
+                style = LfButtonStyle.Text,
                 onClick = { onEvent(EntryEvent.NewDraftStarted) },
+            )
+        }
+
+        if (state.unsaved.isEmpty()) return@Column
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+        ) {
+            items(items = state.unsaved, key = { it.id }, contentType = { "draft" }) { draft ->
+                DraftCard(draft, onEvent)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
+    val spacing = LfTheme.spacing
+    val colors = LfTheme.colors
+    val shape = RoundedCornerShape(spacing.cornerMedium)
+
+    Box(
+        modifier = Modifier
+            .width(spacing.peekCardWidth)
+            .clip(shape)
+            .background(colors.surfaceRaised)
+            .border(1.dp, colors.outline, shape)
+            // The whole card opens it. A card whose only tap target is a small
+            // button inside it is a card people tap and nothing happens.
+            .clickable { onEvent(EntryEvent.DraftOpened(draft.id)) }
+            .padding(start = spacing.md, end = spacing.xs, bottom = spacing.md),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = draft.age,
+                    style = LfTheme.typography.label,
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                LfIconButton(
+                    icon = LfIcons.Close,
+                    // Names what it throws away. "Close" beside an amount could
+                    // as easily mean "collapse this card".
+                    contentDescription = "Discard unsaved entry of " +
+                        MoneyFormat.spoken(draft.amountMinor, draft.currencyCode),
+                    onClick = { onEvent(EntryEvent.DraftDiscardRequested(draft.id)) },
+                )
+            }
+            Text(
+                text = MoneyFormat.symbolised(draft.amountMinor, draft.currencyCode),
+                style = LfTheme.typography.amountM,
+                color = colors.textPrimary,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(end = spacing.sm),
+            )
+            Text(
+                text = draft.subtitle() ?: "No details yet",
+                style = LfTheme.typography.bodyM,
+                color = colors.textSecondary,
+                // A note is content, not a control label, so BUG9's no-ellipsis
+                // rule does not apply: a truncated note is still readable, and
+                // the card opens to the whole thing.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(end = spacing.sm),
             )
         }
     }
@@ -265,7 +362,7 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 /** What the card says under the amount, if there is anything worth saying. */
 private fun EntryDraftCard.subtitle(): String? = listOfNotNull(
     note,
-    if (lineItemCount > 0) "$lineItemCount line items" else null,
+    if (lineItemCount > 0) "$lineItemCount items" else null,
 ).joinToString(" · ").ifBlank { null }
 
 @Composable
