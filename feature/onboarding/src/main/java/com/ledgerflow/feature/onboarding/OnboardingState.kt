@@ -2,6 +2,7 @@ package com.ledgerflow.feature.onboarding
 
 import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
+import com.ledgerflow.core.model.CurrencyDisplay
 
 /**
  * The onboarding gate (SPEC.md §7.4).
@@ -44,17 +45,19 @@ public data class CurrencyOption(
  * The shortlist offered at onboarding. Deliberately short and INR-first: this
  * is an India-first product (§3.1), and a 180-entry picker as the very first
  * screen is a worse experience than a short list plus search later.
+ *
+ * Derived from [CurrencyDisplay] rather than listed here, so the symbol this
+ * screen shows and the symbol every amount in the app renders with come from
+ * one table. They were two, briefly, which is one table too many for a fact the
+ * user chooses once and then sees forever.
  */
-public val SupportedCurrencies: List<CurrencyOption> = listOf(
-    CurrencyOption("INR", "Indian Rupee", "₹"),
-    CurrencyOption("USD", "US Dollar", "$"),
-    CurrencyOption("EUR", "Euro", "€"),
-    CurrencyOption("GBP", "British Pound", "£"),
-    CurrencyOption("AED", "UAE Dirham", "د.إ"),
-    CurrencyOption("SGD", "Singapore Dollar", "S$"),
-    CurrencyOption("AUD", "Australian Dollar", "A$"),
-    CurrencyOption("JPY", "Japanese Yen", "¥"),
-)
+public val SupportedCurrencies: List<CurrencyOption> = CurrencyDisplay.supportedCodes.map { code ->
+    CurrencyOption(
+        code = code,
+        displayName = CurrencyDisplay.nameOf(code),
+        symbol = CurrencyDisplay.symbolOf(code),
+    )
+}
 
 @Immutable
 public data class OnboardingUiState(
