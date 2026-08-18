@@ -13,9 +13,12 @@ import com.ledgerflow.core.model.PaymentMethod
  * persisted to `draft_entry` behind a 300 ms debounce (BUG6). Nothing the user
  * has entered lives only in the composition.
  *
- * [amountMinor] is a `Long` of minor units from the first keystroke. There is
- * no string form of the amount at any point -- the keypad appends digits
- * right-to-left and this is the running total (Law 3).
+ * [amountText] is what is in the field; [amountMinor] is what will be stored.
+ * The text exists because reformatting a money field while someone is typing
+ * moves the caret out from under their thumb; the `Long` exists because Law 3
+ * says money is an integer. They are not two sources of truth -- the `Long` is
+ * derived from the text by `MoneyFormat.parse` in one place, with integer
+ * arithmetic and no `Double` anywhere on the path.
  */
 @Immutable
 public data class EntryUiState(
@@ -26,7 +29,12 @@ public data class EntryUiState(
      */
     val ledger: LedgerType = LedgerType.DEBIT,
 
+    /** Raw, exactly as typed. Empty renders as a placeholder, not as "0.00". */
+    val amountText: String = "",
+
+    /** Derived from [amountText]. What the approval receives. */
     val amountMinor: Long = 0L,
+
     val currencyCode: String = DEFAULT_CURRENCY,
 
     val categoryId: String? = null,
@@ -103,6 +111,8 @@ public data class EntryUiState(
 public data class EntryLineItem(
     val key: String,
     val name: String = "",
+    /** Raw text, for the same caret reason as [EntryUiState.amountText]. */
+    val amountText: String = "",
     val amountMinor: Long = 0L,
 )
 
@@ -139,9 +149,8 @@ public sealed interface EntryEvent {
 
     public data class LedgerSelected(val ledger: LedgerType) : EntryEvent
 
-    /** One or two digits from the keypad, appended in minor units. */
-    public data class DigitsPressed(val digits: String) : EntryEvent
-    public data object BackspacePressed : EntryEvent
+    /** The amount field's raw text. Parsed to minor units by the ViewModel. */
+    public data class AmountChanged(val text: String) : EntryEvent
 
     public data class NoteChanged(val value: String) : EntryEvent
 
@@ -159,7 +168,7 @@ public sealed interface EntryEvent {
 
     public data object LineItemAdded : EntryEvent
     public data class LineItemNameChanged(val key: String, val value: String) : EntryEvent
-    public data class LineItemDigitsChanged(val key: String, val digits: String) : EntryEvent
+    public data class LineItemAmountChanged(val key: String, val text: String) : EntryEvent
     public data class LineItemRemoved(val key: String) : EntryEvent
 
     public data object SaveRequested : EntryEvent

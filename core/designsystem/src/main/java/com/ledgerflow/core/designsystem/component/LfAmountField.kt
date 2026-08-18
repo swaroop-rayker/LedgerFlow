@@ -1,52 +1,70 @@
 package com.ledgerflow.core.designsystem.component
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.CurrencyDisplay
 
 /**
- * The amount being entered, shown large (SPEC.md §9.4).
+ * The amount being entered, shown large and typed on the system keyboard
+ * (SPEC.md §9.4).
  *
- * Display only — it never owns the value and has no text cursor. The keypad
- * builds a `Long` of minor units and this renders it, which is what keeps Law 3
- * true all the way to the glass: there is no point at which a partially-typed
- * amount exists as a string that something might parse into a `Double`.
+ * **This used to be a display beside an in-app keypad, and the keypad is gone.**
+ * The keypad's argument was that appending digits right-to-left keeps the amount
+ * an integer with no string to parse, and that the system IME cannot be trusted
+ * to offer digits. Both were true and neither was decisive: an accumulator makes
+ * typing `125` mean ₹1.25, which is right for a payments app and wrong for a
+ * ledger, where you are usually transcribing an exact figure off a receipt.
+ * ADR-0012 records the reversal.
  *
- * The typography is `amountL`, which carries `tnum` (§9.2). Tabular figures
- * matter more here than anywhere: without them the whole number jitters
- * sideways as each digit is typed, because a "1" is narrower than an "8".
+ * What replaces the safety argument is [MoneyFormat.parse], which converts the
+ * typed text to minor units with integer arithmetic only. So the value is still
+ * a `Long` everywhere below this composable, and the untrustworthy-keyboard case
+ * is handled by discarding anything that is not a digit rather than by refusing
+ * to use the keyboard at all.
  *
- * **The whole block speaks as one thing.** Left alone, TalkBack would read
- * "rupee", "1,240.50" and the foreign line as three separate nodes; §9.6 asks
- * for "1,240 rupees", so the parts are merged and one composed description is
- * set on the merged node.
+ * The field holds **raw text**, not a formatted value. Reformatting while
+ * someone is typing moves the caret out from under their thumb, which is the
+ * single most common way a money field becomes unusable.
  *
- * Merged rather than `clearAndSetSemantics`, which was the first attempt and is
- * wrong twice over: it deletes the children's semantics outright, so the
- * amount stops being findable by text *and* its `TextLayoutResult` becomes
- * unreachable — which is precisely how BUG9's regression tests measure whether
- * a label wrapped. Silencing a node for a screen reader should not blind the
- * test suite to it.
+ * The typography is `amountL`, which carries `tnum` (§9.2) — without tabular
+ * figures the number jitters sideways as each digit lands, because a "1" is
+ * narrower than an "8".
  */
 @Composable
 public fun LfAmountField(
-    minorUnits: Long,
+    value: String,
+    onValueChange: (String) -> Unit,
     currencyCode: String,
     modifier: Modifier = Modifier,
     label: String? = null,
     tone: LfAmountTone = LfAmountTone.Neutral,
     secondary: String? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     val colors = LfTheme.colors
     val spacing = LfTheme.spacing
@@ -57,7 +75,9 @@ public fun LfAmountField(
         LfAmountTone.Credit -> colors.credit
     }
 
-    val spokenAmount = MoneyFormat.spoken(minorUnits, currencyCode)
+    // Announced as words, from the parsed value rather than the raw text, so a
+    // half-typed "12." is read as an amount and not as punctuation (§9.6).
+    val spokenAmount = MoneyFormat.spoken(MoneyFormat.parse(value, currencyCode), currencyCode)
     val description = listOfNotNull(label, spokenAmount, secondary).joinToString(", ")
 
     Column(
@@ -71,29 +91,13 @@ public fun LfAmountField(
             Text(text = it, style = LfTheme.typography.label, color = colors.textSecondary)
         }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(spacing.xs),
-        ) {
-            Text(
-                text = CurrencyDisplay.symbolOf(currencyCode),
-                style = LfTheme.typography.titleL,
-                color = colors.textSecondary,
-                maxLines = 1,
-                softWrap = false,
-            )
-            Text(
-                text = MoneyFormat.plain(minorUnits, currencyCode),
-                style = LfTheme.typography.amountL,
-                color = amountColor,
-                textAlign = TextAlign.Center,
-                // An amount is a control's value, and BUG9's rule applies: it
-                // is never broken across lines. A number that wraps stops being
-                // a number you can read at a glance.
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+        AmountInput(
+            value = value,
+            onValueChange = onValueChange,
+            currencyCode = currencyCode,
+            amountColor = amountColor,
+            focusRequester = focusRequester,
+        )
 
         secondary?.let {
             Text(
@@ -108,14 +112,91 @@ public fun LfAmountField(
 }
 
 /**
+ * The field itself, split out of [LfAmountField] so neither half is long enough
+ * to hide anything: this is the text-input contract, the caller owns the
+ * label, tone and spoken description around it.
+ */
+@Composable
+private fun AmountInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    currencyCode: String,
+    amountColor: androidx.compose.ui.graphics.Color,
+    focusRequester: FocusRequester?,
+) {
+    val colors = LfTheme.colors
+    val spacing = LfTheme.spacing
+    val focusManager = LocalFocusManager.current
+
+    CompositionLocalProvider(
+        LocalTextSelectionColors provides TextSelectionColors(
+            handleColor = colors.accent,
+            backgroundColor = colors.accent.copy(alpha = SELECTION_ALPHA),
+        ),
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .wrapContentWidth()
+                .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier),
+            textStyle = LfTheme.typography.amountL.copy(
+                color = amountColor,
+                textAlign = TextAlign.Center,
+            ),
+            singleLine = true,
+            cursorBrush = SolidColor(colors.accent),
+            keyboardOptions = KeyboardOptions(
+                // A hint, not a guarantee -- some OEM keyboards ignore it and
+                // serve QWERTY. The parser is what makes that harmless.
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Done,
+            ),
+            // Done dismisses the keyboard; it deliberately does not save. A form
+            // whose keyboard commits an expense is a form that commits expenses
+            // by accident.
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            decorationBox = { innerTextField ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = CurrencyDisplay.symbolOf(currencyCode),
+                        style = LfTheme.typography.titleL,
+                        color = colors.textSecondary,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    Box {
+                        if (value.isEmpty()) {
+                            Text(
+                                text = MoneyFormat.plain(0L, currencyCode),
+                                style = LfTheme.typography.amountL,
+                                color = colors.textTertiary,
+                                maxLines = 1,
+                                softWrap = false,
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            },
+        )
+    }
+}
+
+/**
  * Which book's colour an amount wears (§9.1).
  *
- * [Neutral] is the default and is what the entry form uses while the amount is
- * still being typed: colouring it before the user has chosen a ledger would be
- * the UI asserting something the user has not said yet.
+ * [Neutral] is the default and is what the entry form uses while the field is
+ * still empty: colouring a zero before the user has entered anything reads as
+ * an error rather than as an expense.
  *
  * Declared after the composable to match the rest of `component/`: detekt's
  * MatchingDeclarationName fires when a file's *first* top-level declaration is
  * a class whose name is not the filename.
  */
 public enum class LfAmountTone { Neutral, Debit, Credit }
+
+private const val SELECTION_ALPHA = 0.3f

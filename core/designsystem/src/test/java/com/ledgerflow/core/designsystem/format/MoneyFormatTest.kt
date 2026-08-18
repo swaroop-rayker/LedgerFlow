@@ -91,6 +91,95 @@ class MoneyFormatTest {
         assertThat(MoneyFormat.symbolised(1_00L, "XYZ", us)).isEqualTo("XYZ1.00")
     }
 
+    // ── parse: what a person typed -> minor units ───────────────────────────
+
+    @Test
+    fun parse_readsWholeAmountsAsMajorUnits() {
+        // The whole reason for moving off the keypad: type 125, get ₹125.
+        assertThat(MoneyFormat.parse("125", "INR", us)).isEqualTo(125_00L)
+        assertThat(MoneyFormat.parse("0", "INR", us)).isEqualTo(0L)
+    }
+
+    @Test
+    fun parse_readsDecimals() {
+        assertThat(MoneyFormat.parse("125.50", "INR", us)).isEqualTo(125_50L)
+        // A single decimal digit is tenths, not hundredths.
+        assertThat(MoneyFormat.parse("125.5", "INR", us)).isEqualTo(125_50L)
+        assertThat(MoneyFormat.parse("0.07", "INR", us)).isEqualTo(7L)
+    }
+
+    /**
+     * Law 3 at the point of entry. `"8415.79".toDouble() * 100` is
+     * 841578.9999999999, which floors to 841578 -- one paise short, silently,
+     * on the very first thing the app learns about the user's money.
+     */
+    @Test
+    fun parse_isExactWhereADoubleWouldNotBe() {
+        assertThat(MoneyFormat.parse("8415.79", "INR", us)).isEqualTo(841_579L)
+        assertThat(MoneyFormat.parse("0.29", "INR", us)).isEqualTo(29L)
+        assertThat(MoneyFormat.parse("1.15", "INR", us)).isEqualTo(115L)
+    }
+
+    /** Truncated, not rounded: the third digit is still being typed. */
+    @Test
+    fun parse_truncatesBeyondTheCurrencyExponent() {
+        assertThat(MoneyFormat.parse("12.567", "INR", us)).isEqualTo(12_56L)
+        assertThat(MoneyFormat.parse("12.999", "INR", us)).isEqualTo(12_99L)
+    }
+
+    @Test
+    fun parse_honoursTheCurrencyExponent() {
+        // JPY has no minor unit at all.
+        assertThat(MoneyFormat.parse("1250", "JPY", us)).isEqualTo(1_250L)
+        assertThat(MoneyFormat.parse("1250.9", "JPY", us)).isEqualTo(1_250L)
+        // BHD has three.
+        assertThat(MoneyFormat.parse("1.234", "BHD", us)).isEqualTo(1_234L)
+    }
+
+    /**
+     * A keyboard is a hint, not a contract: `KeyboardType.Decimal` is advisory
+     * and some OEM keyboards serve a full QWERTY anyway. Junk is discarded
+     * rather than rejected, so the field never fights the user mid-keystroke.
+     */
+    @Test
+    fun parse_discardsAnythingThatIsNotADigitOrASeparator() {
+        assertThat(MoneyFormat.parse("12ab.5", "INR", us)).isEqualTo(12_50L)
+        assertThat(MoneyFormat.parse("₹1,250.00", "INR", us)).isEqualTo(1_250_00L)
+        assertThat(MoneyFormat.parse("  ", "INR", us)).isEqualTo(0L)
+        assertThat(MoneyFormat.parse("abc", "INR", us)).isEqualTo(0L)
+    }
+
+    /** Half-typed states a live field really produces. */
+    @Test
+    fun parse_handlesPartialInput() {
+        assertThat(MoneyFormat.parse(".", "INR", us)).isEqualTo(0L)
+        assertThat(MoneyFormat.parse("12.", "INR", us)).isEqualTo(12_00L)
+        assertThat(MoneyFormat.parse(".5", "INR", us)).isEqualTo(50L)
+        // Only the first separator splits; the rest are noise.
+        assertThat(MoneyFormat.parse("1.2.3", "INR", us)).isEqualTo(1_23L)
+    }
+
+    /**
+     * A long paste must not fold past `Long.MAX_VALUE` and come back negative,
+     * which would file a large expense as income.
+     */
+    @Test
+    fun parse_cannotOverflowIntoANegativeAmount() {
+        val parsed = MoneyFormat.parse("9".repeat(40), "INR", us)
+
+        assertThat(parsed).isGreaterThan(0L)
+        assertThat(parsed).isEqualTo(999_999_999_999_00L)
+    }
+
+    /** What is typed and what is displayed have to agree. */
+    @Test
+    fun parse_roundTripsWithPlain() {
+        listOf(0L, 1L, 7L, 125_00L, 8_415_79L, 1_24_000_00L).forEach { minor ->
+            val rendered = MoneyFormat.plain(minor, "INR", us)
+            assertThat(MoneyFormat.parse(rendered, "INR", us)).isEqualTo(minor)
+        }
+    }
+
     /** §9.6: "1,240 rupees", never "1,240 ₹" — screen readers skip glyphs. */
     @Test
     fun spoken_namesTheUnitInWords() {

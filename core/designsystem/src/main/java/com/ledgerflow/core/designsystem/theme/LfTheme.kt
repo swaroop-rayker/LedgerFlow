@@ -135,16 +135,6 @@ public data class LfSpacing(
      */
     val segmentMinWidth: Dp = 72.dp,
 
-    /**
-     * Minimum height of one `LfKeypad` key.
-     *
-     * Comfortably above the 48dp touch-target floor (§9.6), because the keypad
-     * is used at speed with a thumb rather than aimed at: §5.4's four-tap
-     * target is only reachable if the keys can be hit without looking. It is a
-     * *minimum* -- the key grows with its text at large font scales rather than
-     * clipping the digit.
-     */
-    val keypadKeyHeight: Dp = 56.dp,
     val cornerSmall: Dp = 8.dp,
     val cornerMedium: Dp = 16.dp,
     val cornerLarge: Dp = 24.dp,

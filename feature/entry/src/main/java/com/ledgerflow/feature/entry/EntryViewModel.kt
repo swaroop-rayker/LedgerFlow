@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
+import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.DraftSlot
@@ -44,10 +45,11 @@ import kotlinx.coroutines.launch
  *
  * Two things here are load-bearing rather than incidental:
  *
- * **The amount is a `Long` from the first keystroke.** The keypad appends
- * digits in minor units and this holds the running total; there is no string
- * form of the amount at any point, so there is nothing for a later refactor to
- * parse into a `Double` (Law 3).
+ * **The amount is parsed to a `Long` on every keystroke.** The field holds raw
+ * text, because reformatting under a moving caret makes a money field
+ * unusable; `MoneyFormat.parse` turns it into minor units with integer
+ * arithmetic only, so no `Double` ever touches the value (Law 3). ADR-0012
+ * records why this replaced the in-app keypad.
  *
  * **Every edit reaches Room within 300 ms.** The debounce is a coalescing
  * window, not a delay before the state is real: the form's state updates
@@ -147,9 +149,7 @@ public class EntryViewModel @Inject constructor(
     public fun onEvent(event: EntryEvent) {
         when (event) {
             is EntryEvent.LedgerSelected -> switchLedger(event.ledger)
-            is EntryEvent.DigitsPressed,
-            EntryEvent.BackspacePressed,
-            -> onAmountEvent(event)
+            is EntryEvent.AmountChanged -> changeAmount(event.text)
 
             is EntryEvent.NoteChanged,
             EntryEvent.DateRequested,
@@ -165,7 +165,7 @@ public class EntryViewModel @Inject constructor(
 
             EntryEvent.LineItemAdded,
             is EntryEvent.LineItemNameChanged,
-            is EntryEvent.LineItemDigitsChanged,
+            is EntryEvent.LineItemAmountChanged,
             is EntryEvent.LineItemRemoved,
             -> onLineItemEvent(event)
 
@@ -181,11 +181,19 @@ public class EntryViewModel @Inject constructor(
 
     // ── Amount ──────────────────────────────────────────────────────────────
 
-    private fun onAmountEvent(event: EntryEvent) {
-        when (event) {
-            is EntryEvent.DigitsPressed -> edit { it.copy(amountMinor = it.amountMinor.append(event.digits)) }
-            EntryEvent.BackspacePressed -> edit { it.copy(amountMinor = it.amountMinor / RADIX) }
-            else -> Unit
+    /**
+     * Keeps the field's text and the stored `Long` in step.
+     *
+     * The text is never rewritten here. Echoing back a reformatted value would
+     * fight the caret on every keystroke, and "12." would become "12.00" before
+     * the user has finished the number they were typing.
+     */
+    private fun changeAmount(text: String) {
+        edit {
+            it.copy(
+                amountText = text,
+                amountMinor = MoneyFormat.parse(text, currency.value),
+            )
         }
     }
 
@@ -251,8 +259,11 @@ public class EntryViewModel @Inject constructor(
                 it.copy(lineItems = it.lineItems + EntryLineItem(key = ids.generate()))
             }
             is EntryEvent.LineItemNameChanged -> editLine(event.key) { it.copy(name = event.value) }
-            is EntryEvent.LineItemDigitsChanged -> editLine(event.key) {
-                it.copy(amountMinor = event.digits.toMinorUnits())
+            is EntryEvent.LineItemAmountChanged -> editLine(event.key) {
+                it.copy(
+                    amountText = event.text,
+                    amountMinor = MoneyFormat.parse(event.text, currency.value),
+                )
             }
             is EntryEvent.LineItemRemoved -> edit {
                 it.copy(lineItems = it.lineItems.filterNot { line -> line.key == event.key })
@@ -312,7 +323,7 @@ public class EntryViewModel @Inject constructor(
             if (current.dirty && current.ledger == ledger) {
                 current
             } else {
-                payload?.toForm(ledger, clock.nowMillis())
+                payload?.toForm(ledger, clock.nowMillis(), currency.value)
                     ?: Form(ledger = ledger, occurredAt = clock.nowMillis())
             }
         }
@@ -410,6 +421,8 @@ public class EntryViewModel @Inject constructor(
 
 private data class Form(
     val ledger: LedgerType = LedgerType.DEBIT,
+    /** Exactly as typed. Never rewritten by the ViewModel; see `changeAmount`. */
+    val amountText: String = "",
     val amountMinor: Long = 0L,
     val categoryId: String? = null,
     val subcategoryId: String? = null,
@@ -439,6 +452,7 @@ private data class LedgerScoped(
 
 private fun Form.toUiState(scoped: LedgerScoped, currencyCode: String) = EntryUiState(
     ledger = ledger,
+    amountText = amountText,
     amountMinor = amountMinor,
     currencyCode = currencyCode,
     categoryId = categoryId,
@@ -485,8 +499,13 @@ private fun EntryCombo.toChip(scoped: LedgerScoped): EntryComboChip? {
     )
 }
 
-private fun EntryDraftPayload.toForm(ledger: LedgerType, now: Long) = Form(
+private fun EntryDraftPayload.toForm(ledger: LedgerType, now: Long, currencyCode: String) = Form(
     ledger = ledger,
+    // Re-derived rather than stored. The payload keeps the *value*, so a draft
+    // written before the keypad was removed still restores correctly and
+    // `payload_version` stays at 1 -- nobody's in-flight entry is orphaned by
+    // an input-method change.
+    amountText = amountMinor.asAmountText(currencyCode),
     amountMinor = amountMinor,
     categoryId = categoryId,
     subcategoryId = subcategoryId,
@@ -494,7 +513,14 @@ private fun EntryDraftPayload.toForm(ledger: LedgerType, now: Long) = Form(
     paymentMethodId = paymentMethodId,
     note = note,
     occurredAt = if (occurredAt == 0L) now else occurredAt,
-    lineItems = lineItems.map { EntryLineItem(it.key, it.name, it.amountMinor) },
+    lineItems = lineItems.map {
+        EntryLineItem(
+            key = it.key,
+            name = it.name,
+            amountText = it.amountMinor.asAmountText(currencyCode),
+            amountMinor = it.amountMinor,
+        )
+    },
     // A resumed draft is already worth persisting: the user may switch
     // ledger or close the app without touching a field, and the row they
     // came back to must not be the one thing that fails to survive.
@@ -521,16 +547,14 @@ private fun Form.toPayload() = EntryDraftPayload(
  * into a draft payload.
  */
 
-/** Appends keypad digits right-to-left, refusing anything past the ceiling. */
-private fun Long.append(digits: String): Long = digits.fold(this) { total, character ->
-    val next = total * RADIX + (character - '0')
-    if (next > MAX_AMOUNT_MINOR) total else next
-}
-
-/** A typed line-item amount: digits only, read as minor units. */
-private fun String.toMinorUnits(): Long = filter(Char::isDigit)
-    .takeLast(MAX_AMOUNT_DIGITS)
-    .fold(0L) { total, character -> total * RADIX + (character - '0') }
+/**
+ * A stored amount, rendered back into the field's text.
+ *
+ * Zero is empty rather than "0.00" so a restored draft with no amount shows the
+ * placeholder, exactly as a fresh form does.
+ */
+private fun Long.asAmountText(currencyCode: String): String =
+    if (this == 0L) "" else MoneyFormat.plain(this, currencyCode)
 
 /**
  * BUG6's window (§6.1.2). Long enough to coalesce a burst of keystrokes into one
@@ -541,17 +565,6 @@ private const val DRAFT_DEBOUNCE_MS = 300L
 
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val COMBO_LIMIT = 8
-private const val RADIX = 10L
-
-/**
- * Ceiling on a typed amount: 9,999,999,999.99 in a two-decimal currency.
- *
- * Not a product limit -- it is what stops `amount * 10 + digit` overflowing a
- * `Long` after nineteen taps, which would silently turn a large expense into a
- * negative one.
- */
-private const val MAX_AMOUNT_MINOR = 999_999_999_999L
-private const val MAX_AMOUNT_DIGITS = 12
 
 /**
  * A refusal, in a sentence the user can act on.

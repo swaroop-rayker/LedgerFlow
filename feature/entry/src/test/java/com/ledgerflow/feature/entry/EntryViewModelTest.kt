@@ -67,52 +67,57 @@ class EntryViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    // ── The amount is a Long from the first keystroke (Law 3) ───────────────
+    // ── The typed amount becomes a Long, exactly (Law 3) ────────────────────
 
+    /** The whole point of ADR-0012: type 125, get ₹125, not ₹1.25. */
     @Test
-    fun digits_appendRightToLeftInMinorUnits() = runTest(dispatcher) {
+    fun typedWholeNumber_isMajorUnits() = runTest(dispatcher) {
         val subject = collected()
 
-        subject.press("1", "2", "5")
+        subject.type("125")
         advanceUntilIdle()
 
-        // 1 -> 0.01, 12 -> 0.12, 125 -> 1.25.
-        assertThat(subject.state.value.amountMinor).isEqualTo(125L)
+        assertThat(subject.state.value.amountMinor).isEqualTo(125_00L)
     }
 
     @Test
-    fun doubleZero_shiftsTwoPlaces() = runTest(dispatcher) {
+    fun typedDecimal_isExact() = runTest(dispatcher) {
         val subject = collected()
 
-        subject.press("5", "00", "00")
+        subject.type("8415.79")
         advanceUntilIdle()
 
-        assertThat(subject.state.value.amountMinor).isEqualTo(500_00L)
-    }
-
-    @Test
-    fun backspace_removesTheLastDigit() = runTest(dispatcher) {
-        val subject = collected()
-
-        subject.press("1", "2", "5")
-        subject.onEvent(EntryEvent.BackspacePressed)
-        advanceUntilIdle()
-
-        assertThat(subject.state.value.amountMinor).isEqualTo(12L)
+        // Via a Double this is 841578.9999999999, which floors one paise short.
+        assertThat(subject.state.value.amountMinor).isEqualTo(841_579L)
     }
 
     /**
-     * `amount * 10 + digit` overflows a `Long` after nineteen taps, and an
-     * overflowed amount is a large expense silently stored as a negative one.
+     * The text is never rewritten by the ViewModel. Echoing back a reformatted
+     * value would move the caret out from under the user's thumb on every
+     * keystroke, which is how a money field becomes unusable.
      */
     @Test
-    fun digits_stopAtTheCeilingRatherThanOverflowing() = runTest(dispatcher) {
+    fun theFieldKeepsExactlyWhatWasTyped() = runTest(dispatcher) {
         val subject = collected()
 
-        repeat(25) { subject.onEvent(EntryEvent.DigitsPressed("9")) }
+        subject.type("12.")
         advanceUntilIdle()
 
-        assertThat(subject.state.value.amountMinor).isEqualTo(999_999_999_999L)
+        assertThat(subject.state.value.amountText).isEqualTo("12.")
+        assertThat(subject.state.value.amountMinor).isEqualTo(12_00L)
+    }
+
+    @Test
+    fun clearingTheField_returnsToZero() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("125")
+        advanceUntilIdle()
+
+        subject.type("")
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.amountMinor).isEqualTo(0L)
+        assertThat(subject.state.value.canSave).isFalse()
     }
 
     // ── Draft persistence (BUG6) ────────────────────────────────────────────
@@ -125,7 +130,7 @@ class EntryViewModelTest {
     fun draft_isWrittenOnceAfterABurstOfKeystrokes() = runTest(dispatcher) {
         val subject = collected()
 
-        subject.press("1", "2", "5", "0", "0")
+        subject.type("125")
         advanceTimeBy(DEBOUNCE_MS + 1)
         advanceUntilIdle()
 
@@ -147,7 +152,7 @@ class EntryViewModelTest {
     fun draft_capturesEveryFieldOfTheForm() = runTest(dispatcher) {
         val subject = collected()
 
-        subject.press("9", "9")
+        subject.type("0.99")
         subject.onEvent(EntryEvent.PickerOpened(EntryPicker.Category))
         subject.onEvent(EntryEvent.PickerItemSelected(groceries.id))
         subject.onEvent(EntryEvent.NoteChanged("lunch"))
@@ -165,7 +170,7 @@ class EntryViewModelTest {
     fun draft_payloadNeverCarriesTheLedger() = runTest(dispatcher) {
         val subject = collected()
 
-        subject.press("1")
+        subject.type("0.01")
         advanceTimeBy(DEBOUNCE_MS + 1)
         advanceUntilIdle()
 
@@ -224,10 +229,10 @@ class EntryViewModelTest {
         val subject = viewModel()
         val collector = CoroutineScope(dispatcher).launch { subject.state.collect {} }
         // Deliberately before advanceUntilIdle: the restore has not landed yet.
-        subject.press("7")
+        subject.type("7")
         advanceUntilIdle()
 
-        assertThat(subject.state.value.amountMinor).isEqualTo(7L)
+        assertThat(subject.state.value.amountMinor).isEqualTo(7_00L)
         assertThat(subject.state.value.note).isEmpty()
         collector.cancel()
     }
@@ -255,7 +260,7 @@ class EntryViewModelTest {
     fun switchingLedger_flushesTheOutgoingFormImmediately() = runTest(dispatcher) {
         val subject = collected()
 
-        subject.press("7", "5")
+        subject.type("0.75")
         // Deliberately *inside* the debounce window: a tap that looks like
         // navigation must not throw away 300 ms of typing.
         subject.onEvent(EntryEvent.LedgerSelected(LedgerType.CREDIT))
@@ -365,12 +370,12 @@ class EntryViewModelTest {
     @Test
     fun lineItems_reportTheUnallocatedRemainder() = runTest(dispatcher) {
         val subject = collected()
-        subject.press("1", "0", "0", "0", "0")
+        subject.type("100")
         subject.onEvent(EntryEvent.LineItemAdded)
         advanceUntilIdle()
 
         val key = subject.state.value.lineItems.single().key
-        subject.onEvent(EntryEvent.LineItemDigitsChanged(key, "6000"))
+        subject.onEvent(EntryEvent.LineItemAmountChanged(key, "60"))
         advanceUntilIdle()
 
         assertThat(subject.state.value.unallocatedMinor).isEqualTo(40_00L)
@@ -397,7 +402,7 @@ class EntryViewModelTest {
     @Test
     fun save_sendsManualProvenanceAndTheTypedAmount() = runTest(dispatcher) {
         val subject = collected()
-        subject.press("1", "2", "5", "0", "0")
+        subject.type("125")
         subject.choose(EntryPicker.Category, groceries.id)
         advanceUntilIdle()
 
@@ -428,7 +433,7 @@ class EntryViewModelTest {
     @Test
     fun save_dropsEmptyLineItems() = runTest(dispatcher) {
         val subject = collected()
-        subject.press("5", "0", "0", "0")
+        subject.type("50")
         subject.onEvent(EntryEvent.LineItemAdded)
         advanceUntilIdle()
 
@@ -442,7 +447,7 @@ class EntryViewModelTest {
     @Test
     fun save_clearsTheDraftOnlyAfterTheEntryIsCommitted() = runTest(dispatcher) {
         val subject = collected()
-        subject.press("5", "0", "0", "0")
+        subject.type("50")
         advanceUntilIdle()
 
         subject.onEvent(EntryEvent.SaveRequested)
@@ -464,7 +469,7 @@ class EntryViewModelTest {
     @Test
     fun save_leavesNoDraftBehindEvenWithAWriteAlreadyPending() = runTest(dispatcher) {
         val subject = collected()
-        subject.press("5", "0", "0", "0")
+        subject.type("50")
 
         // Save inside the debounce window, so a write is genuinely in flight.
         subject.onEvent(EntryEvent.SaveRequested)
@@ -476,7 +481,7 @@ class EntryViewModelTest {
     @Test
     fun save_emptiesTheFormForTheNextEntry() = runTest(dispatcher) {
         val subject = collected()
-        subject.press("5", "0", "0", "0")
+        subject.type("50")
         subject.choose(EntryPicker.Category, groceries.id)
         advanceUntilIdle()
 
@@ -494,7 +499,7 @@ class EntryViewModelTest {
             LedgerError.CategoryNotInLedger(salary.id, LedgerType.DEBIT),
         )
         val subject = collected()
-        subject.press("5", "0", "0", "0")
+        subject.type("50")
         advanceUntilIdle()
 
         subject.onEvent(EntryEvent.SaveRequested)
@@ -550,8 +555,9 @@ class EntryViewModelTest {
         collectors.clear()
     }
 
-    private fun EntryViewModel.press(vararg keys: String) =
-        keys.forEach { onEvent(EntryEvent.DigitsPressed(it)) }
+    /** Types into the amount field, as the system keyboard would. */
+    private fun EntryViewModel.type(text: String) =
+        onEvent(EntryEvent.AmountChanged(text))
 
     private fun EntryViewModel.choose(picker: EntryPicker, id: String?) {
         onEvent(EntryEvent.PickerOpened(picker))

@@ -16,6 +16,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -31,7 +33,6 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDivider
-import com.ledgerflow.core.designsystem.component.LfKeypad
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfTextField
@@ -51,9 +52,11 @@ import java.time.format.FormatStyle
  * and comes back as state, which is the same discipline that lets `draft_entry`
  * see it (BUG6).
  *
- * The keypad sits directly under the amount rather than at the bottom of a long
- * form, because §5.4's four-tap target is amount-then-chip-then-save and those
- * three taps should not require a scroll between them.
+ * The amount is the first thing focused, so the keyboard is already up when the
+ * screen opens and the fastest path -- amount, chip, Save -- needs no
+ * intervening tap. It is deliberately *not* focused when a draft was resumed:
+ * the keyboard would cover the notice explaining why yesterday's figure is on
+ * screen.
  */
 @Composable
 public fun EntryScreen(
@@ -71,6 +74,13 @@ public fun EntryScreen(
 
     EntryDialogs(state, onEvent)
 
+    val amountFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        // Only on a form the user is starting. Stealing focus into a resumed
+        // draft would raise the keyboard over the notice that explains it.
+        if (!state.resumedFromDraft) runCatching { amountFocus.requestFocus() }
+    }
+
     LfScaffold(
         modifier = modifier,
         bottomBar = { SaveBar(state, onEvent, onDone) },
@@ -86,8 +96,10 @@ public fun EntryScreen(
             LedgerSelector(state, onEvent)
 
             LfAmountField(
-                minorUnits = state.amountMinor,
+                value = state.amountText,
+                onValueChange = { onEvent(EntryEvent.AmountChanged(it)) },
                 currencyCode = state.currencyCode,
+                focusRequester = amountFocus,
                 label = if (state.ledger == LedgerType.DEBIT) "Amount spent" else "Amount received",
                 // Neutral until there is an amount. A coral zero on an
                 // untouched form reads as an error rather than as an expense,
@@ -101,11 +113,6 @@ public fun EntryScreen(
 
             if (state.resumedFromDraft) ResumeNotice(onEvent)
             if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
-
-            LfKeypad(
-                onDigits = { onEvent(EntryEvent.DigitsPressed(it)) },
-                onBackspace = { onEvent(EntryEvent.BackspacePressed) },
-            )
 
             DetailRows(state, onEvent)
 
@@ -278,7 +285,7 @@ private fun LineItemEditor(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
         )
 
         state.lineItems.forEach { line ->
-            LineItemCard(line, state.currencyCode, onEvent)
+            LineItemCard(line, onEvent)
         }
 
         if (state.lineItems.isNotEmpty()) {
@@ -304,11 +311,7 @@ private fun LineItemEditor(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 }
 
 @Composable
-private fun LineItemCard(
-    line: EntryLineItem,
-    currencyCode: String,
-    onEvent: (EntryEvent) -> Unit,
-) {
+private fun LineItemCard(line: EntryLineItem, onEvent: (EntryEvent) -> Unit) {
     LfCard {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
             LfTextField(
@@ -317,17 +320,13 @@ private fun LineItemCard(
                 label = "Item",
             )
             LfTextField(
-                // Rendered formatted and read back as digits, so this field
-                // behaves exactly like the keypad: each digit shifts the value
-                // one place, and the amount is a Long throughout (Law 3).
-                value = if (line.amountMinor == 0L) {
-                    ""
-                } else {
-                    MoneyFormat.plain(line.amountMinor, currencyCode)
-                },
-                onValueChange = { onEvent(EntryEvent.LineItemDigitsChanged(line.key, it)) },
+                // Raw text, parsed to minor units by the ViewModel -- the same
+                // contract as the entry amount, so the two fields in one form
+                // cannot behave differently.
+                value = line.amountText,
+                onValueChange = { onEvent(EntryEvent.LineItemAmountChanged(line.key, it)) },
                 label = "Amount",
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             )
             LfDivider()
             LfActionRow {
@@ -377,7 +376,11 @@ private fun Long.asLocalDate(): String =
 private fun EntryScreenPreview() {
     LfTheme {
         EntryScreen(
-            state = EntryUiState(amountMinor = 1_250_00L, occurredAt = 1_755_540_000_000L),
+            state = EntryUiState(
+                amountText = "1250",
+                amountMinor = 1_250_00L,
+                occurredAt = 1_755_540_000_000L,
+            ),
             onEvent = {},
             onDone = {},
         )
