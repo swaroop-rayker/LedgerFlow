@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -36,14 +39,44 @@ import androidx.compose.foundation.text.KeyboardOptions
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
+ * The insets every LedgerFlow screen consumes: system bars and display cutout.
+ *
+ * **Deliberately not `safeDrawing`, because `safeDrawing` includes the IME**,
+ * and the IME is handled once at the scaffold instead — see [LfScaffold].
+ *
+ * Two measured failures produced this split, and both are worth recording
+ * because each looks like the fix for the other:
+ *
+ * 1. `safeDrawing` here *and* on the bottom bar: with the keyboard open the
+ *    pinned bar rendered at `y = 170` and **8 pixels tall**. The keyboard was
+ *    being subtracted twice, leaving no room for content at all — tapping the
+ *    Note field scrolled the whole form off screen.
+ * 2. Removing the IME entirely: the collapse went away and the keyboard then
+ *    covered the bar and the focused field, because `enableEdgeToEdge()` makes
+ *    the manifest's `adjustResize` a no-op. The window no longer shrinks, so
+ *    nothing accounted for the keyboard at all.
+ *
+ * The keyboard therefore has exactly one consumer, and it is [LfScaffold].
+ */
+private val LfDrawingInsets: WindowInsets
+    @Composable get() = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+
+/**
  * The app's scaffold.
  *
- * **Consumes `WindowInsets.safeDrawing` for you.** Android 15+ enforces
- * edge-to-edge, and BUG5 is what happens when each screen is trusted to
+ * **Consumes the drawing insets and the keyboard for you.** Android 15+
+ * enforces edge-to-edge, and BUG5 is what happens when each screen is trusted to
  * remember its own inset handling: content slides under the status bar on
  * exactly the devices nobody tested. Screens use this rather than Material's
  * `Scaffold` directly, so the correct behaviour is the default rather than a
  * thing to remember.
+ *
+ * `imePadding()` sits on the **scaffold**, not on the content and not on the
+ * bottom bar. That shortens the whole screen by the keyboard's height — which
+ * is what `adjustResize` would have done had `enableEdgeToEdge()` not disabled
+ * it — so the content viewport shrinks and Compose scrolls the focused field
+ * into view, and the pinned bar rides above the keyboard. Putting it on either
+ * child instead double-counts against the other, which is the bug this fixed.
  */
 @Composable
 public fun LfScaffold(
@@ -53,8 +86,9 @@ public fun LfScaffold(
     snackbarHostState: SnackbarHostState? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
+    val insets = LfDrawingInsets
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.imePadding(),
         topBar = topBar,
         bottomBar = {
             // `contentWindowInsets` covers the *content* slot only -- Material3
@@ -64,9 +98,7 @@ public fun LfScaffold(
             // bar. Doing it here means no screen has to remember (BUG5).
             Box(
                 Modifier.windowInsetsPadding(
-                    WindowInsets.safeDrawing.only(
-                        WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal,
-                    ),
+                    insets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
                 ),
             ) {
                 bottomBar()
@@ -74,7 +106,7 @@ public fun LfScaffold(
         },
         containerColor = LfTheme.colors.surfaceBase,
         contentColor = LfTheme.colors.textPrimary,
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = insets,
         snackbarHost = {
             snackbarHostState?.let { SnackbarHost(it) }
         },
