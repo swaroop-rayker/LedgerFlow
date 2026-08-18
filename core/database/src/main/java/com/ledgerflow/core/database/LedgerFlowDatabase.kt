@@ -73,8 +73,12 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
         /**
          * v2 adds `draft_entry` (BUG6), `merchant_alias`, and the two
          * category-group tables. Purely additive — see `MIGRATION_1_2`.
+         *
+         * v3 drops `draft_entry`'s unique slot index so a book can hold many
+         * in-flight entries at once (ADR-0013, superseding D-06) — see
+         * `MIGRATION_2_3`.
          */
-        public const val VERSION: Int = 2
+        public const val VERSION: Int = 3
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

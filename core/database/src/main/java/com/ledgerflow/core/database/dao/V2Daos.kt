@@ -32,14 +32,27 @@ public interface DraftEntryDao {
     public suspend fun byId(id: String): DraftEntryEntity?
 
     /**
-     * The slot a given form occupies: one per ledger for new entries, one per
-     * entry being edited. Matches the unique index exactly.
+     * One book's drafts, most recently touched first -- the stack the user
+     * sees (ADR-0013).
+     */
+    @Query("SELECT * FROM draft_entry WHERE ledger = :ledger ORDER BY updated_at DESC")
+    public fun observeForLedger(ledger: LedgerType): Flow<List<DraftEntryEntity>>
+
+    /**
+     * The in-flight edit of one entry.
+     *
+     * `editing_entry_key` rather than `editing_entry_id` so this stays a plain
+     * equality: the key is `COALESCE(editing_entry_id, '')`, and matching a
+     * nullable column would need an `IS NULL` branch the index cannot serve.
      */
     @Query(
         "SELECT * FROM draft_entry WHERE ledger = :ledger " +
             "AND editing_entry_key = :editingEntryKey LIMIT 1",
     )
-    public suspend fun bySlot(ledger: LedgerType, editingEntryKey: String): DraftEntryEntity?
+    public suspend fun byEditingEntry(
+        ledger: LedgerType,
+        editingEntryKey: String,
+    ): DraftEntryEntity?
 
     @Upsert
     public suspend fun upsert(draft: DraftEntryEntity)
@@ -50,15 +63,6 @@ public interface DraftEntryDao {
     @Query("DELETE FROM draft_entry WHERE id = :id")
     public suspend fun delete(id: String)
 
-    /**
-     * Clears a slot in one statement.
-     *
-     * Read-then-delete would work, but the form discards a draft on the same
-     * tap that saves the entry, and two statements there are two chances for a
-     * concurrent debounce tick to land between them and resurrect the row.
-     */
-    @Query("DELETE FROM draft_entry WHERE ledger = :ledger AND editing_entry_key = :editingEntryKey")
-    public suspend fun deleteSlot(ledger: LedgerType, editingEntryKey: String)
 
     /**
      * Purges abandoned drafts (§6.1.2): the app was killed and the user never

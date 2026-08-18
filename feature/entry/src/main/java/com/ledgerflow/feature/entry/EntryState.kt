@@ -54,6 +54,18 @@ public data class EntryUiState(
     /** §5.4's repeat-expense chips, already resolved to names. */
     val combos: List<EntryComboChip> = emptyList(),
 
+    /**
+     * Other unsaved entries in this book, most recent first (ADR-0013).
+     *
+     * Excludes the one currently in the form. This is the surface that answers
+     * D-06's objection to unbounded drafts -- they pile up only if nothing
+     * shows them.
+     */
+    val unsaved: List<EntryDraftCard> = emptyList(),
+
+    /** The draft this form is currently editing, if it has been written yet. */
+    val openDraftId: String? = null,
+
     val picker: EntryPicker? = null,
     val choosingDate: Boolean = false,
     val confirmingDiscard: Boolean = false,
@@ -126,6 +138,17 @@ public data class EntryLineItem(
     val amountMinor: Long = 0L,
 )
 
+/** One unsaved entry in the stack. */
+@Immutable
+public data class EntryDraftCard(
+    val id: String,
+    val amountMinor: Long,
+    val currencyCode: String,
+    val note: String?,
+    val lineItemCount: Int,
+    val updatedAt: Long,
+)
+
 /** A repeat-expense chip: a combination already used, resolved to names (§5.4). */
 @Immutable
 public data class EntryComboChip(
@@ -180,6 +203,15 @@ public sealed interface EntryEvent {
     public data class LineItemNameChanged(val key: String, val value: String) : EntryEvent
     public data class LineItemAmountChanged(val key: String, val text: String) : EntryEvent
     public data class LineItemRemoved(val key: String) : EntryEvent
+
+    /** Load an unsaved entry from the stack into the form. */
+    public data class DraftOpened(val id: String) : EntryEvent
+
+    /** Throw one away from the stack, without opening it. */
+    public data class DraftDiscarded(val id: String) : EntryEvent
+
+    /** Park what is in the form and start another entry. */
+    public data object NewDraftStarted : EntryEvent
 
     public data object SaveRequested : EntryEvent
 

@@ -4,11 +4,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
-import com.ledgerflow.core.domain.ledger.DraftSlot
+import com.ledgerflow.core.domain.ledger.DraftWrite
 import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.model.EntryAssignment
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -16,21 +17,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * `draft_entry` (SPEC.md §6.1.2, D-06) — the storage half of BUG6.
+ * `draft_entry` (SPEC.md §6.1.2) — the storage half of BUG6.
  *
- * The screen-level regression test lives in `:feature:entry`
- * (`Bug6_DraftSurvivesProcessDeathTest`) and kills a real process. This one
- * covers what that test depends on being true: that a slot holds exactly one
- * draft, that resuming finds it, and that nothing here ever deletes user input
- * except on the user's own instruction or the 30-day sweep.
+ * The screen-level regression test lives in `:app`
+ * (`Bug6_DraftSurvivesProcessDeathTest`) and rebuilds the whole graph from
+ * disk. This one covers what that test depends on: that a draft's identity is
+ * its id, that a book can hold several at once (ADR-0013), and that nothing
+ * here deletes user input except on the user's instruction or the 30-day sweep.
  */
 @RunWith(AndroidJUnit4::class)
 class DraftRepositoryInstrumentedTest {
 
     private val vault = LedgerTestVault("lf_draft_test")
-
-    private val newDebit = DraftSlot(LedgerType.DEBIT)
-    private val newCredit = DraftSlot(LedgerType.CREDIT)
 
     @Before
     fun setUp() = runBlocking<Unit> { vault.open() }
@@ -38,100 +36,134 @@ class DraftRepositoryInstrumentedTest {
     @After
     fun tearDown() = vault.close()
 
+    private suspend fun write(
+        id: String? = null,
+        ledger: LedgerType = LedgerType.DEBIT,
+        payload: String = PAYLOAD,
+        version: Int = VERSION,
+        editingEntryId: String? = null,
+    ) = vault.drafts.save(
+        DraftWrite(
+            id = id,
+            ledger = ledger,
+            editingEntryId = editingEntryId,
+            payloadJson = payload,
+            payloadVersion = version,
+        ),
+    )
+
     @Test
     fun save_thenFind_returnsThePayloadVerbatim() = runBlocking<Unit> {
-        vault.drafts.save(newDebit, PAYLOAD, VERSION)
+        val saved = write()
 
-        val found = vault.drafts.find(newDebit)
+        val found = vault.drafts.find(saved.id)
 
-        assertThat(found).isNotNull()
         assertThat(found?.payloadJson).isEqualTo(PAYLOAD)
-        assertThat(found?.slot).isEqualTo(newDebit)
+        assertThat(found?.ledger).isEqualTo(LedgerType.DEBIT)
     }
 
     @Test
-    fun find_emptySlot_isNull() = runBlocking<Unit> {
-        assertThat(vault.drafts.find(newDebit)).isNull()
+    fun find_unknownId_isNull() = runBlocking<Unit> {
+        assertThat(vault.drafts.find("nope")).isNull()
     }
 
     /**
-     * The debounce writes on every keystroke, so this is the hot path: repeated
-     * saves must land on one row rather than accumulate siblings that the unique
-     * index would eventually reject mid-typing.
+     * The debounce writes on every keystroke, so this is the hot path: passing
+     * the id back must update one row. Without it the dropped unique index
+     * (ADR-0013) would let the form deposit a fresh draft every 300 ms.
      */
     @Test
-    fun save_repeatedly_keepsOneRowAndOneId() = runBlocking<Unit> {
-        val first = vault.drafts.save(newDebit, """{"amount":"1"}""", VERSION)
+    fun save_withTheSameId_keepsOneRow() = runBlocking<Unit> {
+        val first = write(payload = """{"amount":"1"}""")
         vault.now += 500L
-        val second = vault.drafts.save(newDebit, """{"amount":"12"}""", VERSION)
+        val second = write(id = first.id, payload = """{"amount":"12"}""")
         vault.now += 500L
-        val third = vault.drafts.save(newDebit, """{"amount":"125"}""", VERSION)
+        val third = write(id = first.id, payload = """{"amount":"125"}""")
 
         assertThat(second.id).isEqualTo(first.id)
         assertThat(third.id).isEqualTo(first.id)
         assertThat(vault.session.requireDatabase().draftEntryDao().all()).hasSize(1)
-        assertThat(vault.drafts.find(newDebit)?.payloadJson).isEqualTo("""{"amount":"125"}""")
+        assertThat(vault.drafts.find(first.id)?.payloadJson).isEqualTo("""{"amount":"125"}""")
+    }
+
+    /** ADR-0013, superseding D-06: a book holds as many in-flight entries as you start. */
+    @Test
+    fun save_withoutAnId_addsAnotherDraftToTheSameBook() = runBlocking<Unit> {
+        val first = write(payload = """{"which":"one"}""")
+        vault.now += 500L
+        val second = write(payload = """{"which":"two"}""")
+
+        assertThat(second.id).isNotEqualTo(first.id)
+        assertThat(vault.drafts.observe(LedgerType.DEBIT).first()).hasSize(2)
+    }
+
+    /** The stack is newest-first; that ordering is what the screen renders. */
+    @Test
+    fun observe_ordersMostRecentlyTouchedFirst() = runBlocking<Unit> {
+        val older = write(payload = """{"which":"older"}""")
+        vault.now += 1_000L
+        val newer = write(payload = """{"which":"newer"}""")
+
+        val stack = vault.drafts.observe(LedgerType.DEBIT).first()
+
+        assertThat(stack.map { it.id }).containsExactly(newer.id, older.id).inOrder()
+    }
+
+    /** Law 2: one book's stack never shows the other's. */
+    @Test
+    fun observe_neverReturnsTheOtherBook() = runBlocking<Unit> {
+        write(ledger = LedgerType.DEBIT, payload = """{"which":"debit"}""")
+        write(ledger = LedgerType.CREDIT, payload = """{"which":"credit"}""")
+
+        assertThat(vault.drafts.observe(LedgerType.DEBIT).first()).hasSize(1)
+        assertThat(vault.drafts.observe(LedgerType.CREDIT).first()).hasSize(1)
+        assertThat(vault.drafts.observe(LedgerType.DEBIT).first().single().payloadJson)
+            .isEqualTo("""{"which":"debit"}""")
     }
 
     /** `created_at` is when the user started, not when they last typed. */
     @Test
     fun save_preservesCreatedAtAndAdvancesUpdatedAt() = runBlocking<Unit> {
-        val first = vault.drafts.save(newDebit, PAYLOAD, VERSION)
+        val first = write()
         vault.now += 10_000L
-        val second = vault.drafts.save(newDebit, PAYLOAD, VERSION)
+        val second = write(id = first.id)
 
         assertThat(second.createdAt).isEqualTo(first.createdAt)
         assertThat(second.updatedAt).isGreaterThan(first.updatedAt)
     }
 
     /**
-     * D-06: the two books have separate forms, so a debit draft and a credit
-     * draft coexist. A singleton would silently destroy the first when the
-     * second was started — BUG6 reintroduced by BUG6's own countermeasure.
+     * One edit-draft per entry is a repository rule now rather than a unique
+     * index, because a partial index is not expressible through Room.
      */
     @Test
-    fun save_bothLedgers_occupySeparateSlots() = runBlocking<Unit> {
-        vault.drafts.save(newDebit, """{"which":"debit"}""", VERSION)
-        vault.drafts.save(newCredit, """{"which":"credit"}""", VERSION)
-
-        assertThat(vault.drafts.find(newDebit)?.payloadJson).isEqualTo("""{"which":"debit"}""")
-        assertThat(vault.drafts.find(newCredit)?.payloadJson).isEqualTo("""{"which":"credit"}""")
-        assertThat(vault.session.requireDatabase().draftEntryDao().all()).hasSize(2)
-    }
-
-    /**
-     * `editing_entry_key` is `COALESCE(editing_entry_id, '')`, so an edit-draft
-     * lands in its own slot rather than colliding with the new-entry one.
-     */
-    @Test
-    fun save_editDraft_doesNotDisplaceTheNewEntryDraft() = runBlocking<Unit> {
+    fun findForEntry_locatesTheEditDraft() = runBlocking<Unit> {
         val entryId = approveAnEntry()
+        write(payload = """{"which":"new"}""")
+        val edit = write(payload = """{"which":"edit"}""", editingEntryId = entryId)
 
-        vault.drafts.save(newDebit, """{"which":"new"}""", VERSION)
-        val editSlot = DraftSlot(LedgerType.DEBIT, editingEntryId = entryId)
-        vault.drafts.save(editSlot, """{"which":"edit"}""", VERSION)
+        val found = vault.drafts.findForEntry(LedgerType.DEBIT, entryId)
 
-        assertThat(vault.drafts.find(newDebit)?.payloadJson).isEqualTo("""{"which":"new"}""")
-        assertThat(vault.drafts.find(editSlot)?.payloadJson).isEqualTo("""{"which":"edit"}""")
-        assertThat(vault.drafts.find(editSlot)?.slot?.editingEntryId).isEqualTo(entryId)
+        assertThat(found?.id).isEqualTo(edit.id)
+        assertThat(found?.payloadJson).isEqualTo("""{"which":"edit"}""")
     }
 
     @Test
-    fun discard_removesOnlyThatSlot() = runBlocking<Unit> {
-        vault.drafts.save(newDebit, PAYLOAD, VERSION)
-        vault.drafts.save(newCredit, PAYLOAD, VERSION)
+    fun discard_removesOnlyThatDraft() = runBlocking<Unit> {
+        val doomed = write(payload = """{"which":"doomed"}""")
+        val kept = write(payload = """{"which":"kept"}""")
 
-        vault.drafts.discard(newDebit)
+        vault.drafts.discard(doomed.id)
 
-        assertThat(vault.drafts.find(newDebit)).isNull()
-        assertThat(vault.drafts.find(newCredit)).isNotNull()
+        assertThat(vault.drafts.find(doomed.id)).isNull()
+        assertThat(vault.drafts.find(kept.id)).isNotNull()
     }
 
     @Test
-    fun discard_emptySlot_isHarmless() = runBlocking<Unit> {
-        vault.drafts.discard(newDebit)
+    fun discard_unknownId_isHarmless() = runBlocking<Unit> {
+        vault.drafts.discard("nope")
 
-        assertThat(vault.drafts.find(newDebit)).isNull()
+        assertThat(vault.drafts.find("nope")).isNull()
     }
 
     /**
@@ -141,37 +173,38 @@ class DraftRepositoryInstrumentedTest {
      */
     @Test
     fun find_unreadableVersion_returnsTheRowButNotThePayload() = runBlocking<Unit> {
-        vault.drafts.save(newDebit, PAYLOAD, payloadVersion = VERSION + 1)
+        val saved = write(version = VERSION + 1)
 
-        val found = vault.drafts.find(newDebit)
+        val found = vault.drafts.find(saved.id)
 
         assertThat(found).isNotNull()
         assertThat(found?.payloadIfReadable(VERSION)).isNull()
         assertThat(found?.payloadIfReadable(VERSION + 1)).isEqualTo(PAYLOAD)
     }
 
+    /** The sweep is what keeps "many drafts" from becoming "drafts forever". */
     @Test
     fun purgeAbandoned_removesOnlyDraftsPastRetention() = runBlocking<Unit> {
         vault.now = 1_000_000L
-        vault.drafts.save(newDebit, PAYLOAD, VERSION)
+        val old = write(payload = """{"which":"old"}""")
 
         vault.now += DraftRepository.RETENTION_MILLIS + 1
-        vault.drafts.save(newCredit, PAYLOAD, VERSION)
+        val fresh = write(payload = """{"which":"fresh"}""")
 
         val purged = vault.drafts.purgeAbandoned()
 
         assertThat(purged).isEqualTo(1)
-        assertThat(vault.drafts.find(newDebit)).isNull()
-        assertThat(vault.drafts.find(newCredit)).isNotNull()
+        assertThat(vault.drafts.find(old.id)).isNull()
+        assertThat(vault.drafts.find(fresh.id)).isNotNull()
     }
 
     @Test
     fun purgeAbandoned_freshDrafts_isANoOp() = runBlocking<Unit> {
         vault.now = 1_000_000L
-        vault.drafts.save(newDebit, PAYLOAD, VERSION)
+        val saved = write()
 
         assertThat(vault.drafts.purgeAbandoned()).isEqualTo(0)
-        assertThat(vault.drafts.find(newDebit)).isNotNull()
+        assertThat(vault.drafts.find(saved.id)).isNotNull()
     }
 
     /**
@@ -181,14 +214,13 @@ class DraftRepositoryInstrumentedTest {
     @Test
     fun editDraft_isCascadedAwayWithItsEntry() = runBlocking<Unit> {
         val entryId = approveAnEntry()
-        val editSlot = DraftSlot(LedgerType.DEBIT, editingEntryId = entryId)
-        vault.drafts.save(editSlot, PAYLOAD, VERSION)
+        val edit = write(editingEntryId = entryId)
 
         vault.session.requireDatabase()
             .openHelper.writableDatabase
             .execSQL("DELETE FROM ledger_entry WHERE id = ?", arrayOf(entryId))
 
-        assertThat(vault.drafts.find(editSlot)).isNull()
+        assertThat(vault.drafts.find(edit.id)).isNull()
     }
 
     private suspend fun approveAnEntry(): String {

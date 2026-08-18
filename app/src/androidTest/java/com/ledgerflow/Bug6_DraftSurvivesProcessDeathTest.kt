@@ -18,7 +18,6 @@ import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
-import com.ledgerflow.core.domain.ledger.DraftSlot
 import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
@@ -37,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -70,8 +70,22 @@ import org.junit.runner.RunWith
 class Bug6_DraftSurvivesProcessDeathTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
-    private val keystoreAlias = "lf_bug6_test"
-    private val keyDirectory = File(context.filesDir, "keys-bug6-test")
+
+    /**
+     * Per test **method**, not per class.
+     *
+     * JUnit builds a fresh instance for each method, so this gives every method
+     * its own database, key directory and Keystore alias. Sharing them was a
+     * real failure: `deleteDatabase` in teardown does not always win the race
+     * against a SQLCipher connection that is still releasing, so the next
+     * method found a file encrypted under the previous method's DEK and
+     * reported `NeedsRecovery(DatabaseUnopenable)` -- which reads exactly like
+     * a bug in the unlock flow and is not.
+     */
+    private val suffix = System.nanoTime().toString()
+    private val keystoreAlias = "lf_bug6_test_$suffix"
+    private val testDatabase = "lf-test-bug6-$suffix.db"
+    private val keyDirectory = File(context.filesDir, "keys-bug6-$suffix")
 
     private var session: VaultSession? = null
     private val collectors = mutableListOf<Job>()
@@ -81,7 +95,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
     fun setUp() = runBlocking<Unit> {
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
-        context.deleteDatabase(TEST_DATABASE)
+        context.deleteDatabase(testDatabase)
     }
 
     @After
@@ -97,7 +111,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
         runCatching { runBlocking { session?.close() } }
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
-        context.deleteDatabase(TEST_DATABASE)
+        context.deleteDatabase(testDatabase)
     }
 
     @Test
@@ -165,6 +179,14 @@ class Bug6_DraftSurvivesProcessDeathTest {
         // device and reports "the draft was lost" when it was merely not shown
         // yet. That is precisely how this test failed in a full-suite run
         // having passed on its own.
+        // ADR-0013: the form opens empty and the stack offers what was unsaved,
+        // so BUG6's guarantee is now "your typing is still there and reachable"
+        // rather than "the form auto-fills". Opening it is the user's tap.
+        val stacked = after.awaitState("the unsaved entry in the stack") {
+            it.unsaved.isNotEmpty()
+        }
+        after.onEvent(EntryEvent.DraftOpened(stacked.unsaved.first().id))
+
         val restored = after.awaitState("the restored amount") { it.amountMinor == 125_00L }
 
         assertThat(restored.amountMinor).isEqualTo(125_00L)
@@ -223,13 +245,20 @@ class Bug6_DraftSurvivesProcessDeathTest {
     private suspend fun openGraph(create: Boolean): Graph {
         val store = FileWrappedDekStore(keyDirectory)
         val dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
-        val vault = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, TEST_DATABASE)
+        val vault = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, testDatabase)
 
-        if (create) {
+        val outcome = if (create) {
             vault.initialize(VaultInitRequest(Bip39.generate(SecureRandom()), "INR"))
         } else {
             vault.openOnLaunch()
+            null
         }
+        // A vault that failed to open produces "Vault is locked" several frames
+        // later, in whatever the test does next -- which names the symptom and
+        // not the cause. Fail here instead.
+        assertThat(vault.state.value)
+            .isEqualTo(com.ledgerflow.core.domain.vault.VaultState.Unlocked)
+        assertThat(outcome?.toString() ?: "Unlocked").isNotEmpty()
         session = vault
         return Graph(vault)
     }
@@ -256,7 +285,8 @@ class Bug6_DraftSurvivesProcessDeathTest {
         val categories = DefaultCategoryRepository(vault, ids, clock, Dispatchers.IO)
         private val drafts = DefaultDraftRepository(vault, ids, clock, Dispatchers.IO)
 
-        suspend fun currentDraft(): EntryDraft? = drafts.find(DraftSlot(LedgerType.DEBIT))
+        suspend fun currentDraft(): EntryDraft? =
+            drafts.observe(LedgerType.DEBIT).first().firstOrNull()
 
         /**
          * Waits for the debounced write to reach `draft_entry`.
@@ -325,11 +355,3 @@ class Bug6_DraftSurvivesProcessDeathTest {
     }
 }
 
-/**
- * This suite's own database file.
- *
- * Never the production name: these tests run against the app
- * under test and delete their database in teardown, so sharing the real name
- * wiped the debug install's ledger on every run (CLAUDE.md §8, BUG1(e)).
- */
-private const val TEST_DATABASE: String = "lf-test-bug6.db"

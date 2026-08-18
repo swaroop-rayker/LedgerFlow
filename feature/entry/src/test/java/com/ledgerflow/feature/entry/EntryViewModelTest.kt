@@ -3,7 +3,6 @@ package com.ledgerflow.feature.entry
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
-import com.ledgerflow.core.domain.ledger.DraftSlot
 import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
@@ -22,6 +21,7 @@ import java.security.SecureRandom
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -180,11 +180,18 @@ class EntryViewModelTest {
     @Test
     fun openingTheForm_resumesAnExistingDraftFieldForField() = runTest(dispatcher) {
         drafts.seed(
-            DraftSlot(LedgerType.DEBIT),
+            "draft-a",
+            LedgerType.DEBIT,
             """{"amountMinor":4250,"categoryId":"cat-groceries","note":"half typed"}""",
         )
-
         val subject = collected()
+        advanceUntilIdle()
+
+        // ADR-0013: the form opens empty and the stack offers the draft.
+        assertThat(subject.state.value.amountMinor).isEqualTo(0L)
+        assertThat(subject.state.value.unsaved.map { it.id }).containsExactly("draft-a")
+
+        subject.onEvent(EntryEvent.DraftOpened("draft-a"))
         advanceUntilIdle()
 
         val state = subject.state.value
@@ -202,7 +209,8 @@ class EntryViewModelTest {
     @Test
     fun openingTheForm_ignoresADraftFromANewerBuild() = runTest(dispatcher) {
         drafts.seed(
-            DraftSlot(LedgerType.DEBIT),
+            "draft-future",
+            LedgerType.DEBIT,
             """{"amountMinor":4250}""",
             payloadVersion = EntryDraftCodec.VERSION + 1,
         )
@@ -210,8 +218,10 @@ class EntryViewModelTest {
         val subject = collected()
         advanceUntilIdle()
 
+        // Not offered, not deserialized -- and the row is still on disk.
+        assertThat(subject.state.value.unsaved).isEmpty()
+        assertThat(drafts.find("draft-future")).isNotNull()
         assertThat(subject.state.value.amountMinor).isEqualTo(0L)
-        assertThat(subject.state.value.resumedFromDraft).isFalse()
     }
 
     /**
@@ -224,7 +234,7 @@ class EntryViewModelTest {
      */
     @Test
     fun aDraftArrivingLate_neverOverwritesWhatTheUserAlreadyTyped() = runTest(dispatcher) {
-        drafts.seed(DraftSlot(LedgerType.DEBIT), """{"amountMinor":4250,"note":"yesterday"}""")
+        drafts.seed("draft-a", LedgerType.DEBIT, """{"amountMinor":4250,"note":"yesterday"}""")
 
         val subject = viewModel()
         val collector = CoroutineScope(dispatcher).launch { subject.state.collect {} }
@@ -239,8 +249,10 @@ class EntryViewModelTest {
 
     @Test
     fun startFresh_discardsTheDraftAndEmptiesTheForm() = runTest(dispatcher) {
-        drafts.seed(DraftSlot(LedgerType.DEBIT), """{"amountMinor":4250}""")
+        drafts.seed("draft-a", LedgerType.DEBIT, """{"amountMinor":4250}""")
         val subject = collected()
+        advanceUntilIdle()
+        subject.onEvent(EntryEvent.DraftOpened("draft-a"))
         advanceUntilIdle()
 
         subject.onEvent(EntryEvent.DiscardRequested)
@@ -250,7 +262,7 @@ class EntryViewModelTest {
         subject.onEvent(EntryEvent.DiscardConfirmed)
         advanceUntilIdle()
 
-        assertThat(drafts.discarded).contains(DraftSlot(LedgerType.DEBIT))
+        assertThat(drafts.discarded).contains("draft-a")
         assertThat(subject.state.value.amountMinor).isEqualTo(0L)
     }
 
@@ -266,21 +278,22 @@ class EntryViewModelTest {
         subject.onEvent(EntryEvent.LedgerSelected(LedgerType.CREDIT))
         advanceUntilIdle()
 
-        assertThat(drafts.find(DraftSlot(LedgerType.DEBIT))?.payloadJson)
-            .contains("\"amountMinor\":75")
+        assertThat(drafts.saves.last()).contains("\"amountMinor\":75")
     }
 
     @Test
-    fun switchingLedger_loadsTheOtherBooksOwnDraft() = runTest(dispatcher) {
-        drafts.seed(DraftSlot(LedgerType.CREDIT), """{"amountMinor":900000}""")
+    fun switchingLedger_showsTheOtherBooksStack() = runTest(dispatcher) {
+        drafts.seed("draft-credit", LedgerType.CREDIT, """{"amountMinor":900000}""")
         val subject = collected()
         advanceUntilIdle()
 
         subject.onEvent(EntryEvent.LedgerSelected(LedgerType.CREDIT))
         advanceUntilIdle()
 
+        // A fresh form in the other book, with that book's stack beside it.
         assertThat(subject.state.value.ledger).isEqualTo(LedgerType.CREDIT)
-        assertThat(subject.state.value.amountMinor).isEqualTo(900_000L)
+        assertThat(subject.state.value.amountMinor).isEqualTo(0L)
+        assertThat(subject.state.value.unsaved.map { it.id }).containsExactly("draft-credit")
     }
 
     @Test
@@ -453,7 +466,7 @@ class EntryViewModelTest {
         subject.onEvent(EntryEvent.SaveRequested)
         advanceUntilIdle()
 
-        assertThat(drafts.discarded).containsExactly(DraftSlot(LedgerType.DEBIT))
+        assertThat(drafts.discarded).hasSize(1)
         assertThat(subject.state.value.savedEntryId).isNotNull()
     }
 
@@ -475,7 +488,7 @@ class EntryViewModelTest {
         subject.onEvent(EntryEvent.SaveRequested)
         advanceUntilIdle()
 
-        assertThat(drafts.find(DraftSlot(LedgerType.DEBIT))).isNull()
+        assertThat(drafts.observe(LedgerType.DEBIT).first()).isEmpty()
     }
 
     @Test

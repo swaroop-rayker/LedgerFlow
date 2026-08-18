@@ -7,7 +7,8 @@ import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
-import com.ledgerflow.core.domain.ledger.DraftSlot
+import com.ledgerflow.core.domain.ledger.DraftWrite
+import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.domain.ledger.EntryCombo
 import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerRepository
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -88,8 +90,9 @@ public class EntryViewModel @Inject constructor(
                 merchants.observeAll(),
                 paymentMethods.observeAll(),
                 ledgerRepository.observeRecentCombos(ledger, COMBO_LIMIT),
-            ) { tree, merchantList, methods, combos ->
-                LedgerScoped(tree, merchantList, methods, combos)
+                drafts.observe(ledger),
+            ) { tree, merchantList, methods, combos, unsaved ->
+                LedgerScoped(tree, merchantList, methods, combos, unsaved)
             }
         }
 
@@ -106,7 +109,6 @@ public class EntryViewModel @Inject constructor(
         viewModelScope.launch {
             currency.value = ledgerRepository.baseCurrency() ?: EntryUiState.DEFAULT_CURRENCY
         }
-        viewModelScope.launch { resume(LedgerType.DEBIT) }
         viewModelScope.launch { collectDraftWrites() }
     }
 
@@ -131,6 +133,12 @@ public class EntryViewModel @Inject constructor(
         // keystroke before it wrote the whole thing straight back, and the next
         // entry opened pre-filled with the one just saved.
         form.filter { it.dirty }
+            // Keyed on the payload, not the whole form. `persist` writes the
+            // new draft id back into `form`, and observing that emission sent
+            // the collector straight back round to save again -- every draft
+            // written twice, on the hottest path in the app. The payload is
+            // what a draft *is*; the id is where it lives.
+            .distinctUntilChangedBy { it.toPayload() }
             .debounce(DRAFT_DEBOUNCE_MS)
             .collect {
                 val current = form.value
@@ -169,6 +177,26 @@ public class EntryViewModel @Inject constructor(
             is EntryEvent.LineItemRemoved,
             -> onLineItemEvent(event)
 
+            is EntryEvent.DraftOpened,
+            is EntryEvent.DraftDiscarded,
+            EntryEvent.NewDraftStarted,
+            EntryEvent.SaveRequested,
+            EntryEvent.DiscardRequested,
+            EntryEvent.DiscardConfirmed,
+            EntryEvent.DiscardDismissed,
+            EntryEvent.MessageDismissed,
+            EntryEvent.ResumeNoticeDismissed,
+            -> onDraftEvent(event)
+        }
+    }
+
+    /** The stack, saving, and the two dismissals that close a notice. */
+    private fun onDraftEvent(event: EntryEvent) {
+        when (event) {
+            is EntryEvent.DraftOpened -> openDraft(event.id)
+            is EntryEvent.DraftDiscarded -> discardDraft(event.id)
+            EntryEvent.NewDraftStarted -> startNewDraft()
+
             EntryEvent.SaveRequested -> save()
             EntryEvent.DiscardRequested -> form.update { it.copy(confirmingDiscard = true) }
             EntryEvent.DiscardConfirmed -> startFresh()
@@ -176,6 +204,7 @@ public class EntryViewModel @Inject constructor(
 
             EntryEvent.MessageDismissed -> form.update { it.copy(message = null) }
             EntryEvent.ResumeNoticeDismissed -> form.update { it.copy(resumedFromDraft = false) }
+            else -> Unit
         }
     }
 
@@ -295,46 +324,76 @@ public class EntryViewModel @Inject constructor(
         viewModelScope.launch {
             val outgoing = form.value
             if (outgoing.dirty) persist(outgoing)
-            resume(ledger)
+            // A fresh form in the other book. The outgoing one is not lost --
+            // it was just written, and it is in that book's stack.
+            form.value = Form(ledger = ledger, occurredAt = clock.nowMillis())
         }
     }
 
     // ── Drafts (BUG6) ───────────────────────────────────────────────────────
 
-    private suspend fun resume(ledger: LedgerType) {
-        val draft = drafts.find(DraftSlot(ledger))
-        val payload = draft?.payloadIfReadable(EntryDraftCodec.VERSION)?.let(EntryDraftCodec::decode)
+    /**
+     * Loads one draft into the form.
+     *
+     * The form no longer resumes anything on its own (ADR-0013). It opens
+     * empty and the stack shows what is unsaved, because with many drafts
+     * "resume the most recent" would be the app guessing which of several
+     * half-finished entries the user meant. Whatever is currently in the form
+     * is flushed first so switching between drafts never costs a keystroke.
+     */
+    private fun openDraft(id: String) {
+        viewModelScope.launch {
+            val outgoing = form.value
+            if (outgoing.dirty) persist(outgoing)
 
-        form.update { current ->
-            // **Never overwrite input the user has already given.** The draft
-            // read is asynchronous, so between the form opening and this
-            // returning there is a window in which someone can start typing --
-            // and a restore that landed on top of their first keystrokes would
-            // be BUG6 committed by BUG6's own countermeasure.
-            //
-            // The window is a single indexed row read and nobody is fast enough
-            // in practice, which is exactly why it is guarded rather than
-            // reasoned about. Their typing wins: it is the fresher intent, and
-            // the draft row itself is untouched until their own next debounce.
-            //
-            // A ledger switch is not this case. It calls resume() while the
-            // form still holds the *outgoing* book, so the ledgers differ and
-            // the replacement is what it asked for.
-            if (current.dirty && current.ledger == ledger) {
-                current.copy(isRestoring = false)
-            } else {
-                payload?.toForm(ledger, clock.nowMillis(), currency.value)
-                    ?: Form(ledger = ledger, occurredAt = clock.nowMillis())
-            }.copy(isRestoring = false)
+            val draft = drafts.find(id) ?: return@launch
+            val payload = draft.payloadIfReadable(EntryDraftCodec.VERSION)
+                ?.let(EntryDraftCodec::decode)
+                ?: return@launch
+
+            form.value = payload.toForm(draft, clock.nowMillis(), currency.value)
         }
     }
 
+    /**
+     * Clears the form for a new entry, leaving anything already typed in the
+     * stack rather than destroying it.
+     */
+    private fun startNewDraft() {
+        viewModelScope.launch {
+            val outgoing = form.value
+            if (outgoing.dirty) persist(outgoing)
+            form.value = Form(ledger = outgoing.ledger, occurredAt = clock.nowMillis())
+        }
+    }
+
+    private fun discardDraft(id: String) {
+        viewModelScope.launch {
+            drafts.discard(id)
+            if (form.value.draftId == id) {
+                form.value = Form(ledger = form.value.ledger, occurredAt = clock.nowMillis())
+            }
+        }
+    }
+
+    /**
+     * Writes the form and remembers the id it was given.
+     *
+     * Keeping the id is what makes the 300 ms debounce update one row instead
+     * of depositing a new draft every tick now that the unique index is gone
+     * (ADR-0013).
+     */
     private suspend fun persist(current: Form) {
-        drafts.save(
-            slot = DraftSlot(current.ledger),
-            payloadJson = EntryDraftCodec.encode(current.toPayload()),
-            payloadVersion = EntryDraftCodec.VERSION,
+        val saved = drafts.save(
+            DraftWrite(
+                id = current.draftId,
+                ledger = current.ledger,
+                editingEntryId = current.editingEntryId,
+                payloadJson = EntryDraftCodec.encode(current.toPayload()),
+                payloadVersion = EntryDraftCodec.VERSION,
+            ),
         )
+        form.update { if (it.draftId == null) it.copy(draftId = saved.id) else it }
     }
 
     /**
@@ -346,10 +405,10 @@ public class EntryViewModel @Inject constructor(
      * destroyed the same data without anyone choosing it.
      */
     private fun startFresh() {
-        val ledger = form.value.ledger
+        val current = form.value
         viewModelScope.launch {
-            drafts.discard(DraftSlot(ledger))
-            form.value = Form(ledger = ledger, occurredAt = clock.nowMillis())
+            current.draftId?.let { drafts.discard(it) }
+            form.value = Form(ledger = current.ledger, occurredAt = clock.nowMillis())
         }
     }
 
@@ -365,7 +424,7 @@ public class EntryViewModel @Inject constructor(
                 is LedgerResult.Success -> {
                     // The draft goes only after the entry is committed. Clearing
                     // it first would lose the form if the approval were refused.
-                    drafts.discard(DraftSlot(current.ledger))
+                    current.draftId?.let { drafts.discard(it) }
                     // And the form is emptied, not merely marked saved. Leaving
                     // the committed values in a form that is still `dirty` is
                     // what let the debounce write them back as a fresh draft.
@@ -420,6 +479,9 @@ public class EntryViewModel @Inject constructor(
 // responsibility of the object that owns the form's lifetime.
 
 private data class Form(
+    /** Null until the first debounced write gives this form a row. */
+    val draftId: String? = null,
+    val editingEntryId: String? = null,
     val ledger: LedgerType = LedgerType.DEBIT,
     /** Exactly as typed. Never rewritten by the ViewModel; see `changeAmount`. */
     val amountText: String = "",
@@ -449,6 +511,7 @@ private data class LedgerScoped(
     val merchants: List<Merchant>,
     val paymentMethods: List<PaymentMethod>,
     val combos: List<EntryCombo>,
+    val unsaved: List<EntryDraft>,
 )
 
 private fun Form.toUiState(scoped: LedgerScoped, currencyCode: String) = EntryUiState(
@@ -467,6 +530,11 @@ private fun Form.toUiState(scoped: LedgerScoped, currencyCode: String) = EntryUi
     merchants = scoped.merchants,
     paymentMethods = scoped.paymentMethods,
     combos = scoped.combos.mapNotNull { it.toChip(scoped) },
+    // The form's own draft is not offered back to it as something to open.
+    unsaved = scoped.unsaved
+        .filter { it.id != draftId }
+        .mapNotNull { it.toCard(currencyCode) },
+    openDraftId = draftId,
     picker = picker,
     choosingDate = choosingDate,
     confirmingDiscard = confirmingDiscard,
@@ -501,8 +569,10 @@ private fun EntryCombo.toChip(scoped: LedgerScoped): EntryComboChip? {
     )
 }
 
-private fun EntryDraftPayload.toForm(ledger: LedgerType, now: Long, currencyCode: String) = Form(
-    ledger = ledger,
+private fun EntryDraftPayload.toForm(draft: EntryDraft, now: Long, currencyCode: String) = Form(
+    draftId = draft.id,
+    editingEntryId = draft.editingEntryId,
+    ledger = draft.ledger,
     // Re-derived rather than stored. The payload keeps the *value*, so a draft
     // written before the keypad was removed still restores correctly and
     // `payload_version` stays at 1 -- nobody's in-flight entry is orphaned by
@@ -549,6 +619,28 @@ private fun Form.toPayload() = EntryDraftPayload(
  * the pickers read, which comes from the database and must never be written
  * into a draft payload.
  */
+
+/**
+ * A draft, summarised for the stack.
+ *
+ * Decoded here rather than in `:core:data` because the payload's shape is this
+ * screen's business -- the repository carries it as an opaque string on purpose.
+ * A draft this build cannot read is dropped from the stack rather than shown as
+ * a blank card, and the row stays on disk untouched (§6.1.2).
+ */
+private fun EntryDraft.toCard(currencyCode: String): EntryDraftCard? {
+    val payload = payloadIfReadable(EntryDraftCodec.VERSION)?.let(EntryDraftCodec::decode)
+        ?: return null
+
+    return EntryDraftCard(
+        id = id,
+        amountMinor = payload.amountMinor,
+        currencyCode = currencyCode,
+        note = payload.note.ifBlank { null },
+        lineItemCount = payload.lineItems.count { it.name.isNotBlank() },
+        updatedAt = updatedAt,
+    )
+}
 
 /**
  * A stored amount, rendered back into the field's text.

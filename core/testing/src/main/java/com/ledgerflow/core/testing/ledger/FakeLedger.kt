@@ -2,7 +2,7 @@ package com.ledgerflow.core.testing.ledger
 
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
-import com.ledgerflow.core.domain.ledger.DraftSlot
+import com.ledgerflow.core.domain.ledger.DraftWrite
 import com.ledgerflow.core.domain.ledger.EntryCombo
 import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.domain.ledger.LedgerRepository
@@ -81,49 +81,61 @@ public class FakeLedgerRepository : LedgerRepository {
 }
 
 /**
- * An in-memory [DraftRepository] keyed by slot.
+ * An in-memory [DraftRepository].
  *
- * This one *does* model its rule, because the rule is the whole point: one row
- * per slot. A fake that let two drafts share a slot would let a ViewModel test
- * pass while the real unique index rejected the same sequence on device.
+ * Models the one rule that matters: a draft's identity is its id, so repeated
+ * saves with the same id update one row while a save with a null id makes a new
+ * one. A fake that collapsed every save onto a single draft would let a
+ * ViewModel test pass while the real table accumulated a row per keystroke.
  */
 public class FakeDraftRepository : DraftRepository {
 
-    private val rows = mutableMapOf<DraftSlot, EntryDraft>()
+    private val rows = LinkedHashMap<String, EntryDraft>()
 
     /** Every payload written, in order — the debounce is asserted against this. */
     public val saves: MutableList<String> = mutableListOf()
 
-    public val discarded: MutableList<DraftSlot> = mutableListOf()
+    public val discarded: MutableList<String> = mutableListOf()
     public var purgeCalls: Int = 0
 
     /** Advanced by the test so `updated_at` assertions never race a real clock. */
     public var now: Long = 1_000L
 
-    override suspend fun find(slot: DraftSlot): EntryDraft? = rows[slot]
+    private var nextId: Int = 1
 
-    override suspend fun save(
-        slot: DraftSlot,
-        payloadJson: String,
-        payloadVersion: Int,
-    ): EntryDraft {
-        saves += payloadJson
-        val existing = rows[slot]
-        val draft = EntryDraft(
-            id = existing?.id ?: "draft-${rows.size + 1}",
-            slot = slot,
-            payloadJson = payloadJson,
-            payloadVersion = payloadVersion,
+    override fun observe(ledger: LedgerType): Flow<List<EntryDraft>> =
+        revision.map { _ ->
+            rows.values.filter { it.ledger == ledger }.sortedByDescending { it.updatedAt }
+        }
+
+    private val revision = MutableStateFlow(0)
+
+    override suspend fun find(id: String): EntryDraft? = rows[id]
+
+    override suspend fun findForEntry(ledger: LedgerType, editingEntryId: String): EntryDraft? =
+        rows.values.firstOrNull { it.ledger == ledger && it.editingEntryId == editingEntryId }
+
+    override suspend fun save(draft: DraftWrite): EntryDraft {
+        saves += draft.payloadJson
+        val existing = draft.id?.let { rows[it] }
+        val stored = EntryDraft(
+            id = existing?.id ?: draft.id ?: "draft-${nextId++}",
+            ledger = draft.ledger,
+            editingEntryId = draft.editingEntryId,
+            payloadJson = draft.payloadJson,
+            payloadVersion = draft.payloadVersion,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
-        rows[slot] = draft
-        return draft
+        rows[stored.id] = stored
+        revision.value += 1
+        return stored
     }
 
-    override suspend fun discard(slot: DraftSlot) {
-        discarded += slot
-        rows.remove(slot)
+    override suspend fun discard(id: String) {
+        discarded += id
+        rows.remove(id)
+        revision.value += 1
     }
 
     override suspend fun purgeAbandoned(): Int {
@@ -132,15 +144,25 @@ public class FakeDraftRepository : DraftRepository {
     }
 
     /** Seeds a draft as though a previous process had written it. */
-    public fun seed(slot: DraftSlot, payloadJson: String, payloadVersion: Int = 1) {
-        rows[slot] = EntryDraft(
-            id = "seeded",
-            slot = slot,
+    public fun seed(
+        id: String,
+        ledger: LedgerType,
+        payloadJson: String,
+        payloadVersion: Int = 1,
+        updatedAt: Long = now,
+    ): EntryDraft {
+        val draft = EntryDraft(
+            id = id,
+            ledger = ledger,
+            editingEntryId = null,
             payloadJson = payloadJson,
             payloadVersion = payloadVersion,
-            createdAt = now,
-            updatedAt = now,
+            createdAt = updatedAt,
+            updatedAt = updatedAt,
         )
+        rows[id] = draft
+        revision.value += 1
+        return draft
     }
 }
 

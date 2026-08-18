@@ -6,15 +6,21 @@ import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.DraftEntryEntity
 import com.ledgerflow.core.domain.ledger.DraftRepository
-import com.ledgerflow.core.domain.ledger.DraftSlot
+import com.ledgerflow.core.domain.ledger.DraftWrite
 import com.ledgerflow.core.domain.ledger.EntryDraft
+import com.ledgerflow.core.model.LedgerType
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 /**
- * `draft_entry` over Room (SPEC.md §6.1.2, D-06) -- BUG6's countermeasure.
+ * `draft_entry` over Room (SPEC.md §6.1.2) -- BUG6's countermeasure.
  *
  * The write path is one `@Upsert` on one row and nothing else. The entry form
  * calls [save] on every field change behind a 300 ms debounce, so this is the
@@ -22,10 +28,9 @@ import kotlinx.coroutines.withContext
  * would make each tick a multi-row delete-and-reinsert, which is exactly the
  * shape that trips StrictMode's `penaltyDeath` in debug (§11).
  *
- * The row's identity is its **slot**, not its id. A second call for the same
- * (ledger, editing entry) reuses the existing row rather than inserting a
- * sibling, which is what makes `UNIQUE(ledger, editing_entry_key)` a
- * constraint the code cooperates with instead of one it collides against.
+ * A draft's identity is now its **id**, not its slot (ADR-0013). Passing that
+ * id back on subsequent saves is what makes a form's debounce update one row
+ * rather than deposit a fresh draft every 300 ms.
  */
 @Singleton
 public class DefaultDraftRepository @Inject constructor(
@@ -35,33 +40,43 @@ public class DefaultDraftRepository @Inject constructor(
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : DraftRepository {
 
-    override suspend fun find(slot: DraftSlot): EntryDraft? = withContext(io) {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observe(ledger: LedgerType): Flow<List<EntryDraft>> =
+        session.whenUnlocked().flatMapLatest { database ->
+            database?.draftEntryDao()?.observeForLedger(ledger)
+                ?.map { rows -> rows.map { it.toDomain() } }
+                ?: flowOf(emptyList())
+        }
+
+    override suspend fun find(id: String): EntryDraft? = withContext(io) {
+        session.requireDatabase().draftEntryDao().byId(id)?.toDomain()
+    }
+
+    override suspend fun findForEntry(
+        ledger: LedgerType,
+        editingEntryId: String,
+    ): EntryDraft? = withContext(io) {
         session.requireDatabase().draftEntryDao()
-            .bySlot(slot.ledger, editingEntryKeyOf(slot.editingEntryId))
+            .byEditingEntry(ledger, editingEntryId)
             ?.toDomain()
     }
 
-    override suspend fun save(
-        slot: DraftSlot,
-        payloadJson: String,
-        payloadVersion: Int,
-    ): EntryDraft = withContext(io) {
+    override suspend fun save(draft: DraftWrite): EntryDraft = withContext(io) {
         val dao = session.requireDatabase().draftEntryDao()
-        val key = editingEntryKeyOf(slot.editingEntryId)
         val now = clock.nowMillis()
 
-        // Read-then-upsert rather than a blind insert: reusing the existing row
-        // preserves `created_at`, which is what "started this entry an hour ago"
-        // is measured from, and keeps the id stable so a concurrent debounce
-        // tick cannot produce two rows racing for one slot.
-        val existing = dao.bySlot(slot.ledger, key)
+        // Reuse rather than blind-insert: it preserves `created_at`, which is
+        // what "started this an hour ago" is measured from, and keeps the id
+        // stable so a concurrent debounce tick cannot produce a second row for
+        // a form the user thinks is one entry.
+        val existing = draft.id?.let { dao.byId(it) }
         val entity = DraftEntryEntity(
-            id = existing?.id ?: ids.generate(),
-            ledger = slot.ledger,
-            editingEntryId = slot.editingEntryId,
-            editingEntryKey = key,
-            payloadJson = payloadJson,
-            payloadVersion = payloadVersion,
+            id = existing?.id ?: draft.id ?: ids.generate(),
+            ledger = draft.ledger,
+            editingEntryId = draft.editingEntryId,
+            editingEntryKey = editingEntryKeyOf(draft.editingEntryId),
+            payloadJson = draft.payloadJson,
+            payloadVersion = draft.payloadVersion,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
@@ -69,9 +84,8 @@ public class DefaultDraftRepository @Inject constructor(
         entity.toDomain()
     }
 
-    override suspend fun discard(slot: DraftSlot): Unit = withContext(io) {
-        session.requireDatabase().draftEntryDao()
-            .deleteSlot(slot.ledger, editingEntryKeyOf(slot.editingEntryId))
+    override suspend fun discard(id: String): Unit = withContext(io) {
+        session.requireDatabase().draftEntryDao().delete(id)
     }
 
     override suspend fun purgeAbandoned(): Int = withContext(io) {
@@ -84,14 +98,15 @@ public class DefaultDraftRepository @Inject constructor(
  * Row -> domain.
  *
  * `payload_json` is carried across unread. Deserializing here would put the
- * entry form's field names in `:core:data` and would mean a payload written by
+ * entry form's field names in `:core:data`, and would mean a payload written by
  * a newer build gets parsed against an older schema on the way past -- which is
  * the failure §6.1.2 asks us to avoid by *retaining* the row rather than
  * touching it.
  */
 private fun DraftEntryEntity.toDomain(): EntryDraft = EntryDraft(
     id = id,
-    slot = DraftSlot(ledger = ledger, editingEntryId = editingEntryId),
+    ledger = ledger,
+    editingEntryId = editingEntryId,
     payloadJson = payloadJson,
     payloadVersion = payloadVersion,
     createdAt = createdAt,

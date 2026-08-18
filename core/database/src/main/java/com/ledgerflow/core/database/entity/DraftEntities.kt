@@ -17,8 +17,15 @@ import com.ledgerflow.core.model.LedgerType
  *
  * One row per in-flight entry rather than a singleton: a singleton silently
  * destroys the first draft when a second is started, which is BUG6 reintroduced
- * by BUG6's own countermeasure. Uniqueness is scoped instead, so drafts cannot
- * accumulate unbounded — see [editingEntryKey].
+ * by BUG6's own countermeasure.
+ *
+ * **Drafts are unbounded per ledger (ADR-0013, superseding D-06.)** v2 carried
+ * `UNIQUE(ledger, editing_entry_key)`, which allowed exactly one new-entry
+ * draft per book on the reasoning that unbounded drafts would pile up where
+ * nobody could find them. In use that constraint read as data loss: starting a
+ * second entry silently resumed the first, so the second one could not exist.
+ * The answer to "nobody can find them" is a surface that shows them, which is
+ * what the drafts stack is — not a constraint that forbids having two.
  *
  * As with `ledger_entry`, SPEC.md's `CHECK (ledger IN ('DEBIT','CREDIT'))` is
  * carried by the type: [ledger] is a [LedgerType] and the converter can only
@@ -27,15 +34,14 @@ import com.ledgerflow.core.model.LedgerType
 @Entity(
     tableName = "draft_entry",
     indices = [
-        // One new-entry draft per ledger, one edit-draft per entry.
-        Index(
-            value = ["ledger", "editing_entry_key"],
-            unique = true,
-            name = "index_draft_entry_unique_slot",
-        ),
-        // "Resume unsaved entry?" wants the most recent first. SQLite scans an
-        // index backwards as cheaply as forwards, so a plain index serves the
-        // DESC ordering SPEC.md §6.1 asks for.
+        // The stack: one book's drafts, most recent first. SQLite scans an
+        // index backwards as cheaply as forwards, so this serves the DESC
+        // ordering without a second index.
+        Index(value = ["ledger", "updated_at"]),
+        // Finding the edit-draft for a given entry. Not unique any more, but
+        // still the lookup the repository does before reusing a row.
+        Index(value = ["ledger", "editing_entry_key"]),
+        // The 30-day purge sweeps on `updated_at` alone, across both books.
         Index(value = ["updated_at"]),
         Index(value = ["editing_entry_id"]),
     ],
@@ -63,10 +69,12 @@ public data class DraftEntryEntity(
     val editingEntryId: String?,
 
     /**
-     * `COALESCE(editing_entry_id, '')`, the same sentinel pattern as
-     * `category.parent_key` and for the same reason: SQLite treats NULLs as
-     * distinct in a unique index, so a nullable column in the constraint would
-     * let unlimited new-entry drafts coexist and make the index decorative.
+     * `COALESCE(editing_entry_id, '')`.
+     *
+     * It was the sentinel half of a unique constraint that no longer exists
+     * (ADR-0013). It stays because it is still the column the edit-draft
+     * lookup matches on, and because a NULL-free key is what lets that lookup
+     * be a plain equality rather than an `IS NULL` special case.
      */
     @ColumnInfo(name = "editing_entry_key")
     val editingEntryKey: String,

@@ -117,6 +117,7 @@ public fun EntryScreen(
 
             if (state.resumedFromDraft) ResumeNotice(onEvent)
             if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
+            if (state.unsaved.isNotEmpty()) UnsavedStack(state, onEvent)
 
             DetailRows(state, onEvent)
 
@@ -200,6 +201,72 @@ private fun ComboChips(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
         }
     }
 }
+
+/**
+ * The unsaved-entry stack (ADR-0013), newest first.
+ *
+ * D-06 allowed one draft per book because unbounded drafts would "accumulate
+ * into a list nobody curates". This is that list, and it is why the constraint
+ * could go: they only pile up unseen if nothing shows them. The same shape
+ * serves the Inbox at P2 -- but over `pending_transaction`, which is a
+ * different table on purpose (§5.4): one gates a commit, this recovers typing.
+ */
+@Composable
+private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Text(
+            text = "Unsaved (${state.unsaved.size})",
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textSecondary,
+        )
+        state.unsaved.forEach { draft ->
+            LfCard {
+                Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+                    Text(
+                        text = MoneyFormat.symbolised(draft.amountMinor, draft.currencyCode),
+                        style = LfTheme.typography.amountM,
+                        color = LfTheme.colors.textPrimary,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    draft.subtitle()?.let {
+                        Text(
+                            text = it,
+                            style = LfTheme.typography.bodyM,
+                            color = LfTheme.colors.textSecondary,
+                        )
+                    }
+                    LfDivider()
+                    LfActionRow {
+                        LfButton(
+                            text = "Open",
+                            style = LfButtonStyle.Outlined,
+                            onClick = { onEvent(EntryEvent.DraftOpened(draft.id)) },
+                        )
+                        LfButton(
+                            text = "Discard",
+                            style = LfButtonStyle.Outlined,
+                            onClick = { onEvent(EntryEvent.DraftDiscarded(draft.id)) },
+                        )
+                    }
+                }
+            }
+        }
+        LfActionRow {
+            LfButton(
+                text = "Start another",
+                style = LfButtonStyle.Outlined,
+                onClick = { onEvent(EntryEvent.NewDraftStarted) },
+            )
+        }
+    }
+}
+
+/** What the card says under the amount, if there is anything worth saying. */
+private fun EntryDraftCard.subtitle(): String? = listOfNotNull(
+    note,
+    if (lineItemCount > 0) "$lineItemCount line items" else null,
+).joinToString(" · ").ifBlank { null }
 
 @Composable
 private fun DetailRows(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
