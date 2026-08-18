@@ -3,8 +3,10 @@ package com.ledgerflow
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
+import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.VaultState
+import com.ledgerflow.core.testing.ledger.FakeDraftRepository
 import com.ledgerflow.core.testing.vault.FakeVaultRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,9 +35,12 @@ class AppViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private val drafts = FakeDraftRepository()
+
     private fun viewModel(vault: FakeVaultRepository) = AppViewModel(
         observeVaultState = ObserveVaultStateUseCase(vault),
         openVaultOnLaunch = OpenVaultOnLaunchUseCase(vault),
+        purgeAbandonedDrafts = PurgeAbandonedDraftsUseCase(drafts),
     )
 
     /**
@@ -105,6 +110,59 @@ class AppViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
         assertThat(subject.route.value).isEqualTo(AppRoute.Ready)
 
+        job.cancel()
+    }
+
+    // ── The draft orphan sweep (SPEC.md §6.1.2) ─────────────────────────────
+
+    /**
+     * There is no database before the unlock succeeds, so a sweep that ran at
+     * construction would throw on the one launch it matters for — a first run,
+     * where `openOnLaunch` routes to onboarding and no vault exists at all.
+     */
+    @Test
+    fun purge_doesNotRunBeforeTheVaultOpens() = runTest(dispatcher) {
+        routeOf(FakeVaultRepository(VaultState.NeedsOnboarding))
+
+        assertThat(drafts.purgeCalls).isEqualTo(0)
+    }
+
+    @Test
+    fun purge_runsOnceTheVaultIsOpen() = runTest(dispatcher) {
+        routeOf(FakeVaultRepository(VaultState.Unlocked))
+
+        assertThat(drafts.purgeCalls).isEqualTo(1)
+    }
+
+    /** A user who came in through Recovery gets the same housekeeping. */
+    @Test
+    fun purge_runsAfterRecoveryToo() = runTest(dispatcher) {
+        val vault = FakeVaultRepository(VaultState.NeedsRecovery(RecoveryReason.CanaryMismatch))
+        val subject = viewModel(vault)
+        val job = launch { subject.route.collect {} }
+        dispatcher.scheduler.advanceUntilIdle()
+        assertThat(drafts.purgeCalls).isEqualTo(0)
+
+        vault.emit(VaultState.Unlocked)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(drafts.purgeCalls).isEqualTo(1)
+        job.cancel()
+    }
+
+    /** One sweep per process. `first` cancels the collection rather than subscribing. */
+    @Test
+    fun purge_runsOnceEvenIfTheVaultReopens() = runTest(dispatcher) {
+        val vault = FakeVaultRepository(VaultState.Unlocked)
+        val subject = viewModel(vault)
+        val job = launch { subject.route.collect {} }
+        dispatcher.scheduler.advanceUntilIdle()
+
+        vault.emit(VaultState.Working)
+        vault.emit(VaultState.Unlocked)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(drafts.purgeCalls).isEqualTo(1)
         job.cancel()
     }
 }

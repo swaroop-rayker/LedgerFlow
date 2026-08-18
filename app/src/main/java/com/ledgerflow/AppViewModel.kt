@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
+import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.VaultState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -33,6 +35,7 @@ public sealed interface AppRoute {
 public class AppViewModel @Inject constructor(
     observeVaultState: ObserveVaultStateUseCase,
     private val openVaultOnLaunch: OpenVaultOnLaunchUseCase,
+    private val purgeAbandonedDrafts: PurgeAbandonedDraftsUseCase,
 ) : ViewModel() {
 
     /**
@@ -60,6 +63,20 @@ public class AppViewModel @Inject constructor(
     init {
         // §7.3 step 1. Idempotent, so a config change does not re-open anything.
         viewModelScope.launch { openVaultOnLaunch() }
+
+        // §6.1.2's orphan sweep: drafts the user abandoned 30 days ago, from
+        // launches where the app was killed and they never came back.
+        //
+        // It waits for the vault rather than running at construction, because
+        // there is no database until the unlock succeeds -- and it deliberately
+        // runs after *any* route reaches Ready, so a user who came in through
+        // Recovery gets the same housekeeping as one who came in through the
+        // Keystore. `first` cancels the collection as soon as it fires, so this
+        // is one sweep per process, not a subscription.
+        viewModelScope.launch {
+            route.first { it is AppRoute.Ready }
+            purgeAbandonedDrafts()
+        }
     }
 
     private companion object {
