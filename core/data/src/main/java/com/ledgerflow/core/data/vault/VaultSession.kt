@@ -98,6 +98,28 @@ public class VaultSession @Inject constructor(
         state.map { if (it is VaultState.Unlocked) database else null }
             .distinctUntilChanged()
 
+    /**
+     * Closes the database and returns to the pre-launch state.
+     *
+     * Deliberately **not** on [VaultRepository]: the domain layer has no
+     * business ending a database's life. This class does, because it is the
+     * thing that owns that life -- and something that owns a lifetime and
+     * cannot end it leaks by construction. Every open vault holds a native
+     * SQLCipher connection pool.
+     *
+     * Not a wipe and not a lock: nothing on disk changes, and [openOnLaunch]
+     * reopens. The session is reusable afterwards, which is why the state goes
+     * back to [VaultState.Initializing] rather than staying `Unlocked` over a
+     * handle that no longer exists.
+     */
+    public suspend fun close() {
+        mutex.withLock {
+            withContext(io) { database?.close() }
+            database = null
+            _state.value = VaultState.Initializing
+        }
+    }
+
     override suspend fun openOnLaunch() {
         mutex.withLock {
             // Pull the BIP-39 wordlist off the APK here, on IO, so that every
