@@ -66,6 +66,16 @@ public data class EntryUiState(
      */
     val resumedFromDraft: Boolean = false,
 
+    /**
+     * True until the draft read that runs on open has finished.
+     *
+     * The screen waits for this before deciding whether to raise the keyboard:
+     * at first composition [resumedFromDraft] is still false for a form that is
+     * about to be restored, so a decision made then always autofocuses -- which
+     * put the keyboard over the resume notice.
+     */
+    val isRestoring: Boolean = true,
+
     val isSaving: Boolean = false,
 
     /** Set once the entry is committed; the shell navigates away on it. */

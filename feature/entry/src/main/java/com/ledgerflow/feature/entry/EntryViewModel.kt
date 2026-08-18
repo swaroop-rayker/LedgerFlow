@@ -321,11 +321,11 @@ public class EntryViewModel @Inject constructor(
             // form still holds the *outgoing* book, so the ledgers differ and
             // the replacement is what it asked for.
             if (current.dirty && current.ledger == ledger) {
-                current
+                current.copy(isRestoring = false)
             } else {
                 payload?.toForm(ledger, clock.nowMillis(), currency.value)
                     ?: Form(ledger = ledger, occurredAt = clock.nowMillis())
-            }
+            }.copy(isRestoring = false)
         }
     }
 
@@ -436,6 +436,7 @@ private data class Form(
     val confirmingDiscard: Boolean = false,
     val resumedFromDraft: Boolean = false,
     val dirty: Boolean = false,
+    val isRestoring: Boolean = true,
     val isSaving: Boolean = false,
     val savedEntryId: String? = null,
     val message: String? = null,
@@ -470,6 +471,7 @@ private fun Form.toUiState(scoped: LedgerScoped, currencyCode: String) = EntryUi
     choosingDate = choosingDate,
     confirmingDiscard = confirmingDiscard,
     resumedFromDraft = resumedFromDraft,
+    isRestoring = isRestoring,
     isSaving = isSaving,
     savedEntryId = savedEntryId,
     message = message,
@@ -526,6 +528,7 @@ private fun EntryDraftPayload.toForm(ledger: LedgerType, now: Long, currencyCode
     // came back to must not be the one thing that fails to survive.
     dirty = true,
     resumedFromDraft = true,
+    isRestoring = false,
 )
 
 private fun Form.toPayload() = EntryDraftPayload(

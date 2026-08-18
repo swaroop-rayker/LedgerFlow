@@ -3,9 +3,11 @@ package com.ledgerflow.core.designsystem.component
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.CurrencyDisplay
@@ -138,11 +141,16 @@ private fun AmountInput(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier
-                .wrapContentWidth()
+                .width(IntrinsicSize.Min)
+                .widthIn(min = MIN_FIELD_WIDTH)
                 .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier),
+            // Start, not Center. A `BasicTextField` measures to the width it is
+            // offered rather than to its text, so centring the glyphs inside it
+            // strands the currency symbol several centimetres to the left of the
+            // number it belongs to -- which is what the first build did.
             textStyle = LfTheme.typography.amountL.copy(
                 color = amountColor,
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Start,
             ),
             singleLine = true,
             cursorBrush = SolidColor(colors.accent),
@@ -200,3 +208,12 @@ private fun AmountInput(
 public enum class LfAmountTone { Neutral, Debit, Credit }
 
 private const val SELECTION_ALPHA = 0.3f
+
+/**
+ * Enough room for a caret and a couple of digits.
+ *
+ * `IntrinsicSize.Min` sizes the field to its text, which is what keeps the
+ * currency symbol beside the number -- but an empty field would then collapse
+ * to nothing and be untappable.
+ */
+private val MIN_FIELD_WIDTH = 96.dp

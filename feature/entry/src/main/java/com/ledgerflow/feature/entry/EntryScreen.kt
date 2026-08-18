@@ -75,10 +75,14 @@ public fun EntryScreen(
     EntryDialogs(state, onEvent)
 
     val amountFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        // Only on a form the user is starting. Stealing focus into a resumed
-        // draft would raise the keyboard over the notice that explains it.
-        if (!state.resumedFromDraft) runCatching { amountFocus.requestFocus() }
+    LaunchedEffect(state.isRestoring) {
+        // Waits for the draft read, then decides once. Keyed on `Unit` this
+        // ran at first composition -- before the restore had landed, when
+        // `resumedFromDraft` is still false -- so it always focused and put the
+        // keyboard over the notice explaining the resume.
+        if (!state.isRestoring && !state.resumedFromDraft) {
+            runCatching { amountFocus.requestFocus() }
+        }
     }
 
     LfScaffold(
