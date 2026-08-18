@@ -164,13 +164,25 @@ class TaxonomyRepositoryInstrumentedTest {
         assertThat(categories.find(food.id)?.name).isEqualTo("Supermarket")
     }
 
+    /**
+     * SPEC.md §5.5: the seed set ships "all editable", and categories are
+     * soft-deletable through the re-assign flow.
+     *
+     * This used to assert the opposite. `is_system` blocked deletion, and since
+     * every seeded row carries the flag, that made the entire starter taxonomy
+     * permanently undeletable -- a user who did not want "Health" was stuck
+     * with it forever, and the Delete control was absent from every category
+     * they had. The flag is provenance, not permission.
+     */
     @Test
-    fun seed_systemCategoriesCannotBeDeleted() = runBlocking {
+    fun seed_categoriesCanBeDeletedLikeAnyOther() = runBlocking {
         categories.seedSystemDefaults()
         val other = categories.observe(LedgerType.DEBIT).first().first { it.name == "Other" }
+        assertThat(other.isSystem).isTrue()
 
-        assertThat(categories.delete(other.id, null).error())
-            .isEqualTo(TaxonomyError.SystemProtected)
+        categories.delete(other.id, null).success()
+
+        assertThat(categories.find(other.id)).isNull()
     }
 
     // ── Uniqueness and the parent_key sentinel (§6.1.1) ──────────────────────

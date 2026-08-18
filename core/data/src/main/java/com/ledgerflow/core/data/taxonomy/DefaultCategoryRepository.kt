@@ -150,11 +150,21 @@ public class DefaultCategoryRepository @Inject constructor(
             val dao = database.categoryDao()
             val entries = database.ledgerEntryDao()
 
+            // `is_system` is provenance -- "we shipped this row" -- not a
+            // permission. It used to block deletion, which made the *entire*
+            // seed set permanently undeletable, because every seeded row
+            // carries the flag. SPEC.md §5.5 says the opposite: the seed set
+            // ships "all editable", and categories are soft-deletable through
+            // the re-assign flow below.
+            //
+            // Nothing is lost by allowing it. `ledger_entry.category_id` is
+            // nullable with ON DELETE SET NULL, and the re-assign check a few
+            // lines down already refuses to orphan entries silently -- so
+            // "there must always be somewhere for uncategorised spend to go"
+            // is a property the schema and that check already guarantee,
+            // rather than one this flag was holding up.
             val existing = dao.byId(id)
                 ?: return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
-            if (existing.isSystem) {
-                return@withContext TaxonomyResult.Failure(TaxonomyError.SystemProtected)
-            }
             if (reassignTo == id) {
                 return@withContext TaxonomyResult.Failure(TaxonomyError.SameSourceAndTarget)
             }

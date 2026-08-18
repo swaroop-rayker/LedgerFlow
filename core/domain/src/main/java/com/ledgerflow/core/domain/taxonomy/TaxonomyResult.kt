@@ -36,12 +36,6 @@ public sealed interface TaxonomyError {
     public data object NotFound : TaxonomyError
 
     /**
-     * System rows ship pre-populated and are editable but not deletable -- a
-     * user who deletes "Other" leaves uncategorised spend with nowhere to go.
-     */
-    public data object SystemProtected : TaxonomyError
-
-    /**
      * The tree is exactly two levels (§5.5). A parent that is itself a
      * subcategory, or a parent in the other ledger, is refused here rather than
      * stored and discovered later.

@@ -343,9 +343,6 @@ internal fun TaxonomyError.toMessage(): String = when (this) {
     is TaxonomyError.DuplicateName -> "\"$name\" already exists here."
     TaxonomyError.BlankName -> "Give it a name first."
     TaxonomyError.NotFound -> "That's already gone."
-    TaxonomyError.SystemProtected ->
-        "Built-in categories can be renamed but not deleted — something has to " +
-            "hold uncategorised spending."
     TaxonomyError.InvalidParent ->
         "Categories go two levels deep, and a subcategory has to sit under a " +
             "category in the same ledger."

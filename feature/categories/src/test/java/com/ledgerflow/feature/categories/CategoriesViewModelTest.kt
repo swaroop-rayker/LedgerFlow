@@ -222,14 +222,14 @@ class CategoriesViewModelTest {
     }
 
     @Test
-    fun aSystemCategoryRefusalIsExplainedRatherThanSwallowed() = runTest(dispatcher) {
-        categories.deleteResult = TaxonomyResult.Failure(TaxonomyError.SystemProtected)
+    fun aRefusalIsExplainedRatherThanSwallowed() = runTest(dispatcher) {
+        categories.deleteResult = TaxonomyResult.Failure(TaxonomyError.NotFound)
         val (vm, scope) = viewModel()
 
-        vm.onEvent(CategoriesEvent.DeleteCategory("cat-other", "Other"))
+        vm.onEvent(CategoriesEvent.DeleteCategory("cat-gone", "Gone"))
         vm.settle()
 
-        assertThat(vm.state.value.message).contains("not deleted")
+        assertThat(vm.state.value.message).isNotEmpty()
         scope.cancel()
     }
 

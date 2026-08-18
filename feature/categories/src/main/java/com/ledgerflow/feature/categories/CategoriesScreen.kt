@@ -221,15 +221,11 @@ private fun CategoryRow(
                         },
                     )
                 }
-                // System categories are renameable but not deletable, so the
-                // control is absent rather than present-and-failing.
-                if (!category.isSystem) {
-                    LfButton(
-                        text = "Delete",
-                        style = LfButtonStyle.Outlined,
-                        onClick = { onEvent(CategoriesEvent.DeleteCategory(category.id, category.name)) },
-                    )
-                }
+                LfButton(
+                    text = "Delete",
+                    style = LfButtonStyle.Outlined,
+                    onClick = { onEvent(CategoriesEvent.DeleteCategory(category.id, category.name)) },
+                )
             }
         }
     }
