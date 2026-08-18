@@ -6,12 +6,16 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.WrappedDekStore
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.keystore.KeystoreKek
+import com.ledgerflow.core.data.ledger.DefaultDraftRepository
+import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
 import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.RecoveryKitWriter
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.domain.ledger.DraftRepository
+import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
@@ -75,6 +79,26 @@ public interface VaultModule {
 
     @Binds
     public fun recoveryKitRepository(impl: RecoveryKitWriter): RecoveryKitRepository
+}
+
+/**
+ * The ledger write path and in-flight form state (SPEC.md §6.1, §6.1.2).
+ *
+ * Binding `LedgerRepository` here does not weaken Law 1: the interface is
+ * injectable, and `LedgerSingleWriterTest` is what makes
+ * `ApproveTransactionUseCase` the only caller of `approve`. Hiding the binding
+ * would not help -- Hilt has to see it to build the use case -- so the
+ * enforcement lives where it can actually fail a build.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+public interface LedgerModule {
+
+    @Binds
+    public fun ledgerRepository(impl: DefaultLedgerRepository): LedgerRepository
+
+    @Binds
+    public fun draftRepository(impl: DefaultDraftRepository): DraftRepository
 }
 
 /** Categories, merchants and payment methods (SPEC.md §5.5). */

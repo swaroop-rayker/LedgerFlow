@@ -210,6 +210,56 @@ public interface LedgerEntryDao {
     public suspend fun allLineItems(): List<LineItemEntity>
 
     /**
+     * The combinations this book has actually been filed under (§5.4).
+     *
+     * One statement per ledger rather than one taking `:ledger`, because the
+     * grouping reads a view and there are two views. That is the shape ADR-0002
+     * asks for: the predicate is part of the object, so neither statement can
+     * be made to return the other book's rows by passing a different argument.
+     *
+     * Ordered by use count with recency as the tiebreak -- "recent" and
+     * "frequent" in §5.4 are one ranking, not two lists. Entries with no
+     * category are excluded: a chip that fills in nothing saves no taps.
+     */
+    @Query(
+        "SELECT category_id, subcategory_id, merchant_id, payment_method_id, " +
+            "COUNT(*) AS uses, MAX(occurred_at) AS last_used_at FROM debit_entries " +
+            "WHERE category_id IS NOT NULL " +
+            "GROUP BY category_id, subcategory_id, merchant_id, payment_method_id " +
+            "ORDER BY uses DESC, last_used_at DESC LIMIT :limit",
+    )
+    public fun observeDebitCombos(limit: Int): Flow<List<EntryComboRow>>
+
+    @Query(
+        "SELECT category_id, subcategory_id, merchant_id, payment_method_id, " +
+            "COUNT(*) AS uses, MAX(occurred_at) AS last_used_at FROM credit_entries " +
+            "WHERE category_id IS NOT NULL " +
+            "GROUP BY category_id, subcategory_id, merchant_id, payment_method_id " +
+            "ORDER BY uses DESC, last_used_at DESC LIMIT :limit",
+    )
+    public fun observeCreditCombos(limit: Int): Flow<List<EntryComboRow>>
+
+    /**
+     * Rows violating §6.1.1's denormalisation invariant.
+     *
+     * `ApproveTransactionUseCase` is what stops these being written, and a
+     * SQLite CHECK cannot express the rule because it needs a subquery. So this
+     * is the detector: `LedgerEntryConsistencyTest` asserts it returns zero
+     * after every write path the app has, which is what turns the enforcement
+     * from "we remembered to check" into something a build can fail on.
+     *
+     * `IS NOT` rather than `<>` so a null parent (a subcategory that is really a
+     * top-level category) counts as a mismatch instead of comparing to null and
+     * disappearing.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM ledger_entry WHERE ledger = :ledger " +
+            "AND subcategory_id IS NOT NULL AND (category_id IS NULL OR " +
+            "(SELECT parent_id FROM category WHERE id = subcategory_id) IS NOT category_id)",
+    )
+    public suspend fun inconsistentSubcategoryCount(ledger: LedgerType): Int
+
+    /**
      * Approval is a single transaction (CLAUDE.md §5): the entry and its line
      * items land together or not at all. A half-approved entry would be a
      * ledger row whose items are missing -- silently wrong totals.

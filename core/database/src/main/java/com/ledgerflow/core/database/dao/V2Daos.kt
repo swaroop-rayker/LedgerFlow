@@ -51,6 +51,16 @@ public interface DraftEntryDao {
     public suspend fun delete(id: String)
 
     /**
+     * Clears a slot in one statement.
+     *
+     * Read-then-delete would work, but the form discards a draft on the same
+     * tap that saves the entry, and two statements there are two chances for a
+     * concurrent debounce tick to land between them and resurrect the row.
+     */
+    @Query("DELETE FROM draft_entry WHERE ledger = :ledger AND editing_entry_key = :editingEntryKey")
+    public suspend fun deleteSlot(ledger: LedgerType, editingEntryKey: String)
+
+    /**
      * Purges abandoned drafts (§6.1.2): the app was killed and the user never
      * came back. Thirty days, run on app open, one statement.
      */
