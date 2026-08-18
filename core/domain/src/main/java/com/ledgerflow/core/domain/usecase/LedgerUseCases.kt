@@ -2,15 +2,10 @@ package com.ledgerflow.core.domain.usecase
 
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
-import com.ledgerflow.core.domain.ledger.DraftSlot
-import com.ledgerflow.core.domain.ledger.EntryCombo
-import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.model.LedgerEntry
-import com.ledgerflow.core.model.LedgerType
 import javax.inject.Inject
-import kotlinx.coroutines.flow.Flow
 
 /**
  * **The only thing in LedgerFlow that may insert into `ledger_entry`** (Law 1).
@@ -36,64 +31,6 @@ public class ApproveTransactionUseCase @Inject constructor(
     /** @return the committed entry, or the reason it was refused. */
     public suspend operator fun invoke(request: ApprovalRequest): LedgerResult<LedgerEntry> =
         ledger.approve(request)
-}
-
-/**
- * Combinations already used in this book, for §5.4's repeat-expense chips.
- *
- * One ledger at a time. A combined list would be the netted view Law 2 forbids,
- * and would offer a credit category on a debit form.
- */
-public class ObserveRecentCombosUseCase @Inject constructor(
-    private val ledger: LedgerRepository,
-) {
-    public operator fun invoke(
-        ledger: LedgerType,
-        limit: Int = DEFAULT_LIMIT,
-    ): Flow<List<EntryCombo>> = this.ledger.observeRecentCombos(ledger, limit)
-
-    private companion object {
-        /** Enough to fill a chip row twice over without scrolling forever. */
-        private const val DEFAULT_LIMIT = 8
-    }
-}
-
-/** Loads the draft for a form that is opening (BUG6). */
-public class FindDraftUseCase @Inject constructor(
-    private val drafts: DraftRepository,
-) {
-    public suspend operator fun invoke(slot: DraftSlot): EntryDraft? = drafts.find(slot)
-}
-
-/**
- * Persists in-flight form state.
- *
- * Debouncing is the caller's job, not this class's: the 300 ms window belongs to
- * the form's keystroke stream, and a use case that owned a timer would be a use
- * case with a lifetime.
- */
-public class SaveDraftUseCase @Inject constructor(
-    private val drafts: DraftRepository,
-) {
-    public suspend operator fun invoke(
-        slot: DraftSlot,
-        payloadJson: String,
-        payloadVersion: Int,
-    ): EntryDraft = drafts.save(slot, payloadJson, payloadVersion)
-}
-
-/**
- * Removes a draft the user is finished with — saved, or explicitly abandoned.
- *
- * Never called speculatively. Every deletion here is an act of the user, which
- * is the entire distinction between this design and the singleton D-06 rejected.
- */
-public class DiscardDraftUseCase @Inject constructor(
-    private val drafts: DraftRepository,
-) {
-    public suspend operator fun invoke(slot: DraftSlot) {
-        drafts.discard(slot)
-    }
 }
 
 /**

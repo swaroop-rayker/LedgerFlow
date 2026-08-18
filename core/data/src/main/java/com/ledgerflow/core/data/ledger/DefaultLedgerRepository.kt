@@ -80,6 +80,10 @@ public class DefaultLedgerRepository @Inject constructor(
             rows.map { list -> list.map { it.toDomain() } }
         }
 
+    override suspend fun baseCurrency(): String? = withContext(io) {
+        session.requireDatabase().appMetaDao().value(AppMetaEntity.KEY_BASE_CURRENCY)
+    }
+
     private suspend fun commit(
         database: LedgerFlowDatabase,
         request: ApprovalRequest,

@@ -41,6 +41,22 @@ public interface LedgerRepository {
      * deliberately no variant returning both (Law 2).
      */
     public fun observeRecentCombos(ledger: LedgerType, limit: Int): Flow<List<EntryCombo>>
+
+    /**
+     * The install's base currency (`app_meta.baseCurrency`, §5.8).
+     *
+     * It lives on this interface because it is a property of every amount the
+     * ledger stores rather than a user preference -- it is chosen once at
+     * onboarding, cannot be changed (§1.3), and [approve] already has to read
+     * it to stamp each row. A settings repository can take it over when there
+     * is one; inventing one now for a single immutable value would be a layer
+     * that exists to hold a constant.
+     *
+     * Null only if the §7.4 gate never completed, which an unlocked vault makes
+     * impossible -- [approve] refuses rather than guessing, and so should any
+     * caller.
+     */
+    public suspend fun baseCurrency(): String?
 }
 
 /**

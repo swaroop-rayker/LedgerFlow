@@ -17,17 +17,9 @@ import com.ledgerflow.core.designsystem.component.LfEmptyState
  * missing edges cannot be tested, and a back-stack bug found after four screens
  * are built is four screens' worth of debugging. Each says plainly which step
  * fills it in, so none can be mistaken for finished work.
+ *
+ * The entry placeholder is gone: `:feature:entry` fills that destination now.
  */
-@Composable
-internal fun EntryPlaceholder(onBack: () -> Unit) {
-    Placeholder(
-        title = "Add an entry",
-        body = "The manual entry form, both ledgers, the line-item editor and " +
-            "draft persistence arrive with :feature:entry.",
-        onBack = onBack,
-    )
-}
-
 @Composable
 internal fun ExportPlaceholder(onBack: () -> Unit) {
     Placeholder(

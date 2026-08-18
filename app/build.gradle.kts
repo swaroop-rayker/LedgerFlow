@@ -24,6 +24,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":feature:onboarding"))
     implementation(project(":feature:dashboard"))
+    implementation(project(":feature:entry"))
     implementation(project(":feature:ledger"))
     implementation(project(":feature:analytics"))
     implementation(project(":feature:categories"))
@@ -44,4 +45,17 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // BUG6's regression test assembles the real graph -- SQLCipher, the
+    // Keystore-wrapped DEK, the entry form -- tears all of it down, and rebuilds
+    // it from disk. :app is the module that legitimately wires those together,
+    // so it is where a test about the whole graph surviving a process belongs.
+    // Test scope only; none of this reaches main source.
+    androidTestImplementation(project(":core:common"))
+    androidTestImplementation(project(":core:crypto"))
+    androidTestImplementation(project(":core:database"))
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.truth)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }

@@ -23,6 +23,8 @@ import com.ledgerflow.feature.analytics.AnalyticsScreen
 import com.ledgerflow.feature.categories.CategoriesScreen
 import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.dashboard.DashboardScreen
+import com.ledgerflow.feature.entry.EntryScreen
+import com.ledgerflow.feature.entry.EntryViewModel
 import com.ledgerflow.feature.ledger.LedgerScreen
 import com.ledgerflow.feature.settings.MoreScreen
 
@@ -83,7 +85,15 @@ internal fun LedgerFlowShell(
                     onExport = { navController.navigate(Destination.Export) },
                 )
             }
-            composable<Destination.Entry> { EntryPlaceholder(navController::popBackStack) }
+            composable<Destination.Entry> {
+                val viewModel: EntryViewModel = hiltViewModel()
+                val state by viewModel.state.collectAsStateWithLifecycle()
+                EntryScreen(
+                    state = state,
+                    onEvent = viewModel::onEvent,
+                    onDone = { navController.popBackStack() },
+                )
+            }
             composable<Destination.Categories> {
                 val viewModel: CategoriesViewModel = hiltViewModel()
                 val state by viewModel.state.collectAsStateWithLifecycle()

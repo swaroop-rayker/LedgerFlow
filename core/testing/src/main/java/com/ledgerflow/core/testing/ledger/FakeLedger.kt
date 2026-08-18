@@ -40,6 +40,9 @@ public class FakeLedgerRepository : LedgerRepository {
     /** Per-ledger, so a test can prove the form really switched books. */
     public val combos: MutableMap<LedgerType, List<EntryCombo>> = mutableMapOf()
 
+    /** Null models a vault whose §7.4 gate never completed. */
+    public var installBaseCurrency: String? = BASE_CURRENCY
+
     private val revision = MutableStateFlow(0)
 
     override suspend fun approve(request: ApprovalRequest): LedgerResult<LedgerEntry> {
@@ -49,6 +52,8 @@ public class FakeLedgerRepository : LedgerRepository {
 
     override fun observeRecentCombos(ledger: LedgerType, limit: Int): Flow<List<EntryCombo>> =
         revision.map { combos[ledger].orEmpty().take(limit) }
+
+    override suspend fun baseCurrency(): String? = installBaseCurrency
 
     public fun emitCombos(ledger: LedgerType, value: List<EntryCombo>) {
         combos[ledger] = value

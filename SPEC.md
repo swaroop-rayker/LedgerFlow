@@ -268,6 +268,8 @@ Fast-path sheet: amount keypad (large, thumb-reachable) → category → subcate
 
 Supports both ledgers (segmented control DEBIT | CREDIT at the top). Supports multi-line-item entry manually (same editor as OCR review).
 
+**Unbalanced line items are saved, not refused.** §5.3's rule for a receipt that does not reconcile applies to manual entry too: the difference between the entry total and the sum of its lines is written as an `UNALLOCATED` line item by `ApproveTransactionUseCase`. The user is allowed to save it, the entry total stays authoritative, and the parts always add up to the whole. Applying one rule to both paths is what stops manual and OCR entries disagreeing about what an unbalanced bill means.
+
 **Manual entry does not route through the Inbox.** Law 1 says only `ApproveTransactionUseCase` may insert into `ledger_entry`, so manual entry calls it — but directly, with `source = MANUAL` and `source_ref_id = NULL`, rather than first writing a `pending_transaction` row and immediately approving it. The law exists so that *automated* sources cannot commit without a human; the Save tap on a form the human just filled in **is** that human act. Round-tripping it through a review queue the user would leave in the same gesture is ceremony that adds a table write, a second state to reason about, and a row in the Inbox that was never pending on anything. `pending_transaction` therefore stays out of schema v2 and lands with the ingest pipeline in P2, which is the first thing that actually needs it. In-flight form state lives in `draft_entry` (§6.1.2), which is a different concern: recovering unsaved work, not gating a commit.
 
 ### 5.5 Ledgers, Categories, Merchants
@@ -435,7 +437,15 @@ line_item(
   normalized_name TEXT NOT NULL,
   quantity_milli INTEGER NOT NULL DEFAULT 1000,   -- 1.000 = 1000, supports 0.5 kg
   unit_price_minor INTEGER NULL,
-  total_minor INTEGER NOT NULL,
+  total_minor INTEGER NOT NULL,      -- SIGNED. An entry's line items sum to its
+                                     -- amount_minor, so DISCOUNT rows are
+                                     -- negative and UNALLOCATED may be either.
+                                     -- §5.3 states reconciliation with the
+                                     -- discount subtracted in the formula; the
+                                     -- sign lives on the row instead, which is
+                                     -- the same arithmetic and means every
+                                     -- consumer that sums line items is correct
+                                     -- without knowing what a `kind` means.
   kind TEXT NOT NULL,                -- 'ITEM' | 'TAX' | 'DISCOUNT' | 'UNALLOCATED'
   category_id TEXT NULL,
   subcategory_id TEXT NULL
