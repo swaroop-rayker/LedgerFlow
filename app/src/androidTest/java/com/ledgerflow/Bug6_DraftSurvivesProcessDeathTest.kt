@@ -81,7 +81,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
     fun setUp() = runBlocking<Unit> {
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
-        context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
+        context.deleteDatabase(TEST_DATABASE)
     }
 
     @After
@@ -97,7 +97,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
         runCatching { runBlocking { session?.close() } }
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
-        context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
+        context.deleteDatabase(TEST_DATABASE)
     }
 
     @Test
@@ -121,10 +121,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
         // rather than the persistence.
         delay(RESTORE_SETTLE_MS)
 
-        before.onEvent(EntryEvent.DigitsPressed("1"))
-        before.onEvent(EntryEvent.DigitsPressed("2"))
-        before.onEvent(EntryEvent.DigitsPressed("5"))
-        before.onEvent(EntryEvent.DigitsPressed("00"))
+        before.onEvent(EntryEvent.AmountChanged("125"))
         before.select(EntryPicker.Category, groceries.id)
         before.select(EntryPicker.Subcategory(groceries.id), vegetables.id)
         before.onEvent(EntryEvent.NoteChanged("weekly shop, half typed"))
@@ -140,7 +137,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
 
         val lineItemKey = before.state.value.lineItems.singleOrNull()?.key
         before.onEvent(EntryEvent.LineItemNameChanged(requireNotNull(lineItemKey), "Rice"))
-        before.onEvent(EntryEvent.LineItemDigitsChanged(lineItemKey, "6000"))
+        before.onEvent(EntryEvent.LineItemAmountChanged(lineItemKey, "60"))
         first.awaitDraftContaining("\"name\":\"Rice\"")
 
         val expected = before.state.value
@@ -226,7 +223,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
     private suspend fun openGraph(create: Boolean): Graph {
         val store = FileWrappedDekStore(keyDirectory)
         val dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
-        val vault = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO)
+        val vault = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, TEST_DATABASE)
 
         if (create) {
             vault.initialize(VaultInitRequest(Bip39.generate(SecureRandom()), "INR"))
@@ -327,3 +324,12 @@ class Bug6_DraftSurvivesProcessDeathTest {
         private const val POLL_INTERVAL_MS = 50L
     }
 }
+
+/**
+ * This suite's own database file.
+ *
+ * Never the production name: these tests run against the app
+ * under test and delete their database in teardown, so sharing the real name
+ * wiped the debug install's ledger on every run (CLAUDE.md §8, BUG1(e)).
+ */
+private const val TEST_DATABASE: String = "lf-test-bug6.db"

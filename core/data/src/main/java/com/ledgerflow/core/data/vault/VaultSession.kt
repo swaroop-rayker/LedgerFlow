@@ -3,6 +3,7 @@ package com.ledgerflow.core.data.vault
 import android.content.Context
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.ledgerflow.core.common.di.IoDispatcher
+import com.ledgerflow.core.data.di.VaultDatabaseName
 import com.ledgerflow.core.crypto.Dek
 import com.ledgerflow.core.crypto.DekManager
 import com.ledgerflow.core.crypto.UnlockFailure
@@ -57,6 +58,17 @@ public class VaultSession @Inject constructor(
     private val dekManager: DekManager,
     private val validator: RecoveryPhraseValidator,
     @param:IoDispatcher private val io: CoroutineDispatcher,
+    /**
+     * Which file the vault lives in.
+     *
+     * Injected rather than fixed so instrumented tests can open their **own**
+     * database. They previously shared the real one and deleted it in teardown,
+     * which meant every `connectedAndroidTest` run destroyed the debug
+     * install's ledger -- squarely against CLAUDE.md §8's BUG1(e), and it ate a
+     * real vault twice before it was fixed. A name that cannot be varied is a
+     * class that cannot be tested without collateral damage.
+     */
+    @param:VaultDatabaseName private val databaseName: String = LedgerFlowDatabase.DATABASE_NAME,
 ) : VaultRepository {
 
     private val _state = MutableStateFlow<VaultState>(VaultState.Initializing)
@@ -214,7 +226,7 @@ public class VaultSession @Inject constructor(
         dek: Dek,
         seedMetadata: VaultInitRequest? = null,
     ): VaultOutcome = withContext(io) {
-        val opened = runCatching { LedgerFlowDatabaseFactory.create(context, dek) }
+        val opened = runCatching { LedgerFlowDatabaseFactory.create(context, dek, databaseName) }
             .getOrElse { return@withContext VaultOutcome.Failed(RecoveryReason.DatabaseUnopenable) }
 
         val result = runCatching {

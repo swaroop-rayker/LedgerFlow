@@ -42,7 +42,7 @@ class VaultSessionInstrumentedTest {
     fun setUp() {
         keyDirectory = File(context.filesDir, "keys-test").apply { deleteRecursively() }
         deleteKeystoreEntry()
-        context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
+        context.deleteDatabase(TEST_DATABASE)
     }
 
     /**
@@ -57,7 +57,7 @@ class VaultSessionInstrumentedTest {
         opened.clear()
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
-        context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
+        context.deleteDatabase(TEST_DATABASE)
     }
 
     private val opened = mutableListOf<VaultSession>()
@@ -65,7 +65,7 @@ class VaultSessionInstrumentedTest {
     private fun session(): VaultSession {
         val store = FileWrappedDekStore(keyDirectory)
         val dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
-        return VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO)
+        return VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, TEST_DATABASE)
             .also { opened += it }
     }
 
@@ -132,7 +132,7 @@ class VaultSessionInstrumentedTest {
         assertThat(relaunched.state.value).isInstanceOf(VaultState.NeedsRecovery::class.java)
         // The database and the phrase wrap are both still on disk. Nothing about
         // a lost Keystore key may remove either.
-        assertThat(context.getDatabasePath(LedgerFlowDatabase.DATABASE_NAME).exists()).isTrue()
+        assertThat(context.getDatabasePath(TEST_DATABASE).exists()).isTrue()
         assertThat(File(keyDirectory, KekId.PHRASE.fileName).exists()).isTrue()
     }
 
@@ -168,7 +168,7 @@ class VaultSessionInstrumentedTest {
 
         assertThat(outcome).isEqualTo(VaultOutcome.PhraseDidNotMatch)
         assertThat(recovering.state.value).isInstanceOf(VaultState.NeedsRecovery::class.java)
-        assertThat(context.getDatabasePath(LedgerFlowDatabase.DATABASE_NAME).exists()).isTrue()
+        assertThat(context.getDatabasePath(TEST_DATABASE).exists()).isTrue()
     }
 
     /**
@@ -202,3 +202,12 @@ class VaultSessionInstrumentedTest {
         private const val KDF_FLOOR_MS = 25L
     }
 }
+
+/**
+ * This suite's own database file.
+ *
+ * Never the production name: these tests run against the app
+ * under test and delete their database in teardown, so sharing the real name
+ * wiped the debug install's ledger on every run (CLAUDE.md §8, BUG1(e)).
+ */
+private const val TEST_DATABASE: String = "lf-test-vault.db"

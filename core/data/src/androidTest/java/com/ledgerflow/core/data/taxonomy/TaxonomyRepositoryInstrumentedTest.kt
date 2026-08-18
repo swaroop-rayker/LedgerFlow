@@ -61,11 +61,11 @@ class TaxonomyRepositoryInstrumentedTest {
     fun setUp() = runBlocking {
         keyDirectory = File(context.filesDir, "keys-taxonomy-test").apply { deleteRecursively() }
         deleteKeystoreEntry()
-        context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
+        context.deleteDatabase(TEST_DATABASE)
 
         val store = FileWrappedDekStore(keyDirectory)
         val dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
-        session = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO)
+        session = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, TEST_DATABASE)
         session.initialize(VaultInitRequest(Bip39.generate(SecureRandom()), "INR"))
 
         val ids = Uuid7Generator(SecureRandom())
@@ -90,7 +90,7 @@ class TaxonomyRepositoryInstrumentedTest {
         runCatching { session.requireDatabase().close() }
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
-        context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
+        context.deleteDatabase(TEST_DATABASE)
     }
 
     private fun deleteKeystoreEntry() {
@@ -497,3 +497,12 @@ class TaxonomyRepositoryInstrumentedTest {
             .isEqualTo(TaxonomyError.DuplicateName("GPay"))
     }
 }
+
+/**
+ * This suite's own database file.
+ *
+ * Never the production name: these tests run against the app
+ * under test and delete their database in teardown, so sharing the real name
+ * wiped the debug install's ledger on every run (CLAUDE.md §8, BUG1(e)).
+ */
+private const val TEST_DATABASE: String = "lf-test-taxonomy.db"

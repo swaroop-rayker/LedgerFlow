@@ -67,11 +67,11 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
     suspend fun open() {
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
-        context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
+        context.deleteDatabase(TEST_DATABASE)
 
         val store = FileWrappedDekStore(keyDirectory)
         val dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
-        session = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO)
+        session = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, TEST_DATABASE)
         session.initialize(VaultInitRequest(Bip39.generate(SecureRandom()), BASE_CURRENCY))
 
         categories = DefaultCategoryRepository(session, ids, clock, Dispatchers.IO)
@@ -85,7 +85,7 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
         runCatching { session.requireDatabase().close() }
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
-        context.deleteDatabase(LedgerFlowDatabase.DATABASE_NAME)
+        context.deleteDatabase(TEST_DATABASE)
     }
 
     private fun deleteKeystoreEntry() {
@@ -98,3 +98,12 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
         const val BASE_CURRENCY: String = "INR"
     }
 }
+
+/**
+ * This suite's own database file.
+ *
+ * Never the production name: these tests run against the app
+ * under test and delete their database in teardown, so sharing the real name
+ * wiped the debug install's ledger on every run (CLAUDE.md §8, BUG1(e)).
+ */
+private const val TEST_DATABASE: String = "lf-test-ledger.db"
