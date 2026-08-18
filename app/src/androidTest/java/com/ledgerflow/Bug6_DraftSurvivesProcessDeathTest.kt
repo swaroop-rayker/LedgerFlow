@@ -18,6 +18,8 @@ import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
+import com.ledgerflow.core.domain.ledger.DraftSlot
+import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
@@ -26,6 +28,7 @@ import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.feature.entry.EntryEvent
 import com.ledgerflow.feature.entry.EntryPicker
+import com.ledgerflow.feature.entry.EntryUiState
 import com.ledgerflow.feature.entry.EntryViewModel
 import java.io.File
 import java.security.KeyStore
@@ -72,6 +75,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
 
     private var session: VaultSession? = null
     private val collectors = mutableListOf<Job>()
+    private val stores = mutableListOf<ViewModelStore>()
 
     @Before
     fun setUp() = runBlocking<Unit> {
@@ -83,6 +87,11 @@ class Bug6_DraftSurvivesProcessDeathTest {
     @After
     fun tearDown() {
         collectors.forEach { it.cancel() }
+        // Every ViewModel goes in a store and every store is cleared, so no
+        // viewModelScope outlives the test that made it. A leaked scope keeps a
+        // debounce collector and a repository alive over a closed session, and
+        // the failure it produces lands in whichever test runs next.
+        stores.forEach { it.clear() }
         // Every open vault holds a native SQLCipher connection pool; leaving one
         // behind is how a suite dies with a bare "Process crashed".
         runCatching { runBlocking { session?.close() } }
@@ -98,7 +107,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
         val groceries = first.newCategory("Groceries")
         val vegetables = first.newCategory("Vegetables", parentId = groceries.id)
 
-        val storeBefore = ViewModelStore()
+        val storeBefore = store()
         val before = first.entryViewModel()
         storeBefore.put(VIEW_MODEL_KEY, before)
         // stateIn(WhileSubscribed) emits nothing until collected, so without a
@@ -121,14 +130,18 @@ class Bug6_DraftSurvivesProcessDeathTest {
         before.onEvent(EntryEvent.NoteChanged("weekly shop, half typed"))
         before.onEvent(EntryEvent.LineItemAdded)
 
-        // Real time, because the debounce is real time. Generous enough that a
-        // slow device is not a failure, short enough to stay a unit of work.
-        delay(DEBOUNCE_SETTLE_MS)
+        // Polled, not slept. The debounce is real time and so is the SQLCipher
+        // write, and a fixed sleep turns "the device was busy" into a failure —
+        // which is exactly the flake this suite cannot afford. Waiting on the
+        // row itself also splits the two halves of the test: if this times out
+        // the *write* is broken, and if the assertions below fail the *restore*
+        // is, rather than both looking identical.
+        first.awaitDraftContaining("\"amountMinor\":12500")
 
         val lineItemKey = before.state.value.lineItems.singleOrNull()?.key
         before.onEvent(EntryEvent.LineItemNameChanged(requireNotNull(lineItemKey), "Rice"))
         before.onEvent(EntryEvent.LineItemDigitsChanged(lineItemKey, "6000"))
-        delay(DEBOUNCE_SETTLE_MS)
+        first.awaitDraftContaining("\"name\":\"Rice\"")
 
         val expected = before.state.value
 
@@ -146,10 +159,16 @@ class Bug6_DraftSurvivesProcessDeathTest {
         // ── After ───────────────────────────────────────────────────────────
         val second = openGraph(create = false)
         val after = second.entryViewModel()
+        store().put(VIEW_MODEL_KEY, after)
         collectors += CoroutineScope(Dispatchers.Main).launch { after.state.collect {} }
-        delay(RESTORE_SETTLE_MS)
 
-        val restored = after.state.value
+        // Polled for the same reason the write is. `state` is a combine over
+        // the form and four database flows, and it emits nothing until all of
+        // them have — so a fixed sleep here reads the seed state on a busy
+        // device and reports "the draft was lost" when it was merely not shown
+        // yet. That is precisely how this test failed in a full-suite run
+        // having passed on its own.
+        val restored = after.awaitState("the restored amount") { it.amountMinor == 125_00L }
 
         assertThat(restored.amountMinor).isEqualTo(125_00L)
         assertThat(restored.amountMinor).isEqualTo(expected.amountMinor)
@@ -173,9 +192,11 @@ class Bug6_DraftSurvivesProcessDeathTest {
     @Test
     fun anUntouchedFormLeavesNothingToResume() = runBlocking<Unit> {
         val first = openGraph(create = true)
-        val store = ViewModelStore()
+        val store = store()
         store.put(VIEW_MODEL_KEY, first.entryViewModel())
         delay(DEBOUNCE_SETTLE_MS)
+
+        assertThat(first.currentDraft()).isNull()
 
         store.clear()
         first.close()
@@ -183,6 +204,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
 
         val second = openGraph(create = false)
         val after = second.entryViewModel()
+        store().put(VIEW_MODEL_KEY, after)
         collectors += CoroutineScope(Dispatchers.Main).launch { after.state.collect {} }
         delay(RESTORE_SETTLE_MS)
 
@@ -215,11 +237,48 @@ class Bug6_DraftSurvivesProcessDeathTest {
         return Graph(vault)
     }
 
+    private fun store(): ViewModelStore = ViewModelStore().also { stores += it }
+
+    /** Waits for [predicate] to hold, or fails saying what never arrived. */
+    private suspend fun EntryViewModel.awaitState(
+        what: String,
+        predicate: (EntryUiState) -> Boolean,
+    ): EntryUiState {
+        val deadline = System.currentTimeMillis() + WRITE_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (predicate(state.value)) return state.value
+            delay(POLL_INTERVAL_MS)
+        }
+        throw AssertionError("$what never appeared in the form; last state was ${state.value}")
+    }
+
     private inner class Graph(val vault: VaultSession) {
         private val ids = Uuid7Generator(SecureRandom())
         private val clock = Clock.System
 
         val categories = DefaultCategoryRepository(vault, ids, clock, Dispatchers.IO)
+        private val drafts = DefaultDraftRepository(vault, ids, clock, Dispatchers.IO)
+
+        suspend fun currentDraft(): EntryDraft? = drafts.find(DraftSlot(LedgerType.DEBIT))
+
+        /**
+         * Waits for the debounced write to reach `draft_entry`.
+         *
+         * The timeout is generous because it is a backstop, not a measurement:
+         * on an idle device this returns in well under the debounce window.
+         */
+        suspend fun awaitDraftContaining(fragment: String) {
+            val deadline = System.currentTimeMillis() + WRITE_TIMEOUT_MS
+            while (System.currentTimeMillis() < deadline) {
+                if (currentDraft()?.payloadJson?.contains(fragment) == true) return
+                delay(POLL_INTERVAL_MS)
+            }
+            throw AssertionError(
+                "draft_entry never received a payload containing $fragment -- " +
+                    "the debounced write did not land, so the restore below " +
+                    "would have failed for the wrong reason.",
+            )
+        }
 
         fun entryViewModel() = EntryViewModel(
             approveTransaction = ApproveTransactionUseCase(
@@ -259,8 +318,12 @@ class Bug6_DraftSurvivesProcessDeathTest {
     private companion object {
         private const val VIEW_MODEL_KEY = "entry"
 
-        /** Comfortably past the 300 ms debounce, without being a sleep-and-hope. */
+        /** Only used where the assertion is an *absence*, which no poll can hurry. */
         private const val DEBOUNCE_SETTLE_MS = 800L
         private const val RESTORE_SETTLE_MS = 600L
+
+        /** Backstop for the debounced write, not an expected duration. */
+        private const val WRITE_TIMEOUT_MS = 10_000L
+        private const val POLL_INTERVAL_MS = 50L
     }
 }
