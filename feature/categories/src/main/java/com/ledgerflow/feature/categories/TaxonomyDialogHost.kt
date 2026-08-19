@@ -34,6 +34,7 @@ internal fun TaxonomyDialogHost(
     onEvent: (CategoriesEvent) -> Unit,
 ) {
     when (dialog) {
+        is TaxonomyDialog.ConfirmDelete -> ConfirmDeleteDialog(dialog, state, onEvent)
         is TaxonomyDialog.TextPrompt -> TextPromptDialog(dialog, state, onEvent)
         is TaxonomyDialog.ReassignCategory -> ReassignDialog(dialog, state, onEvent)
         is TaxonomyDialog.MergeMerchant -> MergeDialog(dialog, state, onEvent)
@@ -85,6 +86,54 @@ private fun TextPromptDialog(
                 state.message?.let { ErrorText(it) }
             }
         },
+    )
+}
+
+/**
+ * The mis-tap guard, worded per target.
+ *
+ * Each of the three says what actually happens, because they genuinely differ
+ * and a confirmation that overstates the damage is as bad as one that
+ * understates it — both teach the user that the words are boilerplate. A
+ * merchant keeps labelling past entries; a payment method is scrubbed from
+ * them; a category may still have to be re-assigned in a second step.
+ */
+@Composable
+private fun ConfirmDeleteDialog(
+    dialog: TaxonomyDialog.ConfirmDelete,
+    state: CategoriesUiState,
+    onEvent: (CategoriesEvent) -> Unit,
+) {
+    val noun = when (dialog.target) {
+        DeleteTarget.Category -> "category"
+        DeleteTarget.Subcategory -> "subcategory"
+        DeleteTarget.Merchant -> "merchant"
+        DeleteTarget.PaymentMethod -> "payment method"
+    }
+    val body = when (dialog.target) {
+        DeleteTarget.Category ->
+            "Its subcategories go with it. Entries already filed under it keep " +
+                "their amounts — if any exist, you'll be asked where to move them next."
+        DeleteTarget.Subcategory ->
+            "Entries already filed under it keep their amounts — if any exist, " +
+                "you'll be asked where to move them next."
+        DeleteTarget.Merchant ->
+            "It stops being offered on new entries. Past entries keep showing it, " +
+                "so your history reads the same."
+        DeleteTarget.PaymentMethod ->
+            "It stops being offered on new entries, and past entries lose the " +
+                "record of which method was used. Their amounts are untouched."
+    }
+    LfDialog(
+        title = "Delete \"${dialog.name}\"?",
+        body = "This $noun will be removed. $body",
+        confirmText = "Delete",
+        // Warning emphasis also stops an outside tap from standing in for an
+        // answer, which for a confirmation would defeat the point.
+        emphasis = LfDialogEmphasis.Warning,
+        onConfirm = { onEvent(CategoriesEvent.DialogConfirmed) },
+        onDismiss = { onEvent(CategoriesEvent.DialogDismissed) },
+        detail = { state.message?.let { ErrorText(it) } },
     )
 }
 

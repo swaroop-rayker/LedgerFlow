@@ -69,6 +69,18 @@ class CategoriesViewModelTest {
 
     private fun CategoriesViewModel.settle() = dispatcher.scheduler.advanceUntilIdle()
 
+    /**
+     * Say yes to the "are you sure?" that now precedes every delete.
+     *
+     * Spelled out in each test rather than folded into a `delete()` helper: the
+     * point of these tests is that the two steps are separate, and a helper that
+     * performed both would pass just as happily if the guard were removed.
+     */
+    private fun CategoriesViewModel.confirmDelete() {
+        onEvent(CategoriesEvent.DialogConfirmed)
+        settle()
+    }
+
     // ── Sections and the ledger partition ───────────────────────────────────
 
     @Test
@@ -159,14 +171,118 @@ class CategoriesViewModelTest {
         scope.cancel()
     }
 
+    // ── Deleting: the confirmation guard ────────────────────────────────────
+
+    /**
+     * Delete used to be a one-tap write, and every one of these rows sits under
+     * a finger in a scrolling list.
+     *
+     * The assertion that matters is the second one in each case: not that a
+     * dialog appeared, but that the repository was *not* called. A guard that
+     * shows a dialog and deletes anyway would satisfy the first alone.
+     */
+    @Test
+    fun deletingACategoryAsksFirstAndWritesNothingYet() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.DeleteCategory("cat-1", "Snacks", isChild = false))
+        vm.settle()
+
+        val dialog = vm.state.value.dialog
+        assertThat(dialog).isInstanceOf(TaxonomyDialog.ConfirmDelete::class.java)
+        with(dialog as TaxonomyDialog.ConfirmDelete) {
+            assertThat(target).isEqualTo(DeleteTarget.Category)
+            // The name is carried so the dialog can name what it is about to
+            // remove; "delete this?" is not a question anyone can answer.
+            assertThat(name).isEqualTo("Snacks")
+        }
+        assertThat(categories.deleted).isEmpty()
+        scope.cancel()
+    }
+
+    @Test
+    fun deletingASubcategoryIsNamedAsOne() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.DeleteCategory("cat-2", "Coffee", isChild = true))
+        vm.settle()
+
+        val dialog = vm.state.value.dialog as TaxonomyDialog.ConfirmDelete
+        assertThat(dialog.target).isEqualTo(DeleteTarget.Subcategory)
+        scope.cancel()
+    }
+
+    @Test
+    fun deletingAMerchantAsksFirstAndWritesNothingYet() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.DeleteMerchant("m1", "Amazon"))
+        vm.settle()
+
+        val dialog = vm.state.value.dialog as TaxonomyDialog.ConfirmDelete
+        assertThat(dialog.target).isEqualTo(DeleteTarget.Merchant)
+        assertThat(merchants.deleted).isEmpty()
+        scope.cancel()
+    }
+
+    @Test
+    fun deletingAPaymentMethodAsksFirstAndWritesNothingYet() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.DeletePaymentMethod("pm1", "HDFC Card"))
+        vm.settle()
+
+        val dialog = vm.state.value.dialog as TaxonomyDialog.ConfirmDelete
+        assertThat(dialog.target).isEqualTo(DeleteTarget.PaymentMethod)
+        assertThat(paymentMethods.deleted).isEmpty()
+        scope.cancel()
+    }
+
+    @Test
+    fun dismissingTheConfirmationDeletesNothing() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.DeleteCategory("cat-1", "Snacks", isChild = false))
+        vm.onEvent(CategoriesEvent.DialogDismissed)
+        vm.settle()
+
+        assertThat(categories.deleted).isEmpty()
+        assertThat(vm.state.value.dialog).isNull()
+        scope.cancel()
+    }
+
+    @Test
+    fun confirmingAMerchantDeleteIsWhatActuallyDeletesIt() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.DeleteMerchant("m1", "Amazon"))
+        vm.confirmDelete()
+
+        assertThat(merchants.deleted).containsExactly("m1")
+        assertThat(vm.state.value.dialog).isNull()
+        scope.cancel()
+    }
+
+    @Test
+    fun confirmingAPaymentMethodDeleteIsWhatActuallyDeletesIt() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.DeletePaymentMethod("pm1", "HDFC Card"))
+        vm.confirmDelete()
+
+        assertThat(paymentMethods.deleted).containsExactly("pm1")
+        assertThat(vm.state.value.dialog).isNull()
+        scope.cancel()
+    }
+
     // ── Deleting, and the re-assign flow (§5.5) ─────────────────────────────
 
     @Test
     fun deletingAnUnusedCategoryJustDeletesIt() = runTest(dispatcher) {
         val (vm, scope) = viewModel()
 
-        vm.onEvent(CategoriesEvent.DeleteCategory("cat-1", "Snacks"))
-        vm.settle()
+        vm.onEvent(CategoriesEvent.DeleteCategory("cat-1", "Snacks", isChild = false))
+        vm.confirmDelete()
 
         assertThat(categories.deleted).containsExactly("cat-1" to null)
         assertThat(vm.state.value.dialog).isNull()
@@ -187,7 +303,8 @@ class CategoriesViewModelTest {
         categories.deleteResult = TaxonomyResult.Failure(TaxonomyError.ReassignRequired(7))
         val (vm, scope) = viewModel()
 
-        vm.onEvent(CategoriesEvent.DeleteCategory("cat-1", "Snacks"))
+        vm.onEvent(CategoriesEvent.DeleteCategory("cat-1", "Snacks", isChild = false))
+        vm.confirmDelete()
         vm.settle()
 
         val dialog = vm.state.value.dialog
@@ -208,7 +325,8 @@ class CategoriesViewModelTest {
         )
         categories.deleteResult = TaxonomyResult.Failure(TaxonomyError.ReassignRequired(2))
         val (vm, scope) = viewModel()
-        vm.onEvent(CategoriesEvent.DeleteCategory("cat-1", "Snacks"))
+        vm.onEvent(CategoriesEvent.DeleteCategory("cat-1", "Snacks", isChild = false))
+        vm.confirmDelete()
         vm.settle()
 
         categories.deleteResult = TaxonomyResult.Success(Unit)
@@ -226,7 +344,8 @@ class CategoriesViewModelTest {
         categories.deleteResult = TaxonomyResult.Failure(TaxonomyError.NotFound)
         val (vm, scope) = viewModel()
 
-        vm.onEvent(CategoriesEvent.DeleteCategory("cat-gone", "Gone"))
+        vm.onEvent(CategoriesEvent.DeleteCategory("cat-gone", "Gone", isChild = false))
+        vm.confirmDelete()
         vm.settle()
 
         assertThat(vm.state.value.message).isNotEmpty()

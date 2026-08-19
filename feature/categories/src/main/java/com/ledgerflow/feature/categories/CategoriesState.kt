@@ -72,12 +72,34 @@ public sealed interface TaxonomyDialog {
         val targetId: String? = null,
     ) : TaxonomyDialog
 
+    /**
+     * "Are you sure?", asked before anything is written.
+     *
+     * A separate case rather than a flag on the actions themselves because the
+     * three targets do not have the same consequence, and a confirmation that
+     * rounds them all to one sentence is one the user learns to tap through.
+     * The wording is chosen per [target] in `TaxonomyDialogHost`.
+     *
+     * For a category this is the *first* of two questions: confirming may still
+     * surface [ReassignCategory] if entries would be orphaned. That is not a
+     * redundant double-prompt — this one guards the mis-tap, that one asks
+     * where the entries go, and only the second needs an answer supplied.
+     */
+    public data class ConfirmDelete(
+        val target: DeleteTarget,
+        val id: String,
+        val name: String,
+    ) : TaxonomyDialog
+
     public data class NewPaymentMethod(
         val label: String = "",
         val type: PaymentMethodType = PaymentMethodType.UPI,
         val last4: String = "",
     ) : TaxonomyDialog
 }
+
+/** What a [TaxonomyDialog.ConfirmDelete] is about to remove. */
+public enum class DeleteTarget { Category, Subcategory, Merchant, PaymentMethod }
 
 public enum class TextPromptKind { NewCategory, NewSubcategory, RenameCategory, NewMerchant, RenameMerchant }
 
@@ -93,16 +115,20 @@ public sealed interface CategoriesEvent {
 
     public data class AddCategory(val parentId: String?, val parentName: String?) : CategoriesEvent
     public data class RenameCategory(val id: String, val currentName: String) : CategoriesEvent
-    public data class DeleteCategory(val id: String, val name: String) : CategoriesEvent
+    public data class DeleteCategory(
+        val id: String,
+        val name: String,
+        val isChild: Boolean,
+    ) : CategoriesEvent
 
     public data object AddMerchant : CategoriesEvent
     public data class RenameMerchant(val id: String, val currentName: String) : CategoriesEvent
     public data class StartMergeMerchant(val id: String, val name: String) : CategoriesEvent
-    public data class DeleteMerchant(val id: String) : CategoriesEvent
+    public data class DeleteMerchant(val id: String, val name: String) : CategoriesEvent
 
     public data object AddPaymentMethod : CategoriesEvent
     public data class SetDefaultPaymentMethod(val id: String) : CategoriesEvent
-    public data class DeletePaymentMethod(val id: String) : CategoriesEvent
+    public data class DeletePaymentMethod(val id: String, val name: String) : CategoriesEvent
 
     /** Dialog editing. Kept generic so one set of handlers serves every prompt. */
     public data class DialogTextChanged(val value: String) : CategoriesEvent

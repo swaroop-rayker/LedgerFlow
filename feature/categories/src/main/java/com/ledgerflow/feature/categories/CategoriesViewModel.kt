@@ -120,7 +120,11 @@ public class CategoriesViewModel @Inject constructor(
                 value = event.currentName,
                 contextId = event.id,
             )
-            is CategoriesEvent.DeleteCategory -> deleteCategory(event.id, event.name, null)
+            is CategoriesEvent.DeleteCategory -> askDelete(
+                if (event.isChild) DeleteTarget.Subcategory else DeleteTarget.Category,
+                event.id,
+                event.name,
+            )
             else -> Unit
         }
     }
@@ -134,7 +138,8 @@ public class CategoriesViewModel @Inject constructor(
                 contextId = event.id,
             )
             is CategoriesEvent.StartMergeMerchant -> startMerge(event.id, event.name)
-            is CategoriesEvent.DeleteMerchant -> run { merchants.delete(event.id) }
+            is CategoriesEvent.DeleteMerchant ->
+                askDelete(DeleteTarget.Merchant, event.id, event.name)
             else -> Unit
         }
     }
@@ -144,7 +149,8 @@ public class CategoriesViewModel @Inject constructor(
             CategoriesEvent.AddPaymentMethod ->
                 local.update { it.copy(dialog = TaxonomyDialog.NewPaymentMethod()) }
             is CategoriesEvent.SetDefaultPaymentMethod -> run { paymentMethods.setDefault(event.id) }
-            is CategoriesEvent.DeletePaymentMethod -> run { paymentMethods.delete(event.id) }
+            is CategoriesEvent.DeletePaymentMethod ->
+                askDelete(DeleteTarget.PaymentMethod, event.id, event.name)
             else -> Unit
         }
     }
@@ -214,6 +220,7 @@ public class CategoriesViewModel @Inject constructor(
         when (val dialog = local.value.dialog) {
             null -> Unit
             is TaxonomyDialog.TextPrompt -> confirmTextPrompt(dialog)
+            is TaxonomyDialog.ConfirmDelete -> confirmDelete(dialog)
             is TaxonomyDialog.ReassignCategory ->
                 deleteCategory(dialog.id, dialog.name, dialog.targetId)
             is TaxonomyDialog.MergeMerchant -> dialog.targetId?.let { target ->
@@ -257,6 +264,29 @@ public class CategoriesViewModel @Inject constructor(
             .map { MerchantChoice(it.id, it.canonicalName) }
         local.update {
             it.copy(dialog = TaxonomyDialog.MergeMerchant(id, name, candidates))
+        }
+    }
+
+    /**
+     * Every delete goes through here first; nothing is written until it is
+     * confirmed.
+     *
+     * The pending question is ViewModel state rather than a `remember` in the
+     * row composable, for the same reason the other dialogs are: a row can
+     * leave composition while its dialog is up — the list re-emits whenever any
+     * sibling changes — and a confirmation that evaporates mid-question is
+     * worse than not asking.
+     */
+    private fun askDelete(target: DeleteTarget, id: String, name: String) {
+        local.update { it.copy(dialog = TaxonomyDialog.ConfirmDelete(target, id, name)) }
+    }
+
+    private fun confirmDelete(dialog: TaxonomyDialog.ConfirmDelete) {
+        when (dialog.target) {
+            DeleteTarget.Category, DeleteTarget.Subcategory ->
+                deleteCategory(dialog.id, dialog.name, null)
+            DeleteTarget.Merchant -> run { merchants.delete(dialog.id) }
+            DeleteTarget.PaymentMethod -> run { paymentMethods.delete(dialog.id) }
         }
     }
 

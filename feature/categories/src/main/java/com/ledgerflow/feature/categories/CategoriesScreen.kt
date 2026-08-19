@@ -293,7 +293,9 @@ private fun CategoryRow(
             LfButton(
                 text = "Delete",
                 style = LfButtonStyle.Inline,
-                onClick = { onEvent(CategoriesEvent.DeleteCategory(category.id, category.name)) },
+                onClick = {
+                    onEvent(CategoriesEvent.DeleteCategory(category.id, category.name, isChild))
+                },
             )
         }
     }
@@ -317,44 +319,38 @@ private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
         items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
-            val merchant = merchants[index]
-            LfCard {
-                Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                    Text(
-                        text = merchant.canonicalName,
-                        style = LfTheme.typography.bodyL,
-                        color = LfTheme.colors.textPrimary,
-                    )
-                    LfDivider()
-                    LfActionRow {
-                        LfButton(
-                            text = "Rename",
-                            style = LfButtonStyle.Outlined,
-                            onClick = {
-                                onEvent(
-                                    CategoriesEvent.RenameMerchant(merchant.id, merchant.canonicalName),
-                                )
-                            },
-                        )
-                        LfButton(
-                            text = "Merge",
-                            style = LfButtonStyle.Outlined,
-                            onClick = {
-                                onEvent(
-                                    CategoriesEvent.StartMergeMerchant(
-                                        merchant.id,
-                                        merchant.canonicalName,
-                                    ),
-                                )
-                            },
-                        )
-                        LfButton(
-                            text = "Hide",
-                            style = LfButtonStyle.Outlined,
-                            onClick = { onEvent(CategoriesEvent.DeleteMerchant(merchant.id)) },
-                        )
-                    }
-                }
+            MerchantCard(merchants[index], onEvent)
+        }
+    }
+}
+
+@Composable
+private fun MerchantCard(merchant: Merchant, onEvent: (CategoriesEvent) -> Unit) {
+    val name = merchant.canonicalName
+    LfCard {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            Text(
+                text = name,
+                style = LfTheme.typography.bodyL,
+                color = LfTheme.colors.textPrimary,
+            )
+            LfDivider()
+            LfActionRow {
+                LfButton(
+                    text = "Rename",
+                    style = LfButtonStyle.Outlined,
+                    onClick = { onEvent(CategoriesEvent.RenameMerchant(merchant.id, name)) },
+                )
+                LfButton(
+                    text = "Merge",
+                    style = LfButtonStyle.Outlined,
+                    onClick = { onEvent(CategoriesEvent.StartMergeMerchant(merchant.id, name)) },
+                )
+                LfButton(
+                    text = "Hide",
+                    style = LfButtonStyle.Outlined,
+                    onClick = { onEvent(CategoriesEvent.DeleteMerchant(merchant.id, name)) },
+                )
             }
         }
     }
@@ -402,7 +398,11 @@ private fun PaymentMethodList(methods: List<PaymentMethod>, onEvent: (Categories
                         LfButton(
                             text = "Remove",
                             style = LfButtonStyle.Outlined,
-                            onClick = { onEvent(CategoriesEvent.DeletePaymentMethod(method.id)) },
+                            onClick = {
+                                onEvent(
+                                    CategoriesEvent.DeletePaymentMethod(method.id, method.label),
+                                )
+                            },
                         )
                     }
                 }
