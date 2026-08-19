@@ -120,7 +120,21 @@ private fun AddBar(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit)
         TaxonomySection.Merchants -> "Add merchant"
         TaxonomySection.PaymentMethods -> "Add payment method"
     }
-    Column(modifier = Modifier.fillMaxWidth().padding(LfTheme.spacing.lg)) {
+    // Tighter vertically than horizontally, deliberately. A uniform `lg` inset
+    // put 24dp above the button and 24dp below it, and `LfScaffold` already
+    // pads the bar for the navigation bar underneath -- so the bottom 24dp was
+    // stacked on top of an inset that exists for the same purpose. Both edges
+    // came out of the one thing on this screen that has to scroll: the list.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = LfTheme.spacing.lg,
+                end = LfTheme.spacing.lg,
+                top = LfTheme.spacing.sm,
+                bottom = LfTheme.spacing.md,
+            ),
+    ) {
         LfButton(
             text = label,
             modifier = Modifier.fillMaxWidth(),
