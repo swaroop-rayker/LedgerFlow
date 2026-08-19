@@ -127,6 +127,44 @@ Debug builds use `applicationIdSuffix ".debug"` and coexist with release install
 - **A control's label never wraps** (BUG9). Buttons/chips render their label `maxLines = 1, softWrap = false`, with no ellipsis. Two or more actions go in an `LfActionRow` (`FlowRow`) so the *container* wraps whole controls — a bare `Row` of three actions inside a card is the defect, and it shows up as "Delet / e".
 - Insets: `enableEdgeToEdge()` + **`LfScaffold`**, never Material's `Scaffold` directly and never `WindowInsets.safeDrawing`. `safeDrawing` includes the IME, and consuming it on both the content and a pinned bottom bar subtracts the keyboard twice — measured on device, the bar rendered 8px tall at the top of the screen. `LfScaffold` consumes system bars + display cutout for layout and the keyboard exactly once via `imePadding()` on the scaffold. Never hardcode bar padding. A `bottomBar` therefore supplies only its own *visual* padding — `LfScaffold` has already inset it for the navigation bar, so a uniform `lg` on a pinned bar stacks 24dp on top of an inset that exists for the same purpose, and it comes out of the one thing on the screen that scrolls. Note the corollary when someone asks for a pinned control to sit lower: once its own padding is at `xs`, the control is *already* against the navigation bar and cannot move down at all. Any further height for the scrolling content has to come from the header — measure with `uiautomator dump` plus the nav bar's `mFrame` before changing numbers, rather than guessing which gap is the slack one.
 
+**Visual design philosophy** — the owner's standing brief, restated after
+several rounds of "this looks bloated". Read it as a constraint, not a mood:
+every line below is something a change has already violated at least once.
+
+- **Compact by default.** Medium-to-small boxes and text. A row that presents
+  one thing plus its actions should cost about two lines of height, not a card
+  with a header, a divider and a row of pill buttons. If a list of three items
+  fills the screen, the item is too big — that list exists to be scanned.
+- **One shape per screen.** All the sections of a screen use the same card
+  container. Two shapes on one screen reads as two designs, and it is obvious
+  the moment the user switches tabs. Extract a private container composable
+  (see `TaxonomyCard`) rather than repeating a `Modifier` chain.
+- **Hairline border over elevation** for anything list-sized. At that scale
+  elevation reads as a smear rather than depth, and a border is what keeps
+  adjacent structure (nesting rails, tree stubs) legible against the card edge.
+- **In-card actions are `LfButtonStyle.Inline`,** not `Outlined`/`Filled`
+  pills. Pills are for a screen's primary action, not for three actions inside
+  a row. This is also usually what decides whether the actions fit on one line.
+- **No odd placements.** Actions sit on one edge, aligned — `LfActionRow` with
+  an explicit alignment, never a stray `Row` with hand-tuned spacers. The
+  heading gets its own line rather than competing with the buttons for it: a
+  name inside the action row makes the row wrap mid-actions, which is how the
+  category card ended up taller than the one it replaced.
+- **The scrolling content is the screen's purpose; chrome pays for it.** Headers
+  and pinned bars are trimmed toward the scale's small end (`sm`/`xs`), not the
+  comfortable middle. A gap between stacked header bands is charged to the list
+  once per band.
+- **Proportions are measured, not guessed.** Before changing a number, dump the
+  real geometry (`uiautomator dump`, plus the nav bar's `mFrame` when a pinned
+  bar is involved) and state the before/after in the commit. "Looks tight" is
+  not a measurement, and space that appears wasted is often a system inset.
+- **It must survive font scale 2.0 and RTL.** Elegant at 1.0 and broken at 2.0
+  is broken. Degrade by wrapping whole controls, never by clipping a label
+  (BUG9) — verify on device, not only in previews.
+- **The palette does not change** to solve a layout problem. Reach for spacing,
+  type scale and hierarchy first; colour is not a fix for a crowded row.
+
+
 **Room**
 - Every DAO returns `Flow<T>` for reads, `suspend` for writes.
 - **Reads go through the `debit_entries` / `credit_entries` views, never `ledger_entry` directly** (ADR-0002). Any query that does name the base table takes a `ledger: LedgerType` parameter — no overload omits it. `LedgerIsolationTest` fails the build otherwise.
