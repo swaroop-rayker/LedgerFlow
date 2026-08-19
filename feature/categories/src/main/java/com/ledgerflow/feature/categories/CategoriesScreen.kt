@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -29,9 +30,7 @@ import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
-import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
-import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
@@ -270,16 +269,8 @@ private fun CategoryRow(
     onEvent: (CategoriesEvent) -> Unit,
 ) {
     val spacing = LfTheme.spacing
-    val shape = RoundedCornerShape(spacing.cornerSmall)
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = spacing.xs)
-            .background(LfTheme.colors.surfaceRaised, shape)
-            .border(1.dp, LfTheme.colors.outline, shape)
-            .padding(horizontal = spacing.md, vertical = spacing.sm),
-    ) {
+    TaxonomyCard(modifier = Modifier.padding(vertical = spacing.xs)) {
         // Name on its own line, actions beneath — the shape in the sketch.
         //
         // The first attempt put the name *inside* the action `FlowRow`, which
@@ -329,6 +320,37 @@ private fun CategoryRow(
 /** Hairline. Thin enough to read as a connector rather than as a border. */
 private const val RAIL_THICKNESS = 1
 
+/**
+ * The one card shape this screen uses, for all three sections.
+ *
+ * Categories got this treatment first and merchants and payment methods kept
+ * `LfCard` with `Outlined` buttons, which made a single screen read as two
+ * designs: a tall card with a divider and pill buttons next to a compact
+ * bordered row with text actions. The heavier shape also spent roughly twice
+ * the vertical space per item on lists whose whole job is letting you scan what
+ * you have -- three merchants filled the screen.
+ *
+ * Hairline border rather than elevation: on a surface this small elevation
+ * reads as a shadow smear instead of depth, and the border is what keeps the
+ * category tree's nesting rail legible against the card edge.
+ */
+@Composable
+private fun TaxonomyCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val spacing = LfTheme.spacing
+    val shape = RoundedCornerShape(spacing.cornerSmall)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(LfTheme.colors.surfaceRaised, shape)
+            .border(1.dp, LfTheme.colors.outline, shape)
+            .padding(horizontal = spacing.md, vertical = spacing.sm),
+        content = content,
+    )
+}
+
 @Composable
 private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -> Unit) {
     if (merchants.isEmpty()) {
@@ -352,31 +374,32 @@ private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -
 @Composable
 private fun MerchantCard(merchant: Merchant, onEvent: (CategoriesEvent) -> Unit) {
     val name = merchant.canonicalName
-    LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-            Text(
-                text = name,
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+    TaxonomyCard {
+        // Name on its own line, actions beneath -- a category row's shape. The
+        // three labels share one line only because they are `Inline`: as
+        // `Outlined` pills, Rename + Merge + Hide overflowed the card width and
+        // the third dropped to a row of its own.
+        Text(
+            text = name,
+            style = LfTheme.typography.bodyL,
+            color = LfTheme.colors.textPrimary,
+        )
+        LfActionRow(alignment = LfActionAlignment.End) {
+            LfButton(
+                text = "Rename",
+                style = LfButtonStyle.Inline,
+                onClick = { onEvent(CategoriesEvent.RenameMerchant(merchant.id, name)) },
             )
-            LfDivider()
-            LfActionRow {
-                LfButton(
-                    text = "Rename",
-                    style = LfButtonStyle.Outlined,
-                    onClick = { onEvent(CategoriesEvent.RenameMerchant(merchant.id, name)) },
-                )
-                LfButton(
-                    text = "Merge",
-                    style = LfButtonStyle.Outlined,
-                    onClick = { onEvent(CategoriesEvent.StartMergeMerchant(merchant.id, name)) },
-                )
-                LfButton(
-                    text = "Hide",
-                    style = LfButtonStyle.Outlined,
-                    onClick = { onEvent(CategoriesEvent.DeleteMerchant(merchant.id, name)) },
-                )
-            }
+            LfButton(
+                text = "Merge",
+                style = LfButtonStyle.Inline,
+                onClick = { onEvent(CategoriesEvent.StartMergeMerchant(merchant.id, name)) },
+            )
+            LfButton(
+                text = "Hide",
+                style = LfButtonStyle.Inline,
+                onClick = { onEvent(CategoriesEvent.DeleteMerchant(merchant.id, name)) },
+            )
         }
     }
 }
@@ -392,46 +415,46 @@ private fun PaymentMethodList(methods: List<PaymentMethod>, onEvent: (Categories
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
         items(methods.size, key = { methods[it].id }, contentType = { "method" }) { index ->
-            val method = methods[index]
-            LfCard {
-                Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                    Text(
-                        text = buildString {
-                            append(method.label)
-                            method.last4?.let { append(" ····$it") }
-                            if (method.isDefault) append("  · default")
-                        },
-                        style = LfTheme.typography.bodyL,
-                        color = LfTheme.colors.textPrimary,
-                    )
-                    Text(
-                        text = method.type.name.lowercase().replace('_', ' '),
-                        style = LfTheme.typography.label,
-                        color = LfTheme.colors.textTertiary,
-                    )
-                    LfDivider()
-                    LfActionRow {
-                        if (!method.isDefault) {
-                            LfButton(
-                                text = "Make default",
-                                style = LfButtonStyle.Outlined,
-                                onClick = {
-                                    onEvent(CategoriesEvent.SetDefaultPaymentMethod(method.id))
-                                },
-                            )
-                        }
-                        LfButton(
-                            text = "Remove",
-                            style = LfButtonStyle.Outlined,
-                            onClick = {
-                                onEvent(
-                                    CategoriesEvent.DeletePaymentMethod(method.id, method.label),
-                                )
-                            },
-                        )
-                    }
-                }
+            PaymentMethodCard(methods[index], onEvent)
+        }
+    }
+}
+
+@Composable
+private fun PaymentMethodCard(method: PaymentMethod, onEvent: (CategoriesEvent) -> Unit) {
+    TaxonomyCard {
+        Text(
+            text = buildString {
+                append(method.label)
+                method.last4?.let { append(" ····$it") }
+                if (method.isDefault) append("  · default")
+            },
+            style = LfTheme.typography.bodyL,
+            color = LfTheme.colors.textPrimary,
+        )
+        // The type keeps its own line rather than joining the one above: label,
+        // last-4, default and type is four facts abreast with no hierarchy, and
+        // the label is the one being scanned for.
+        Text(
+            text = method.type.name.lowercase().replace('_', ' '),
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textTertiary,
+        )
+        LfActionRow(alignment = LfActionAlignment.End) {
+            if (!method.isDefault) {
+                LfButton(
+                    text = "Make default",
+                    style = LfButtonStyle.Inline,
+                    onClick = { onEvent(CategoriesEvent.SetDefaultPaymentMethod(method.id)) },
+                )
             }
+            LfButton(
+                text = "Remove",
+                style = LfButtonStyle.Inline,
+                onClick = {
+                    onEvent(CategoriesEvent.DeletePaymentMethod(method.id, method.label))
+                },
+            )
         }
     }
 }
