@@ -61,9 +61,13 @@ public fun CategoriesScreen(
         modifier = modifier,
         bottomBar = { AddBar(state, onEvent) },
     ) { padding ->
+        // `sm` between the header blocks, not `md`. This screen's header is
+        // three stacked bands -- title, section control, ledger control -- above
+        // a list that is the only thing here anyone scrolls, so every step of
+        // the gap scale between them is charged to the list twice over.
         Column(
             modifier = Modifier.fillMaxSize().padding(padding),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -82,7 +86,7 @@ public fun CategoriesScreen(
 
             Column(
                 modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
             ) {
                 LfSegmentedControl(
                     options = TaxonomySection.entries.map { it.label },
@@ -125,14 +129,21 @@ private fun AddBar(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit)
     // pads the bar for the navigation bar underneath -- so the bottom 24dp was
     // stacked on top of an inset that exists for the same purpose. Both edges
     // came out of the one thing on this screen that has to scroll: the list.
+    //
+    // `xs` below is the floor, not a taste call. Measured on device: the
+    // button's bottom edge, this padding, and the 48dp navigation-bar inset add
+    // up exactly to the top of the navigation bar, so anything reclaimed past
+    // this puts the button under the system bar (BUG5). The button cannot be
+    // pushed down further than this; more list height has to come from the
+    // header above it instead.
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
                 start = LfTheme.spacing.lg,
                 end = LfTheme.spacing.lg,
-                top = LfTheme.spacing.sm,
-                bottom = LfTheme.spacing.md,
+                top = LfTheme.spacing.xs,
+                bottom = LfTheme.spacing.xs,
             ),
     ) {
         LfButton(
