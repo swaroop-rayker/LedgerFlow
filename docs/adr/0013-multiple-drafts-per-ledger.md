@@ -128,3 +128,30 @@ remedy then is a shorter retention or a prompt, not the constraint back.
   stack, and opening it restores field-for-field.
 - `Bug6_DraftSurvivesProcessDeathTest` — after the whole graph is rebuilt from
   disk, the unsaved entry is in the stack and opening it restores it.
+
+## Amendment — 2026-08-19: the surface is a shelf, not a stack
+
+The decision above is unchanged; this records that the word "stack" throughout
+it describes a shape that did not survive contact with the device.
+
+"Stacked like notifications" was the request and the first build took it
+literally: a vertical list above the form. The flaw is structural rather than
+aesthetic — on this screen the drafts are not the content, the form is, and a
+vertical list displaces the form downward in proportion to the draft count,
+which is worst precisely when the user has the most parked work. The shelf is a
+`LazyRow` of fixed-width cards: one row of height regardless of count, newest
+first, with a partially visible next card doing the job the scrollbar would
+otherwise have to.
+
+Two consequences worth recording because both were bugs first:
+
+- `Start another` moved into the shelf **header** (a `FlowRow`). In the row it
+  was unreachable in the exact state that needs it — with one draft it *was*
+  the peeking card — and at font scale 2.0 its label clipped to "Start anoth",
+  which is BUG9.
+- **Opening a draft must not re-date it.** `updated_at` orders the shelf, so
+  a read that writes would mean inspecting the shelf reorders the shelf. The
+  ordering has to mean "what I last worked on", not "what I last looked at".
+
+Read every "stack" below as "shelf". `SPEC.md` §6.1.2 carries the current
+description.

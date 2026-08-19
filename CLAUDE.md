@@ -100,6 +100,8 @@ LedgerFlow/
 
 **Never run `adb uninstall`** during development — it destroys test data and masks BUG1. Use `installSmsFullDebug` (install-over-install) so you're continuously testing the upgrade path.
 
+**`connectedAndroidTest` uninstalls both APKs when it finishes**, which is the same destruction arriving through a task you *do* have to run — it takes the app's vault with it, and the symptom on next launch is a Recovery screen, not an obvious "tests wiped your data". `gradle.properties` sets `android.injected.androidTest.leaveApksInstalledAfterRun=true` to stop it. Don't remove that line. Separately, instrumented tests must open their **own** database via `VaultSession`'s injected name and never the app's — sharing one file across test methods also surfaces as `NeedsRecovery`.
+
 Debug builds use `applicationIdSuffix ".debug"` and coexist with release installs. This is deliberate. Don't remove it.
 
 ---
@@ -123,7 +125,7 @@ Debug builds use `applicationIdSuffix ".debug"` and coexist with release install
 - Preview annotations on every top-level screen: `@PreviewScreenSizes @PreviewFontScale @PreviewLightDark`.
 - Zero hardcoded colours, dimensions, or type sizes. Everything comes from `LfTheme`.
 - **A control's label never wraps** (BUG9). Buttons/chips render their label `maxLines = 1, softWrap = false`, with no ellipsis. Two or more actions go in an `LfActionRow` (`FlowRow`) so the *container* wraps whole controls — a bare `Row` of three actions inside a card is the defect, and it shows up as "Delet / e".
-- Insets: `enableEdgeToEdge()` + `Scaffold` + `WindowInsets.safeDrawing`. Never hardcode bar padding.
+- Insets: `enableEdgeToEdge()` + **`LfScaffold`**, never Material's `Scaffold` directly and never `WindowInsets.safeDrawing`. `safeDrawing` includes the IME, and consuming it on both the content and a pinned bottom bar subtracts the keyboard twice — measured on device, the bar rendered 8px tall at the top of the screen. `LfScaffold` consumes system bars + display cutout for layout and the keyboard exactly once via `imePadding()` on the scaffold. Never hardcode bar padding.
 
 **Room**
 - Every DAO returns `Flow<T>` for reads, `suspend` for writes.
