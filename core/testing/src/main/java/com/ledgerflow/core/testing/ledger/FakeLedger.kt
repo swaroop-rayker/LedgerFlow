@@ -1,14 +1,20 @@
 package com.ledgerflow.core.testing.ledger
 
+import androidx.paging.PagingData
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
+import com.ledgerflow.core.domain.ledger.DraftSummary
+import com.ledgerflow.core.domain.ledger.DraftSummaryFields
 import com.ledgerflow.core.domain.ledger.DraftWrite
 import com.ledgerflow.core.domain.ledger.EntryCombo
 import com.ledgerflow.core.domain.ledger.EntryDraft
+import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.model.EntryOrigin
+import com.ledgerflow.core.model.DeletedEntry
 import com.ledgerflow.core.model.LedgerEntry
+import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +46,16 @@ public class FakeLedgerRepository : LedgerRepository {
     /** Per-ledger, so a test can prove the form really switched books. */
     public val combos: MutableMap<LedgerType, List<EntryCombo>> = mutableMapOf()
 
+    /**
+     * Per-ledger list contents.
+     *
+     * Keyed by book rather than held as one list with a filter, so a test that
+     * seeds only DEBIT and reads CREDIT gets an empty page -- a fake that
+     * filtered a shared list would pass even if the real query had lost its
+     * ledger predicate, which is exactly the failure Law 2 is about.
+     */
+    public val entries: MutableMap<LedgerType, List<LedgerListItem>> = mutableMapOf()
+
     /** Null models a vault whose §7.4 gate never completed. */
     public var installBaseCurrency: String? = BASE_CURRENCY
 
@@ -50,6 +66,116 @@ public class FakeLedgerRepository : LedgerRepository {
         return approveResult ?: LedgerResult.Success(request.toEntry())
     }
 
+    /** Every `since` this fake was asked for, so a test can prove the window. */
+    public val windows: MutableList<Int> = mutableListOf()
+
+    override fun observeEntries(
+        ledger: LedgerType,
+        since: Int,
+    ): Flow<PagingData<LedgerListItem>> {
+        windows += since
+        // Filtered, not ignored: a fake that returned everything would let a
+        // ViewModel test pass with the window wired to the wrong value.
+        return revision.map { _ ->
+            PagingData.from(entries[ledger].orEmpty().filter { it.localDate >= since })
+        }
+    }
+
+    /**
+     * Overridden per book when a test needs "has entries, but none in the
+     * window". Null means "derive it from [entries]", which is what every
+     * other test wants.
+     */
+    public val hasEntriesOverride: MutableMap<LedgerType, Boolean> = mutableMapOf()
+
+    /** Every (book, id) this fake was asked to delete, in order. */
+    public val deleted: MutableList<Pair<LedgerType, String>> = mutableListOf()
+
+    /** Scripted refusal. Null means "accept and remove it from [entries]". */
+    public var deleteResult: LedgerResult<Unit>? = null
+
+    override suspend fun softDeleteEntry(ledger: LedgerType, id: String): LedgerResult<Unit> {
+        deleted += ledger to id
+        deleteResult?.let { return it }
+        // Removed from that book only. A fake that dropped the id from every
+        // book would pass a ViewModel test even if the real statement had lost
+        // its ledger predicate, which is the failure Law 2 is about.
+        entries[ledger] = entries[ledger].orEmpty().filterNot { it.id == id }
+        revision.value += 1
+        return LedgerResult.Success(Unit)
+    }
+
+    /** Soft-deleted rows this fake is holding, per book. */
+    public val deletedCounts: MutableMap<LedgerType, Int> = mutableMapOf()
+
+    /** Books purged, in order, so a test can prove both were swept. */
+    public val purged: MutableList<LedgerType> = mutableListOf()
+
+    public var compactions: Int = 0
+        private set
+
+    /** The bin, per book. Seeded by a test; mutated by restore and purge. */
+    public val binned: MutableMap<LedgerType, List<DeletedEntry>> = mutableMapOf()
+
+    /** Every (book, id) restored, in order. */
+    public val restored: MutableList<Pair<LedgerType, String>> = mutableListOf()
+
+    /** Every (book, id) destroyed from the bin, in order. */
+    public val purgedEntries: MutableList<Pair<LedgerType, String>> = mutableListOf()
+
+    override fun observeDeleted(ledger: LedgerType): Flow<List<DeletedEntry>> =
+        revision.map { binned[ledger].orEmpty() }
+
+    override suspend fun restoreEntry(ledger: LedgerType, id: String): LedgerResult<Unit> {
+        restored += ledger to id
+        // Removed from that book's bin only. A fake that searched every book
+        // would pass even if the real statement had lost its ledger predicate,
+        // which is the failure Law 2 is about.
+        val before = binned[ledger].orEmpty()
+        binned[ledger] = before.filterNot { it.id == id }
+        revision.value += 1
+        return if (before.any { it.id == id }) {
+            LedgerResult.Success(Unit)
+        } else {
+            LedgerResult.Failure(LedgerError.EntryNotFound(id))
+        }
+    }
+
+    override suspend fun purgeDeletedEntry(ledger: LedgerType, id: String): Int {
+        purgedEntries += ledger to id
+        val before = binned[ledger].orEmpty()
+        binned[ledger] = before.filterNot { it.id == id }
+        revision.value += 1
+        return if (before.any { it.id == id }) 1 else 0
+    }
+
+    public fun emitBinned(ledger: LedgerType, value: List<DeletedEntry>) {
+        binned[ledger] = value
+        revision.value += 1
+    }
+
+    override fun observeDeletedCount(ledger: LedgerType): Flow<Int> =
+        revision.map { deletedCounts[ledger] ?: 0 }
+
+    override suspend fun purgeDeletedEntries(ledger: LedgerType): Int {
+        purged += ledger
+        val count = deletedCounts.remove(ledger) ?: 0
+        revision.value += 1
+        return count
+    }
+
+    override suspend fun compactStorage() {
+        compactions += 1
+    }
+
+    public fun emitDeletedCount(ledger: LedgerType, value: Int) {
+        deletedCounts[ledger] = value
+        revision.value += 1
+    }
+
+    override fun observeHasEntries(ledger: LedgerType): Flow<Boolean> =
+        revision.map { hasEntriesOverride[ledger] ?: entries[ledger].orEmpty().isNotEmpty() }
+
     override fun observeRecentCombos(ledger: LedgerType, limit: Int): Flow<List<EntryCombo>> =
         revision.map { combos[ledger].orEmpty().take(limit) }
 
@@ -57,6 +183,11 @@ public class FakeLedgerRepository : LedgerRepository {
 
     public fun emitCombos(ledger: LedgerType, value: List<EntryCombo>) {
         combos[ledger] = value
+        revision.value += 1
+    }
+
+    public fun emitEntries(ledger: LedgerType, value: List<LedgerListItem>) {
+        entries[ledger] = value
         revision.value += 1
     }
 
@@ -124,6 +255,7 @@ public class FakeDraftRepository : DraftRepository {
             editingEntryId = draft.editingEntryId,
             payloadJson = draft.payloadJson,
             payloadVersion = draft.payloadVersion,
+            summary = draft.summary,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
@@ -143,6 +275,32 @@ public class FakeDraftRepository : DraftRepository {
         return 0
     }
 
+    /**
+     * Built from the same rows [observe] serves, with names left null.
+     *
+     * The real query resolves them with a join; a fake that invented names
+     * would be asserting its own lookup rather than the screen's rendering.
+     */
+    override fun observeSummaries(ledger: LedgerType): Flow<List<DraftSummary>> =
+        revision.map { _ ->
+            rows.values
+                .filter { it.ledger == ledger }
+                .sortedByDescending { it.updatedAt }
+                .map { draft ->
+                    DraftSummary(
+                        id = draft.id,
+                        ledger = draft.ledger,
+                        amount = Money(draft.summary.amountMinor),
+                        categoryName = null,
+                        categoryColorArgb = null,
+                        merchantName = null,
+                        updatedAt = draft.updatedAt,
+                        datedAt = draft.summary.occurredAt.takeIf { it > 0L }
+                            ?: draft.updatedAt,
+                    )
+                }
+        }
+
     /** Seeds a draft as though a previous process had written it. */
     public fun seed(
         id: String,
@@ -150,6 +308,7 @@ public class FakeDraftRepository : DraftRepository {
         payloadJson: String,
         payloadVersion: Int = 1,
         updatedAt: Long = now,
+        summary: DraftSummaryFields = DraftSummaryFields(),
     ): EntryDraft {
         val draft = EntryDraft(
             id = id,
@@ -157,6 +316,7 @@ public class FakeDraftRepository : DraftRepository {
             editingEntryId = null,
             payloadJson = payloadJson,
             payloadVersion = payloadVersion,
+            summary = summary,
             createdAt = updatedAt,
             updatedAt = updatedAt,
         )

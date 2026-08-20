@@ -28,8 +28,10 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
  */
 @Composable
 public fun MoreScreen(
+    state: MoreUiState,
     onCategories: () -> Unit,
     onExport: () -> Unit,
+    onDeletedEntries: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -53,8 +55,41 @@ public fun MoreScreen(
                 subtitle = "Save your data as CSV",
                 onClick = onExport,
             )
+            // **"Deleted entries", not "Erase deleted entries".** The row used
+            // to perform the erase itself, so it was named for the verb; it now
+            // opens the bin, and a row that navigates takes a noun. Naming a
+            // destination after the most destructive thing you can do inside it
+            // is how you get people afraid to open it.
+            //
+            // Not "Recently deleted" either, for all that the platform leans
+            // that way: nothing here expires on a timer, and the word would
+            // promise a sweep the app does not perform.
+            //
+            // Always present and always enabled, even at zero. It was hidden
+            // when there was nothing to erase, and that was reported as the
+            // feature being missing -- a control that exists only sometimes is
+            // indistinguishable from one that was never built.
+            MoreRow(
+                title = "Deleted entries",
+                subtitle = deletedSubtitle(state),
+                onClick = onDeletedEntries,
+            )
         }
     }
+}
+
+/**
+ * What the bin row says about itself.
+ *
+ * The zero case has to explain what the row is *for*, not merely that it is
+ * empty: that is the state a user reading Settings to learn what the app can do
+ * will normally find it in.
+ */
+internal fun deletedSubtitle(state: MoreUiState): String = when {
+    !state.isLoaded -> "Restore or permanently erase deleted entries"
+    state.deletedCount == 0 -> "Nothing deleted. Entries you delete are kept here."
+    state.deletedCount == 1 -> "1 entry kept here. Restore it or erase it for good."
+    else -> "${state.deletedCount} entries kept here. Restore them or erase them for good."
 }
 
 @Composable
@@ -85,5 +120,28 @@ private fun MoreRow(title: String, subtitle: String, onClick: () -> Unit) {
 @PreviewLightDark
 @Composable
 private fun MorePreview() {
-    LfTheme { MoreScreen(onCategories = {}, onExport = {}) }
+    LfTheme {
+        MoreScreen(
+            state = MoreUiState(deletedCount = 3, isLoaded = true),
+            onCategories = {},
+            onExport = {},
+            onDeletedEntries = {},
+        )
+    }
+}
+
+/** An empty bin — the state most users see most of the time. */
+@PreviewScreenSizes
+@PreviewFontScale
+@PreviewLightDark
+@Composable
+private fun MoreEmptyBinPreview() {
+    LfTheme {
+        MoreScreen(
+            state = MoreUiState(deletedCount = 0, isLoaded = true),
+            onCategories = {},
+            onExport = {},
+            onDeletedEntries = {},
+        )
+    }
 }

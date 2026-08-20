@@ -320,27 +320,7 @@ private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
             .padding(start = spacing.md, end = spacing.xs, bottom = spacing.md),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = draft.age,
-                    style = LfTheme.typography.label,
-                    color = colors.textTertiary,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-                LfIconButton(
-                    icon = LfIcons.Close,
-                    // Names what it throws away. "Close" beside an amount could
-                    // as easily mean "collapse this card".
-                    contentDescription = "Discard unsaved entry of " +
-                        MoneyFormat.spoken(draft.amountMinor, draft.currencyCode),
-                    onClick = { onEvent(EntryEvent.DraftDiscardRequested(draft.id)) },
-                )
-            }
+            DraftCardHeader(draft, onEvent)
             Text(
                 text = MoneyFormat.symbolised(draft.amountMinor, draft.currencyCode),
                 style = LfTheme.typography.amountM,
@@ -349,9 +329,23 @@ private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
                 softWrap = false,
                 modifier = Modifier.padding(end = spacing.sm),
             )
+            // What it is filed as gets its own line above the note. Folding
+            // both onto one `maxLines = 1` line meant the merchant and category
+            // -- the thing that identifies which draft this is -- were the first
+            // characters to be ellipsised away by a long note.
+            draft.filedAs?.let {
+                Text(
+                    text = it,
+                    style = LfTheme.typography.bodyM,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = spacing.sm),
+                )
+            }
             Text(
                 text = draft.subtitle() ?: "No details yet",
-                style = LfTheme.typography.bodyM,
+                style = LfTheme.typography.label,
                 color = colors.textSecondary,
                 // A note is content, not a control label, so BUG9's no-ellipsis
                 // rule does not apply: a truncated note is still readable, and
@@ -361,6 +355,32 @@ private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
                 modifier = Modifier.padding(end = spacing.sm),
             )
         }
+    }
+}
+
+/** How old it is, and the way to throw it away. */
+@Composable
+private fun DraftCardHeader(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = draft.age,
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textTertiary,
+            maxLines = 1,
+            softWrap = false,
+        )
+        LfIconButton(
+            icon = LfIcons.Close,
+            // Names what it throws away. "Close" beside an amount could as
+            // easily mean "collapse this card".
+            contentDescription = "Discard unsaved entry of " +
+                MoneyFormat.spoken(draft.amountMinor, draft.currencyCode),
+            onClick = { onEvent(EntryEvent.DraftDiscardRequested(draft.id)) },
+        )
     }
 }
 

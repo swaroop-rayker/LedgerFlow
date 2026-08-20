@@ -1,6 +1,7 @@
 package com.ledgerflow.core.domain.ledger
 
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.Money
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -77,6 +78,23 @@ public interface DraftRepository {
      */
     public suspend fun purgeAbandoned(): Int
 
+    /**
+     * One book's unsaved entries as the Ledger shows them: an amount and the
+     * names it is filed under, no payload.
+     *
+     * Separate from [observe] because the two callers want different things.
+     * The entry form wants the payload so it can restore a half-typed form;
+     * the Ledger wants something renderable and must never see the payload at
+     * all -- its shape is `:feature:entry`'s business, and a second feature
+     * parsing it would couple two features through a JSON schema.
+     *
+     * Names are resolved by the query, and are null when the category or
+     * merchant has since been deleted. That is the honest rendering of "you
+     * picked something that has gone", and it is why the summary columns carry
+     * no foreign keys.
+     */
+    public fun observeSummaries(ledger: LedgerType): Flow<List<DraftSummary>>
+
     public companion object {
         private const val DAYS_RETAINED = 30L
         private const val MILLIS_PER_DAY = 24L * 60L * 60L * 1000L
@@ -100,6 +118,64 @@ public data class DraftWrite(
     val editingEntryId: String? = null,
     val payloadJson: String,
     val payloadVersion: Int,
+    /**
+     * A typed summary of what is inside [payloadJson], lifted out by the
+     * writer (schema v4).
+     *
+     * The caller supplies it because the caller is the only thing that can:
+     * the payload's shape belongs to the entry form, and every layer below
+     * this one treats the JSON as opaque. [payloadJson] stays authoritative --
+     * if the two ever disagree, the payload is right and the summary is a
+     * stale render.
+     */
+    val summary: DraftSummaryFields = DraftSummaryFields(),
+)
+
+/**
+ * The part of a draft that other screens are allowed to know about.
+ *
+ * Deliberately not the whole form. A draft is `:feature:entry`'s working
+ * state; this is the minimum another surface needs to say "you have an unsaved
+ * ₹240 at Zepto" and offer to open it.
+ */
+public data class DraftSummaryFields(
+    /** Minor units (Law 3). Zero while nothing has been typed, which is common. */
+    val amountMinor: Long = 0L,
+    val categoryId: String? = null,
+    val merchantId: String? = null,
+    /**
+     * When the form says the entry happened (schema v5).
+     *
+     * The date the user picked, not when they last typed -- so a pending row
+     * reads the same way a committed one does. Zero means "not recorded",
+     * which is every draft written before v5.
+     */
+    val occurredAt: Long = 0L,
+)
+
+/**
+ * An unsaved entry, as the Ledger's pending section renders it.
+ *
+ * [categoryName] and [merchantName] are resolved by the query rather than held
+ * on the draft, so a category renamed after the draft was written shows its
+ * current name. They are null when the row they pointed at is gone.
+ */
+public data class DraftSummary(
+    val id: String,
+    val ledger: LedgerType,
+    val amount: Money,
+    val categoryName: String?,
+    val categoryColorArgb: Int?,
+    val merchantName: String?,
+    val updatedAt: Long,
+    /**
+     * When to say this entry happened.
+     *
+     * Already resolved: the draft's own `occurred_at` when it has one, and its
+     * last edit when it does not (a draft written before schema v5). The screen
+     * never has to know which it got.
+     */
+    val datedAt: Long,
 )
 
 /** A persisted form-in-progress. */
@@ -109,6 +185,8 @@ public data class EntryDraft(
     val editingEntryId: String?,
     val payloadJson: String,
     val payloadVersion: Int,
+    /** The denormalised copy written alongside [payloadJson] (schema v4). */
+    val summary: DraftSummaryFields = DraftSummaryFields(),
     val createdAt: Long,
     val updatedAt: Long,
 ) {

@@ -4,8 +4,11 @@ import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.database.dao.DraftSummaryRow
 import com.ledgerflow.core.database.entity.DraftEntryEntity
 import com.ledgerflow.core.domain.ledger.DraftRepository
+import com.ledgerflow.core.domain.ledger.DraftSummary
+import com.ledgerflow.core.domain.ledger.DraftSummaryFields
 import com.ledgerflow.core.domain.ledger.DraftWrite
 import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.model.LedgerType
@@ -48,6 +51,14 @@ public class DefaultDraftRepository @Inject constructor(
                 ?: flowOf(emptyList())
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeSummaries(ledger: LedgerType): Flow<List<DraftSummary>> =
+        session.whenUnlocked().flatMapLatest { database ->
+            database?.draftEntryDao()?.observeSummariesForLedger(ledger)
+                ?.map { rows -> rows.map { it.toDomain() } }
+                ?: flowOf(emptyList())
+        }
+
     override suspend fun find(id: String): EntryDraft? = withContext(io) {
         session.requireDatabase().draftEntryDao().byId(id)?.toDomain()
     }
@@ -77,6 +88,14 @@ public class DefaultDraftRepository @Inject constructor(
             editingEntryKey = editingEntryKeyOf(draft.editingEntryId),
             payloadJson = draft.payloadJson,
             payloadVersion = draft.payloadVersion,
+            // Written from what the caller lifted out of the payload, every
+            // save. Never derived here: parsing the payload in :core:data would
+            // put the entry form's field names in a layer that is not allowed
+            // to know them.
+            amountMinor = draft.summary.amountMinor,
+            categoryId = draft.summary.categoryId,
+            merchantId = draft.summary.merchantId,
+            occurredAt = draft.summary.occurredAt,
             createdAt = existing?.createdAt ?: now,
             updatedAt = now,
         )
@@ -109,6 +128,30 @@ private fun DraftEntryEntity.toDomain(): EntryDraft = EntryDraft(
     editingEntryId = editingEntryId,
     payloadJson = payloadJson,
     payloadVersion = payloadVersion,
+    summary = DraftSummaryFields(
+        amountMinor = amountMinor,
+        categoryId = categoryId,
+        merchantId = merchantId,
+        occurredAt = occurredAt,
+    ),
     createdAt = createdAt,
     updatedAt = updatedAt,
+)
+
+/**
+ * Summary row -> domain.
+ *
+ * Names arrive already resolved by the query's joins, and stay null when the
+ * category or merchant they pointed at has been deleted -- which is the honest
+ * rendering, and why those columns carry no foreign key.
+ */
+private fun DraftSummaryRow.toDomain(): DraftSummary = DraftSummary(
+    id = id,
+    ledger = ledger,
+    amount = amountMinor,
+    categoryName = categoryName,
+    categoryColorArgb = categoryColorArgb,
+    merchantName = merchantName,
+    updatedAt = updatedAt,
+    datedAt = datedAt,
 )

@@ -31,9 +31,21 @@ public sealed interface Destination {
     @Serializable
     public data object More : Destination
 
-    /** Full-screen, reached from the centre action. */
+    /**
+     * Full-screen, reached from the centre action — or from a pending row in
+     * the Ledger, which opens one specific draft.
+     *
+     * **The property name is a contract.** Navigation Compose derives the
+     * argument name from it, and `:feature:entry` reads that argument out of
+     * its `SavedStateHandle` by string: it cannot reference this type, because
+     * routes live in `:app` precisely so features never depend on each other.
+     * `EntryViewModel.DRAFT_ID_ARG` is the other half; the two must agree, and
+     * `EntryDraftArgumentTest` fails the build if they drift.
+     *
+     * Null means "a new entry", which is what the centre action asks for.
+     */
     @Serializable
-    public data object Entry : Destination
+    public data class Entry(val draftId: String? = null) : Destination
 
     /** Reached from More. */
     @Serializable
@@ -41,6 +53,10 @@ public sealed interface Destination {
 
     @Serializable
     public data object Export : Destination
+
+    /** The bin, reached from More. Everything deleted, both books (ADR-0015). */
+    @Serializable
+    public data object DeletedEntries : Destination
 }
 
 /** The bottom bar's four destinations, in the order §9.3 specifies. */

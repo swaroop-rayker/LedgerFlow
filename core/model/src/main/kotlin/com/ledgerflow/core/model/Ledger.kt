@@ -11,6 +11,12 @@ package com.ledgerflow.core.model
  * Direction is carried by [ledger], never by a sign -- a negative amount in a
  * credit row would be a figure that nets against a debit somewhere, which is
  * precisely what Law 2 forbids.
+ *
+ * The Ledger list *renders* a `-`/`+` prefix (`MoneyFormat.directional`). That
+ * is a glyph chosen from [ledger] at the moment of drawing, and it must never
+ * travel back the other way: no stored amount, no argument, and no aggregate
+ * carries a sign. The rule above is unchanged -- what a row looks like and what
+ * a row is are different questions.
  */
 public data class LedgerEntry(
     val id: String,

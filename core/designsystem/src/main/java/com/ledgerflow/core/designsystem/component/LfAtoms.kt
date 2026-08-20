@@ -157,7 +157,13 @@ public fun LfButton(
         ) {
             ButtonLabel(
                 text = text,
-                color = colors.accent,
+                // Dimmed when it cannot be tapped. The label was `accent`
+                // unconditionally, so a disabled text action rendered in full
+                // clickable blue -- inert, but indistinguishable from one that
+                // works. Found on the bin's "Erase", which sits beside a
+                // correctly-greyed filled button and looked available with
+                // nothing selected.
+                color = if (enabled && !loading) colors.accent else colors.textTertiary,
                 style = if (inline) LfTheme.typography.label else LfTheme.typography.bodyL,
             )
         }

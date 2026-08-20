@@ -101,6 +101,60 @@ public data class DraftEntryEntity(
     @ColumnInfo(name = "payload_version")
     val payloadVersion: Int,
 
+    /**
+     * The draft's amount, denormalised out of [payloadJson] (schema v4).
+     *
+     * **The payload stays authoritative; this is a copy for one purpose.** The
+     * Ledger's unsaved section has to show what each draft is worth, and it
+     * cannot read the payload: `EntryDraftPayload` is `internal` to
+     * `:feature:entry`, and `DraftRepository` treats the JSON as opaque on
+     * purpose -- `:core:domain` knowing a screen's field names would invert the
+     * dependency the module graph exists to keep pointing one way.
+     *
+     * So the writer -- the entry form, which does know the shape -- lifts these
+     * three out on every save, and every reader gets typed columns. The
+     * alternative was moving the form's payload model down into `:core:model`,
+     * which reverses a documented decision to buy the same thing.
+     *
+     * Zero for a draft with no amount typed yet, which is most of a draft's
+     * life. It is minor units like every other amount (Law 3).
+     */
+    @ColumnInfo(name = "amount_minor", defaultValue = "0")
+    val amountMinor: Long = 0L,
+
+    /**
+     * Denormalised alongside [amountMinor], and **deliberately not a foreign
+     * key**.
+     *
+     * A draft is unsaved, partial and invalid by definition; an FK here would
+     * mean a category soft-deleted mid-typing could refuse the next debounce
+     * write, and losing keystrokes to referential integrity is BUG6 arriving
+     * through the countermeasure for BUG6. The summary query resolves the name
+     * with a `LEFT JOIN` and shows nothing when it no longer resolves, which is
+     * the honest rendering of "you picked something that has since gone".
+     */
+    @ColumnInfo(name = "category_id")
+    val categoryId: String? = null,
+
+    @ColumnInfo(name = "merchant_id")
+    val merchantId: String? = null,
+
+    /**
+     * When the draft says the entry happened, denormalised out of
+     * [payloadJson] (schema v5).
+     *
+     * The date the user picked in the form -- what becomes `occurred_at` on the
+     * committed row -- rather than [updatedAt], which is when they last typed.
+     * The Ledger shows it on a pending row so an unsaved entry reads the same
+     * way a saved one does.
+     *
+     * Zero for a draft written before v5, and for those the reader falls back
+     * to [updatedAt]: rendering the epoch would be worse than approximately
+     * right.
+     */
+    @ColumnInfo(name = "occurred_at", defaultValue = "0")
+    val occurredAt: Long = 0L,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
 

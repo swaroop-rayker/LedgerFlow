@@ -74,4 +74,15 @@ public sealed interface LedgerError {
 
     /** A line with no name is a row nobody can identify later. */
     public data class LineItemNameBlank(val position: Int) : LedgerError
+
+    /**
+     * No live entry with this id in this book.
+     *
+     * Covers two cases the caller cannot distinguish and should not have to:
+     * the entry was already deleted (a stale list, a second tap on a
+     * confirmation), or the id belongs to the *other* book. Both mean the same
+     * thing to the user -- there is nothing here to delete -- and collapsing
+     * them keeps the second from becoming a way to probe the other ledger.
+     */
+    public data class EntryNotFound(val id: String) : LedgerError
 }

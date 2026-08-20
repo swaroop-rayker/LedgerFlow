@@ -10,6 +10,7 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,8 +26,12 @@ import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.dashboard.DashboardScreen
 import com.ledgerflow.feature.entry.EntryScreen
 import com.ledgerflow.feature.entry.EntryViewModel
+import com.ledgerflow.feature.ledger.BinScreen
+import com.ledgerflow.feature.ledger.BinViewModel
 import com.ledgerflow.feature.ledger.LedgerScreen
+import com.ledgerflow.feature.ledger.LedgerViewModel
 import com.ledgerflow.feature.settings.MoreScreen
+import com.ledgerflow.feature.settings.MoreViewModel
 
 /**
  * The unlocked app: bottom bar, centre action, nav graph (SPEC.md §9.3).
@@ -65,47 +70,116 @@ internal fun LedgerFlowShell(
                             onClick = { navController.switchTab(destination) },
                         )
                     },
-                    onAddClick = { navController.navigate(Destination.Entry) },
+                    onAddClick = { navController.navigate(Destination.Entry()) },
                     addContentDescription = "Add an entry",
                 )
             }
         },
     ) { padding ->
-        NavHost(
+        LedgerFlowNavHost(
             navController = navController,
-            startDestination = Destination.Dashboard,
             modifier = Modifier.padding(padding),
-        ) {
-            composable<Destination.Dashboard> { DashboardScreen() }
-            composable<Destination.Ledger> { LedgerScreen() }
-            composable<Destination.Analytics> { AnalyticsScreen() }
-            composable<Destination.More> {
-                MoreScreen(
-                    onCategories = { navController.navigate(Destination.Categories) },
-                    onExport = { navController.navigate(Destination.Export) },
-                )
-            }
-            composable<Destination.Entry> {
-                val viewModel: EntryViewModel = hiltViewModel()
-                val state by viewModel.state.collectAsStateWithLifecycle()
-                EntryScreen(
-                    state = state,
-                    onEvent = viewModel::onEvent,
-                    onDone = { navController.popBackStack() },
-                )
-            }
-            composable<Destination.Categories> {
-                val viewModel: CategoriesViewModel = hiltViewModel()
-                val state by viewModel.state.collectAsStateWithLifecycle()
-                CategoriesScreen(
-                    state = state,
-                    onEvent = viewModel::onEvent,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composable<Destination.Export> { ExportPlaceholder(navController::popBackStack) }
-        }
+        )
     }
+}
+
+/**
+ * The graph itself, split out from the scaffold above it.
+ *
+ * Two jobs, two functions: [LedgerFlowShell] decides what chrome is on screen
+ * and this decides what is under it. They were one function until the Ledger
+ * destination gained a ViewModel and pushed it past detekt's length limit --
+ * which was the right signal, since by then the chrome logic was six lines
+ * buried under a screen-by-screen list.
+ *
+ * The destinations are split again by *chrome* rather than by feature: the four
+ * that keep the bottom bar, and the four full-screen ones that hide it. That is
+ * the distinction [LedgerFlowShell] actually acts on, so it is the one worth
+ * being able to read off the graph.
+ */
+@Composable
+private fun LedgerFlowNavHost(
+    navController: NavHostController,
+    modifier: Modifier = Modifier,
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Destination.Dashboard,
+        modifier = modifier,
+    ) {
+        tabDestinations(navController)
+        fullScreenDestinations(navController)
+    }
+}
+
+/** The four that keep the bottom bar (§9.3). */
+private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
+    composable<Destination.Dashboard> { DashboardScreen() }
+    composable<Destination.Ledger> {
+        val viewModel: LedgerViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        LedgerScreen(
+            state = state,
+            entries = viewModel.entries,
+            onEvent = viewModel::onEvent,
+            // The Ledger lists unsaved entries but does not edit them -- that is
+            // the entry form's job, and features never reach each other
+            // directly. It hands up an id; the graph decides where it goes
+            // (CLAUDE.md §3).
+            onOpenDraft = { draftId ->
+                navController.navigate(Destination.Entry(draftId = draftId))
+            },
+        )
+    }
+    composable<Destination.Analytics> { AnalyticsScreen() }
+    composable<Destination.More> {
+        val viewModel: MoreViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        MoreScreen(
+            state = state,
+            onCategories = { navController.navigate(Destination.Categories) },
+            onExport = { navController.navigate(Destination.Export) },
+            onDeletedEntries = { navController.navigate(Destination.DeletedEntries) },
+        )
+    }
+}
+
+/**
+ * The ones that hide the bottom bar.
+ *
+ * Each carries its own way out rather than relying on the gesture alone -- a
+ * full-screen destination with no visible exit is one people back out of by
+ * accident, and two of these are holding unsaved work while they do it.
+ */
+private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostController) {
+    composable<Destination.Entry> {
+        val viewModel: EntryViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        EntryScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onDone = { navController.popBackStack() },
+        )
+    }
+    composable<Destination.Categories> {
+        val viewModel: CategoriesViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        CategoriesScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onBack = { navController.popBackStack() },
+        )
+    }
+    composable<Destination.DeletedEntries> {
+        val viewModel: BinViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        BinScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onBack = { navController.popBackStack() },
+        )
+    }
+    composable<Destination.Export> { ExportPlaceholder(navController::popBackStack) }
 }
 
 /**
@@ -133,9 +207,10 @@ private val Destination.label: String
         Destination.Ledger -> "Ledger"
         Destination.Analytics -> "Analytics"
         Destination.More -> "More"
-        Destination.Entry -> "Add"
+        is Destination.Entry -> "Add"
         Destination.Categories -> "Categories"
         Destination.Export -> "Export"
+        Destination.DeletedEntries -> "Deleted"
     }
 
 private val Destination.icon

@@ -78,7 +78,7 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * in-flight entries at once (ADR-0013, superseding D-06) — see
          * `MIGRATION_2_3`.
          */
-        public const val VERSION: Int = 3
+        public const val VERSION: Int = 5
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

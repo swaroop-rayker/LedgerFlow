@@ -99,8 +99,15 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version.ref = "sqlcipher" }
 
 # ── Paging / Work ─────────────────────────────────────────────────────────
+# paging-common is the pure Kotlin/JVM half of Paging 3 -- PagingData, Pager,
+# PagingSource, no android.* anywhere in it. That is what makes it admissible in
+# :core:domain, which otherwise sees :core:model and :core:common only
+# (ADR-0014, CLAUDE.md §3). Do not swap it for paging-runtime there: runtime
+# pulls the Android framework in and the carve-out stops being narrow.
+androidx-paging-common = { group = "androidx.paging", name = "paging-common", version.ref = "paging" }
 androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", version.ref = "paging" }
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
+androidx-paging-testing = { group = "androidx.paging", name = "paging-testing", version.ref = "paging" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
 # ── DI ────────────────────────────────────────────────────────────────────

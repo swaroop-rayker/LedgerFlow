@@ -115,6 +115,130 @@ class LedgerSingleWriterTest {
         assertThat(offenders.map { it.name }).isEmpty()
     }
 
+    /**
+     * Deleting is the second door, and it needs the same guard.
+     *
+     * Law 1 is written about inserts, so a soft delete is not literally covered
+     * by it -- which is exactly why this test exists. The law's *purpose* is
+     * that every write to `ledger_entry` has one audited entrance, and a delete
+     * is the write with the consequence an insert does not have: it changes
+     * totals that have already been read. A feature injecting
+     * [LedgerRepository] and calling `softDeleteEntry` itself would compile,
+     * run, and remove a perfectly real row with nothing recording that it had
+     * happened.
+     *
+     * The name is `softDeleteEntry` rather than `softDelete` or `delete` for
+     * this test's sake: the taxonomy DAOs and repositories all carry a
+     * `softDelete`, and a guard matching that would flag three correct files
+     * every run. A guard that cries wolf is one somebody eventually deletes.
+     */
+    @Test
+    fun onlyDeleteEntryUseCaseRemovesLedgerRows() {
+        val permitted = setOf(
+            "LedgerRepository.kt",
+            "DefaultLedgerRepository.kt",
+            "LedgerUseCases.kt",
+        )
+        val call = Regex("""\.softDeleteEntry\s*\(""")
+
+        val offenders = productionSources()
+            .filter { it.name !in permitted }
+            .filter { call.containsMatchIn(it.readText()) }
+
+        assertThat(offenders.map { it.name }).isEmpty()
+    }
+
+    @Test
+    fun theDeletionUseCaseExistsAndIsTheOnlyDoor() {
+        val useCases = productionSources().single { it.name == "LedgerUseCases.kt" }.readText()
+
+        assertThat(useCases).contains("class DeleteEntryUseCase")
+        assertThat(useCases).contains("ledger.softDeleteEntry(book, id)")
+    }
+
+    /**
+     * The third door, and the only irreversible one.
+     *
+     * `softDeleteEntry` can be undone by clearing a column; this cannot be
+     * undone at all. If any screen could call it directly, the one operation in
+     * the app that destroys committed ledger data would also be the one with no
+     * record of who asked for it.
+     */
+    @Test
+    fun onlyPurgeDeletedEntriesUseCaseDestroysLedgerRows() {
+        val permitted = setOf(
+            "LedgerRepository.kt",
+            "DefaultLedgerRepository.kt",
+            "LedgerUseCases.kt",
+        )
+        val call = Regex("""\.purgeDeletedEntries\s*\(""")
+
+        val offenders = productionSources()
+            .filter { it.name !in permitted }
+            .filter { call.containsMatchIn(it.readText()) }
+
+        assertThat(offenders.map { it.name }).isEmpty()
+    }
+
+    @Test
+    fun thePurgeUseCaseExistsAndSweepsBothBooks() {
+        val useCases = productionSources().single { it.name == "LedgerUseCases.kt" }.readText()
+
+        assertThat(useCases).contains("class PurgeDeletedEntriesUseCase")
+        // Both books, one statement each -- never a single statement spanning
+        // them, which is what Law 2 forbids.
+        assertThat(useCases).contains("LedgerType.entries.sumOf")
+    }
+
+    /**
+     * Restoring is the fourth door, and the only one that puts rows *back*.
+     *
+     * Easy to wave through on the grounds that it destroys nothing. It still
+     * changes what every total says, and a screen that could call it directly
+     * would be able to resurrect an entry with nothing recording that it had.
+     * Same rule as the other three.
+     */
+    @Test
+    fun onlyRestoreEntryUseCaseBringsLedgerRowsBack() {
+        val permitted = setOf(
+            "LedgerRepository.kt",
+            "DefaultLedgerRepository.kt",
+            "LedgerUseCases.kt",
+        )
+        val call = Regex("""\.restoreEntry\s*\(""")
+
+        val offenders = productionSources()
+            .filter { it.name !in permitted }
+            .filter { call.containsMatchIn(it.readText()) }
+
+        assertThat(offenders.map { it.name }).isEmpty()
+    }
+
+    /** The single-entry purge is the same door as the sweep, not a side one. */
+    @Test
+    fun onlyThePurgeUseCaseDestroysASingleBinnedRow() {
+        val permitted = setOf(
+            "LedgerRepository.kt",
+            "DefaultLedgerRepository.kt",
+            "LedgerUseCases.kt",
+        )
+        val call = Regex("""\.purgeDeletedEntry\s*\(""")
+
+        val offenders = productionSources()
+            .filter { it.name !in permitted }
+            .filter { call.containsMatchIn(it.readText()) }
+
+        assertThat(offenders.map { it.name }).isEmpty()
+    }
+
+    @Test
+    fun theRestoreUseCaseExists() {
+        val useCases = productionSources().single { it.name == "LedgerUseCases.kt" }.readText()
+
+        assertThat(useCases).contains("class RestoreEntryUseCase")
+        assertThat(useCases).contains("ledger.restoreEntry(it.ledger, it.id)")
+    }
+
     @Test
     fun theApprovalUseCaseExistsAndIsTheOnlyDoor() {
         val useCases = productionSources().single { it.name == "LedgerUseCases.kt" }.readText()

@@ -2,6 +2,7 @@ package com.ledgerflow.core.designsystem.format
 
 import com.ledgerflow.core.model.CurrencyDisplay
 import com.ledgerflow.core.model.CurrencyExponent
+import com.ledgerflow.core.model.LedgerType
 import java.math.BigDecimal
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -63,6 +64,61 @@ public object MoneyFormat {
         // The sign leads the symbol: "-₹5" reads as a negative amount where
         // "₹-5" reads as a typo.
         return sign + symbol + magnitude(minor, currencyCode, locale)
+    }
+
+    /**
+     * `-₹1,240.50` for a debit, `+₹85,000.00` for a credit.
+     *
+     * **The sign is a glyph, not a number.** `amount_minor` is stored positive
+     * in both books and direction is carried by [LedgerType] (Law 2); nothing
+     * here changes that, and nothing downstream may read this back. It exists
+     * because a column of amounts is quicker to scan when the direction is on
+     * the figure as well as in its colour -- and colour alone fails §9.6 for a
+     * colour-blind reader, exactly as it does for the category swatch.
+     *
+     * Deliberately **not** implemented by negating the minor units and handing
+     * them to [symbolised]. That would put a negative `Long` on the path for
+     * the sake of a character, and a negative amount is precisely the shape
+     * Law 2 forbids -- one that could be summed against the other book without
+     * anything looking wrong. The magnitude stays unsigned and the prefix is
+     * chosen from the book.
+     *
+     * The sign leads the currency symbol, matching [symbolised]: "-₹5" reads as
+     * a negative amount where "₹-5" reads as a typo.
+     */
+    public fun directional(
+        minor: Long,
+        currencyCode: String,
+        ledger: LedgerType,
+        locale: Locale = Locale.getDefault(),
+    ): String {
+        val sign = when (ledger) {
+            LedgerType.DEBIT -> '-'
+            LedgerType.CREDIT -> '+'
+        }
+        return sign + CurrencyDisplay.symbolOf(currencyCode) +
+            magnitude(minor, currencyCode, locale)
+    }
+
+    /**
+     * `spent 1,240.50 rupees` / `received 85,000.00 rupees` -- the spoken form
+     * of [directional] (§9.6).
+     *
+     * A word, not a character: TalkBack reads "-" inconsistently and often not
+     * at all, so a screen reader user would get the magnitude with the
+     * direction silently dropped -- the one thing the sign is there to convey.
+     */
+    public fun spokenDirectional(
+        minor: Long,
+        currencyCode: String,
+        ledger: LedgerType,
+        locale: Locale = Locale.getDefault(),
+    ): String {
+        val verb = when (ledger) {
+            LedgerType.DEBIT -> "spent"
+            LedgerType.CREDIT -> "received"
+        }
+        return "$verb ${spoken(minor, currencyCode, locale)}"
     }
 
     /**

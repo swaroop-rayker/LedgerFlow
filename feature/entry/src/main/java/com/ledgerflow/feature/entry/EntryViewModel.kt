@@ -1,5 +1,6 @@
 package com.ledgerflow.feature.entry
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.common.id.Uuid7Generator
@@ -7,6 +8,7 @@ import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
+import com.ledgerflow.core.domain.ledger.DraftSummaryFields
 import com.ledgerflow.core.domain.ledger.DraftWrite
 import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.domain.ledger.EntryCombo
@@ -75,6 +77,7 @@ public class EntryViewModel @Inject constructor(
     private val paymentMethods: PaymentMethodRepository,
     private val clock: Clock,
     private val ids: Uuid7Generator,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val form = MutableStateFlow(Form(occurredAt = clock.nowMillis()))
@@ -110,6 +113,17 @@ public class EntryViewModel @Inject constructor(
             currency.value = ledgerRepository.baseCurrency() ?: EntryUiState.DEFAULT_CURRENCY
         }
         viewModelScope.launch { collectDraftWrites() }
+
+        // Opened from a pending row in the Ledger rather than from the centre
+        // action. Read from `SavedStateHandle` rather than taken as a
+        // navigation side effect, so it survives process death: the argument is
+        // restored with the back stack, where a one-shot event fired from
+        // composition would not be.
+        //
+        // By string, not by route type. Routes live in `:app` so that features
+        // never depend on one another (CLAUDE.md §3), which means this module
+        // cannot name `Destination.Entry` -- only agree with it on a key.
+        savedStateHandle.get<String>(DRAFT_ID_ARG)?.let(::openDraft)
     }
 
     /**
@@ -368,6 +382,19 @@ public class EntryViewModel @Inject constructor(
         }
     }
 
+    public companion object {
+        /**
+         * The navigation argument that opens one specific draft.
+         *
+         * A string rather than a typed route, because routes live in `:app` so
+         * that features never depend on one another (CLAUDE.md §3) — this
+         * module cannot name `Destination.Entry`, only agree with it on a key.
+         * The other half is that route's `draftId` property, whose name
+         * Navigation Compose turns into this argument.
+         */
+        public const val DRAFT_ID_ARG: String = "draftId"
+    }
+
     /**
      * Clears the form for a new entry, leaving anything already typed in the
      * stack rather than destroying it.
@@ -410,6 +437,17 @@ public class EntryViewModel @Inject constructor(
                 editingEntryId = current.editingEntryId,
                 payloadJson = EntryDraftCodec.encode(current.toPayload()),
                 payloadVersion = EntryDraftCodec.VERSION,
+                // Lifted out here because this is the only layer that may know
+                // the payload's shape (schema v4). Everything below treats the
+                // JSON as opaque, so a summary derived down there would mean
+                // `:core:data` parsing a screen's field names. The payload
+                // stays authoritative; this is a copy other surfaces can read.
+                summary = DraftSummaryFields(
+                    amountMinor = current.amountMinor,
+                    categoryId = current.categoryId,
+                    merchantId = current.merchantId,
+                    occurredAt = current.occurredAt,
+                ),
             ),
         )
         form.update { if (it.draftId == null) it.copy(draftId = saved.id) else it }
@@ -549,9 +587,17 @@ private fun Form.toUiState(
     now: Long,
 ): EntryUiState {
     // The form's own draft is not offered back to it as something to open.
+    // Flattened once per state emission rather than per card: the tree is two
+    // levels, and a card that searched it itself would rescan for every draft
+    // on screen.
+    val categoryNames = scoped.tree
+        .flatMap { branch -> listOf(branch.parent) + branch.children }
+        .associate { it.id to it.name }
+    val merchantNames = scoped.merchants.associate { it.id to it.canonicalName }
+
     val unsavedCards = scoped.unsaved
         .filter { it.id != draftId }
-        .mapNotNull { it.toCard(currencyCode, now) }
+        .mapNotNull { it.toCard(currencyCode, now, categoryNames, merchantNames) }
 
     return EntryUiState(
         ledger = ledger,
@@ -693,7 +739,12 @@ private fun Form.toPayload() = EntryDraftPayload(
  * A draft this build cannot read is dropped from the stack rather than shown as
  * a blank card, and the row stays on disk untouched (§6.1.2).
  */
-private fun EntryDraft.toCard(currencyCode: String, now: Long): EntryDraftCard? {
+private fun EntryDraft.toCard(
+    currencyCode: String,
+    now: Long,
+    categoryNames: Map<String, String>,
+    merchantNames: Map<String, String>,
+): EntryDraftCard? {
     val payload = payloadIfReadable(EntryDraftCodec.VERSION)?.let(EntryDraftCodec::decode)
         ?: return null
 
@@ -705,8 +756,30 @@ private fun EntryDraft.toCard(currencyCode: String, now: Long): EntryDraftCard? 
         lineItemCount = payload.lineItems.count { it.name.isNotBlank() },
         updatedAt = updatedAt,
         age = relativeAge(now - updatedAt),
+        // Read from the *payload*, which is authoritative and is what the user
+        // last typed -- not from the denormalised summary, which exists for
+        // screens that cannot decode it. Merchant first, then category, the
+        // same order and the same two fields the Ledger shows.
+        //
+        // **The subcategory is deliberately not here.** It was, and on a card
+        // fixed at `peekCardWidth` the three names together overran a single
+        // line -- so the subcategory, being last, was the part ellipsised away,
+        // and a long one took the category with it. Two names fit; three did
+        // not, and a field that is only sometimes visible is worse than one
+        // that is honestly absent. The whole draft is one tap away.
+        //
+        // The lookup, not the id, is what may be null: an id whose row has
+        // since been deleted resolves to nothing and is left out, rather than
+        // rendering a raw UUID at the user.
+        filedAs = listOfNotNull(
+            payload.merchantId?.let(merchantNames::get),
+            payload.categoryId?.let(categoryNames::get),
+        ).joinToString(FILED_SEPARATOR).ifBlank { null },
     )
 }
+
+/** Between merchant and category on a draft card. */
+private const val FILED_SEPARATOR = " · "
 
 /**
  * "just now", "12m", "3h", "2d" -- coarse on purpose.
@@ -771,4 +844,10 @@ private fun LedgerError.toMessage(): String = when (this) {
     is LedgerError.ForeignCurrencyIsBase -> "A foreign amount needs a different currency."
     LedgerError.ForeignRateNotPositive -> "Enter an exchange rate above zero."
     is LedgerError.LineItemNameBlank -> "Line ${position + 1} needs a name."
+
+    // Not reachable from this form -- it belongs to the Ledger's delete path,
+    // which this screen has no way to reach. Spelled out rather than folded
+    // into an `else`, because an `else` here is what would let the *next*
+    // genuinely-reachable error ship with no sentence attached to it.
+    is LedgerError.EntryNotFound -> "That entry is already gone."
 }

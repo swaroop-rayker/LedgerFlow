@@ -73,7 +73,15 @@ LedgerFlow/
 **Dependency rule (enforced by a Gradle check):**
 - `:feature:*` → `:core:*` only. **Features never depend on features.**
 - `:core:model` depends on nothing (pure Kotlin, no Android).
-- `:core:domain` depends on `:core:model` + `:core:common` only.
+- `:core:domain` depends on `:core:model` + `:core:common` — **plus
+  `androidx.paging:paging-common`, and nothing else from AndroidX** (ADR-0014).
+  That artifact is the Kotlin/JVM half of Paging 3 (`PagingData`, `Pager`,
+  `PagingSource`); it contains no `android.*` and the module still compiles and
+  unit-tests off-device, which is the property this rule exists to protect.
+  `paging-runtime` and `paging-compose` are the Android halves and belong to
+  `:feature:*`. **This is a carve-out, not a precedent:** a second AndroidX
+  coordinate proposed for `:core:domain` is the trigger to reopen ADR-0014, not
+  to widen this bullet.
 - `:app` wires everything; it contains no business logic.
 
 ---
@@ -211,6 +219,35 @@ The DEK is multi-wrapped by two factors: Android Keystore (KEK-A) and the 24-wor
 - The notification package allowlist filter runs **before** any notification body is read. Never log or persist content from a non-allowlisted package — this is a stated privacy guarantee, not an implementation detail.
 - Cross-source dedupe is mandatory. A single UPI payment commonly fires both a bank SMS and a GPay notification; producing two pending rows is a bug with a named test (`Dedupe_SameTxnAcrossSources_ProducesOnePending`).
 - Suppressed duplicates are **retained and visible** under the Inbox "Suppressed" filter. Never silently discarded.
+
+### Destroying ledger data
+`PurgeDeletedEntriesUseCase` is the only thing in the app that removes a
+committed `ledger_entry` row from the file, and the only irreversible operation
+anywhere in it. `LedgerSingleWriterTest` guards **all four** doors into that
+table — `approve`, `softDeleteEntry`, `restoreEntry`, `purgeDeletedEntries` (and
+its per-row `purgeDeletedEntry`) — and a fifth would need the same guard on the
+day it appears. Restoring is guarded too, for all that it destroys nothing: it
+is a write that makes past totals change again.
+
+- **Every one of those statements binds `:ledger`.** The bin shows both books
+  at once (ADR-0015), so it is the one screen where a write can be issued
+  against the wrong ledger — and with the predicate in place that affects no
+  rows and returns `EntryNotFound` rather than quietly hitting something else.
+- **The per-row purge also binds `deleted_at IS NOT NULL`.** Without it, that
+  statement would destroy any entry by id, live or not. The bin only ever shows
+  binned rows, so nothing in the UI would have caught the difference.
+
+- **Never make the purge reachable without a `Warning` confirmation** that names
+  the count. It is one tap from a Settings row and cannot be undone.
+- **Never offer to back up first as though the app could.** Backups are
+  phrase-derived (ADR-0011) and the app never holds the phrase; the dialog tells
+  the user to export, it does not pretend to do it for them.
+- **`VACUUM` runs outside a transaction, after a WAL checkpoint.** SQLite
+  refuses it inside one, and an uncheckpointed WAL means rewriting a file that
+  does not yet contain the deletes. It rewrites the whole encrypted database, so
+  a mistake here does not fail loudly — it surfaces as an unreadable vault on
+  the user's next launch. `PurgeDeletedEntriesTest` opens and reads the vault
+  afterwards for exactly that reason.
 
 ### `:core:database` migrations
 - A pre-migration `.lfbk` backup is written and verified before any migration runs. Don't remove this.

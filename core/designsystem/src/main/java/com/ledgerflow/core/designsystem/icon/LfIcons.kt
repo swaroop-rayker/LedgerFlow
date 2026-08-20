@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.ui.graphics.Color
@@ -15,7 +16,7 @@ import androidx.compose.ui.unit.dp
 /**
  * The app's icon set.
  *
- * Five come from `material-icons-core`, which the version catalog already
+ * Six come from `material-icons-core`, which the version catalog already
  * carries. The bar chart does not: charting icons live in
  * `material-icons-extended`, which is a very large artifact to pull in for one
  * glyph against a 15 MB budget (SPEC.md §11) that ML Kit still has to fit into
@@ -33,6 +34,12 @@ public object LfIcons {
 
     /** Dismiss. Never used for a destructive action without a confirmation. */
     public val Close: ImageVector = Icons.Filled.Close
+
+    /**
+     * Remove. **Always behind a confirmation** -- it sits in a scrolling list of
+     * small controls, which is one mis-tap away from destroying a real entry.
+     */
+    public val Delete: ImageVector = Icons.Filled.Delete
 
     /** Three ascending bars on a 24dp grid, matching the core set's weight. */
     public val Analytics: ImageVector by lazy {

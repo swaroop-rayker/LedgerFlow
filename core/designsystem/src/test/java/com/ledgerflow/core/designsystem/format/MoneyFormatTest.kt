@@ -1,6 +1,7 @@
 package com.ledgerflow.core.designsystem.format
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.model.LedgerType
 import java.util.Locale
 import org.junit.Test
 
@@ -186,4 +187,60 @@ class MoneyFormatTest {
         assertThat(MoneyFormat.spoken(1_240_00L, "INR", us)).isEqualTo("1,240.00 rupees")
         assertThat(MoneyFormat.spoken(49_50L, "USD", us)).isEqualTo("49.50 dollars")
     }
+
+    // ── Directional prefix (CHANGE#3) ───────────────────────────────────────
+
+    @Test
+    fun directional_prefixesADebitWithMinus() {
+        assertThat(MoneyFormat.directional(1_240_50L, "INR", LedgerType.DEBIT, us))
+            .isEqualTo("-₹1,240.50")
+    }
+
+    @Test
+    fun directional_prefixesACreditWithPlus() {
+        assertThat(MoneyFormat.directional(85_000_00L, "INR", LedgerType.CREDIT, us))
+            .isEqualTo("+₹85,000.00")
+    }
+
+    /**
+     * The sign comes from the book, not from the number.
+     *
+     * This is the assertion that keeps Law 2 true at the presentation layer: the
+     * same positive `Long` renders with either prefix depending only on which
+     * ledger it belongs to. If someone ever "simplifies" this by negating the
+     * minor units for debits, a negative amount is on the path again and this
+     * fails.
+     */
+    @Test
+    fun directional_readsTheBookRatherThanTheSignOfTheAmount() {
+        val minor = 500_00L
+
+        assertThat(MoneyFormat.directional(minor, "INR", LedgerType.DEBIT, us))
+            .isEqualTo("-₹500.00")
+        assertThat(MoneyFormat.directional(minor, "INR", LedgerType.CREDIT, us))
+            .isEqualTo("+₹500.00")
+    }
+
+    /** Grouping still follows the currency, exactly as [MoneyFormat.symbolised] does. */
+    @Test
+    fun directional_keepsLakhGrouping() {
+        assertThat(MoneyFormat.directional(1_24_000_00L, "INR", LedgerType.DEBIT, us))
+            .isEqualTo("-₹1,24,000.00")
+    }
+
+    /**
+     * TalkBack gets a word, not a character.
+     *
+     * Screen readers skip "-" and "+" as often as they skip the currency glyph,
+     * so a spoken row would otherwise carry the amount with the direction
+     * silently dropped -- the one thing the prefix exists to convey (§9.6).
+     */
+    @Test
+    fun spokenDirectional_saysTheDirectionAsAWord() {
+        assertThat(MoneyFormat.spokenDirectional(1_240_50L, "INR", LedgerType.DEBIT, us))
+            .isEqualTo("spent 1,240.50 rupees")
+        assertThat(MoneyFormat.spokenDirectional(1_240_50L, "INR", LedgerType.CREDIT, us))
+            .isEqualTo("received 1,240.50 rupees")
+    }
+
 }

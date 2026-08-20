@@ -56,7 +56,14 @@ complexity:
     # CategoryDao into a reader and a writer to satisfy a counter would put the
     # duplicate-name check and the insert it guards in different files, which is
     # the opposite of what this rule is for.
-    thresholdInInterfaces: 20
+    #
+    # 30, not 20, and the number follows the argument above rather than the
+    # other way round: LedgerEntryDao crossed 20 when the Ledger list's paged
+    # reads landed (S9/ADR-0014), and the only ways to get back under it were to
+    # split the ledger's reads from its writes -- the exact move this comment
+    # rejects -- or to raise the ceiling. A threshold that forces the refactor
+    # its own rationale calls wrong is a threshold set at the wrong value.
+    thresholdInInterfaces: 30
     ignoreAnnotatedFunctions: ['Composable']
 
 exceptions:

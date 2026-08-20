@@ -54,6 +54,31 @@ public interface DraftEntryDao {
         editingEntryKey: String,
     ): DraftEntryEntity?
 
+    /**
+     * One book's drafts as another screen renders them: the summary columns,
+     * with the taxonomy names resolved.
+     *
+     * `payload_json` is deliberately absent from the projection. The Ledger's
+     * unsaved section must not receive it -- its shape belongs to
+     * `:feature:entry`, and shipping it to a second feature would couple the
+     * two through a JSON schema neither of them owns.
+     *
+     * `LEFT JOIN`, so a draft filed under a category that has since been
+     * deleted is still listed, with no name rather than no row. Unsaved user
+     * input is never hidden to tidy up a join (§6.1.2).
+     */
+    @Query(
+        "SELECT d.id AS id, d.ledger AS ledger, d.amount_minor AS amount_minor, " +
+            "d.updated_at AS updated_at, d.occurred_at AS occurred_at, " +
+            "c.name AS category_name, c.color_argb AS category_color_argb, " +
+            "m.canonical_name AS merchant_name " +
+            "FROM draft_entry d " +
+            "LEFT JOIN category c ON c.id = d.category_id " +
+            "LEFT JOIN merchant m ON m.id = d.merchant_id " +
+            "WHERE d.ledger = :ledger ORDER BY d.updated_at DESC",
+    )
+    public fun observeSummariesForLedger(ledger: LedgerType): Flow<List<DraftSummaryRow>>
+
     @Upsert
     public suspend fun upsert(draft: DraftEntryEntity)
 

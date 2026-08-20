@@ -14,8 +14,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
@@ -127,6 +129,16 @@ public fun LfDivider(modifier: Modifier = Modifier) {
  * near-white — the two ratios multiply to about 21, so demanding 4.5 of each is
  * arithmetically impossible. The swatch does not change between themes, so
  * neither may its ink. `CategoryPaletteContrastTest` pins the pairing.
+ *
+ * **The initial does not follow the user's font scale, and that is deliberate.**
+ * It is part of an icon, not a piece of text: it carries no information the
+ * adjacent label does not already carry, which is why it is excluded from
+ * semantics entirely. Sized in `sp` it scaled while the 24dp circle did not, so
+ * at font scale 2.0 the glyph's em box exactly matched the circle's *diameter*
+ * and the letter was clipped by the curve on all four sides — visible on device
+ * in the Ledger list, where every row has one. §9.6 wants 2.0 without
+ * clipping, and the fix for a decorative glyph is to pin it to the shape it
+ * lives inside rather than to the text scale.
  */
 @Composable
 public fun LfCategoryDot(
@@ -135,9 +147,15 @@ public fun LfCategoryDot(
     modifier: Modifier = Modifier,
 ) {
     val initial = name.firstOrNull()?.uppercase().orEmpty()
+    val diameter = LfTheme.spacing.lg
+    // `Dp.toSp()` divides by the font scale, so the result renders at exactly
+    // this many dp whatever the user's setting. Half the diameter is what the
+    // 12sp `label` style already produced at font scale 1.0, so the swatch is
+    // unchanged where it was already correct.
+    val initialSize = with(LocalDensity.current) { (diameter * INITIAL_HEIGHT_RATIO).toSp() }
     Box(
         modifier = modifier
-            .size(LfTheme.spacing.lg)
+            .size(diameter)
             .background(Color(colorArgb), CircleShape)
             // The adjacent label already reads the category name aloud.
             .clearAndSetSemantics {},
@@ -145,11 +163,20 @@ public fun LfCategoryDot(
     ) {
         Text(
             text = initial,
-            style = LfTheme.typography.label,
+            style = LfTheme.typography.label.copy(
+                fontSize = initialSize,
+                // Unspecified so the line box follows the pinned font size. The
+                // scale's 16sp line height would otherwise keep scaling and
+                // push a correctly-sized glyph out of a fixed-size circle.
+                lineHeight = TextUnit.Unspecified,
+            ),
             color = LfCategoryInk,
         )
     }
 }
+
+/** The initial's height as a fraction of the swatch. Matches 12sp in a 24dp dot. */
+private const val INITIAL_HEIGHT_RATIO = 0.5f
 
 /** The one ink every category swatch is designed against. */
 public val LfCategoryInk: Color = Color.White

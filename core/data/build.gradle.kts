@@ -30,4 +30,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.truth)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+    // `asSnapshot()`. A PagingData is opaque by design -- there is no supported
+    // way to read items out of one by hand, and hand-rolling it would test our
+    // own reflection rather than the query (ADR-0014).
+    androidTestImplementation(libs.androidx.paging.testing)
 }

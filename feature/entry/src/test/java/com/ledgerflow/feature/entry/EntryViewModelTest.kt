@@ -1,5 +1,6 @@
 package com.ledgerflow.feature.entry
 
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
@@ -608,7 +609,12 @@ class EntryViewModelTest {
 
     // ── Harness ─────────────────────────────────────────────────────────────
 
-    private fun viewModel() = EntryViewModel(
+    /**
+     * @param openingDraftId the navigation argument, as it arrives when the
+     *   form is opened from a pending row in the Ledger. Null is the centre
+     *   action's "new entry", which is what every other test here wants.
+     */
+    private fun viewModel(openingDraftId: String? = null) = EntryViewModel(
         approveTransaction = ApproveTransactionUseCase(ledger),
         drafts = drafts,
         ledgerRepository = ledger,
@@ -617,6 +623,9 @@ class EntryViewModelTest {
         paymentMethods = paymentMethods,
         clock = Clock { NOW },
         ids = Uuid7Generator(SecureRandom()),
+        savedStateHandle = SavedStateHandle(
+            openingDraftId?.let { mapOf(EntryViewModel.DRAFT_ID_ARG to it) } ?: emptyMap(),
+        ),
     )
 
     /**

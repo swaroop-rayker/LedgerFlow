@@ -173,6 +173,24 @@ public data class EntryDraftCard(
     val updatedAt: Long,
     /** Already relative ("2m ago"), resolved against the injected clock. */
     val age: String,
+    /**
+     * "Zepto · Food & Dining" — the merchant and category chosen so far.
+     *
+     * Resolved to *names* here rather than carried as ids, because a card
+     * cannot look anything up: it is handed a finished string. Null while
+     * nothing has been picked, which is a real state and the most common one
+     * for a draft a few keystrokes old.
+     *
+     * **Two names, not three.** The subcategory was here and came out: on a
+     * card fixed at `peekCardWidth` three names overran the line, so the
+     * subcategory was ellipsised away and a long one took the category with it.
+     * The same two fields the Ledger's pending rows show, for the same reason.
+     *
+     * The entry form builds this from the payload directly — it owns that
+     * shape — so unlike the Ledger's pending rows it needs no denormalised
+     * columns to do it.
+     */
+    val filedAs: String? = null,
 )
 
 /** A repeat-expense chip: a combination already used, resolved to names (§5.4). */
