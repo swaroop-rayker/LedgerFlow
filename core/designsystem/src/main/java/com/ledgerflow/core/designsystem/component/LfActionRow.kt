@@ -34,6 +34,7 @@ public fun LfActionRow(
         horizontalArrangement = Arrangement.spacedBy(
             LfTheme.spacing.sm,
             when (alignment) {
+                LfActionAlignment.Start -> Alignment.Start
                 LfActionAlignment.Center -> Alignment.CenterHorizontally
                 LfActionAlignment.End -> Alignment.End
             },
@@ -53,5 +54,10 @@ public fun LfActionRow(
  *
  * [End] is for dialogs, where convention puts the confirming action on the
  * trailing edge and users reach for it there.
+ *
+ * [Start] is for clusters that are not actions at all -- a row of informational
+ * chips under a card heading, where centring would leave them floating away
+ * from the text they belong to. The reasoning behind [Center] does not apply,
+ * because nothing here is a control the eye has to find.
  */
-public enum class LfActionAlignment { Center, End }
+public enum class LfActionAlignment { Start, Center, End }

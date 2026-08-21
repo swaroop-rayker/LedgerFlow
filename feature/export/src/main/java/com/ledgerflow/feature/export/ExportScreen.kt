@@ -18,9 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import com.ledgerflow.core.designsystem.component.LfActionAlignment
+import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfChip
+import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
@@ -35,9 +39,9 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
  * **The screen's real job is the warning, not the button.** Everything else here
  * is one tap and a system picker; what needs designing is that the artifact is a
  * complete, unencrypted copy of the user's financial history, and that once it
- * is written the app has no further say in where it goes. So the page states
- * that in plain words *before* the action, and the confirmation states it again
- * in the treatment reserved for the Recovery Kit and the bin's erase.
+ * is written the app has no further say in where it goes. The page flags that
+ * standing, as a chip; the confirmation says it in full before every export, in
+ * the treatment reserved for the Recovery Kit and the bin's erase.
  */
 @Composable
 public fun ExportScreen(
@@ -78,62 +82,54 @@ public fun ExportScreen(
                 modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
             ) {
-                WhatYouGetCard(suggestedFileName)
-                UnencryptedCard()
+                CsvFileCard(suggestedFileName)
                 state.status.let { status -> StatusCard(status, onEvent) }
             }
         }
     }
 }
 
+/**
+ * What the export is, in one card.
+ *
+ * This was two cards and two paragraphs -- "What you get" and "This file is not
+ * encrypted" -- and between them they said more about the export than anyone
+ * standing on this screen needs in order to decide. Two facts matter: it opens
+ * in a spreadsheet, and it is not protected. Both are properties of the file, so
+ * they belong to the same card rather than to two competing ones.
+ *
+ * **Chips rather than sentences**, because a property is not an explanation. It
+ * also keeps the warning from being the longest paragraph on the screen, which
+ * is what people scroll past.
+ *
+ * The warning chip keeps the `warn` outline and text, so it still carries weight
+ * at a glance -- and it is [LfChipStyle.Warning] rather than `Error`, because
+ * nothing here has failed. The full sentence lives in the confirmation, which
+ * fires before every export and cannot be skipped, so this is a flag rather than
+ * the whole of the user's protection.
+ */
 @Composable
-private fun WhatYouGetCard(suggestedFileName: String) {
+private fun CsvFileCard(suggestedFileName: String) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
             Text(
-                text = "What you get",
+                text = "CSV file",
                 style = LfTheme.typography.bodyL,
                 color = LfTheme.colors.textPrimary,
             )
-            Text(
-                // "Spreadsheets" rather than "your data" or "CSV": it says what
-                // opens on the other end, which is the one thing someone
-                // deciding whether they want this needs to know.
-                text = "A zip of spreadsheets. Expenses and income in separate " +
-                    "files. Hidden and binned items are included.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
-            )
+            // `Start`, not the default `Center`: these are facts sitting under a
+            // heading, not controls the eye has to find, and centring would
+            // float them away from the text they belong to. Still an
+            // `LfActionRow` so they wrap as whole chips at font scale 2.0 rather
+            // than breaking a label (BUG9).
+            LfActionRow(alignment = LfActionAlignment.Start) {
+                LfChip(label = "Opens in any spreadsheet")
+                LfChip(label = "Not encrypted", style = LfChipStyle.Warning)
+            }
             Text(
                 text = suggestedFileName,
                 style = LfTheme.typography.label,
                 color = LfTheme.colors.textTertiary,
-            )
-        }
-    }
-}
-
-/**
- * The standing warning, on the page rather than only in the dialog.
- *
- * A dialog is read once and dismissed; this is the sentence somebody sees when
- * they come back to the screen a month later wondering what an export is. Kept
- * to two lines: a warning people scroll past protects nobody.
- */
-@Composable
-private fun UnencryptedCard() {
-    LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = "This file is not encrypted",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.warn,
-            )
-            Text(
-                text = "Anyone who opens it can read everything. Keep it " +
-                    "somewhere private and delete it when you're done.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
             )
         }
     }
