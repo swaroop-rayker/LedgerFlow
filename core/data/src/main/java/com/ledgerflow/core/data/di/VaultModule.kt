@@ -6,6 +6,7 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.WrappedDekStore
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.keystore.KeystoreKek
+import com.ledgerflow.core.data.export.DefaultExportRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
 import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
@@ -15,6 +16,7 @@ import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.RecoveryKitWriter
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
@@ -112,6 +114,22 @@ public interface LedgerModule {
      */
     @Binds
     public fun storageMaintenance(impl: DefaultStorageMaintenance): StorageMaintenance
+}
+
+/**
+ * Writing the ledger out to files the user owns (SPEC.md §5.9).
+ *
+ * Its own module rather than a binding on [LedgerModule], because an export is
+ * not a ledger operation: it reads every table, writes nothing, and the thing it
+ * produces is unencrypted and leaves the device. Keeping it separate is how the
+ * graph says that out loud.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+public interface ExportModule {
+
+    @Binds
+    public fun exportRepository(impl: DefaultExportRepository): ExportRepository
 }
 
 /** Categories, merchants and payment methods (SPEC.md §5.5). */

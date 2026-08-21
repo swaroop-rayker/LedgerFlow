@@ -147,7 +147,22 @@ public class DatabaseBackupManager(
         }
     }
 
-    private suspend fun export(): BackupPayload = BackupPayload(
+    /**
+     * Every row of every table, as one materialised payload.
+     *
+     * **Public because the CSV export consumes it too** (ADR-0017), and that
+     * sharing is the point rather than a convenience. This function is the
+     * codebase's single answer to "which tables are there"; a second
+     * enumeration living in the export path would mean a table added at schema
+     * v6 reaches the backup and silently misses every CSV a user takes, with
+     * nothing failing anywhere. `ExportCoversEveryTableTest` counts the lists
+     * returned here and fails if the export does not produce a file for each.
+     *
+     * Read-only, so widening it does not widen the write surface
+     * `LedgerSingleWriterTest` guards -- that permit is about
+     * [BackupPayload]-driven *inserts*, which stay confined to [restore].
+     */
+    public suspend fun export(): BackupPayload = BackupPayload(
         schemaVersion = LedgerFlowDatabase.VERSION,
         createdAt = System.currentTimeMillis(),
         appMeta = database.appMetaDao().all().map { AppMetaRow(it.key, it.value) },

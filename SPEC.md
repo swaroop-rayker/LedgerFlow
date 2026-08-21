@@ -365,7 +365,7 @@ The schema was always currency-tagged, so the storage cost of this is zero. What
 
 | Artifact | Format | Encryption | Trigger |
 |---|---|---|---|
-| Data export | CSV (one file per table, zipped) | none (user's choice, warned) | Manual, SAF destination |
+| Data export | CSV (one file per table, zipped) — **shipped, ADR-0017** | none (user's choice, warned) | Manual, SAF destination |
 | Data export | XLSX (multi-sheet: entries, line items, categories, merchants, budgets, summary pivots) | none | Manual, SAF destination |
 | **Full backup** | `.lfbk` (custom container) | **AES-256-GCM, key = HKDF-SHA256(24-word phrase seed). Never the passphrase (§7.2).** | Manual + `PeriodicWorkRequest` nightly to a user-granted SAF tree URI |
 
@@ -405,6 +405,18 @@ Three properties this format must have, each of which the earlier draft lacked:
 Backup is **key-independent of the Android Keystore** — this is what makes cross-device and post-factory-reset restore possible (§7.4).
 
 **XLSX library note:** Apache POI is unusable on Android (dex bloat + xmlbeans). Use `org.dhatim:fastexcel` (writer-only, lightweight) or hand-roll SpreadsheetML into a zip. Decide in ADR-004.
+
+#### CSV export, as shipped (ADR-0017)
+
+- **One CSV per table, zipped, streamed straight into a SAF document.** No temp file, which is the deliberate opposite of the `.lfbk` writer's temp → fsync → verify → rename. That ceremony exists because a truncated backup sitting where a good one used to be turns a backup system into a data-loss mechanism (BUG4); an export has no such hazard — it is a copy leaving the app, the database is untouched either way, and a half-written one costs a retry. Staging it would mean writing the user's complete unencrypted financial history into `filesDir` as a side effect of exporting it.
+- **The file list comes from `BackupPayload`, not from the DAOs.** `DatabaseBackupManager.export()` is `public` for exactly this: it is the codebase's single answer to "which tables are there". A second enumeration in the export path would mean a table added at schema v6 reaches the backup and silently misses every CSV a user takes, with nothing failing anywhere. `ExportCoversEveryTableTest` counts the payload's `List` fields by reflection and fails if the export does not produce a file for each.
+- **Money is written twice: the `_minor` integer verbatim, and a decimal string beside it.** One re-imports without a rounding story, the other is what a human reads. **The decimal is assembled by integer division and zero-padding — no `Float`/`Double` touches a money value** (Law 3), and `CsvMoneyTest` asserts it against values a `Double` renders wrong (807 → `8.069999999999999`) rather than against round numbers that would pass either way. `fx_rate_micro` and `quantity_milli` share the routine at six and three decimal places; the scale comes from the column, not from a constant.
+- **Timestamps are written twice too** — epoch millis and an ISO-8601 **UTC** string. UTC rather than device-local because the integer beside it is already authoritative, so the string exists to be read, and a local time with no offset is how an export becomes ambiguous a year later in another timezone.
+- **`ledger_entry` exports as two files**, `ledger_entry_debit.csv` and `ledger_entry_credit.csv`. Not because Law 2 requires it — a CSV derives no figures, so it could not violate it — but because §5.5 promises the user "separate lists", and an export is the most literal list the app hands over. The rows already arrive per book, so the split is free.
+- **Soft-deleted rows are included**, each file carrying `deleted_at`. The bin's erase dialog instructs the user to export first if they might want something back; that instruction is only true if the export contains what they are about to erase. It also keeps the CSV and the `.lfbk` describing the same database rather than two lists that rot apart.
+- **RFC 4180**: CRLF, quotes only where required, embedded quotes doubled, UTF-8 with no BOM. **Surrounding whitespace forces quoting** even though the RFC does not require it — unquoted, every spreadsheet trims it on import, so a merchant stored as `" Zepto"` would come back a different string. **Null and empty stay distinguishable**: null writes as nothing, empty writes as `""`, because the schema means different things by them (a cleared note is not an absent one).
+- **Three steps: tap, confirm, pick.** The confirmation is not ceremony duplicating the system picker. What the user needs to know is not *where* the file goes but *what it is* — a complete, unencrypted copy of their financial history — and the picker cannot say that. It uses `LfDialogEmphasis.Warning`, the treatment otherwise reserved for the Recovery Kit and the bin's erase, and the page states the same fact standing, for whoever returns to the screen a month later. Cancelling the picker is **silent**: reporting "export failed" for a deliberate cancellation is how a screen teaches people to ignore its messages.
+- **The result names counts, not just success.** "80 rows across 11 files" is a receipt; "Done" gives the user no way to tell a real export from one that wrote empty files. A storage failure never shows the exception text — a revoked SAF grant and a full disk are the same sentence to the person holding the phone.
 
 ---
 
@@ -981,7 +993,7 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | 0001 | Flutter vs Native Compose | ✅ **Accepted** — Native Kotlin + Compose (§2) |
 | 0002 | Separate tables vs partitioned single table for DEBIT/CREDIT ledgers | ✅ **Accepted** — one `ledger_entry` partitioned by a mandatory `ledger` column, read through per-ledger `@DatabaseView`s (§6.1) |
 | 0003 | Key hierarchy & recovery model | ✅ **Accepted** — multi-wrap, phrase-primary (§7.2) |
-| 0004 | XLSX generation library on Android | Open — needed by P5 |
+| 0004 | XLSX generation library on Android | Open — needed by P5. Unblocked by nothing: the CSV export (ADR-0017) shares no writer with it |
 | 0005 | Charting library | Open — needed by P3 |
 | 0006 | Rollup strategy: incremental triggers vs worker-driven rebuild | Open — needed by P3 |
 | 0007 | Ingest source strategy & Play distribution | ✅ **Accepted** — dual co-equal sources, flavour split at P1 (§3.1) |
@@ -994,6 +1006,7 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | 0014 | Does Paging 3 reach `:core:domain`, or stop below it? | ✅ **Accepted** — `PagingData` on `LedgerRepository`; `:core:domain` takes `paging-common` (JVM-only) and **that artifact alone** (§5.5, CLAUDE.md §3) |
 | 0015 | Must the bin obey §5.5's "separate lists"? | ✅ **Accepted** — **no**: one mixed chronological list, two queries underneath, no figure derived across rows. Amends §5.5 for that screen only (§5.5, CLAUDE.md §2 Law 2) |
 | 0016 | Does hidden taxonomy get a restore, and may it be hard-deleted? | ✅ **Accepted** — yes to both. Hidden lists and restore for all three types; a purge behind a reassign-or-block rule **in code**, because `merchant_id` is `ON DELETE SET NULL` and `category_id` has no key at all. No schema change (§5.5, CLAUDE.md §7) |
+| 0017 | What shape is the CSV export? | ✅ **Accepted** — faithful per-table dump; money and timestamps written twice (integer + rendered); `ledger_entry` split per book; soft-deleted rows included; file list driven by `BackupPayload` (§5.9, CLAUDE.md §2 Laws 2 and 3) |
 
 **ADR-0003 is not reopened.** The kickoff listed it as a blocking decision, but §14 has it Accepted and §7.2 specifies it. The *design* — multi-wrapped DEK, phrase-primary — is settled and stays settled. What was genuinely open is the **library and implementation** choice underneath it, which is a different decision with different trade-offs (binary size, native dependencies, maintenance status) and therefore gets its own record: **ADR-0010**. Amending an accepted ADR to smuggle in a new decision is how decision logs stop being trustworthy.
 

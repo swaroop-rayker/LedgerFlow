@@ -21,6 +21,7 @@ import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.feature.analytics.AnalyticsScreen
+import com.ledgerflow.feature.export.ExportRoute
 import com.ledgerflow.feature.categories.CategoriesScreen
 import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.dashboard.DashboardScreen
@@ -179,7 +180,7 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
             onBack = { navController.popBackStack() },
         )
     }
-    composable<Destination.Export> { ExportPlaceholder(navController::popBackStack) }
+    composable<Destination.Export> { ExportRoute(onBack = navController::popBackStack) }
 }
 
 /**
