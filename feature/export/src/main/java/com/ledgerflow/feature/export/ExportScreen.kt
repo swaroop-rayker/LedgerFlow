@@ -96,13 +96,11 @@ private fun WhatYouGetCard(suggestedFileName: String) {
                 color = LfTheme.colors.textPrimary,
             )
             Text(
-                // Named concretely rather than as "your data". A user deciding
-                // whether this is the thing they want deserves to know it is a
-                // zip of spreadsheets and not, say, a backup they could restore.
-                text = "A zip of CSV files — one per table, expenses and income " +
-                    "in separate files — that opens in any spreadsheet. " +
-                    "Anything you have hidden or moved to the bin is included, " +
-                    "with the date it was removed.",
+                // "Spreadsheets" rather than "your data" or "CSV": it says what
+                // opens on the other end, which is the one thing someone
+                // deciding whether they want this needs to know.
+                text = "A zip of spreadsheets. Expenses and income in separate " +
+                    "files. Hidden and binned items are included.",
                 style = LfTheme.typography.bodyM,
                 color = LfTheme.colors.textSecondary,
             )
@@ -119,9 +117,8 @@ private fun WhatYouGetCard(suggestedFileName: String) {
  * The standing warning, on the page rather than only in the dialog.
  *
  * A dialog is read once and dismissed; this is the sentence somebody sees when
- * they come back to the screen a month later wondering what an export is. It
- * also draws the distinction that actually matters — this is not the backup,
- * and the backup is the thing that is safe to put in a cloud folder.
+ * they come back to the screen a month later wondering what an export is. Kept
+ * to two lines: a warning people scroll past protects nobody.
  */
 @Composable
 private fun UnencryptedCard() {
@@ -133,10 +130,8 @@ private fun UnencryptedCard() {
                 color = LfTheme.colors.warn,
             )
             Text(
-                text = "Anyone who opens it can read every entry, note and " +
-                    "amount. Keep it somewhere you trust, and delete it when " +
-                    "you are done. Your encrypted backup is the one that is " +
-                    "safe to keep in cloud storage.",
+                text = "Anyone who opens it can read everything. Keep it " +
+                    "somewhere private and delete it when you're done.",
                 style = LfTheme.typography.bodyM,
                 color = LfTheme.colors.textSecondary,
             )
