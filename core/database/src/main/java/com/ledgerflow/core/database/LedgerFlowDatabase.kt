@@ -8,6 +8,7 @@ import com.ledgerflow.core.database.dao.CategoryDao
 import com.ledgerflow.core.database.dao.CategoryGroupDao
 import com.ledgerflow.core.database.dao.DraftEntryDao
 import com.ledgerflow.core.database.dao.LedgerEntryDao
+import com.ledgerflow.core.database.dao.LedgerTaxonomyDao
 import com.ledgerflow.core.database.dao.MerchantAliasDao
 import com.ledgerflow.core.database.dao.MerchantDao
 import com.ledgerflow.core.database.dao.PaymentMethodDao
@@ -65,6 +66,7 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun merchantDao(): MerchantDao
     public abstract fun paymentMethodDao(): PaymentMethodDao
     public abstract fun ledgerEntryDao(): LedgerEntryDao
+    public abstract fun ledgerTaxonomyDao(): LedgerTaxonomyDao
     public abstract fun draftEntryDao(): DraftEntryDao
     public abstract fun merchantAliasDao(): MerchantAliasDao
     public abstract fun categoryGroupDao(): CategoryGroupDao

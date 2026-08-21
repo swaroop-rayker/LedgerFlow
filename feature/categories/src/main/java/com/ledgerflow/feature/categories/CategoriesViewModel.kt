@@ -9,6 +9,9 @@ import com.ledgerflow.core.domain.taxonomy.NewPaymentMethod
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
 import com.ledgerflow.core.domain.taxonomy.TaxonomyError
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
+import com.ledgerflow.core.domain.usecase.PurgeHiddenCategoryUseCase
+import com.ledgerflow.core.domain.usecase.PurgeHiddenMerchantUseCase
+import com.ledgerflow.core.domain.usecase.PurgeHiddenPaymentMethodUseCase
 import com.ledgerflow.core.model.LedgerType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -17,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -36,6 +40,9 @@ public class CategoriesViewModel @Inject constructor(
     private val categories: CategoryRepository,
     private val merchants: MerchantRepository,
     private val paymentMethods: PaymentMethodRepository,
+    private val purgeCategory: PurgeHiddenCategoryUseCase,
+    private val purgeMerchant: PurgeHiddenMerchantUseCase,
+    private val purgePaymentMethod: PurgeHiddenPaymentMethodUseCase,
 ) : ViewModel() {
 
     /** Everything the user is doing; everything else is derived from the database. */
@@ -46,18 +53,45 @@ public class CategoriesViewModel @Inject constructor(
         .map { it.ledger }
         .flatMapLatest { ledger -> categories.observeTree(ledger) }
 
+    /**
+     * The hidden rows for whichever section is showing (ADR-0016).
+     *
+     * Switched by `flatMapLatest` rather than collected as three parallel
+     * flows, because only one is ever rendered: the other two would be live
+     * database reads feeding a list with no way to reach the screen.
+     *
+     * `distinctUntilChanged` matters more than it looks. Without it every
+     * keystroke in a dialog re-emits `local`, which would tear down and rebuild
+     * the underlying query — and on the Merchants tab the ledger half of the
+     * key is not even part of the question.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val hidden = local
+        .map { it.section to it.ledger }
+        .distinctUntilChanged()
+        .flatMapLatest { (section, ledger) ->
+            when (section) {
+                TaxonomySection.Categories -> categories.observeHidden(ledger)
+                TaxonomySection.Merchants -> merchants.observeHidden()
+                TaxonomySection.PaymentMethods -> paymentMethods.observeHidden()
+            }
+        }
+
     public val state: StateFlow<CategoriesUiState> = combine(
         local,
         tree,
         merchants.observeAll(),
         paymentMethods.observeAll(),
-    ) { local, tree, merchants, methods ->
+        hidden,
+    ) { local, tree, merchants, methods, hidden ->
         CategoriesUiState(
             section = local.section,
             ledger = local.ledger,
             tree = tree,
             merchants = merchants,
             paymentMethods = methods,
+            hidden = hidden,
+            hiddenExpanded = local.hiddenExpanded,
             dialog = local.dialog,
             isWorking = local.isWorking,
             message = local.message,
@@ -74,9 +108,21 @@ public class CategoriesViewModel @Inject constructor(
      */
     public fun onEvent(event: CategoriesEvent) {
         when (event) {
-            is CategoriesEvent.SectionSelected -> local.update { it.copy(section = event.section) }
-            is CategoriesEvent.LedgerSelected -> local.update { it.copy(ledger = event.ledger) }
+            // Switching tabs re-collapses. `hiddenExpanded` is one flag over
+            // three sections, so carrying it across would open the Merchants
+            // hidden list because the user had opened the Categories one.
+            is CategoriesEvent.SectionSelected ->
+                local.update { it.copy(section = event.section, hiddenExpanded = false) }
+            is CategoriesEvent.LedgerSelected ->
+                local.update { it.copy(ledger = event.ledger, hiddenExpanded = false) }
             CategoriesEvent.MessageDismissed -> local.update { it.copy(message = null) }
+            CategoriesEvent.HiddenToggled ->
+                local.update { it.copy(hiddenExpanded = !it.hiddenExpanded) }
+
+            is CategoriesEvent.RestoreHidden -> restore(event.id)
+            is CategoriesEvent.EraseHidden -> local.update {
+                it.copy(dialog = TaxonomyDialog.ConfirmErase(it.section.eraseTarget, event.id, event.name))
+            }
 
             is CategoriesEvent.AddCategory,
             is CategoriesEvent.RenameCategory,
@@ -211,6 +257,7 @@ public class CategoriesViewModel @Inject constructor(
     private fun updateDialogTarget(id: String) = local.update { current ->
         when (val dialog = current.dialog) {
             is TaxonomyDialog.ReassignCategory -> current.copy(dialog = dialog.copy(targetId = id))
+            is TaxonomyDialog.ReassignBeforeErase -> current.copy(dialog = dialog.copy(targetId = id))
             is TaxonomyDialog.MergeMerchant -> current.copy(dialog = dialog.copy(targetId = id))
             else -> current
         }
@@ -221,6 +268,9 @@ public class CategoriesViewModel @Inject constructor(
             null -> Unit
             is TaxonomyDialog.TextPrompt -> confirmTextPrompt(dialog)
             is TaxonomyDialog.ConfirmDelete -> confirmDelete(dialog)
+            is TaxonomyDialog.ConfirmErase -> erase(dialog.target, dialog.id, dialog.name, null)
+            is TaxonomyDialog.ReassignBeforeErase ->
+                erase(dialog.target, dialog.id, dialog.name, dialog.targetId)
             is TaxonomyDialog.ReassignCategory ->
                 deleteCategory(dialog.id, dialog.name, dialog.targetId)
             is TaxonomyDialog.MergeMerchant -> dialog.targetId?.let { target ->
@@ -261,7 +311,7 @@ public class CategoriesViewModel @Inject constructor(
     private fun startMerge(id: String, name: String) {
         val candidates = state.value.merchants
             .filterNot { it.id == id }
-            .map { MerchantChoice(it.id, it.canonicalName) }
+            .map { TaxonomyChoice(it.id, it.canonicalName) }
         local.update {
             it.copy(dialog = TaxonomyDialog.MergeMerchant(id, name, candidates))
         }
@@ -311,7 +361,7 @@ public class CategoriesViewModel @Inject constructor(
                             id = id,
                             name = name,
                             affected = error.affectedEntries,
-                            candidates = reassignCandidates(id),
+                            candidates = state.value.categoryCandidates(id),
                         ),
                     )
                 }
@@ -322,13 +372,66 @@ public class CategoriesViewModel @Inject constructor(
     }
 
     /**
-     * Where the orphaned entries may go: live categories in the same book,
-     * excluding the one being deleted and its own children.
+     * Puts a hidden row back, in whichever section is showing.
+     *
+     * No dialog either side of it. A refusal still surfaces — restoring a
+     * merchant whose name has been taken since, or a category whose live
+     * sibling now owns the name — and it does so as the message banner, next to
+     * the row it is about.
      */
-    private fun reassignCandidates(excludingId: String): List<CategoryChoice> =
-        state.value.tree.flatMap { branch -> listOf(branch.parent) + branch.children }
-            .filterNot { it.id == excludingId || it.parentId == excludingId }
-            .map { CategoryChoice(it.id, it.name) }
+    private fun restore(id: String) {
+        val section = local.value.section
+        run {
+            when (section) {
+                TaxonomySection.Categories -> categories.restore(id)
+                TaxonomySection.Merchants -> merchants.restore(id)
+                TaxonomySection.PaymentMethods -> paymentMethods.restore(id)
+            }
+        }
+    }
+
+    /**
+     * Destroys a hidden row, turning a `ReassignRequired` refusal into the
+     * question it implies.
+     *
+     * The same shape as [deleteCategory] and for the same reason: the count
+     * comes back from the database that actually saw it, rather than being
+     * queried separately and racing an approval landing in between. It matters
+     * more here — a stale count on a soft delete moves entries that can be
+     * moved back, and a stale count on this one is how a reference gets
+     * destroyed.
+     *
+     * Every route in reaches a use case, never a repository. Those three are
+     * the audited doors `TaxonomySingleWriterTest` guards.
+     */
+    private fun erase(target: DeleteTarget, id: String, name: String, reassignTo: String?) {
+        viewModelScope.launch {
+            local.update { it.copy(isWorking = true) }
+            val outcome = when (target) {
+                DeleteTarget.Category, DeleteTarget.Subcategory -> purgeCategory(id, reassignTo)
+                DeleteTarget.Merchant -> purgeMerchant(id, reassignTo)
+                DeleteTarget.PaymentMethod -> purgePaymentMethod(id)
+            }
+            local.update { it.copy(isWorking = false) }
+
+            val error = (outcome as? TaxonomyResult.Failure)?.error
+            if (error is TaxonomyError.ReassignRequired) {
+                local.update {
+                    it.copy(
+                        dialog = TaxonomyDialog.ReassignBeforeErase(
+                            target = target,
+                            id = id,
+                            name = name,
+                            affected = error.affectedEntries,
+                            candidates = state.value.eraseCandidates(target, id),
+                        ),
+                    )
+                }
+            } else {
+                finish(outcome)
+            }
+        }
+    }
 
     /** Runs a repository call, closing the dialog only if it succeeded. */
     private fun run(block: suspend () -> TaxonomyResult<*>) {
@@ -357,6 +460,7 @@ public class CategoriesViewModel @Inject constructor(
     private data class LocalState(
         val section: TaxonomySection = TaxonomySection.Categories,
         val ledger: LedgerType = LedgerType.DEBIT,
+        val hiddenExpanded: Boolean = false,
         val dialog: TaxonomyDialog? = null,
         val isWorking: Boolean = false,
         val message: String? = null,
@@ -368,14 +472,67 @@ public class CategoriesViewModel @Inject constructor(
     }
 }
 
+/**
+ * Where orphaned entries may go: live categories in the same book, excluding the
+ * one being deleted and its own children.
+ *
+ * A function of the state rather than a method on the ViewModel -- it reads a
+ * list and returns a list, with no coroutine, no repository and nothing to
+ * update. It sat inside the class only because that is where it was first
+ * needed.
+ */
+private fun CategoriesUiState.categoryCandidates(excludingId: String): List<TaxonomyChoice> =
+    tree.flatMap { branch -> listOf(branch.parent) + branch.children }
+        .filterNot { it.id == excludingId || it.parentId == excludingId }
+        .map { TaxonomyChoice(it.id, it.name) }
+
+/**
+ * Where a doomed row's entries may go: live rows of the same kind, minus the one
+ * being destroyed.
+ *
+ * A category's children are excluded too. They are hidden alongside it and about
+ * to be destroyed with it, so offering one as a destination would hand the
+ * entries to a row that stops existing in the same transaction.
+ */
+private fun CategoriesUiState.eraseCandidates(
+    target: DeleteTarget,
+    excludingId: String,
+): List<TaxonomyChoice> = when (target) {
+    DeleteTarget.Category, DeleteTarget.Subcategory -> categoryCandidates(excludingId)
+    DeleteTarget.Merchant -> merchants
+        .filterNot { it.id == excludingId }
+        .map { TaxonomyChoice(it.id, it.canonicalName) }
+    // Never reached: a payment method purge takes no target, because hiding one
+    // already scrubbed it off every entry.
+    DeleteTarget.PaymentMethod -> emptyList()
+}
+
+/**
+ * Which [DeleteTarget] a section's hidden rows are.
+ *
+ * `Category` covers a hidden subcategory too: the two differ only in the
+ * confirmation's wording for a *soft* delete, and an erase says the same
+ * sentence either way — the row is destroyed and its entries need somewhere to
+ * go, whichever level it sat at.
+ */
+private val TaxonomySection.eraseTarget: DeleteTarget
+    get() = when (this) {
+        TaxonomySection.Categories -> DeleteTarget.Category
+        TaxonomySection.Merchants -> DeleteTarget.Merchant
+        TaxonomySection.PaymentMethods -> DeleteTarget.PaymentMethod
+    }
+
 /** Every refusal, as a sentence the user can act on. */
 internal fun TaxonomyError.toMessage(): String = when (this) {
     is TaxonomyError.DuplicateName -> "\"$name\" already exists here."
+    is TaxonomyError.NameHeldByHiddenRow ->
+        "\"$name\" is hidden, and still holds that name. Restore or erase it first."
     TaxonomyError.BlankName -> "Give it a name first."
     TaxonomyError.NotFound -> "That's already gone."
     TaxonomyError.InvalidParent ->
         "Categories go two levels deep, and a subcategory has to sit under a " +
             "category in the same ledger."
+    TaxonomyError.InvalidTarget -> "That's not somewhere those entries can go. Pick another."
     is TaxonomyError.ReassignRequired ->
         "$affectedEntries entries still use this. Choose where they should go."
     TaxonomyError.SameSourceAndTarget -> "Pick a different one to merge into."

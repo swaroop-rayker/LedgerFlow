@@ -3,8 +3,12 @@ package com.ledgerflow.feature.categories
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.taxonomy.TaxonomyError
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
+import com.ledgerflow.core.domain.usecase.PurgeHiddenCategoryUseCase
+import com.ledgerflow.core.domain.usecase.PurgeHiddenMerchantUseCase
+import com.ledgerflow.core.domain.usecase.PurgeHiddenPaymentMethodUseCase
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
+import com.ledgerflow.core.model.HiddenTaxonomy
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
 import com.ledgerflow.core.model.PaymentMethodType
@@ -60,7 +64,18 @@ class CategoriesViewModelTest {
      * collects. Every test starts a collector and settles the scheduler.
      */
     private fun viewModel(): Pair<CategoriesViewModel, CoroutineScope> {
-        val vm = CategoriesViewModel(categories, merchants, paymentMethods)
+        val vm = CategoriesViewModel(
+            categories = categories,
+            merchants = merchants,
+            paymentMethods = paymentMethods,
+            // Real use cases over fake repositories. They are thin by design and
+            // wrapping them in fakes would test the wrapper; what matters is
+            // that the screen goes *through* them, which is what
+            // `TaxonomySingleWriterTest` enforces and what the fakes record.
+            purgeCategory = PurgeHiddenCategoryUseCase(categories),
+            purgeMerchant = PurgeHiddenMerchantUseCase(merchants),
+            purgePaymentMethod = PurgeHiddenPaymentMethodUseCase(paymentMethods),
+        )
         val scope = CoroutineScope(dispatcher)
         scope.launch { vm.state.collect {} }
         dispatcher.scheduler.advanceUntilIdle()
@@ -472,6 +487,174 @@ class CategoriesViewModelTest {
         assertThat(categories.created).isEmpty()
         scope.cancel()
     }
+
+    // -- The hidden section (ADR-0016) ---------------------------------------
+
+    @Test
+    fun hiddenRows_areReadFromTheSectionOnShow() = runTest(dispatcher) {
+        categories.hidden[LedgerType.DEBIT] = listOf(hidden("c1", "Food"))
+        merchants.hidden.value = listOf(hidden("m1", "Amazon"))
+        val (vm, scope) = viewModel()
+
+        assertThat(vm.state.value.hidden.map { it.name }).containsExactly("Food")
+
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.settle()
+
+        assertThat(vm.state.value.hidden.map { it.name }).containsExactly("Amazon")
+        scope.cancel()
+    }
+
+    /**
+     * The Categories tab's hidden rows follow the ledger control.
+     *
+     * The two trees are disjoint (Law 2), and so are the two sets of hidden
+     * rows. Switching books must re-read, not filter.
+     */
+    @Test
+    fun hiddenCategories_followTheLedgerPartition() = runTest(dispatcher) {
+        categories.hidden[LedgerType.DEBIT] = listOf(hidden("c1", "Food"))
+        categories.hidden[LedgerType.CREDIT] = listOf(hidden("c2", "Bonus"))
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.LedgerSelected(LedgerType.CREDIT))
+        vm.settle()
+
+        assertThat(vm.state.value.hidden.map { it.name }).containsExactly("Bonus")
+        scope.cancel()
+    }
+
+    /**
+     * Switching section re-collapses.
+     *
+     * One flag over three sections: carrying it across would open the Merchants
+     * hidden list because the user had opened the Categories one.
+     */
+    @Test
+    fun switchingSection_collapsesTheHiddenList() = runTest(dispatcher) {
+        merchants.hidden.value = listOf(hidden("m1", "Amazon"))
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.HiddenToggled)
+        vm.settle()
+        assertThat(vm.state.value.hiddenExpanded).isTrue()
+
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.settle()
+
+        assertThat(vm.state.value.hiddenExpanded).isFalse()
+        scope.cancel()
+    }
+
+    /** Restore asks nothing. The bin settled that, and this keeps it settled. */
+    @Test
+    fun restore_writesImmediatelyWithNoDialog() = runTest(dispatcher) {
+        merchants.hidden.value = listOf(hidden("m1", "Amazon"))
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.settle()
+
+        vm.onEvent(CategoriesEvent.RestoreHidden("m1", "Amazon"))
+        vm.settle()
+
+        assertThat(merchants.restored).containsExactly("m1")
+        assertThat(vm.state.value.dialog).isNull()
+        scope.cancel()
+    }
+
+    @Test
+    fun restore_surfacesARefusalAsAMessage() = runTest(dispatcher) {
+        merchants.hidden.value = listOf(hidden("m1", "Amazon"))
+        merchants.restoreResult = TaxonomyResult.Failure(TaxonomyError.DuplicateName("Amazon"))
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.settle()
+
+        vm.onEvent(CategoriesEvent.RestoreHidden("m1", "Amazon"))
+        vm.settle()
+
+        assertThat(vm.state.value.message).contains("already exists")
+        scope.cancel()
+    }
+
+    /** Erase always asks, and writes nothing until it is answered. */
+    @Test
+    fun erase_asksBeforeDestroyingAnything() = runTest(dispatcher) {
+        merchants.hidden.value = listOf(hidden("m1", "Amazon"))
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.settle()
+
+        vm.onEvent(CategoriesEvent.EraseHidden("m1", "Amazon"))
+        vm.settle()
+
+        val dialog = vm.state.value.dialog
+        assertThat(dialog).isInstanceOf(TaxonomyDialog.ConfirmErase::class.java)
+        assertThat((dialog as TaxonomyDialog.ConfirmErase).target).isEqualTo(DeleteTarget.Merchant)
+        assertThat(merchants.purged).isEmpty()
+
+        vm.onEvent(CategoriesEvent.DialogConfirmed)
+        vm.settle()
+
+        assertThat(merchants.purged).containsExactly("m1" to null)
+        scope.cancel()
+    }
+
+    /**
+     * A `ReassignRequired` refusal becomes the question it implies, and the
+     * answer carries the target through.
+     *
+     * The count comes from the repository rather than being recomputed here --
+     * a number the UI counted separately could disagree with the one the
+     * database saw, and on this path the disagreement is how a reference gets
+     * destroyed.
+     */
+    @Test
+    fun erase_turnsAReassignRefusalIntoAQuestion() = runTest(dispatcher) {
+        merchants.merchants.value = listOf(Merchant("m2", "DMart", "dmart", null, null))
+        merchants.hidden.value = listOf(hidden("m1", "Amazon"))
+        merchants.purgeResult = TaxonomyResult.Failure(TaxonomyError.ReassignRequired(3))
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.settle()
+
+        vm.onEvent(CategoriesEvent.EraseHidden("m1", "Amazon"))
+        vm.onEvent(CategoriesEvent.DialogConfirmed)
+        vm.settle()
+
+        val dialog = vm.state.value.dialog
+        assertThat(dialog).isInstanceOf(TaxonomyDialog.ReassignBeforeErase::class.java)
+        val reassign = dialog as TaxonomyDialog.ReassignBeforeErase
+        assertThat(reassign.affected).isEqualTo(3)
+        assertThat(reassign.candidates.map { it.name }).containsExactly("DMart")
+
+        merchants.purgeResult = TaxonomyResult.Success(Unit)
+        vm.onEvent(CategoriesEvent.DialogTargetSelected("m2"))
+        vm.onEvent(CategoriesEvent.DialogConfirmed)
+        vm.settle()
+
+        assertThat(merchants.purged.last()).isEqualTo("m1" to "m2")
+        assertThat(vm.state.value.dialog).isNull()
+        scope.cancel()
+    }
+
+    /** A payment-method erase takes no target -- hiding already scrubbed it. */
+    @Test
+    fun erase_ofAPaymentMethod_passesNoReassignTarget() = runTest(dispatcher) {
+        paymentMethods.hidden.value = listOf(hidden("p1", "HDFC"))
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.PaymentMethods))
+        vm.settle()
+
+        vm.onEvent(CategoriesEvent.EraseHidden("p1", "HDFC"))
+        vm.onEvent(CategoriesEvent.DialogConfirmed)
+        vm.settle()
+
+        assertThat(paymentMethods.purged).containsExactly("p1")
+        scope.cancel()
+    }
+
+    private fun hidden(id: String, name: String) = HiddenTaxonomy(id, name, hiddenAt = 1_000L)
 }
 
 private fun CoroutineScope.cancel() = coroutineContext[kotlinx.coroutines.Job]?.cancel()

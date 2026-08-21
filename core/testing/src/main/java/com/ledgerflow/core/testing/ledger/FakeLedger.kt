@@ -11,8 +11,9 @@ import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
-import com.ledgerflow.core.model.EntryOrigin
+import com.ledgerflow.core.domain.vault.StorageMaintenance
 import com.ledgerflow.core.model.DeletedEntry
+import com.ledgerflow.core.model.EntryOrigin
 import com.ledgerflow.core.model.LedgerEntry
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
@@ -20,6 +21,26 @@ import com.ledgerflow.core.model.Money
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+
+/**
+ * A recording [StorageMaintenance].
+ *
+ * The counter used to live on [FakeLedgerRepository], because compaction used
+ * to be a `LedgerRepository` method. ADR-0016 moved the port when a taxonomy
+ * purge became its second caller, and the fake follows -- which is the point of
+ * counting at all: "compacted exactly once, at the end" is a property of every
+ * purge in the app, not of the ledger's.
+ */
+public class FakeStorageMaintenance : StorageMaintenance {
+
+    /** How many times a caller asked for a VACUUM. */
+    public var compactions: Int = 0
+        private set
+
+    override suspend fun compactStorage() {
+        compactions += 1
+    }
+}
 
 /**
  * A recording [LedgerRepository].
@@ -111,9 +132,6 @@ public class FakeLedgerRepository : LedgerRepository {
     /** Books purged, in order, so a test can prove both were swept. */
     public val purged: MutableList<LedgerType> = mutableListOf()
 
-    public var compactions: Int = 0
-        private set
-
     /** The bin, per book. Seeded by a test; mutated by restore and purge. */
     public val binned: MutableMap<LedgerType, List<DeletedEntry>> = mutableMapOf()
 
@@ -162,10 +180,6 @@ public class FakeLedgerRepository : LedgerRepository {
         val count = deletedCounts.remove(ledger) ?: 0
         revision.value += 1
         return count
-    }
-
-    override suspend fun compactStorage() {
-        compactions += 1
     }
 
     public fun emitDeletedCount(ledger: LedgerType, value: Int) {

@@ -4,6 +4,7 @@ import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
+import com.ledgerflow.core.domain.vault.StorageMaintenance
 import com.ledgerflow.core.model.LedgerEntry
 import com.ledgerflow.core.model.LedgerType
 import javax.inject.Inject
@@ -77,17 +78,20 @@ public class DeleteEntryUseCase @Inject constructor(
  * The compaction runs **after** the deletes and only if something was actually
  * removed. Skipping it on an empty purge is not just an optimisation: rewriting
  * the whole database to reclaim nothing would be the most expensive no-op in
- * the app.
+ * the app. It arrives through [StorageMaintenance] rather than through
+ * [LedgerRepository], because a taxonomy purge now has the same obligation and
+ * neither should reach through the other's port to discharge it (ADR-0016).
  *
  * @return how many entries were destroyed.
  */
 public class PurgeDeletedEntriesUseCase @Inject constructor(
     private val ledger: LedgerRepository,
+    private val storage: StorageMaintenance,
 ) {
     /** Empties the bin: every binned entry in both books. */
     public suspend operator fun invoke(): Int {
         val purged = LedgerType.entries.sumOf { book -> ledger.purgeDeletedEntries(book) }
-        if (purged > 0) ledger.compactStorage()
+        if (purged > 0) storage.compactStorage()
         return purged
     }
 
@@ -103,7 +107,7 @@ public class PurgeDeletedEntriesUseCase @Inject constructor(
      */
     public suspend operator fun invoke(entries: List<BinnedRef>): Int {
         val purged = entries.sumOf { ledger.purgeDeletedEntry(it.ledger, it.id) }
-        if (purged > 0) ledger.compactStorage()
+        if (purged > 0) storage.compactStorage()
         return purged
     }
 }

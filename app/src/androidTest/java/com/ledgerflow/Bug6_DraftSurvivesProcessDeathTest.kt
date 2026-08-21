@@ -1,5 +1,6 @@
 package com.ledgerflow
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -16,6 +17,7 @@ import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
 import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
+import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.domain.ledger.EntryDraft
@@ -282,7 +284,8 @@ class Bug6_DraftSurvivesProcessDeathTest {
         private val ids = Uuid7Generator(SecureRandom())
         private val clock = Clock.System
 
-        val categories = DefaultCategoryRepository(vault, ids, clock, Dispatchers.IO)
+        val storage = DefaultStorageMaintenance(vault, Dispatchers.IO)
+        val categories = DefaultCategoryRepository(vault, ids, clock, storage, Dispatchers.IO)
         private val drafts = DefaultDraftRepository(vault, ids, clock, Dispatchers.IO)
 
         suspend fun currentDraft(): EntryDraft? =
@@ -314,10 +317,21 @@ class Bug6_DraftSurvivesProcessDeathTest {
             drafts = DefaultDraftRepository(vault, ids, clock, Dispatchers.IO),
             ledgerRepository = DefaultLedgerRepository(vault, ids, clock, Dispatchers.IO),
             categories = categories,
-            merchants = DefaultMerchantRepository(vault, ids, clock, Dispatchers.IO),
-            paymentMethods = DefaultPaymentMethodRepository(vault, ids, clock, Dispatchers.IO),
+            merchants = DefaultMerchantRepository(vault, ids, clock, storage, Dispatchers.IO),
+            paymentMethods = DefaultPaymentMethodRepository(vault, ids, clock, storage, Dispatchers.IO),
             clock = clock,
             ids = ids,
+            // `EntryViewModel` grew a `SavedStateHandle` (the Ledger's
+            // tap-to-resume hands it a draft id) and this call site was not
+            // updated, so `:app`'s androidTest source set has not compiled
+            // since. Nothing reported it because a compile failure in an
+            // instrumented source set only surfaces when the instrumented job
+            // runs, and CI runs that on a self-hosted runner with a phone
+            // attached.
+            //
+            // Empty rather than seeded: this test opens the form with no
+            // argument, which is the "start a new entry" path it is about.
+            savedStateHandle = SavedStateHandle(),
         )
 
         suspend fun newCategory(name: String, parentId: String? = null): Category {

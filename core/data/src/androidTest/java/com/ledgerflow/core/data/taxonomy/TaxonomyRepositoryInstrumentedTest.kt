@@ -10,6 +10,7 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
+import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
@@ -54,6 +55,16 @@ class TaxonomyRepositoryInstrumentedTest {
     private lateinit var merchants: DefaultMerchantRepository
     private lateinit var paymentMethods: DefaultPaymentMethodRepository
 
+    /**
+     * The real one, not a fake.
+     *
+     * A purge that compacts is a purge that runs `VACUUM` over the whole
+     * encrypted database, and the thing worth proving is that the vault is
+     * still readable afterwards (`CLAUDE.md` §7). A no-op fake would assert
+     * nothing about the only step here that can make the file unopenable.
+     */
+    private lateinit var storage: DefaultStorageMaintenance
+
     private var now = 1_000L
     private val clock = Clock { now }
 
@@ -69,9 +80,10 @@ class TaxonomyRepositoryInstrumentedTest {
         session.initialize(VaultInitRequest(Bip39.generate(SecureRandom()), "INR"))
 
         val ids = Uuid7Generator(SecureRandom())
-        categories = DefaultCategoryRepository(session, ids, clock, Dispatchers.IO)
-        merchants = DefaultMerchantRepository(session, ids, clock, Dispatchers.IO)
-        paymentMethods = DefaultPaymentMethodRepository(session, ids, clock, Dispatchers.IO)
+        storage = DefaultStorageMaintenance(session, Dispatchers.IO)
+        categories = DefaultCategoryRepository(session, ids, clock, storage, Dispatchers.IO)
+        merchants = DefaultMerchantRepository(session, ids, clock, storage, Dispatchers.IO)
+        paymentMethods = DefaultPaymentMethodRepository(session, ids, clock, storage, Dispatchers.IO)
     }
 
     /**
@@ -322,23 +334,51 @@ class TaxonomyRepositoryInstrumentedTest {
 
         categories.delete(from.id, to.id).success()
 
-        val entries = session.requireDatabase().ledgerEntryDao()
+        val entries = session.requireDatabase().ledgerTaxonomyDao()
         assertThat(entries.countForCategory(LedgerType.DEBIT, from.id)).isEqualTo(0)
         assertThat(entries.countForCategory(LedgerType.DEBIT, to.id)).isEqualTo(2)
         assertThat(categories.find(from.id)).isNull()
     }
 
+    /**
+     * **This test used to assert BUG12** (ADR-0016).
+     *
+     * It was written as `deletingAParentMovesItsChildrenRatherThanOrphaningThem`
+     * and it passed, because that is what the code did: `reparentChildren` moved
+     * the subcategories under the re-assign target, adopting them into a tree
+     * they had never belonged to -- and with no target, under no parent at all,
+     * which is the orphaning the name promised to prevent.
+     *
+     * Both halves are wrong for the same reason: a subcategory is part of the
+     * category it was created under, not a loose thing that needs rehoming.
+     * **Entries move; subcategories go with their parent.** Once hiding became
+     * reversible, that stopped being a matter of taste -- a branch that leaves
+     * in pieces comes back in pieces, and the tree the user restores is not the
+     * one they deleted.
+     *
+     * Kept here, renamed, rather than deleted: the old assertion is the clearest
+     * statement of what changed, and `Bug12_HiddenCategoryKeepsItsChildrenTest`
+     * covers the restore side.
+     */
     @Test
-    fun deletingAParentMovesItsChildrenRatherThanOrphaningThem() = runBlocking<Unit> {
+    fun deletingAParentTakesItsChildrenWithItAndLeavesTheTargetsTreeAlone() = runBlocking<Unit> {
         val from = categories.create(NewCategory(LedgerType.DEBIT, "Eating out")).success()
         val to = categories.create(NewCategory(LedgerType.DEBIT, "Food")).success()
-        categories.create(NewCategory(LedgerType.DEBIT, "Cafes", parentId = from.id)).success()
+        val cafes = categories
+            .create(NewCategory(LedgerType.DEBIT, "Cafes", parentId = from.id))
+            .success()
 
         categories.delete(from.id, to.id).success()
 
         val tree = categories.observeTree(LedgerType.DEBIT).first()
-        assertThat(tree.single { it.parent.id == to.id }.children.map { it.name })
-            .containsExactly("Cafes")
+        // "Cafes" is not adopted by the re-assign target ...
+        assertThat(tree.single { it.parent.id == to.id }.children).isEmpty()
+        // ... nor promoted to the top level ...
+        assertThat(tree.map { it.parent.name }).containsExactly("Food")
+        // ... it is hidden with its parent, and the row survives.
+        assertThat(categories.find(cafes.id)).isNull()
+        assertThat(session.requireDatabase().categoryDao().byId(cafes.id)?.deletedAt)
+            .isNotEqualTo(0L)
     }
 
     @Test
@@ -398,7 +438,7 @@ class TaxonomyRepositoryInstrumentedTest {
 
         merchants.merge(source.id, target.id).success()
 
-        val entries = session.requireDatabase().ledgerEntryDao()
+        val entries = session.requireDatabase().ledgerTaxonomyDao()
         assertThat(entries.countForMerchant(LedgerType.DEBIT, target.id)).isEqualTo(1)
         assertThat(entries.countForMerchant(LedgerType.CREDIT, target.id)).isEqualTo(1)
         assertThat(entries.countForMerchant(LedgerType.DEBIT, source.id)).isEqualTo(0)

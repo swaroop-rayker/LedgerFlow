@@ -153,24 +153,6 @@ public class DefaultLedgerRepository @Inject constructor(
         session.requireDatabase().ledgerEntryDao().purgeDeletedEntries(ledger)
     }
 
-    /**
-     * `VACUUM`, with the write-ahead log flushed first.
-     *
-     * Deliberately **not** inside `withTransaction`: SQLite refuses to VACUUM
-     * inside one, and Room's transaction wrapper would silently put us there.
-     *
-     * The checkpoint ahead of it is the same `TRUNCATE` the app already runs
-     * when it backgrounds (`WalCheckpointObserver`, BUG2). Without it the
-     * deletes may still be sitting in `-wal`, and VACUUM would rewrite a main
-     * database that does not yet contain them -- reclaiming nothing and leaving
-     * the freed pages exactly where they were.
-     */
-    override suspend fun compactStorage(): Unit = withContext(io) {
-        val database = session.requireDatabase().openHelper.writableDatabase
-        database.query("PRAGMA wal_checkpoint(TRUNCATE);").use { it.moveToFirst() }
-        database.execSQL("VACUUM")
-    }
-
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeDeletedCount(ledger: LedgerType): Flow<Int> =
         session.whenUnlocked().flatMapLatest { database ->

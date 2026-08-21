@@ -57,6 +57,30 @@ public data class PaymentMethod(
 )
 
 /**
+ * A hidden taxonomy row, projected for the list that offers to bring it back
+ * (ADR-0016).
+ *
+ * One shape for all three types rather than three, because the list that shows
+ * them is one list repeated three times: a name, when it went, and a second
+ * line of whatever distinguishes that type. Carrying [Category], [Merchant] and
+ * [PaymentMethod] instead would mean three near-identical composables differing
+ * only in which field they read — and the section is not a picker, so nothing
+ * downstream needs the rest of the row.
+ *
+ * [detail] is that second line, and it is doing real work rather than
+ * decoration: for a hidden category it says whether the row is a branch that
+ * took subcategories out with it, which is what makes restoring it predictable.
+ */
+public data class HiddenTaxonomy(
+    val id: String,
+    val name: String,
+    /** When it was hidden, from `deleted_at`. The list is ordered by it. */
+    val hiddenAt: Long,
+    /** A subcategory's parent, a branch's child count, a card's type and last 4. */
+    val detail: String? = null,
+)
+
+/**
  * The 16 category swatches (SPEC.md §9.1).
  *
  * Curated rather than free choice: an arbitrary colour picker lets a user

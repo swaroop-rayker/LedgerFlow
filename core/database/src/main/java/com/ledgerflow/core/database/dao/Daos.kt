@@ -84,12 +84,109 @@ public interface CategoryDao {
     @Query("UPDATE category SET deleted_at = :deletedAt WHERE id = :id")
     public suspend fun softDelete(id: String, deletedAt: Long)
 
-    /** Moves subcategories of [id] under [newParentId], keeping `parent_key` honest. */
+    // -- The hidden lifecycle (ADR-0016) -------------------------------------
+
+    /**
+     * Everything hidden in one book, most recently hidden first.
+     *
+     * Parents and children both, unshaped: which of them the user is shown as a
+     * restorable row depends on whether each child's parent is also hidden, and
+     * that is a question about two rows the repository answers by combining
+     * this with the live read. A SQL self-join could do it, at the cost of
+     * putting presentation logic in a statement nobody would think to look in.
+     */
     @Query(
-        "UPDATE category SET parent_id = :newParentId, parent_key = :newParentKey " +
-            "WHERE parent_id = :id AND deleted_at = 0",
+        "SELECT * FROM category WHERE ledger_scope = :ledger AND deleted_at != 0 " +
+            "ORDER BY deleted_at DESC, sort_order",
     )
-    public suspend fun reparentChildren(id: String, newParentId: String?, newParentKey: String)
+    public fun observeHidden(ledger: LedgerType): Flow<List<CategoryEntity>>
+
+    /**
+     * The subcategories hidden *with* [parentId], identified by the stamp they
+     * share.
+     *
+     * `softDeleteChildren` writes one `clock.nowMillis()` across the branch, so
+     * the timestamp is the batch id -- and matching on it is what keeps a
+     * subcategory the user hid on its own last week from being dragged back
+     * into a restore of its parent today. Nothing else in the row records which
+     * deletion it belonged to.
+     */
+    @Query(
+        "SELECT * FROM category WHERE parent_id = :parentId AND deleted_at = :deletedAt " +
+            "AND deleted_at != 0",
+    )
+    public suspend fun hiddenChildren(parentId: String, deletedAt: Long): List<CategoryEntity>
+
+    /**
+     * Hides the subcategories of [id] along with it (BUG12).
+     *
+     * This replaces `reparentChildren`, which moved them under the re-assign
+     * target instead -- and with a null target, which is the no-entries path,
+     * moved them to no parent at all: promoted to top-level categories the user
+     * never created, the opposite of what its own comment claimed. That
+     * statement is gone rather than merely unused, because it is a one-line way
+     * to reintroduce BUG12 sitting in the first file anyone fixing a tree
+     * problem would open.
+     *
+     * A branch is deleted as a unit and comes back as one. The stamp is what
+     * makes that possible: it is the only record in the schema of which
+     * deletion a hidden child belonged to.
+     */
+    @Query("UPDATE category SET deleted_at = :deletedAt WHERE parent_id = :id AND deleted_at = 0")
+    public suspend fun softDeleteChildren(id: String, deletedAt: Long)
+
+    /**
+     * Un-hides one category.
+     *
+     * `AND deleted_at != 0` makes "0 rows" mean exactly "nothing hidden with
+     * that id", so a stale list reports honestly instead of silently
+     * succeeding.
+     *
+     * @return rows affected.
+     */
+    @Query("UPDATE category SET deleted_at = 0 WHERE id = :id AND deleted_at != 0")
+    public suspend fun restore(id: String): Int
+
+    /** Un-hides the subcategories that went out with [parentId], and only those. */
+    @Query(
+        "UPDATE category SET deleted_at = 0 " +
+            "WHERE parent_id = :parentId AND deleted_at = :deletedAt AND deleted_at != 0",
+    )
+    public suspend fun restoreChildren(parentId: String, deletedAt: Long): Int
+
+    /**
+     * **Destroys the subcategories that went out with [parentId]. Irreversible.**
+     *
+     * Only `PurgeHiddenCategoryUseCase` may reach it. A branch is destroyed as
+     * the unit it was hidden as; leaving the children behind would strand rows
+     * whose `parent_id` resolves to nothing, and the hidden list -- which folds
+     * a batch into its parent's row -- would then have no row to show them under.
+     *
+     * @return rows destroyed.
+     */
+    @Query(
+        "DELETE FROM category " +
+            "WHERE parent_id = :parentId AND deleted_at = :deletedAt AND deleted_at != 0",
+    )
+    public suspend fun hardDeleteChildren(parentId: String, deletedAt: Long): Int
+
+    /**
+     * **Destroys one hidden category. Irreversible.**
+     *
+     * Only `PurgeHiddenCategoryUseCase` may reach it, enforced by
+     * `TaxonomySingleWriterTest`.
+     *
+     * `AND deleted_at != 0` is the same real guard `purgeDeletedEntry` carries:
+     * without it this statement could destroy a *live* category by id, which is
+     * a thing no screen should be able to ask for. `category_group_member`
+     * cascades away by foreign key; `ledger_entry` does **not**, because
+     * `category_id` has no key at all -- which is why the repository refuses to
+     * call this while anything still references the row.
+     *
+     * @return rows destroyed.
+     */
+    @Query("DELETE FROM category WHERE id = :id AND deleted_at != 0")
+    public suspend fun hardDelete(id: String): Int
 }
 
 @Dao
@@ -118,6 +215,48 @@ public interface MerchantDao {
 
     @Query("UPDATE merchant SET deleted_at = :deletedAt WHERE id = :id")
     public suspend fun softDelete(id: String, deletedAt: Long)
+
+    // -- The hidden lifecycle (ADR-0016) -------------------------------------
+
+    @Query("SELECT * FROM merchant WHERE deleted_at != 0 ORDER BY deleted_at DESC")
+    public fun observeHidden(): Flow<List<MerchantEntity>>
+
+    /**
+     * Lookup on the normalized key **ignoring `deleted_at`** -- the one place
+     * that has to (BUG11).
+     *
+     * `index_merchant_normalized_key` is `UNIQUE (normalized_key)` and does not
+     * include `deleted_at`, so a hidden row still occupies its key.
+     * [byNormalizedKey] filters hidden rows out, which meant `createOrGet`
+     * could not see the blocker and inserted straight into the constraint --
+     * raising `SQLiteConstraintException` out of a repository whose whole
+     * contract is typed refusals. This is how the collision is found before it
+     * is caused.
+     */
+    @Query("SELECT * FROM merchant WHERE normalized_key = :key LIMIT 1")
+    public suspend fun byNormalizedKeyAny(key: String): MerchantEntity?
+
+    /** @return rows affected; 0 means nothing hidden had that id. */
+    @Query("UPDATE merchant SET deleted_at = 0 WHERE id = :id AND deleted_at != 0")
+    public suspend fun restore(id: String): Int
+
+    /**
+     * **Destroys one hidden merchant. Irreversible.**
+     *
+     * Only `PurgeHiddenMerchantUseCase` may reach it, enforced by
+     * `TaxonomySingleWriterTest`.
+     *
+     * `merchant_alias` cascades away with it, which is right -- an alias for a
+     * merchant that no longer exists matches nothing.
+     * `ledger_entry.merchant_id` is `ON DELETE SET NULL`, which is *not* right
+     * and is why the repository counts references first: left to the schema
+     * this succeeds and quietly strips the shop's name off every entry that
+     * ever used it.
+     *
+     * @return rows destroyed.
+     */
+    @Query("DELETE FROM merchant WHERE id = :id AND deleted_at != 0")
+    public suspend fun hardDelete(id: String): Int
 }
 
 @Dao
@@ -167,6 +306,45 @@ public interface PaymentMethodDao {
 
     @Query("UPDATE payment_method SET deleted_at = :deletedAt WHERE id = :id")
     public suspend fun softDelete(id: String, deletedAt: Long)
+
+    // -- The hidden lifecycle (ADR-0016) -------------------------------------
+
+    @Query("SELECT * FROM payment_method WHERE deleted_at != 0 ORDER BY deleted_at DESC")
+    public fun observeHidden(): Flow<List<PaymentMethodEntity>>
+
+    /**
+     * Un-hides one payment method, as a non-default.
+     *
+     * `is_default = 0` in the same statement rather than in a second one.
+     * Hiding does not clear the flag -- nothing reads it on a hidden row -- so
+     * a plain restore of what was once the default can produce two rows both
+     * claiming to be it, and which one the entry form picks then depends on row
+     * order. The schema has no constraint that prevents that, so the statement
+     * has to.
+     *
+     * @return rows affected.
+     */
+    @Query(
+        "UPDATE payment_method SET deleted_at = 0, is_default = 0 " +
+            "WHERE id = :id AND deleted_at != 0",
+    )
+    public suspend fun restore(id: String): Int
+
+    /**
+     * **Destroys one hidden payment method. Irreversible.**
+     *
+     * Only `PurgeHiddenPaymentMethodUseCase` may reach it, enforced by
+     * `TaxonomySingleWriterTest`.
+     *
+     * The only one of the three destroys that needs no reference check first:
+     * `softDelete` already cleared `payment_method_id` from every entry in both
+     * books, binned ones included, so nothing points here by the time a row is
+     * hidden.
+     *
+     * @return rows destroyed.
+     */
+    @Query("DELETE FROM payment_method WHERE id = :id AND deleted_at != 0")
+    public suspend fun hardDelete(id: String): Int
 }
 
 /**
@@ -491,68 +669,4 @@ public interface LedgerEntryDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     public suspend fun insertLineItems(lineItems: List<LineItemEntity>)
-
-    // ── Taxonomy re-pointing ────────────────────────────────────────────────
-    //
-    // Every statement below binds `:ledger`, and callers that need both books
-    // iterate over LedgerType rather than dropping the predicate. That is not
-    // ceremony to appease LedgerIsolationTest: a category is ledger-scoped, so
-    // its re-assignment genuinely only touches one book, and a merchant merge
-    // that spans both should say so by doing it twice rather than by writing one
-    // statement that quietly reaches across the partition (ADR-0002).
-
-    @Query(
-        "SELECT COUNT(*) FROM ledger_entry WHERE ledger = :ledger " +
-            "AND category_id = :categoryId AND deleted_at IS NULL",
-    )
-    public suspend fun countForCategory(ledger: LedgerType, categoryId: String): Int
-
-    /**
-     * Moves entries off a category being deleted.
-     *
-     * `subcategory_id` is cleared in the same statement. §6.1.1's invariant is
-     * that a row's subcategory's parent equals its `category_id`; leaving the
-     * old subcategory behind under a new parent breaks exactly that, and it is
-     * the kind of inconsistency that surfaces months later as an analytics
-     * bucket that does not add up.
-     */
-    @Query(
-        "UPDATE ledger_entry SET category_id = :target, subcategory_id = NULL, " +
-            "updated_at = :now WHERE ledger = :ledger AND category_id = :source",
-    )
-    public suspend fun reassignCategory(
-        ledger: LedgerType,
-        source: String,
-        target: String,
-        now: Long,
-    )
-
-    @Query(
-        "UPDATE ledger_entry SET subcategory_id = NULL, updated_at = :now " +
-            "WHERE ledger = :ledger AND subcategory_id = :source",
-    )
-    public suspend fun clearSubcategory(ledger: LedgerType, source: String, now: Long)
-
-    @Query(
-        "SELECT COUNT(*) FROM ledger_entry WHERE ledger = :ledger " +
-            "AND merchant_id = :merchantId AND deleted_at IS NULL",
-    )
-    public suspend fun countForMerchant(ledger: LedgerType, merchantId: String): Int
-
-    @Query(
-        "UPDATE ledger_entry SET merchant_id = :target, updated_at = :now " +
-            "WHERE ledger = :ledger AND merchant_id = :source",
-    )
-    public suspend fun reassignMerchant(
-        ledger: LedgerType,
-        source: String,
-        target: String,
-        now: Long,
-    )
-
-    @Query(
-        "UPDATE ledger_entry SET payment_method_id = NULL, updated_at = :now " +
-            "WHERE ledger = :ledger AND payment_method_id = :source",
-    )
-    public suspend fun clearPaymentMethod(ledger: LedgerType, source: String, now: Long)
 }

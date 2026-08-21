@@ -151,21 +151,6 @@ public interface LedgerRepository {
     public suspend fun purgeDeletedEntries(ledger: LedgerType): Int
 
     /**
-     * Rewrites the database file, reclaiming the space freed by a purge.
-     *
-     * `DELETE` marks pages free; it does not zero them and it does not shrink
-     * the file. Without this, "permanently erase" would be true of the app's
-     * queries and false of the bytes on disk -- which is the half a user asking
-     * for permanence actually cares about.
-     *
-     * It lives on this interface rather than behind a maintenance port of its
-     * own for the reason [baseCurrency] does: the purge is its only caller, and
-     * inventing a repository to hold one statement would be a layer that exists
-     * to hold a constant. Give it its own port when something else needs it.
-     */
-    public suspend fun compactStorage()
-
-    /**
      * Whether this book holds anything at all, ignoring
      * [observeEntries]' window.
      *

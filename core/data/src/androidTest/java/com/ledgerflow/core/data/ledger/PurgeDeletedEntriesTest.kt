@@ -232,8 +232,8 @@ class PurgeDeletedEntriesTest {
     fun compactStorage_isSafeWithNothingToReclaim() = runBlocking<Unit> {
         val entry = vault.ledger.approve(request()).success()
 
-        vault.ledger.compactStorage()
-        vault.ledger.compactStorage()
+        vault.storage.compactStorage()
+        vault.storage.compactStorage()
 
         assertThat(allRows(LedgerType.DEBIT).map { it.id }).containsExactly(entry.id)
     }
@@ -420,7 +420,7 @@ class PurgeDeletedEntriesTest {
     /** Both books, the way `PurgeDeletedEntriesUseCase` does it. */
     private suspend fun purge(): Int {
         val count = LedgerType.entries.sumOf { vault.ledger.purgeDeletedEntries(it) }
-        if (count > 0) vault.ledger.compactStorage()
+        if (count > 0) vault.storage.compactStorage()
         return count
     }
 

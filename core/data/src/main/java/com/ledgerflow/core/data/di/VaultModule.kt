@@ -12,6 +12,7 @@ import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
 import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
+import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.RecoveryKitWriter
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.domain.ledger.DraftRepository
@@ -21,6 +22,7 @@ import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
 import com.ledgerflow.core.domain.vault.RecoveryKitRepository
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
+import com.ledgerflow.core.domain.vault.StorageMaintenance
 import com.ledgerflow.core.domain.vault.VaultRepository
 import dagger.Binds
 import dagger.Module
@@ -99,6 +101,17 @@ public interface LedgerModule {
 
     @Binds
     public fun draftRepository(impl: DefaultDraftRepository): DraftRepository
+
+    /**
+     * Compaction is bound beside the ledger rather than under it.
+     *
+     * It used to be a `LedgerRepository` method, on that interface's own stated
+     * condition: "give it its own port when something else needs it". A
+     * taxonomy purge erases a name the user typed and has the same obligation
+     * to make the bytes go, so ADR-0016 is that something else.
+     */
+    @Binds
+    public fun storageMaintenance(impl: DefaultStorageMaintenance): StorageMaintenance
 }
 
 /** Categories, merchants and payment methods (SPEC.md §5.5). */

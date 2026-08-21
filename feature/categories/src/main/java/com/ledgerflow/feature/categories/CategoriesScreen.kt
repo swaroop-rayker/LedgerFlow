@@ -17,11 +17,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -38,9 +41,14 @@ import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
+import com.ledgerflow.core.model.HiddenTaxonomy
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
 import com.ledgerflow.core.model.PaymentMethod
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Category, merchant and payment-method management (SPEC.md §5.5).
@@ -108,9 +116,9 @@ public fun CategoriesScreen(
             }
 
             when (state.section) {
-                TaxonomySection.Categories -> CategoryList(state.tree, onEvent)
-                TaxonomySection.Merchants -> MerchantList(state.merchants, onEvent)
-                TaxonomySection.PaymentMethods -> PaymentMethodList(state.paymentMethods, onEvent)
+                TaxonomySection.Categories -> CategoryList(state, onEvent)
+                TaxonomySection.Merchants -> MerchantList(state, onEvent)
+                TaxonomySection.PaymentMethods -> PaymentMethodList(state, onEvent)
             }
         }
     }
@@ -184,8 +192,13 @@ private fun MessageBanner(message: String, onEvent: (CategoriesEvent) -> Unit) {
 }
 
 @Composable
-private fun CategoryList(tree: List<CategoryTree>, onEvent: (CategoriesEvent) -> Unit) {
-    if (tree.isEmpty()) {
+private fun CategoryList(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
+    // The empty state is about the *live* tree, and the hidden section still has
+    // to be reachable underneath it -- a user who hid their last category is
+    // exactly the one who needs the way back, and telling them to "add one to
+    // get started" while the one they want sits hidden below is the version of
+    // this screen that caused the complaint.
+    if (state.tree.isEmpty() && state.hidden.isEmpty()) {
         LfEmptyState(
             title = "No categories yet",
             body = "Categories group your spending. Add one to get started.",
@@ -199,7 +212,7 @@ private fun CategoryList(tree: List<CategoryTree>, onEvent: (CategoriesEvent) ->
             bottom = LfTheme.spacing.xxl,
         ),
     ) {
-        tree.forEach { branch ->
+        state.tree.forEach { branch ->
             // Keyed per branch rather than per row: the connector rail has to
             // measure against the height of the children it spans, so a branch
             // is one item. Stable keys and a contentType still apply (CLAUDE.md
@@ -208,6 +221,7 @@ private fun CategoryList(tree: List<CategoryTree>, onEvent: (CategoriesEvent) ->
                 CategoryBranch(branch, onEvent)
             }
         }
+        hiddenSection(state, onEvent)
     }
 }
 
@@ -307,7 +321,13 @@ private fun CategoryRow(
                 )
             }
             LfButton(
-                text = "Delete",
+                // "Hide", like the other two sections. The three said Delete,
+                // Hide and Remove for one operation, and only "Hide" was ever
+                // accurate: all three set `deleted_at` and leave the row
+                // labelling past entries. With ADR-0016 there is a way back, so
+                // the honest word is also now the reassuring one -- and "Erase"
+                // is free to mean the thing that really does destroy.
+                text = "Hide",
                 style = LfButtonStyle.Inline,
                 onClick = {
                     onEvent(CategoriesEvent.DeleteCategory(category.id, category.name, isChild))
@@ -352,8 +372,9 @@ private fun TaxonomyCard(
 }
 
 @Composable
-private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -> Unit) {
-    if (merchants.isEmpty()) {
+private fun MerchantList(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
+    val merchants = state.merchants
+    if (merchants.isEmpty() && state.hidden.isEmpty()) {
         LfEmptyState(
             title = "No merchants yet",
             body = "Merchants are created as you record spending, and can be " +
@@ -364,10 +385,14 @@ private fun MerchantList(merchants: List<Merchant>, onEvent: (CategoriesEvent) -
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.lg),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            bottom = LfTheme.spacing.xxl,
+        ),
     ) {
         items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
             MerchantCard(merchants[index], onEvent)
         }
+        hiddenSection(state, onEvent)
     }
 }
 
@@ -405,18 +430,23 @@ private fun MerchantCard(merchant: Merchant, onEvent: (CategoriesEvent) -> Unit)
 }
 
 @Composable
-private fun PaymentMethodList(methods: List<PaymentMethod>, onEvent: (CategoriesEvent) -> Unit) {
-    if (methods.isEmpty()) {
+private fun PaymentMethodList(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
+    val methods = state.paymentMethods
+    if (methods.isEmpty() && state.hidden.isEmpty()) {
         LfEmptyState(title = "No payment methods", body = "Add the cards and accounts you use.")
         return
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.lg),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            bottom = LfTheme.spacing.xxl,
+        ),
     ) {
         items(methods.size, key = { methods[it].id }, contentType = { "method" }) { index ->
             PaymentMethodCard(methods[index], onEvent)
         }
+        hiddenSection(state, onEvent)
     }
 }
 
@@ -449,7 +479,7 @@ private fun PaymentMethodCard(method: PaymentMethod, onEvent: (CategoriesEvent) 
                 )
             }
             LfButton(
-                text = "Remove",
+                text = "Hide",
                 style = LfButtonStyle.Inline,
                 onClick = {
                     onEvent(CategoriesEvent.DeletePaymentMethod(method.id, method.label))
@@ -458,6 +488,144 @@ private fun PaymentMethodCard(method: PaymentMethod, onEvent: (CategoriesEvent) 
         }
     }
 }
+
+/**
+ * What this tab has hidden, at the foot of what it has (ADR-0016).
+ *
+ * **A section inside the list, not a screen of its own.** The bin earned a
+ * destination because a deleted entry is looked for without knowing which book
+ * it was in; a hidden merchant is looked for by someone already standing on the
+ * Merchants tab, and sending them to Settings to find it would be further from
+ * the thing than the button that hid it.
+ *
+ * **Collapsed until asked for**, and the header carries the count so the tap is
+ * an informed one. It is a `LazyListScope` extension rather than a composable so
+ * the rows stay real list items -- keyed, typed, and recycled like every other
+ * row -- instead of one enormous item holding a `Column` of them.
+ */
+private fun LazyListScope.hiddenSection(
+    state: CategoriesUiState,
+    onEvent: (CategoriesEvent) -> Unit,
+) {
+    if (state.hidden.isEmpty()) return
+
+    item(key = HIDDEN_HEADER_KEY, contentType = "hiddenHeader") {
+        HiddenHeader(state.hidden.size, state.hiddenExpanded, onEvent)
+    }
+    if (!state.hiddenExpanded) return
+
+    val hidden = state.hidden
+    items(
+        hidden.size,
+        key = { "hidden-" + hidden[it].id },
+        contentType = { "hidden" },
+    ) { index ->
+        HiddenCard(hidden[index], onEvent)
+    }
+}
+
+/**
+ * The disclosure row.
+ *
+ * A text row rather than a button: it is a heading that happens to toggle, and
+ * a full-width control here would read as the screen's primary action on a
+ * screen whose primary action is the pinned Add bar. The glyph is the
+ * affordance, and it is on the leading edge so it mirrors in RTL with the text
+ * rather than drifting away from it.
+ */
+@Composable
+private fun HiddenHeader(count: Int, expanded: Boolean, onEvent: (CategoriesEvent) -> Unit) {
+    val spacing = LfTheme.spacing
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onEvent(CategoriesEvent.HiddenToggled) }
+            .padding(vertical = spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (expanded) "\u25be" else "\u25b8",
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textTertiary,
+        )
+        Text(
+            text = "Hidden ($count)",
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textTertiary,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * One hidden row: what it was, when it went, and the two ways out.
+ *
+ * The same [TaxonomyCard] the live rows use -- one shape per screen. Nothing
+ * else marks it as hidden, because it does not need to: it is under a header
+ * that says so, and giving hidden rows their own treatment would put two card
+ * designs on one screen to restate a fact the section already carries.
+ *
+ * `Restore` sits before `Erase` in reading order, so the recoverable action is
+ * the one a thumb reaches first and the destructive one is furthest from the
+ * gesture that opened the section.
+ */
+@Composable
+private fun HiddenCard(item: HiddenTaxonomy, onEvent: (CategoriesEvent) -> Unit) {
+    TaxonomyCard {
+        Text(
+            text = item.name,
+            style = LfTheme.typography.bodyL,
+            color = LfTheme.colors.textPrimary,
+        )
+        // One line for both facts. They are short, and stacking "Hidden 19 Aug"
+        // above "with 2 subcategories" would make a hidden row taller than the
+        // live row it is a copy of.
+        Text(
+            text = listOfNotNull("Hidden ${hiddenStamp(item.hiddenAt)}", item.detail)
+                .joinToString(" · "),
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textTertiary,
+        )
+        LfActionRow(alignment = LfActionAlignment.End) {
+            LfButton(
+                text = "Restore",
+                style = LfButtonStyle.Inline,
+                onClick = { onEvent(CategoriesEvent.RestoreHidden(item.id, item.name)) },
+            )
+            LfButton(
+                text = "Erase",
+                style = LfButtonStyle.Inline,
+                onClick = { onEvent(CategoriesEvent.EraseHidden(item.id, item.name)) },
+            )
+        }
+    }
+}
+
+/**
+ * The day something was hidden, in the device's locale.
+ *
+ * Date only. The bin prints a time because it shows a *transaction*, which
+ * happened at a moment; hiding a category is housekeeping, and the hour it
+ * happened at tells the user nothing they would use to choose between two rows.
+ *
+ * Written here rather than shared with the Ledger's `occurredStamp`, which is
+ * `internal` to `:feature:ledger` -- features never depend on features
+ * (CLAUDE.md §3). Six lines duplicated is the cheaper side of that rule than a
+ * formatter promoted to `:core:ui` for two callers that format different things.
+ */
+@Composable
+private fun hiddenStamp(millis: Long): String {
+    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    return remember(millis, locale) {
+        DateTimeFormatter.ofPattern(HIDDEN_DATE_PATTERN, locale)
+            .withZone(ZoneId.systemDefault())
+            .format(Instant.ofEpochMilli(millis))
+    }
+}
+
+private const val HIDDEN_DATE_PATTERN = "d MMM"
+private const val HIDDEN_HEADER_KEY = "hidden-header"
 
 /** A tappable row inside a picker dialog. */
 @Composable
@@ -509,6 +677,46 @@ private fun CategoriesPreview() {
         )
     }
 }
+
+/**
+ * The hidden section, open (ADR-0016).
+ *
+ * Its own preview rather than a flag on the others, because the rows it adds are
+ * the ones most likely to break at scale: a name, a stamp and a detail on one
+ * line, above two actions. `@PreviewFontScale` is the point of it -- at 2.0 the
+ * `LfActionRow` has to wrap Restore and Erase as whole controls rather than
+ * breaking a label (BUG9), and the detail line has to wrap rather than clip.
+ */
+@PreviewScreenSizes
+@PreviewFontScale
+@PreviewLightDark
+@Composable
+private fun HiddenMerchantsPreview() {
+    LfTheme {
+        CategoriesScreen(
+            state = CategoriesUiState(
+                section = TaxonomySection.Merchants,
+                merchants = listOf(
+                    Merchant("1", "Big Bazaar", "bigbazaar", null, null),
+                ),
+                hidden = listOf(
+                    HiddenTaxonomy("2", "Amazon", hiddenAt = HIDDEN_PREVIEW_AT),
+                    HiddenTaxonomy(
+                        "3",
+                        "Reliance Fresh 1182",
+                        hiddenAt = HIDDEN_PREVIEW_AT,
+                    ),
+                ),
+                hiddenExpanded = true,
+            ),
+            onEvent = {},
+            onBack = {},
+        )
+    }
+}
+
+/** A fixed instant so the preview does not re-render differently each day. */
+private const val HIDDEN_PREVIEW_AT = 1_755_000_000_000L
 
 @PreviewScreenSizes
 @PreviewFontScale

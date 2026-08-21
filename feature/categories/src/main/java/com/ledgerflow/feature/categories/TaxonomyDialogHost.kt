@@ -35,6 +35,8 @@ internal fun TaxonomyDialogHost(
 ) {
     when (dialog) {
         is TaxonomyDialog.ConfirmDelete -> ConfirmDeleteDialog(dialog, state, onEvent)
+        is TaxonomyDialog.ConfirmErase -> ConfirmEraseDialog(dialog, state, onEvent)
+        is TaxonomyDialog.ReassignBeforeErase -> ReassignBeforeEraseDialog(dialog, state, onEvent)
         is TaxonomyDialog.TextPrompt -> TextPromptDialog(dialog, state, onEvent)
         is TaxonomyDialog.ReassignCategory -> ReassignDialog(dialog, state, onEvent)
         is TaxonomyDialog.MergeMerchant -> MergeDialog(dialog, state, onEvent)
@@ -113,27 +115,123 @@ private fun ConfirmDeleteDialog(
     val body = when (dialog.target) {
         DeleteTarget.Category ->
             "Its subcategories go with it. Entries already filed under it keep " +
-                "their amounts — if any exist, you'll be asked where to move them next."
+                "their amounts — if any exist, you'll be asked where to move them next. " +
+                "You can bring it back from Hidden."
         DeleteTarget.Subcategory ->
             "Entries already filed under it keep their amounts — if any exist, " +
-                "you'll be asked where to move them next."
+                "you'll be asked where to move them next. You can bring it back " +
+                "from Hidden."
         DeleteTarget.Merchant ->
-            "It stops being offered on new entries. Past entries keep showing it, " +
-                "so your history reads the same."
+            "Past entries keep showing it, so your history reads the same. You " +
+                "can bring it back from Hidden."
         DeleteTarget.PaymentMethod ->
-            "It stops being offered on new entries, and past entries lose the " +
-                "record of which method was used. Their amounts are untouched."
+            "Past entries lose the record of which method was used, and their " +
+                "amounts are untouched. You can bring it back from Hidden, but " +
+                "not that record."
     }
     LfDialog(
-        title = "Delete \"${dialog.name}\"?",
-        body = "This $noun will be removed. $body",
-        confirmText = "Delete",
+        title = "Hide \"${dialog.name}\"?",
+        body = "This $noun stops being offered. $body",
+        confirmText = "Hide",
         // Warning emphasis also stops an outside tap from standing in for an
         // answer, which for a confirmation would defeat the point.
         emphasis = LfDialogEmphasis.Warning,
         onConfirm = { onEvent(CategoriesEvent.DialogConfirmed) },
         onDismiss = { onEvent(CategoriesEvent.DialogDismissed) },
         detail = { state.message?.let { ErrorText(it) } },
+    )
+}
+
+/**
+ * The mis-tap guard on the irreversible one (ADR-0016).
+ *
+ * Three things this has to do that [ConfirmDeleteDialog] does not, and each of
+ * them was decided by the bin first:
+ *
+ * - **Name the row.** A dialog that only asks "are you sure?" is one people
+ *   learn to tap through.
+ * - **Say it cannot be undone**, in those words. "Erase" is the app's verb for
+ *   permanence, but a verb is not a warning.
+ * - **Tell the user to export, not offer to back up.** The app cannot back up
+ *   for them: `.lfbk` is phrase-derived and the app never holds the 24 words
+ *   (ADR-0011). A dialog that offered would be lying about what it can do.
+ *
+ * `Warning` emphasis also stops an outside tap standing in for an answer, which
+ * on this dialog would be the difference between a dismissal and a destroy.
+ */
+@Composable
+private fun ConfirmEraseDialog(
+    dialog: TaxonomyDialog.ConfirmErase,
+    state: CategoriesUiState,
+    onEvent: (CategoriesEvent) -> Unit,
+) {
+    val noun = when (dialog.target) {
+        DeleteTarget.Category, DeleteTarget.Subcategory -> "category"
+        DeleteTarget.Merchant -> "merchant"
+        DeleteTarget.PaymentMethod -> "payment method"
+    }
+    LfDialog(
+        title = "Erase \"${dialog.name}\"?",
+        body = "This $noun is removed from your vault for good. This cannot be " +
+            "undone — export first if you might want it back.",
+        confirmText = "Erase",
+        emphasis = LfDialogEmphasis.Warning,
+        onConfirm = { onEvent(CategoriesEvent.DialogConfirmed) },
+        onDismiss = { onEvent(CategoriesEvent.DialogDismissed) },
+        detail = { state.message?.let { ErrorText(it) } },
+    )
+}
+
+/**
+ * Where the entries go, asked *because* the row is about to stop existing.
+ *
+ * Reads almost like [ReassignDialog] and says the opposite thing in one place:
+ * that one can promise "nothing is deleted, they just change category", and this
+ * one cannot. Rounding the two to a single dialog would mean one of the two
+ * sentences being false whenever it was shown, and it is the reassuring one that
+ * would be false.
+ */
+@Composable
+private fun ReassignBeforeEraseDialog(
+    dialog: TaxonomyDialog.ReassignBeforeErase,
+    state: CategoriesUiState,
+    onEvent: (CategoriesEvent) -> Unit,
+) {
+    val noun = if (dialog.target == DeleteTarget.Merchant) "merchant" else "category"
+    val entries = entryNoun(dialog.affected)
+    LfDialog(
+        title = "Move ${dialog.affected} $entries first",
+        body = "\"${dialog.name}\" is still on ${dialog.affected} $entries, " +
+            "including any in your bin. Choose where they go — then the $noun is " +
+            "erased and cannot be brought back.",
+        confirmText = "Move and erase",
+        emphasis = LfDialogEmphasis.Warning,
+        onConfirm = { onEvent(CategoriesEvent.DialogConfirmed) },
+        onDismiss = { onEvent(CategoriesEvent.DialogDismissed) },
+        detail = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                if (dialog.candidates.isEmpty()) {
+                    Text(
+                        text = "There is nowhere else to move them yet. Add another " +
+                            "$noun first.",
+                        style = LfTheme.typography.bodyM,
+                        color = LfTheme.colors.textSecondary,
+                    )
+                }
+                dialog.candidates.forEach { choice ->
+                    ChoiceRow(
+                        label = choice.name,
+                        selected = choice.id == dialog.targetId,
+                        onClick = { onEvent(CategoriesEvent.DialogTargetSelected(choice.id)) },
+                    )
+                }
+                state.message?.let { ErrorText(it) }
+            }
+        },
     )
 }
 
@@ -144,11 +242,18 @@ private fun ReassignDialog(
     onEvent: (CategoriesEvent) -> Unit,
 ) {
     LfDialog(
-        title = "Move ${dialog.affected} entries first",
+        // Both halves pluralise. The body already did; the title said "Move 1
+        // entries first", which is the kind of thing that reads as machine
+        // output and quietly tells the user nobody looked at this screen.
+        title = "Move ${dialog.affected} ${entryNoun(dialog.affected)} first",
         body = "\"${dialog.name}\" is still used by ${dialog.affected} " +
-            "${if (dialog.affected == 1) "entry" else "entries"}. Choose where they " +
+            "${entryNoun(dialog.affected)}. Choose where they " +
             "should go — nothing is deleted, they just change category.",
-        confirmText = "Move and delete",
+        // "hide", not "delete" -- this dialog ends in a soft delete, and every
+        // other control on the screen now calls that hiding. "Delete" here was
+        // the last place the old vocabulary survived, and it is the worst place
+        // to leave it: the sentence above promises nothing is deleted.
+        confirmText = "Move and hide",
         // A destructive-adjacent choice, so it must be made deliberately rather
         // than dismissed by tapping outside.
         emphasis = LfDialogEmphasis.Warning,
@@ -283,3 +388,6 @@ private fun ErrorText(message: String) {
 }
 
 private const val PICKER_MAX_HEIGHT = 280
+
+/** "entry" or "entries". One place, so the two re-assign dialogs cannot drift. */
+private fun entryNoun(count: Int): String = if (count == 1) "entry" else "entries"

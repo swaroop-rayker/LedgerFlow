@@ -12,6 +12,7 @@ import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
 import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
+import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.domain.vault.VaultInitRequest
@@ -64,6 +65,18 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
     lateinit var drafts: DefaultDraftRepository
         private set
 
+    /**
+     * The real compaction, shared by every repository in this vault.
+     *
+     * It moved off `LedgerRepository` when the taxonomy purge became a second
+     * caller (ADR-0016), so `vault.ledger.compactStorage()` is now
+     * `vault.storage.compactStorage()`. Real rather than faked, for the reason
+     * `PurgeDeletedEntriesTest` gives: the step worth testing is the one that
+     * rewrites the encrypted file.
+     */
+    lateinit var storage: DefaultStorageMaintenance
+        private set
+
     suspend fun open() {
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
@@ -74,9 +87,10 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
         session = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, TEST_DATABASE)
         session.initialize(VaultInitRequest(Bip39.generate(SecureRandom()), BASE_CURRENCY))
 
-        categories = DefaultCategoryRepository(session, ids, clock, Dispatchers.IO)
-        merchants = DefaultMerchantRepository(session, ids, clock, Dispatchers.IO)
-        paymentMethods = DefaultPaymentMethodRepository(session, ids, clock, Dispatchers.IO)
+        storage = DefaultStorageMaintenance(session, Dispatchers.IO)
+        categories = DefaultCategoryRepository(session, ids, clock, storage, Dispatchers.IO)
+        merchants = DefaultMerchantRepository(session, ids, clock, storage, Dispatchers.IO)
+        paymentMethods = DefaultPaymentMethodRepository(session, ids, clock, storage, Dispatchers.IO)
         ledger = DefaultLedgerRepository(session, ids, clock, Dispatchers.IO)
         drafts = DefaultDraftRepository(session, ids, clock, Dispatchers.IO)
     }

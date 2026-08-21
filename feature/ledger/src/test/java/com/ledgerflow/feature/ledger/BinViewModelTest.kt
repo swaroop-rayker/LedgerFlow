@@ -7,6 +7,7 @@ import com.ledgerflow.core.model.DeletedEntry
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
+import com.ledgerflow.core.testing.ledger.FakeStorageMaintenance
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -301,11 +302,14 @@ class BinViewModelTest {
      * `state` is a `stateIn(WhileSubscribed)`, so nothing flows until something
      * collects. On the device the subscriber is `collectAsStateWithLifecycle`.
      */
+    /** Compaction moved to its own port when the taxonomy purge became a second caller. */
+    private val storage = FakeStorageMaintenance()
+
     private fun viewModel(): BinViewModel {
         val viewModel = BinViewModel(
             ledger = ledger,
             restoreEntries = RestoreEntryUseCase(ledger),
-            purgeEntries = PurgeDeletedEntriesUseCase(ledger),
+            purgeEntries = PurgeDeletedEntriesUseCase(ledger, storage),
         )
         CoroutineScope(dispatcher).launch { viewModel.state.collect {} }
         dispatcher.scheduler.advanceUntilIdle()

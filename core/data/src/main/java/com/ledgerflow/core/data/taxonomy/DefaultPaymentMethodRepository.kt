@@ -10,6 +10,8 @@ import com.ledgerflow.core.domain.taxonomy.NewPaymentMethod
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
 import com.ledgerflow.core.domain.taxonomy.TaxonomyError
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
+import com.ledgerflow.core.domain.vault.StorageMaintenance
+import com.ledgerflow.core.model.HiddenTaxonomy
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.PaymentMethod
 import com.ledgerflow.core.model.PaymentMethodType
@@ -22,12 +24,19 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
+/** How a hidden card names itself: "credit card ····4821". */
+private fun describe(row: PaymentMethodEntity): String = buildString {
+    append(row.type.name.lowercase().replace('_', ' '))
+    row.last4?.let { append(" ····$it") }
+}
+
 /** Payment methods over Room (SPEC.md §5.5). */
 @Singleton
 public class DefaultPaymentMethodRepository @Inject constructor(
     private val session: VaultSession,
     private val ids: Uuid7Generator,
     private val clock: Clock,
+    private val storage: StorageMaintenance,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : PaymentMethodRepository {
 
@@ -109,7 +118,7 @@ public class DefaultPaymentMethodRepository @Inject constructor(
     override suspend fun delete(id: String): TaxonomyResult<Unit> = withContext(io) {
         val database = session.requireDatabase()
         val dao = database.paymentMethodDao()
-        val entries = database.ledgerEntryDao()
+        val entries = database.ledgerTaxonomyDao()
 
         dao.byId(id) ?: return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
 
@@ -122,6 +131,77 @@ public class DefaultPaymentMethodRepository @Inject constructor(
             }
             dao.softDelete(id, clock.nowMillis())
         }
+        TaxonomyResult.Success(Unit)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    override fun observeHidden(): Flow<List<HiddenTaxonomy>> =
+        session.whenUnlocked().flatMapLatest { database ->
+            database?.paymentMethodDao()?.observeHidden()?.map { rows ->
+                rows.map { row ->
+                    HiddenTaxonomy(
+                        id = row.id,
+                        name = row.label,
+                        hiddenAt = row.deletedAt,
+                        // The same second line the live card carries, so a row
+                        // is recognisable in the hidden list as the thing that
+                        // was hidden -- two cards ending "4821" are told apart
+                        // by their type and nothing else.
+                        detail = describe(row),
+                    )
+                }
+            } ?: flowOf(emptyList())
+        }
+
+    /**
+     * Un-hides a payment method, as a non-default.
+     *
+     * No name check, unlike the other two: `payment_method` has no uniqueness
+     * index at all -- two cards can legitimately share a label and be told apart
+     * by issuer and last-4 -- so there is no constraint for a restore to
+     * violate. `findLiveByLabel` exists for the create form's benefit, which is
+     * a courtesy to the user rather than a rule of the schema, and applying it
+     * here would refuse a restore the database would have accepted.
+     *
+     * Past entries do not get their instrument back. [delete] scrubbed
+     * `payment_method_id` off them and the app kept no record of which rows it
+     * cleared, so there is nothing to reverse -- which the confirmation said at
+     * the time.
+     */
+    override suspend fun restore(id: String): TaxonomyResult<Unit> = withContext(io) {
+        val dao = session.requireDatabase().paymentMethodDao()
+        dao.byId(id)?.takeIf { it.deletedAt != 0L }
+            ?: return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
+
+        if (dao.restore(id) == 0) {
+            return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
+        }
+        TaxonomyResult.Success(Unit)
+    }
+
+    /**
+     * **Destroys a hidden payment method.** Only
+     * `PurgeHiddenPaymentMethodUseCase` may call this (ADR-0016).
+     *
+     * The only one of the three purges with no reference count in front of it,
+     * and the reason is a property of [delete] rather than an assumption about
+     * this one: hiding a payment method already ran `clearPaymentMethod` across
+     * both books, with no `deleted_at` predicate, so binned entries were
+     * scrubbed too. Nothing points here.
+     *
+     * That makes the absence of a check a claim about the code above it. If
+     * [delete] ever stops clearing the column -- say someone decides an entry
+     * should remember which card it used -- this becomes the merchant case and
+     * needs the merchant's count. `TaxonomyPurgeTest` asserts the entries come
+     * out null, which is what would fail first.
+     */
+    override suspend fun purge(id: String): TaxonomyResult<Unit> = withContext(io) {
+        val dao = session.requireDatabase().paymentMethodDao()
+        dao.byId(id)?.takeIf { it.deletedAt != 0L }
+            ?: return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
+
+        val destroyed = dao.hardDelete(id)
+        if (destroyed > 0) storage.compactStorage()
         TaxonomyResult.Success(Unit)
     }
 
