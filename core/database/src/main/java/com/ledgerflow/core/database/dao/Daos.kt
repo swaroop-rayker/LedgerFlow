@@ -404,12 +404,34 @@ public interface LedgerEntryDao {
      * budgets and export all still read the whole book. The bound exists so the
      * screen a user scrolls daily stays short and recent. A caller that wants
      * everything passes `Int.MIN_VALUE`.
+     *
+     * **Three correlated subqueries carry the line items' own filing**
+     * (ADR-0018). An itemised entry stores no category on `e` itself, so
+     * without these `category_name` comes back null for it exactly as it does
+     * for a genuinely uncategorised row, and the two become indistinguishable
+     * in the list. Each subquery is bounded by the `line_item(entry_id)` index
+     * to the handful of lines one entry has, so the real cost is the page size
+     * -- `PAGE_SIZE` rows, three cheap lookups each -- not the size of the book.
+     * The `GROUP BY category_id` / `ORDER BY SUM(...) DESC` picks the
+     * categorised line with the largest signed total; ties break on the
+     * earliest `position` so a dead heat is deterministic rather than
+     * whatever order SQLite happens to visit rows in.
      */
     @Query(
         "SELECT e.id AS id, e.amount_minor AS amount_minor, e.currency AS currency, " +
             "e.local_date AS local_date, e.occurred_at AS occurred_at, e.note AS note, " +
             "c.name AS category_name, c.color_argb AS category_color_argb, " +
-            "m.canonical_name AS merchant_name " +
+            "m.canonical_name AS merchant_name, " +
+            "(SELECT lc.name FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_name, " +
+            "(SELECT lc.color_argb FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_color_argb, " +
+            "(SELECT COUNT(DISTINCT li.category_id) FROM line_item li " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL) AS line_item_category_count " +
             "FROM debit_entries e " +
             "LEFT JOIN category c ON c.id = e.category_id " +
             "LEFT JOIN merchant m ON m.id = e.merchant_id " +
@@ -418,11 +440,22 @@ public interface LedgerEntryDao {
     )
     public fun pagingDebits(since: Int): PagingSource<Int, LedgerListRow>
 
+    /** The credit book's mirror of [pagingDebits]. Same shape, same reasoning. */
     @Query(
         "SELECT e.id AS id, e.amount_minor AS amount_minor, e.currency AS currency, " +
             "e.local_date AS local_date, e.occurred_at AS occurred_at, e.note AS note, " +
             "c.name AS category_name, c.color_argb AS category_color_argb, " +
-            "m.canonical_name AS merchant_name " +
+            "m.canonical_name AS merchant_name, " +
+            "(SELECT lc.name FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_name, " +
+            "(SELECT lc.color_argb FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_color_argb, " +
+            "(SELECT COUNT(DISTINCT li.category_id) FROM line_item li " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL) AS line_item_category_count " +
             "FROM credit_entries e " +
             "LEFT JOIN category c ON c.id = e.category_id " +
             "LEFT JOIN merchant m ON m.id = e.merchant_id " +
@@ -516,13 +549,31 @@ public interface LedgerEntryDao {
      * Ordered by `occurred_at`, not `deleted_at`: the row shows the entry's own
      * date, and a list sorted by one date while displaying another reads as
      * broken.
+     *
+     * The three line-item subqueries mirror `pagingDebits` exactly (ADR-0018),
+     * and are needed here for the same reason: an itemised entry has no
+     * category of its own, so `c.name` comes back null and the row would read
+     * "Unfiled". The soft-delete makes no difference to them --
+     * `ON DELETE CASCADE` only fires on a real `DELETE`, so a binned entry
+     * still has all its `line_item` rows, which is exactly why restoring works
+     * at all.
      */
     @Query(
         "SELECT e.id AS id, e.ledger AS ledger, e.amount_minor AS amount_minor, " +
             "e.currency AS currency, e.occurred_at AS occurred_at, " +
             "e.deleted_at AS deleted_at, e.note AS note, " +
             "c.name AS category_name, c.color_argb AS category_color_argb, " +
-            "s.name AS subcategory_name, m.canonical_name AS merchant_name " +
+            "s.name AS subcategory_name, m.canonical_name AS merchant_name, " +
+            "(SELECT lc.name FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_name, " +
+            "(SELECT lc.color_argb FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_color_argb, " +
+            "(SELECT COUNT(DISTINCT li.category_id) FROM line_item li " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL) AS line_item_category_count " +
             "FROM ledger_entry e " +
             "LEFT JOIN category c ON c.id = e.category_id " +
             "LEFT JOIN category s ON s.id = e.subcategory_id " +

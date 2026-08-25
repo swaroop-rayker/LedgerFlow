@@ -32,4 +32,28 @@ public data class LedgerListRow(
     @ColumnInfo(name = "category_color_argb") val categoryColorArgb: Int?,
     @ColumnInfo(name = "merchant_name") val merchantName: String?,
     @ColumnInfo(name = "note") val note: String?,
+    /**
+     * The line items' own filing, for a row whose [categoryName] is null
+     * (ADR-0018).
+     *
+     * An itemised entry stores no entry-level category, so without this an
+     * itemised row has nothing here to show and falls into the same "Unfiled"
+     * bucket as a genuinely uncategorised one. This is the categorised line
+     * with the largest signed total — the correlated subquery behind it groups
+     * `line_item` by `category_id` and orders by `SUM(total_minor) DESC`, tied
+     * on the earliest `position` so a dead-heat picks the item entered first.
+     *
+     * Null whenever [categoryName] is non-null (a plain entry) or when every
+     * line item is uncategorised.
+     */
+    @ColumnInfo(name = "line_item_category_name") val lineItemCategoryName: String?,
+    /** The swatch for [lineItemCategoryName]. Null exactly when it is. */
+    @ColumnInfo(name = "line_item_category_color_argb") val lineItemCategoryColorArgb: Int?,
+    /**
+     * How many distinct categories this entry's line items carry, 0 when none.
+     *
+     * What tells the row whether [lineItemCategoryName] is the whole story or
+     * only the largest slice of it -- the "+2" on "Groceries +2".
+     */
+    @ColumnInfo(name = "line_item_category_count") val lineItemCategoryCount: Int,
 )

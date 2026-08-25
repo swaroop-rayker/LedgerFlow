@@ -17,6 +17,13 @@ import com.ledgerflow.core.model.Money
  * Three `LEFT JOIN`s, one more than the Ledger's list row: the bin resolves the
  * subcategory too, because it is where a user tells two near-identical entries
  * apart before deciding which to keep.
+ *
+ * It also carries the same line-item fallback the list row does (ADR-0018), for
+ * the same reason: an itemised entry files at line grain, so without it a binned
+ * itemised entry reads as "Unfiled" here exactly as it did in the list. A
+ * deleted entry is *more* dependent on it, not less -- the bin is where the user
+ * decides whether to restore something, and "Unfiled" is the least useful thing
+ * to tell them about a bill they broke into six categories.
  */
 public data class DeletedEntryRow(
     @ColumnInfo(name = "id") val id: String,
@@ -30,4 +37,13 @@ public data class DeletedEntryRow(
     @ColumnInfo(name = "subcategory_name") val subcategoryName: String?,
     @ColumnInfo(name = "merchant_name") val merchantName: String?,
     @ColumnInfo(name = "note") val note: String?,
+    /**
+     * The categorised line with the largest signed total (ADR-0018). Null when
+     * [categoryName] is non-null, or when no line item carries a category.
+     */
+    @ColumnInfo(name = "line_item_category_name") val lineItemCategoryName: String?,
+    /** The swatch for [lineItemCategoryName]. Null exactly when it is. */
+    @ColumnInfo(name = "line_item_category_color_argb") val lineItemCategoryColorArgb: Int?,
+    /** Distinct categories across this entry's line items. 0 when none. */
+    @ColumnInfo(name = "line_item_category_count") val lineItemCategoryCount: Int,
 )

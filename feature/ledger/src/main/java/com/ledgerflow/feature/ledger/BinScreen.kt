@@ -171,9 +171,18 @@ private fun BinRow(
     val colors = LfTheme.colors
     val shape = RoundedCornerShape(spacing.cornerLarge)
 
-    val title = listOfNotNull(entry.merchantName, entry.categoryName, entry.subcategoryName)
+    // displayCategoryName, not categoryName: an itemised entry files at line
+    // grain and has none of its own (ADR-0018), so without the fallback a
+    // binned itemised bill reads "Unfiled" — the least useful thing to tell
+    // someone deciding whether to restore it. The subcategory stays the
+    // entry's own and is simply absent on such a row; see
+    // DeletedEntry.additionalCategoryCount for why it gets no line-grain twin.
+    val categoryLabel = entry.displayCategoryName?.let { name ->
+        entry.additionalCategoryCount?.let { extra -> "$name +$extra" } ?: name
+    }
+    val title = listOfNotNull(entry.merchantName, categoryLabel, entry.subcategoryName)
         .joinToString(BIN_SEPARATOR)
-        .ifEmpty { "Unfiled" }
+        .ifEmpty { UNFILED }
     // Always with the date: a bin spans whatever the user has deleted,
     // and there is no band header above a row to carry it.
     val stamp = occurredStamp(entry.occurredAt, withDate = true)
@@ -265,8 +274,9 @@ private fun BinSwatch(entry: DeletedEntry) {
         LfTheme.typography.bodyL.lineHeight.toDp()
     }
     Box(modifier = Modifier.height(namingLine), contentAlignment = Alignment.Center) {
-        val name = entry.categoryName
-        val color = entry.categoryColorArgb
+        // The display variants, as the title above uses (ADR-0018).
+        val name = entry.displayCategoryName
+        val color = entry.displayCategoryColorArgb
         if (name != null && color != null) {
             LfCategoryDot(name = name, colorArgb = color)
         } else {

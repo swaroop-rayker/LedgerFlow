@@ -110,6 +110,9 @@ internal fun LedgerListRow.toDomain(ledger: LedgerType): LedgerListItem = Ledger
     categoryColorArgb = categoryColorArgb,
     merchantName = merchantName,
     note = note,
+    lineItemCategoryName = lineItemCategoryName,
+    lineItemCategoryColorArgb = lineItemCategoryColorArgb,
+    lineItemCategoryCount = lineItemCategoryCount,
 )
 
 /**
@@ -132,4 +135,7 @@ internal fun DeletedEntryRow.toDomain(): DeletedEntry = DeletedEntry(
     subcategoryName = subcategoryName,
     merchantName = merchantName,
     note = note,
+    lineItemCategoryName = lineItemCategoryName,
+    lineItemCategoryColorArgb = lineItemCategoryColorArgb,
+    lineItemCategoryCount = lineItemCategoryCount,
 )

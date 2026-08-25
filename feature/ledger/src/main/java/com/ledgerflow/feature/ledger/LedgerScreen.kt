@@ -432,7 +432,17 @@ private fun EntryRow(
     // does not exist: they are two independent facts about the same entry, and
     // most rows have both. Either alone degrades to just itself, with no
     // dangling separator.
-    val title = listOfNotNull(item.merchantName, item.categoryName)
+    //
+    // The category half reads displayCategoryName, not categoryName directly
+    // (ADR-0018): an itemised entry has no category of its own, so its largest
+    // line item's stands in, with "+2" appended when the bill spans more than
+    // one. Without this an itemised row fell into the same UNFILED bucket as a
+    // genuinely uncategorised one — a Reliance Fresh bill split across
+    // groceries and electronics read as filed under nothing at all.
+    val categoryLabel = item.displayCategoryName?.let { name ->
+        item.additionalCategoryCount?.let { extra -> "$name +$extra" } ?: name
+    }
+    val title = listOfNotNull(item.merchantName, categoryLabel)
         .joinToString(SEPARATOR)
         .ifEmpty { UNFILED }
     // The band header already says "Today"; repeating the date under it is
@@ -528,8 +538,11 @@ private fun EntrySwatch(item: LedgerListItem) {
         modifier = Modifier.height(namingLine),
         contentAlignment = Alignment.Center,
     ) {
-        val categoryName = item.categoryName
-        val categoryColor = item.categoryColorArgb
+        // The display variants, not the raw column: an itemised entry's swatch
+        // comes from its largest line item's category (ADR-0018), same as the
+        // title text above does.
+        val categoryName = item.displayCategoryName
+        val categoryColor = item.displayCategoryColorArgb
         if (categoryName != null && categoryColor != null) {
             LfCategoryDot(name = categoryName, colorArgb = categoryColor)
         } else {
@@ -808,8 +821,14 @@ private const val TIME_12_HOUR = "h:mm a"
 private const val TIME_24_HOUR = "HH:mm"
 private const val DATE_PREFIX = "d MMM, "
 
-/** An entry filed under nothing. §5.1 writes these when a parse fails. */
-private const val UNFILED = "Unfiled"
+/**
+ * An entry filed under nothing. §5.1 writes these when a parse fails.
+ *
+ * `internal` so the bin says the same word, the way it shares [HAIRLINE]. Both
+ * screens reach it only after the line-item fallback has come back empty too
+ * (ADR-0018), so it now means "genuinely nothing" on either.
+ */
+internal const val UNFILED = "Unfiled"
 
 /** A draft with nothing chosen yet, which is most of a draft's life. */
 private const val UNTITLED_DRAFT = "Unsaved entry"

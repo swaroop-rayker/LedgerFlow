@@ -81,8 +81,21 @@ This requires **no change to the schema in `SPEC.md` §6.1** — it already desc
 
 **What would make us revisit this.** If `LedgerIsolationTest` ever has to be weakened or exempted to let a legitimate query through, that is the signal that the partitioned model is fighting a real requirement. Reopen rather than adding an exemption list.
 
+### Amendment, 2026-08-25 — the aggregate rule was sharpened, not weakened
+
+ADR-0018's line-item fallback tripped `aggregatesReadFromTheViewsNotTheBaseTable`, whose rule was *"any SQL literal containing `SUM(` must mention a view name"*. Per the paragraph above, that is the trigger to come back here rather than to add an exemption, so this records what was done and why it is not the weakening the rule was written to prevent.
+
+The old rule was a **string proxy** for the invariant, and it was wrong in both directions:
+
+- **Too strict.** The bin's read of an itemised entry sums `line_item.total_minor` in a per-entry subquery to find which category a bill mostly went to. It must name `ledger_entry` — the views' predicate is `deleted_at IS NULL`, so no view can return a binned row — and the old rule failed it. That aggregate cannot net books: it is scoped by `li.entry_id = e.id`, a line item belongs to one entry, an entry belongs to one book, and the value is only ever an `ORDER BY` key used to choose a category *name*. No figure derived from it is displayed or summed.
+- **Too lax.** `pagingDebits` and `pagingCredits` carry the same subquery and passed regardless, purely because `debit_entries` appears in their outer `FROM`. The rule was never checking what their `SUM` read from.
+
+What Law 2 forbids is netting **entry amounts** across the two books. The rule now tests exactly that — a `SUM` over `amount_minor` must read a view — and a second assertion, `lineItemAggregatesAreScopedToOneEntry`, requires every `SUM(total_minor)` to bind an entry so it cannot span books either. Both were verified to fail against deliberately planted violations before being accepted; a guard nobody has watched fail is not a guard.
+
+Net effect: one aggregate that was previously rejected is now allowed, two that previously passed by accident are now genuinely checked, and a class of unscoped line-item aggregate that was never checked at all is now forbidden. The partitioned model is not fighting a real requirement here — the guard was measuring the wrong thing.
+
 ## Verification
 
-- `LedgerIsolationTest` — reflection over all DAO `@Query` annotations; blocking in `unit-test`.
+- `LedgerIsolationTest` — source scanning of every SQL literal in every DAO; blocking in `unit-test`. Covers unguarded reads of the base table, statements naming both views, entry-amount aggregates outside the views, and (since the 2026-08-25 amendment) line-item aggregates not scoped to a single entry.
 - Room schema validation of the two views, via the committed schema JSON and `guard-schema.sh`.
 - An instrumented assertion that seeds both ledgers and confirms every view and DAO read returns rows of exactly one `ledger` value.

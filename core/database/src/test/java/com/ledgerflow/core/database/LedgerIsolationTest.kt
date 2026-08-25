@@ -107,14 +107,72 @@ class LedgerIsolationTest {
         assertThat(offenders.map { "${it.file}: ${it.sql}" }).isEmpty()
     }
 
+    /**
+     * A money aggregate over the ledger must read a per-book view (ADR-0002).
+     *
+     * **Sharpened 2026-08-25, and it is worth being precise about why**, because
+     * an edit to a Law 2 guard is otherwise indistinguishable from someone
+     * filing the teeth off it.
+     *
+     * The rule used to be "any literal containing `SUM(` must mention a view
+     * name somewhere". That is a proxy for the real invariant, and it was wrong
+     * in both directions:
+     *
+     * - **Too strict.** ADR-0018's line-item fallback sums
+     *   `line_item.total_minor` inside a per-entry subquery to find which
+     *   category a bill mostly went to. The bin's copy of that read must name
+     *   `ledger_entry` -- the views' predicate is `deleted_at IS NULL`, so no
+     *   view can ever return a binned row -- and the old rule failed it. That
+     *   aggregate cannot net books: it is scoped by `li.entry_id = e.id`, a line
+     *   item belongs to one entry, an entry belongs to one book, and the value
+     *   is only ever an `ORDER BY` key for choosing a *name*.
+     * - **Too lax.** `pagingDebits` and `pagingCredits` carry the same subquery
+     *   and passed anyway, purely because "debit_entries" appears in their outer
+     *   `FROM`. The guard was not checking what their `SUM` read from; it was
+     *   checking that a view was mentioned in the string at all.
+     *
+     * What Law 2 actually forbids is netting *entry amounts* across the two
+     * books, so that is what is tested now: a `SUM` over the ledger's own money
+     * column has to come from a view. `SUM(li.total_minor)` and any future
+     * aggregate over a different column are simply not what this rule is about
+     * -- `noQueryTouchesLedgerEntryWithoutBindingALedger` above still covers
+     * every statement naming the base table, including those.
+     *
+     * This is a narrowing of scope onto the real invariant rather than an
+     * exemption list, which is why it did not reopen ADR-0002 -- but it is
+     * recorded there under Consequences so the next reader finds the reasoning
+     * rather than a mysteriously specific regex.
+     */
     @Test
-    fun aggregatesReadFromTheViewsNotTheBaseTable() {
-        val aggregates = sqlLiterals().filter { it.sql.contains("SUM(", ignoreCase = true) }
+    fun aggregatesOverEntryAmountsReadFromTheViewsNotTheBaseTable() {
+        // SUM over amount_minor, with or without a table alias in front of it.
+        val entryAmountSum = Regex("""SUM\(\s*(\w+\.)?amount_minor\s*\)""", RegexOption.IGNORE_CASE)
+        val aggregates = sqlLiterals().filter { entryAmountSum.containsMatchIn(it.sql) }
 
         assertThat(aggregates).isNotEmpty()
         aggregates.forEach { literal ->
             assertThat(literal.sql.lowercase()).containsMatch("debit_entries|credit_entries")
         }
+    }
+
+    /**
+     * The other half of the sharpening: an aggregate over anything else must
+     * still be confined to one entry.
+     *
+     * Without this, dropping the old blanket rule would leave
+     * `SUM(li.total_minor)` unconstrained across the whole `line_item` table --
+     * a statement that really could add a debit's items to a credit's. Every
+     * such aggregate has to bind an entry, which is what makes it single-book
+     * by construction.
+     */
+    @Test
+    fun lineItemAggregatesAreScopedToOneEntry() {
+        val lineItemSum = Regex("""SUM\(\s*(\w+\.)?total_minor\s*\)""", RegexOption.IGNORE_CASE)
+        val offenders = sqlLiterals()
+            .filter { lineItemSum.containsMatchIn(it.sql) }
+            .filterNot { Regex("""entry_id\s*=\s*\w+\.id""").containsMatchIn(it.sql) }
+
+        assertThat(offenders.map { "${it.file}: ${it.sql}" }).isEmpty()
     }
 
     @Test
