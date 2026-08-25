@@ -208,8 +208,14 @@ public class DefaultCategoryRepository @Inject constructor(
             database.withTransaction {
                 if (reassignTo != null) {
                     entries.reassignCategory(ledger, id, reassignTo, now)
+                    entries.reassignLineItemCategory(ledger, id, reassignTo)
+                    // Line grain too (ADR-0018). An itemised entry files only
+                    // here, so moving `ledger_entry` alone would leave the very
+                    // rows the count was about still pointing at the category
+                    // the user just emptied.
                 }
                 entries.clearSubcategory(ledger, id, now)
+                entries.clearLineItemSubcategory(ledger, id)
                 // Children follow the parent out (BUG12).
                 //
                 // This was `reparentChildren(id, reassignTo, ...)`, which in the
@@ -292,6 +298,13 @@ public class DefaultCategoryRepository @Inject constructor(
      * `deleted_at IS NULL` predicate here would let a purge quietly strip the
      * category off rows still sitting in the bin.
      *
+     * **It counts line items too, since ADR-0018**, and that was a real hole
+     * rather than a theoretical one. `line_item.category_id` has no foreign key
+     * either, and an itemised entry files *only* there -- so a category used by
+     * nothing but line items counted 0, the block never fired, and erasing it
+     * silently detached every one of those lines. `countAllForCategory` now
+     * asks about both grains; the reassign below moves both.
+     *
      * The children are counted as well as destroyed. A branch's entries are
      * usually filed under the parent, but nothing stops an entry naming a
      * subcategory directly as its `category_id`, and that entry needs a
@@ -344,11 +357,16 @@ public class DefaultCategoryRepository @Inject constructor(
                 doomed.forEach { doomedId ->
                     if (reassignTo != null) {
                         entries.reassignCategory(ledger, doomedId, reassignTo, now)
+                        entries.reassignLineItemCategory(ledger, doomedId, reassignTo)
                     }
                     // Always, target or not: this reference has nowhere to go
                     // and cannot be left pointing at a row about to stop
-                    // existing.
+                    // existing. Both grains, for the same reason -- and it
+                    // matters more here than on the soft delete, because after
+                    // this transaction the category row is gone and a missed
+                    // reference resolves to nothing forever.
                     entries.clearSubcategory(ledger, doomedId, now)
+                    entries.clearLineItemSubcategory(ledger, doomedId)
                 }
                 if (branch.isNotEmpty()) dao.hardDeleteChildren(id, hidden.deletedAt)
                 dao.hardDelete(id)

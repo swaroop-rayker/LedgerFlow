@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.data.ledger.LedgerTestVault
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.LedgerResult
+import com.ledgerflow.core.domain.ledger.NewLineItem
 import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.taxonomy.NewPaymentMethod
 import com.ledgerflow.core.domain.taxonomy.TaxonomyError
@@ -373,6 +374,120 @@ class TaxonomyPurgeTest {
             .contains("Household")
     }
 
+    // ── Line-grain references (ADR-0018) ────────────────────────────
+
+    /** With a target, the lines move rather than being orphaned. */
+    @Test
+    fun purge_withATarget_movesLineItemsToo() = runBlocking<Unit> {
+        val entry = binnedItemisedEntry(household.id)
+
+        vault.categories.purge(household.id, reassignTo = groceries.id).success()
+
+        assertThat(allCategoryIds()).doesNotContain(household.id)
+        val lines = lineItemsOf(entry.id)
+        assertThat(lines).isNotEmpty()
+        assertThat(lines.map { it.categoryId }).containsExactly(groceries.id)
+    }
+
+    /**
+     * A subcategory named only by a line item is cleared, not blocked.
+     *
+     * Same rule the entry grain has always had: a subcategory reference needs
+     * nowhere to go, because dropping it leaves the line filed under the
+     * category it already had.
+     */
+    @Test
+    fun purge_subcategoryUsedOnlyByLineItems_clearsTheReference() = runBlocking<Unit> {
+        // Hiding is not blocked here: the line names this row as its
+        // *subcategory*, and neither count asks about that -- by design.
+        val entry = approveItemised(groceries.id, subcategoryId = vegetables.id)
+        vault.categories.delete(vegetables.id, reassignTo = null).success()
+
+        vault.categories.purge(vegetables.id, reassignTo = null).success()
+
+        assertThat(allCategoryIds()).doesNotContain(vegetables.id)
+        val line = lineItemsOf(entry.id).single()
+        assertThat(line.subcategoryId).isNull()
+        // The category it was filed under is untouched.
+        assertThat(line.categoryId).isEqualTo(groceries.id)
+    }
+
+    /** The soft delete reports the same widened count, so the prompt is honest. */
+    @Test
+    fun delete_categoryUsedOnlyByLineItems_isRefusedWithoutATarget() = runBlocking<Unit> {
+        approveItemised(household.id)
+
+        val error = vault.categories.delete(household.id, reassignTo = null).error()
+
+        assertThat(error).isInstanceOf(TaxonomyError.ReassignRequired::class.java)
+        assertThat((error as TaxonomyError.ReassignRequired).affectedEntries).isEqualTo(1)
+    }
+
+    /** And hiding with a target moves the lines, so the count did not lie. */
+    @Test
+    fun delete_withATarget_movesLineItemsToo() = runBlocking<Unit> {
+        val entry = approveItemised(household.id)
+
+        vault.categories.delete(household.id, reassignTo = groceries.id).success()
+
+        assertThat(lineItemsOf(entry.id).map { it.categoryId }).containsExactly(groceries.id)
+    }
+
+    /**
+     * **The regression, and the only route that reaches it.**
+     *
+     * ADR-0018 made an itemised entry file at line grain and store no
+     * `category_id` of its own, while the purge's reference count asked only
+     * about `ledger_entry.category_id`. For a category that every line of a
+     * bill pointed at, it answered 0: the reassign-or-block rule never fired
+     * and the erase went through. `line_item.category_id` has no foreign key,
+     * so SQLite neither refused it nor repaired anything after -- the lines
+     * were left holding an id resolving to no row, and that spend silently
+     * stopped belonging to any category. Irreversible, and invisible from every
+     * screen.
+     *
+     * **Binning the entry first is not incidental to the setup, it is the
+     * whole path.** With both counts widened, hiding a category still used at
+     * line grain is now refused outright, so a hidden category normally has no
+     * references left to orphan. A *binned* entry is the gap: `countForCategory`
+     * excludes it (`deleted_at IS NULL`) so the hide succeeds, and only
+     * `countAllForCategory` -- which deliberately omits that predicate -- is
+     * left standing between the erase and the data. That is exactly the case
+     * the class doc calls the one nobody writes by accident, now reachable one
+     * level down.
+     */
+    @Test
+    fun purge_categoryUsedOnlyByABinnedItemisedEntry_isStillRefused() = runBlocking<Unit> {
+        binnedItemisedEntry(household.id)
+
+        val error = vault.categories.purge(household.id, reassignTo = null).error()
+
+        assertThat(error).isInstanceOf(TaxonomyError.ReassignRequired::class.java)
+        // One entry to re-file, not N line items.
+        assertThat((error as TaxonomyError.ReassignRequired).affectedEntries).isEqualTo(1)
+        assertThat(allCategoryIds()).contains(household.id)
+    }
+
+    /** An entry counted at both grains is one entry, not two. */
+    @Test
+    fun count_doesNotDoubleCountAnEntryReferencedAtBothGrains() = runBlocking<Unit> {
+        vault.ledger.approve(
+            ApprovalRequest(
+                ledger = LedgerType.DEBIT,
+                amount = Money(100_00L),
+                occurredAt = OCCURRED_AT,
+                assignment = EntryAssignment(categoryId = household.id),
+                lineItems = listOf(
+                    NewLineItem(name = "Mop", total = Money(100_00L), categoryId = household.id),
+                ),
+            ),
+        ).success()
+
+        val error = vault.categories.delete(household.id, reassignTo = null).error()
+
+        assertThat((error as TaxonomyError.ReassignRequired).affectedEntries).isEqualTo(1)
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private suspend fun approve(
@@ -394,6 +509,44 @@ class TaxonomyPurgeTest {
             ),
         ),
     ).success()
+
+    /** An itemised entry: no entry-level category, one line filed at line grain. */
+    private suspend fun approveItemised(
+        categoryId: String,
+        subcategoryId: String? = null,
+    ): LedgerEntry = vault.ledger.approve(
+        ApprovalRequest(
+            ledger = LedgerType.DEBIT,
+            amount = Money(100_00L),
+            occurredAt = OCCURRED_AT,
+            lineItems = listOf(
+                NewLineItem(
+                    name = "Mop",
+                    total = Money(100_00L),
+                    categoryId = categoryId,
+                    subcategoryId = subcategoryId,
+                ),
+            ),
+        ),
+    ).success()
+
+    /**
+     * An itemised entry in the bin, with [categoryId] hidden behind it.
+     *
+     * The only state from which a category can be erased while line items still
+     * reference it: binning the entry hides it from `countForCategory`, which
+     * lets the category be hidden, which is the precondition for a purge.
+     */
+    private suspend fun binnedItemisedEntry(categoryId: String): LedgerEntry {
+        val entry = approveItemised(categoryId)
+        vault.ledger.softDeleteEntry(LedgerType.DEBIT, entry.id)
+        vault.categories.delete(categoryId, reassignTo = null).success()
+        return entry
+    }
+
+    private suspend fun lineItemsOf(entryId: String) =
+        vault.session.requireDatabase().ledgerEntryDao().allLineItems()
+            .filter { it.entryId == entryId }
 
     private suspend fun rowFor(id: String, ledger: LedgerType = LedgerType.DEBIT) =
         vault.session.requireDatabase().ledgerEntryDao().allForLedger(ledger).single { it.id == id }

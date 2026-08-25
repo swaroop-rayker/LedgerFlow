@@ -25,9 +25,23 @@ import com.ledgerflow.core.model.LedgerType
 @Dao
 public interface LedgerTaxonomyDao {
 
+    /**
+     * Live entries filed under [categoryId], **at either grain** (ADR-0018).
+     *
+     * The `EXISTS` half is not belt-and-braces. An itemised entry files at line
+     * grain and stores no `category_id` of its own, so before ADR-0018 widened
+     * this it answered 0 for a category that a dozen line items pointed at --
+     * and the caller took that as "nothing uses this".
+     *
+     * Counts **entries, not references**: an entry with three lines under this
+     * category is one thing the user has to re-file, and reporting three would
+     * make the re-assign prompt lie about the size of what it is about to move.
+     */
     @Query(
-        "SELECT COUNT(*) FROM ledger_entry WHERE ledger = :ledger " +
-            "AND category_id = :categoryId AND deleted_at IS NULL",
+        "SELECT COUNT(*) FROM ledger_entry e WHERE e.ledger = :ledger " +
+            "AND e.deleted_at IS NULL AND (e.category_id = :categoryId " +
+            "OR EXISTS (SELECT 1 FROM line_item li WHERE li.entry_id = e.id " +
+            "AND li.category_id = :categoryId))",
     )
     public suspend fun countForCategory(ledger: LedgerType, categoryId: String): Int
 
@@ -56,6 +70,38 @@ public interface LedgerTaxonomyDao {
             "WHERE ledger = :ledger AND subcategory_id = :source",
     )
     public suspend fun clearSubcategory(ledger: LedgerType, source: String, now: Long)
+
+    /**
+     * The line-grain half of [reassignCategory] (ADR-0018).
+     *
+     * A separate statement rather than a widening of that one, because
+     * `line_item` has no `updated_at` to stamp and no `ledger` column to filter
+     * on -- it reaches its book through `entry_id`, which is what the subquery
+     * binds. Callers issue both, in the same transaction.
+     *
+     * `subcategory_id` is cleared alongside, for the reason [reassignCategory]
+     * gives: §6.1.1's invariant is that a subcategory's parent equals the
+     * `category_id` beside it, and moving one without the other breaks exactly
+     * that.
+     */
+    @Query(
+        "UPDATE line_item SET category_id = :target, subcategory_id = NULL " +
+            "WHERE category_id = :source AND entry_id IN " +
+            "(SELECT id FROM ledger_entry WHERE ledger = :ledger)",
+    )
+    public suspend fun reassignLineItemCategory(
+        ledger: LedgerType,
+        source: String,
+        target: String,
+    )
+
+    /** The line-grain half of [clearSubcategory]. Issued with it, always. */
+    @Query(
+        "UPDATE line_item SET subcategory_id = NULL " +
+            "WHERE subcategory_id = :source AND entry_id IN " +
+            "(SELECT id FROM ledger_entry WHERE ledger = :ledger)",
+    )
+    public suspend fun clearLineItemSubcategory(ledger: LedgerType, source: String)
 
     @Query(
         "SELECT COUNT(*) FROM ledger_entry WHERE ledger = :ledger " +
@@ -97,19 +143,33 @@ public interface LedgerTaxonomyDao {
     // user restored an entry months later.
 
     /**
-     * Entries filed **under** [categoryId] in one book, binned ones included.
+     * Entries filed **under** [categoryId] in one book, binned ones included,
+     * at either grain.
      *
-     * `category_id` only, deliberately -- the mirror of [countForCategory],
-     * which asks the same question about live rows. An entry that merely names
-     * the row as its `subcategory_id` is not counted, because it does not need
-     * anywhere to go: `clearSubcategory` drops the reference and the entry keeps
-     * the category it was already filed under. That is what a soft delete has
-     * always done to a subcategory, and a purge changing it would mean the user
-     * being asked to re-file entries that were never mis-filed.
+     * The mirror of [countForCategory], minus the `deleted_at` predicate, and
+     * the number that stands between an erase and silent data loss.
+     *
+     * **`category_id` only, at both grains, deliberately.** A row that names
+     * this category as its `subcategory_id` -- on the entry or on a line -- is
+     * not counted, because it does not need anywhere to go: the two
+     * `clearSubcategory` statements drop that reference and the row keeps the
+     * category it was filed under. That is what a soft delete has always done
+     * to a subcategory, and a purge changing it would mean the user being asked
+     * to re-file rows that were never mis-filed.
+     *
+     * The line-grain half arrived with ADR-0018 and closed a real hole. An
+     * itemised entry has no entry-level `category_id`, so this counted 0 for a
+     * category every one of its lines was filed under, the reassign-or-block
+     * rule never fired, and the purge went through leaving those lines pointing
+     * at a row that no longer exists -- spend that quietly stopped belonging to
+     * anything. `line_item.category_id` has no foreign key either, so nothing
+     * downstream would have complained.
      */
     @Query(
-        "SELECT COUNT(*) FROM ledger_entry WHERE ledger = :ledger " +
-            "AND category_id = :categoryId",
+        "SELECT COUNT(*) FROM ledger_entry e WHERE e.ledger = :ledger " +
+            "AND (e.category_id = :categoryId " +
+            "OR EXISTS (SELECT 1 FROM line_item li WHERE li.entry_id = e.id " +
+            "AND li.category_id = :categoryId))",
     )
     public suspend fun countAllForCategory(ledger: LedgerType, categoryId: String): Int
 
