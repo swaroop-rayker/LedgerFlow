@@ -257,6 +257,6 @@ internal fun LedgerError.toMessage(): String = when (this) {
     LedgerError.BaseCurrencyMissing,
     is LedgerError.ForeignCurrencyIsBase,
     LedgerError.ForeignRateNotPositive,
-    is LedgerError.LineItemNameBlank,
+    is LedgerError.LineItemRefusal,
     -> "That didn't work. Try again."
 }
