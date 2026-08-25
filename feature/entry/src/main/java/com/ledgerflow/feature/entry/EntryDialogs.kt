@@ -21,7 +21,9 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.domain.taxonomy.MerchantNormalizer
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
@@ -58,24 +60,49 @@ private fun PickerDialog(
         onConfirm = { onEvent(EntryEvent.PickerItemSelected(null)) },
         onDismiss = { onEvent(EntryEvent.PickerDismissed) },
         detail = {
-            Column(
-                modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                if (options.isEmpty()) {
-                    Text(
-                        text = picker.emptyMessage,
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textSecondary,
+            Column {
+                // Merchants only. §5.4 promises autocomplete for this one field,
+                // and it is the only picker whose list grows without bound --
+                // categories are a tree the user curates, payment methods are a
+                // handful. A search box over six payment methods is clutter.
+                if (picker is EntryPicker.Merchant) {
+                    LfTextField(
+                        value = state.merchantQuery,
+                        onValueChange = { onEvent(EntryEvent.MerchantQueryChanged(it)) },
+                        label = "Search or add",
                     )
                 }
-                options.forEach { option ->
-                    ChoiceRow(
-                        label = option.label,
-                        selected = option.id == picker.selectedIdIn(state),
-                        onClick = { onEvent(EntryEvent.PickerItemSelected(option.id)) },
-                    )
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    // The offer to create comes first, not last. It is what the
+                    // user is here for once they have typed a name the list
+                    // does not contain, and a list of near-misses above it is
+                    // exactly the wrong order to read them in.
+                    if (state.canCreateMerchant(picker)) {
+                        ChoiceRow(
+                            label = "Add \"${state.merchantQuery.trim()}\"",
+                            selected = false,
+                            emphasised = true,
+                            onClick = { onEvent(EntryEvent.MerchantCreateRequested) },
+                        )
+                    }
+                    if (options.isEmpty() && !state.canCreateMerchant(picker)) {
+                        Text(
+                            text = picker.emptyMessage,
+                            style = LfTheme.typography.bodyM,
+                            color = LfTheme.colors.textSecondary,
+                        )
+                    }
+                    options.forEach { option ->
+                        ChoiceRow(
+                            label = option.label,
+                            selected = option.id == picker.selectedIdIn(state),
+                            onClick = { onEvent(EntryEvent.PickerItemSelected(option.id)) },
+                        )
+                    }
                 }
             }
         },
@@ -183,11 +210,19 @@ private fun SingleItemDialog(state: EntryUiState, onEvent: (EntryEvent) -> Unit)
 }
 
 @Composable
-private fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ChoiceRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    emphasised: Boolean = false,
+) {
     Text(
         text = label,
         style = LfTheme.typography.bodyL,
-        color = if (selected) LfTheme.colors.accent else LfTheme.colors.textPrimary,
+        // `emphasised` is the create row, which is an *action* rather than a
+        // choice -- it reads in the accent colour for the same reason a
+        // selected row does, because both are the row that does something.
+        color = if (selected || emphasised) LfTheme.colors.accent else LfTheme.colors.textPrimary,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -198,6 +233,28 @@ private fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
 
 /** One row of a picker. */
 private data class PickerOption(val id: String, val label: String)
+
+/**
+ * Whether to offer creating the typed merchant.
+ *
+ * Compares on the **normalised key**, not the raw text, because that is what
+ * `merchant.normalized_key` is unique on -- so "zepto", "Zepto " and "Zepto
+ * Pvt Ltd" all recognise the existing row and the offer correctly disappears.
+ * Offering to add one of those would not fail (`createOrGet` returns the
+ * existing merchant), but it would promise the user a new shop and quietly give
+ * them an old one.
+ *
+ * Hidden merchants are deliberately **not** consulted here: they are absent
+ * from `state.merchants`, so a name held by a hidden row still offers to add.
+ * That is the honest offer -- `createOrGet` un-hides it and the user gets the
+ * merchant they asked for, with its aliases (BUG11).
+ */
+private fun EntryUiState.canCreateMerchant(picker: EntryPicker): Boolean {
+    if (picker !is EntryPicker.Merchant) return false
+    val typed = MerchantNormalizer.normalize(merchantQuery)
+    if (typed.isEmpty()) return false
+    return merchants.none { MerchantNormalizer.normalize(it.canonicalName) == typed }
+}
 
 private val EntryPicker.title: String
     get() = when (this) {
@@ -234,7 +291,9 @@ private fun EntryPicker.optionsFrom(state: EntryUiState): List<PickerOption> = w
         .orEmpty()
         .map { PickerOption(it.id, it.name) }
 
-    EntryPicker.Merchant -> state.merchants.map { PickerOption(it.id, it.canonicalName) }
+    EntryPicker.Merchant -> state.merchants
+        .filter { it.canonicalName.contains(state.merchantQuery.trim(), ignoreCase = true) }
+        .map { PickerOption(it.id, it.canonicalName) }
 
     EntryPicker.PaymentMethod -> state.paymentMethods.map { PickerOption(it.id, it.label) }
 }

@@ -6,11 +6,14 @@ import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerResult
+import com.ledgerflow.core.domain.taxonomy.TaxonomyError
+import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.Merchant
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.testing.ledger.FakeDraftRepository
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
@@ -484,228 +487,95 @@ class EntryViewModelTest {
         assertThat(remaining.last().name).isEqualTo("third")
     }
 
-    // ── Itemised entries (ADR-0018) ──────────────────────────────
+    // ── Adding a merchant from the form (§5.4) ──────────────────────
 
     /**
-     * The category is not discarded by the switch, it moves down.
-     *
-     * The user has already answered "what is this"; the answer is still true of
-     * at least part of the bill, and making them pick it again for line one
-     * would be the app forgetting something it was just told.
+     * The point of the feature: a shop with no row yet is typed, not
+     * abandoned.
      */
     @Test
-    fun itemising_movesTheEntryCategoryOntoTheFirstLine() = runTest(dispatcher) {
+    fun typingANewMerchant_createsItAndFilesTheEntryAgainstIt() = runTest(dispatcher) {
         val subject = collected()
-        subject.type("1000")
-        subject.choose(EntryPicker.Category(), groceries.id)
-        subject.choose(EntryPicker.Subcategory(groceries.id), vegetables.id)
+        subject.onEvent(EntryEvent.PickerOpened(EntryPicker.Merchant))
+        subject.onEvent(EntryEvent.MerchantQueryChanged("Zepto"))
         advanceUntilIdle()
 
-        subject.itemise()
+        subject.onEvent(EntryEvent.MerchantCreateRequested)
         advanceUntilIdle()
 
-        val line = subject.state.value.lineItems.single()
-        assertThat(line.categoryId).isEqualTo(groceries.id)
-        assertThat(line.subcategoryId).isEqualTo(vegetables.id)
-
-        // ADR-0018: the entry itself now files nothing.
-        assertThat(subject.state.value.categoryId).isNull()
-        assertThat(subject.state.value.subcategoryId).isNull()
+        assertThat(merchants.created).containsExactly("Zepto")
+        assertThat(subject.state.value.merchantId).isEqualTo("generated-1")
+        // The picker closes on success -- the user's choice has been made.
+        assertThat(subject.state.value.picker).isNull()
+        assertThat(subject.state.value.merchantQuery).isEmpty()
     }
 
-    /** The scenario the feature exists for: one payment, two categories. */
+    /** Whitespace is not a merchant. Guarded before the repository is troubled. */
     @Test
-    fun save_whenItemised_sendsTheLinesAndNoEntryCategory() = runTest(dispatcher) {
+    fun creatingABlankMerchant_doesNothing() = runTest(dispatcher) {
         val subject = collected()
-        subject.type("1000")
-        subject.itemise()
+        subject.onEvent(EntryEvent.PickerOpened(EntryPicker.Merchant))
+        subject.onEvent(EntryEvent.MerchantQueryChanged("   "))
         advanceUntilIdle()
 
-        val first = subject.state.value.lineItems.single().key
-        subject.onEvent(EntryEvent.LineItemNameChanged(first, "Weekly shop"))
-        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(first, "600"))
-        subject.choose(EntryPicker.Category(lineKey = first), groceries.id)
-        subject.onEvent(EntryEvent.LineItemAdded)
+        subject.onEvent(EntryEvent.MerchantCreateRequested)
         advanceUntilIdle()
 
-        val second = subject.state.value.lineItems.last().key
-        subject.onEvent(EntryEvent.LineItemNameChanged(second, "Kettle"))
-        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(second, "400"))
+        assertThat(merchants.created).isEmpty()
+        assertThat(subject.state.value.merchantId).isNull()
+    }
+
+    /** A refusal is shown rather than swallowed, and the picker stays open to fix. */
+    @Test
+    fun aRefusedMerchant_surfacesTheReasonAndKeepsThePickerOpen() = runTest(dispatcher) {
+        merchants.createResult = TaxonomyResult.Failure(TaxonomyError.BlankName)
+        val subject = collected()
+        subject.onEvent(EntryEvent.PickerOpened(EntryPicker.Merchant))
+        subject.onEvent(EntryEvent.MerchantQueryChanged("///"))
         advanceUntilIdle()
 
-        subject.onEvent(EntryEvent.SaveRequested)
+        subject.onEvent(EntryEvent.MerchantCreateRequested)
         advanceUntilIdle()
 
-        val request = ledger.approved.single()
-        assertThat(request.assignment.categoryId).isNull()
-        assertThat(request.lineItems.map { it.name })
-            .containsExactly("Weekly shop", "Kettle").inOrder()
-        assertThat(request.lineItems.map { it.total })
-            .containsExactly(Money(600_00L), Money(400_00L)).inOrder()
+        assertThat(subject.state.value.message).isNotNull()
+        assertThat(subject.state.value.merchantId).isNull()
+        assertThat(subject.state.value.picker).isNotNull()
     }
 
     /**
-     * A second line inherits the first's filing.
+     * The query is cleared on both edges of the picker.
      *
-     * A twelve-line grocery bill is mostly one category with two exceptions, so
-     * this turns twelve category picks into two.
+     * A picker reopened with the last search still in it shows a filtered list
+     * the user did not filter, and the "Add" row for a name they already dealt
+     * with.
      */
     @Test
-    fun addingALine_inheritsThePreviousLinesCategory() = runTest(dispatcher) {
+    fun reopeningTheMerchantPicker_startsWithAnEmptyQuery() = runTest(dispatcher) {
         val subject = collected()
-        subject.type("100")
-        subject.itemise()
+        subject.onEvent(EntryEvent.PickerOpened(EntryPicker.Merchant))
+        subject.onEvent(EntryEvent.MerchantQueryChanged("Zep"))
+        subject.onEvent(EntryEvent.PickerDismissed)
+        advanceUntilIdle()
+        assertThat(subject.state.value.merchantQuery).isEmpty()
+
+        subject.onEvent(EntryEvent.PickerOpened(EntryPicker.Merchant))
         advanceUntilIdle()
 
-        val first = subject.state.value.lineItems.single().key
-        subject.choose(EntryPicker.Category(lineKey = first), groceries.id)
-        subject.onEvent(EntryEvent.LineItemAdded)
-        advanceUntilIdle()
-
-        assertThat(subject.state.value.lineItems.last().categoryId).isEqualTo(groceries.id)
+        assertThat(subject.state.value.merchantQuery).isEmpty()
     }
 
-    /** `unit price x quantity`, in integers, and never typed directly (Law 3). */
+    /** Picking an existing merchant is untouched by any of this. */
     @Test
-    fun lineTotal_isUnitPriceTimesQuantity() = runTest(dispatcher) {
+    fun pickingAnExistingMerchant_stillWorks() = runTest(dispatcher) {
+        merchants.merchants.value = listOf(
+            Merchant("m-zepto", "Zepto", "zepto", null, null),
+        )
         val subject = collected()
-        subject.type("1000")
-        subject.itemise()
+        subject.choose(EntryPicker.Merchant, "m-zepto")
         advanceUntilIdle()
 
-        val key = subject.state.value.lineItems.single().key
-        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(key, "120"))
-        subject.onEvent(EntryEvent.LineItemQuantityChanged(key, "2"))
-        advanceUntilIdle()
-
-        assertThat(subject.state.value.lineItems.single().amountMinor).isEqualTo(240_00L)
-        assertThat(subject.state.value.unallocatedMinor).isEqualTo(760_00L)
-    }
-
-    /** Half a kilo. The case the milli scale exists for. */
-    @Test
-    fun lineTotal_handlesAFractionalQuantity() = runTest(dispatcher) {
-        val subject = collected()
-        subject.type("100")
-        subject.itemise()
-        advanceUntilIdle()
-
-        val key = subject.state.value.lineItems.single().key
-        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(key, "99.99"))
-        subject.onEvent(EntryEvent.LineItemQuantityChanged(key, "0.5"))
-        advanceUntilIdle()
-
-        assertThat(subject.state.value.lineItems.single().amountMinor).isEqualTo(50_00L)
-    }
-
-    /** Leaving itemised mode destroys typing, so it asks first (BUG6's reasoning). */
-    @Test
-    fun leavingItemised_withLinesEntered_asksBeforeDiscarding() = runTest(dispatcher) {
-        val subject = collected()
-        subject.type("100")
-        subject.itemise()
-        advanceUntilIdle()
-
-        val key = subject.state.value.lineItems.single().key
-        subject.onEvent(EntryEvent.LineItemNameChanged(key, "Rice"))
-        subject.onEvent(EntryEvent.ModeSelected(itemised = false))
-        advanceUntilIdle()
-
-        assertThat(subject.state.value.confirmingSingleItem).isTrue()
-        // Nothing has gone yet.
-        assertThat(subject.state.value.itemised).isTrue()
-        assertThat(subject.state.value.lineItems).hasSize(1)
-
-        subject.onEvent(EntryEvent.SingleItemConfirmed)
-        advanceUntilIdle()
-
-        assertThat(subject.state.value.itemised).isFalse()
-        assertThat(subject.state.value.lineItems).isEmpty()
-    }
-
-    /**
-     * An untouched editor goes without a question.
-     *
-     * A confirmation over nothing is how people learn to dismiss dialogs unread,
-     * which is what makes the one that matters ineffective.
-     */
-    @Test
-    fun leavingItemised_withNothingEntered_doesNotAsk() = runTest(dispatcher) {
-        val subject = collected()
-        subject.type("100")
-        subject.itemise()
-        advanceUntilIdle()
-
-        subject.onEvent(EntryEvent.ModeSelected(itemised = false))
-        advanceUntilIdle()
-
-        assertThat(subject.state.value.confirmingSingleItem).isFalse()
-        assertThat(subject.state.value.itemised).isFalse()
-    }
-
-    /** Single-item entries send no lines, whatever was typed before the switch. */
-    @Test
-    fun save_whenSingle_sendsNoLineItems() = runTest(dispatcher) {
-        val subject = collected()
-        subject.type("100")
-        subject.itemise()
-        advanceUntilIdle()
-
-        val key = subject.state.value.lineItems.single().key
-        subject.onEvent(EntryEvent.LineItemNameChanged(key, "Rice"))
-        subject.onEvent(EntryEvent.ModeSelected(itemised = false))
-        subject.onEvent(EntryEvent.SingleItemConfirmed)
-        subject.choose(EntryPicker.Category(), groceries.id)
-        advanceUntilIdle()
-
-        subject.onEvent(EntryEvent.SaveRequested)
-        advanceUntilIdle()
-
-        val request = ledger.approved.single()
-        assertThat(request.lineItems).isEmpty()
-        assertThat(request.assignment.categoryId).isEqualTo(groceries.id)
-    }
-
-    /** Changing a line's category clears its subcategory -- §6.1.1, one level down. */
-    @Test
-    fun changingALinesCategory_clearsItsSubcategory() = runTest(dispatcher) {
-        val subject = collected()
-        subject.type("100")
-        subject.itemise()
-        advanceUntilIdle()
-
-        val key = subject.state.value.lineItems.single().key
-        subject.choose(EntryPicker.Category(lineKey = key), groceries.id)
-        subject.choose(EntryPicker.Subcategory(groceries.id, lineKey = key), vegetables.id)
-        advanceUntilIdle()
-        assertThat(subject.state.value.lineItems.single().subcategoryId).isEqualTo(vegetables.id)
-
-        subject.choose(EntryPicker.Category(lineKey = key), "cat-other")
-        advanceUntilIdle()
-
-        assertThat(subject.state.value.lineItems.single().subcategoryId).isNull()
-    }
-
-    /** Only one line is open at a time, and removing it leaves none open. */
-    @Test
-    fun expansion_isSingleAndSurvivesRemoval() = runTest(dispatcher) {
-        val subject = collected()
-        subject.type("100")
-        subject.itemise()
-        subject.onEvent(EntryEvent.LineItemAdded)
-        advanceUntilIdle()
-
-        val keys = subject.state.value.lineItems.map { it.key }
-        // Adding opens the new row.
-        assertThat(subject.state.value.editor.expandedKey).isEqualTo(keys[1])
-
-        subject.onEvent(EntryEvent.LineItemExpanded(keys[0]))
-        advanceUntilIdle()
-        assertThat(subject.state.value.editor.expandedKey).isEqualTo(keys[0])
-
-        subject.onEvent(EntryEvent.LineItemRemoved(keys[0]))
-        advanceUntilIdle()
-        assertThat(subject.state.value.editor.expandedKey).isNull()
+        assertThat(subject.state.value.merchantId).isEqualTo("m-zepto")
+        assertThat(merchants.created).isEmpty()
     }
 
     // ── Saving ──────────────────────────────────────────────────────────────

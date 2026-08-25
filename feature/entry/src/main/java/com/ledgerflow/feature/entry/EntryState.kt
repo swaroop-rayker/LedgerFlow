@@ -88,6 +88,19 @@ public data class EntryUiState(
     val openDraftId: String? = null,
 
     val picker: EntryPicker? = null,
+
+    /**
+     * What is typed in the merchant picker's field (SPEC.md §5.4).
+     *
+     * Serves as both the filter over existing merchants and the name a new one
+     * would be created under -- one field, because they are one act: the user
+     * types a shop's name, and whether it already exists is the app's problem
+     * rather than something to decide before choosing which control to use.
+     *
+     * Lives here rather than in a `remember` for the reason the picker itself
+     * does: a rotation mid-typing must not lose it.
+     */
+    val merchantQuery: String = "",
     val choosingDate: Boolean = false,
     val confirmingDiscard: Boolean = false,
 
@@ -310,6 +323,19 @@ public sealed interface EntryEvent {
 
     /** Null clears the assignment — "no merchant" is a legitimate answer. */
     public data class PickerItemSelected(val id: String?) : EntryEvent
+
+    /** Typing in the merchant picker: filters the list, and names a new merchant. */
+    public data class MerchantQueryChanged(val value: String) : EntryEvent
+
+    /**
+     * Create the merchant named by [EntryUiState.merchantQuery] and file this
+     * entry against it.
+     *
+     * Goes through `createOrGet`, so typing a name that already exists selects
+     * that merchant rather than refusing — including one the user had hidden,
+     * which comes back with its aliases (BUG11).
+     */
+    public data object MerchantCreateRequested : EntryEvent
     public data object PickerDismissed : EntryEvent
 
     public data class ComboSelected(val index: Int) : EntryEvent

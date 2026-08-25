@@ -19,6 +19,8 @@ import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.domain.ledger.NewLineItem
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
+import com.ledgerflow.core.domain.taxonomy.TaxonomyError
+import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.model.CategoryTree
@@ -187,6 +189,8 @@ public class EntryViewModel @Inject constructor(
             is EntryEvent.PickerItemSelected,
             EntryEvent.PickerDismissed,
             is EntryEvent.ComboSelected,
+            is EntryEvent.MerchantQueryChanged,
+            EntryEvent.MerchantCreateRequested,
             -> onAssignmentEvent(event)
 
             EntryEvent.LineItemAdded,
@@ -284,11 +288,48 @@ public class EntryViewModel @Inject constructor(
 
     private fun onAssignmentEvent(event: EntryEvent) {
         when (event) {
-            is EntryEvent.PickerOpened -> form.update { it.copy(picker = event.picker) }
-            EntryEvent.PickerDismissed -> form.update { it.copy(picker = null) }
+            // The query is cleared on both edges, not just on open. A picker
+            // reopened with the last search still in it looks like a filtered
+            // list the user did not filter.
+            is EntryEvent.PickerOpened ->
+                form.update { it.copy(picker = event.picker, merchantQuery = "") }
+            EntryEvent.PickerDismissed ->
+                form.update { it.copy(picker = null, merchantQuery = "") }
             is EntryEvent.PickerItemSelected -> applyPick(event.id)
-            is EntryEvent.ComboSelected -> applyCombo(event.index)
+            is EntryEvent.ComboSelected ->
+                state.value.combos.getOrNull(event.index)?.let { combo -> edit { it.filedAs(combo) } }
+
+            is EntryEvent.MerchantQueryChanged ->
+                form.update { it.copy(merchantQuery = event.value) }
+            EntryEvent.MerchantCreateRequested -> createMerchant()
+
             else -> Unit
+        }
+    }
+
+    /**
+     * Creates the merchant the user typed, and files this entry against it.
+     *
+     * `createOrGet` rather than a create: the field is a search box as much as
+     * a name box, so typing one that already exists must select it rather than
+     * refuse. It also un-hides a merchant the user had hidden, which brings its
+     * aliases and default category back with it (BUG11) -- the alternative
+     * being a second row the unique index would reject anyway.
+     *
+     * The repository is called directly rather than through a use case, which
+     * is this class's standing pattern: a use case that only forwards a call
+     * adds a name and a file, not a guarantee.
+     */
+    private fun createMerchant() {
+        val name = form.value.merchantQuery.trim()
+        if (name.isEmpty()) return
+        viewModelScope.launch {
+            when (val result = merchants.createOrGet(name)) {
+                is TaxonomyResult.Success ->
+                    edit { it.copy(merchantId = result.value.id, picker = null, merchantQuery = "") }
+                is TaxonomyResult.Failure ->
+                    form.update { it.copy(message = result.error.toMessage()) }
+            }
         }
     }
 
@@ -321,18 +362,6 @@ public class EntryViewModel @Inject constructor(
                 EntryPicker.Merchant -> current.copy(merchantId = id)
                 EntryPicker.PaymentMethod -> current.copy(paymentMethodId = id)
             }.copy(picker = null)
-        }
-    }
-
-    private fun applyCombo(index: Int) {
-        val combo = state.value.combos.getOrNull(index) ?: return
-        edit {
-            it.copy(
-                categoryId = combo.categoryId,
-                subcategoryId = combo.subcategoryId,
-                merchantId = combo.merchantId,
-                paymentMethodId = combo.paymentMethodId,
-            )
         }
     }
 
@@ -632,6 +661,8 @@ internal data class Form(
     /** Which line is open for editing. One at a time keeps a long bill scannable. */
     val expandedLineKey: String? = null,
     val picker: EntryPicker? = null,
+    /** The merchant picker's field: filter and new-merchant name at once. */
+    val merchantQuery: String = "",
     val choosingDate: Boolean = false,
     val confirmingDiscard: Boolean = false,
     val confirmingSingleItem: Boolean = false,
@@ -696,6 +727,7 @@ private fun Form.toUiState(
         openDraftId = draftId,
         discardingDraft = unsavedCards.firstOrNull { it.id == discardingDraftId },
         picker = picker,
+        merchantQuery = merchantQuery,
         choosingDate = choosingDate,
         confirmingDiscard = confirmingDiscard,
         confirmingSingleItem = confirmingSingleItem,
@@ -905,6 +937,35 @@ private const val DRAFT_DEBOUNCE_MS = 300L
 
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val COMBO_LIMIT = 8
+
+/**
+ * Why creating a merchant from the entry form was refused.
+ *
+ * Written here rather than reused from `:feature:categories`, which has a fuller
+ * version of this map: features never depend on features (CLAUDE.md §3), and
+ * copying the whole thing would duplicate sentences for refusals this screen
+ * cannot produce.
+ *
+ * **Only [TaxonomyError.BlankName] is reachable.** `createOrGet` returns the
+ * existing merchant when the name normalises onto one and un-hides a hidden row
+ * that holds the key, so neither `DuplicateName` nor `NameHeldByHiddenRow` can
+ * come back from it -- which is exactly what makes the field safe to use as a
+ * search box and a name box at once. The rest are spelled out rather than folded
+ * into an `else` for the reason [toMessage] gives: an `else` is what lets the
+ * *next* genuinely-reachable refusal ship with no sentence attached.
+ */
+private fun TaxonomyError.toMessage(): String = when (this) {
+    TaxonomyError.BlankName -> "Give the merchant a name first."
+
+    is TaxonomyError.DuplicateName,
+    is TaxonomyError.NameHeldByHiddenRow,
+    TaxonomyError.NotFound,
+    TaxonomyError.InvalidParent,
+    TaxonomyError.InvalidTarget,
+    is TaxonomyError.ReassignRequired,
+    TaxonomyError.SameSourceAndTarget,
+    -> "That merchant could not be added. Try a different name."
+}
 
 /**
  * A refusal about one line, in a sentence naming that line (ADR-0018).

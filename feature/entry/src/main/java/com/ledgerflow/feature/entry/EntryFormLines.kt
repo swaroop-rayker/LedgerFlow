@@ -135,6 +135,20 @@ internal fun Form.lineSubcategoryPicker(key: String): Form {
 }
 
 /**
+ * A repeat-expense chip's assignment, applied wholesale (§5.4).
+ *
+ * All four fields together rather than field by field: the chip's value is that
+ * it is a *combination* the user has filed before, and applying half of one
+ * would produce a pairing they never chose.
+ */
+internal fun Form.filedAs(combo: EntryComboChip): Form = copy(
+    categoryId = combo.categoryId,
+    subcategoryId = combo.subcategoryId,
+    merchantId = combo.merchantId,
+    paymentMethodId = combo.paymentMethodId,
+)
+
+/**
  * Whether a line is worth saving.
  *
  * A row the user added and never typed in is not an item -- it is an empty
