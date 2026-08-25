@@ -56,8 +56,9 @@ drift from the first.
 | S9 | `:feature:ledger` — Paging 3, the bin | ✅ (`96ccac8`) |
 | — | *Off-plan: taxonomy Hide/Restore/Erase, BUG11, BUG12* | ✅, unscheduled (`7825c11`, ADR-0016) |
 | **S10** | **`:feature:export` — CSV via SAF** | ✅ (`4f939d8`, `57ae275`, `fdbf5dc`, ADR-0017) |
-| **S11** | **`:feature:ingest` — `TransactionIngestSource` abstraction + flavour skeleton only** | ⬅ **do this** |
-| S12 | `TESTING.md` + carryover (bundled font, onboarding CTA pinning) | pending |
+| **S11** | **`:feature:ingest` — `TransactionIngestSource` abstraction + flavour skeleton only** | ✅ (`756398b`) |
+| — | *Off-plan, owner-directed: itemised entries (ADR-0018) and the three defects it exposed* | ✅, unscheduled (`1716832`, `16db110`, `ff43609`, `da65982`, `ea0b1ae`) |
+| **S12** | **`TESTING.md` + carryover (bundled font, onboarding CTA pinning)** | ⬅ **do this** |
 
 ### Verified state as of `fdbf5dc`
 
@@ -219,6 +220,73 @@ CLAUDE.md §12 in full, plus specifically:
   this session via `adb shell cmd locale set-app-locales <pkg> --locales ar`,
   which is safe to use for a single app without touching system-wide RTL
   settings — reset it with the same command and an empty `--locales` after.
+
+---
+
+## 7a. Session log — S11 as it actually happened
+
+Recorded here rather than in a new kickoff file, because §1 above is where the
+next reader will look for what the last session did.
+
+**S11 itself landed as scoped** (`756398b`): `TransactionIngestSource` and
+`RawIngestEvent` in `:core:domain` (§4a decided that way — nothing about the
+shape is Android-typed, so ADR-0014's carve-out is untouched and no ADR was
+needed), both capture components declared and inert, `playSafe` binding a real
+SMS adapter that reports `UNSUPPORTED_IN_BUILD` forever. The owner chose the
+"components declared, inert sink" depth for §4b. 19 tests.
+
+Two things worth carrying forward:
+
+- **`restrictedPermissionCheck`** was added to the root build and mirrored in
+  `ci.yml`. The DoD asked for a one-time grep; D-04's failure mode is a single
+  misplaced line that produces no build failure and no on-device symptom, so it
+  became a durable guard instead. Verified by planting violations.
+- **`super.onReceive` does not compile in Kotlin.** Hilt's docs show it;
+  `BroadcastReceiver.onReceive` is abstract, so the call is rejected. The
+  generated base carries `@OnReceiveBytecodeInjectionMarker` and the Hilt Gradle
+  plugin inserts it into the bytecode. Confirmed by disassembling the
+  transformed class. The receiver therefore has no visible super call and is
+  correct anyway — that is written into the file so nobody "fixes" it.
+
+**Then the session went off-plan, at the owner's direction**, and it is worth
+being plain that this was requested rather than drifted into: itemised entries
+(ADR-0018) — an entry that files at line grain and stores no category of its
+own. The feature is in `1716832`; the shared editor lives in `:core:ui`, which
+was an empty module until now, so `:feature:inbox` can drive the same component
+at P2 without one feature depending on another.
+
+**It exposed three defects, each found by using the app rather than by a test:**
+
+1. The Ledger list rendered an itemised entry as "Unfiled" — it reads
+   `ledger_entry.category_id`, which such an entry deliberately leaves null
+   (`ff43609`).
+2. The bin did the same, through its *own* statement. Fixing the list and
+   finding the bin still broken is the lesson: those are two queries, and the
+   bin must read `ledger_entry` directly because the views hide deleted rows.
+3. **`fix(taxonomy)` (`da65982`) is the one to read.** The category purge
+   counted only entry-grain references, so a category used by nothing but line
+   items counted 0, the reassign-or-block rule never fired, and erasing it
+   silently orphaned every line. `line_item.category_id` has no foreign key, so
+   nothing downstream would have complained. Irreversible.
+
+**`LedgerIsolationTest`'s aggregate rule was sharpened** (recorded as an
+amendment under ADR-0002's Consequences, per that ADR's own instruction to
+reopen rather than exempt). The old rule — "any literal containing `SUM(` must
+mention a view" — was a string proxy: it rejected a per-entry aggregate that
+cannot net books, and passed two that were never actually checked. Both new
+assertions were verified against planted violations.
+
+Also this session: a merchant can now be added from the entry form itself
+(`ea0b1ae`), and §5.1/§5.2/§5.5 record that ingest resolves a parsed
+`merchantRaw` through `createOrGet` and **may never fail for a merchant that
+does not exist yet**. That half is a spec rule, not code — there is no parser to
+call it.
+
+**Owner instruction, standing:** do not build or install the `playSafe` flavour
+for device testing until Play distribution is actually on the table. This does
+**not** relax `preMergeCheck`, which still builds and tests both flavours,
+because that is CI parity rather than a personal habit — raise it explicitly if
+that should change too.
 
 ---
 
