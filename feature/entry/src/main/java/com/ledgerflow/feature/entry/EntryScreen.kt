@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -52,6 +53,8 @@ import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.ui.lineitem.LfLineItemEditor
+import com.ledgerflow.core.ui.lineitem.LineItemEditorEvent
 import com.ledgerflow.core.model.LedgerType
 import java.time.Instant
 import java.time.ZoneId
@@ -108,56 +111,85 @@ public fun EntryScreen(
         modifier = modifier,
         bottomBar = { SaveBar(state, onEvent) },
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = LfTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-        ) {
-            LedgerSelector(state, onEvent)
+        EntryForm(state, onEvent, amountFocus, padding)
+    }
+}
 
-            LfAmountField(
-                value = state.amountText,
-                onValueChange = { onEvent(EntryEvent.AmountChanged(it)) },
-                currencyCode = state.currencyCode,
-                focusRequester = amountFocus,
-                label = if (state.ledger == LedgerType.DEBIT) "Amount spent" else "Amount received",
-                // Neutral until there is an amount. A coral zero on an
-                // untouched form reads as an error rather than as an expense,
-                // and it is the UI asserting something the user has not said.
-                tone = when {
-                    state.amountMinor == 0L -> LfAmountTone.Neutral
-                    state.ledger == LedgerType.DEBIT -> LfAmountTone.Debit
-                    else -> LfAmountTone.Credit
-                },
+/**
+ * Everything that scrolls.
+ *
+ * Split out of [EntryScreen] when the itemised-mode control pushed that
+ * function past detekt's length and complexity thresholds. The limits were
+ * measuring something real: the screen function's job is the scaffold, the
+ * dialogs and the focus effect, and the form's contents had simply been living
+ * inside it.
+ */
+@Composable
+private fun EntryForm(
+    state: EntryUiState,
+    onEvent: (EntryEvent) -> Unit,
+    amountFocus: FocusRequester,
+    padding: PaddingValues,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = LfTheme.spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+    ) {
+        LedgerSelector(state, onEvent)
+
+        LfAmountField(
+            value = state.amountText,
+            onValueChange = { onEvent(EntryEvent.AmountChanged(it)) },
+            currencyCode = state.currencyCode,
+            focusRequester = amountFocus,
+            label = if (state.ledger == LedgerType.DEBIT) "Amount spent" else "Amount received",
+            // Neutral until there is an amount. A coral zero on an
+            // untouched form reads as an error rather than as an expense,
+            // and it is the UI asserting something the user has not said.
+            tone = when {
+                state.amountMinor == 0L -> LfAmountTone.Neutral
+                state.ledger == LedgerType.DEBIT -> LfAmountTone.Debit
+                else -> LfAmountTone.Credit
+            },
+        )
+
+        // Only once there is an amount -- the same rule the unsaved shelf
+        // follows below. On an untouched form this is a control for a
+        // decision the user has not reached yet.
+        if (state.amountMinor > 0L) ModeSelector(state, onEvent)
+
+        if (state.resumedFromDraft) ResumeNotice(onEvent)
+        if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
+        // Also shown with an empty shelf once the form has an amount, so
+        // "Start another" exists *before* there is a second draft. Gated on
+        // `unsaved` alone it only appeared once something was already
+        // parked -- which is the one state from which you can never park
+        // anything.
+        if (state.unsaved.isNotEmpty() || state.amountMinor > 0L) {
+            UnsavedStack(state, onEvent)
+        }
+
+        DetailRows(state, onEvent)
+
+        LfTextField(
+            value = state.note,
+            onValueChange = { onEvent(EntryEvent.NoteChanged(it)) },
+            label = "Note (optional)",
+        )
+
+        if (state.itemised) {
+            LfLineItemEditor(
+                state = state.editor,
+                onEvent = { onEvent(it.toEntryEvent()) },
             )
+        }
 
-            if (state.resumedFromDraft) ResumeNotice(onEvent)
-            if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
-            // Also shown with an empty shelf once the form has an amount, so
-            // "Start another" exists *before* there is a second draft. Gated on
-            // `unsaved` alone it only appeared once something was already
-            // parked -- which is the one state from which you can never park
-            // anything.
-            if (state.unsaved.isNotEmpty() || state.amountMinor > 0L) {
-                UnsavedStack(state, onEvent)
-            }
-
-            DetailRows(state, onEvent)
-
-            LfTextField(
-                value = state.note,
-                onValueChange = { onEvent(EntryEvent.NoteChanged(it)) },
-                label = "Note (optional)",
-            )
-
-            LineItemEditor(state, onEvent)
-
-            state.message?.let {
-                Text(text = it, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
-            }
+        state.message?.let {
+            Text(text = it, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
         }
     }
 }
@@ -387,29 +419,40 @@ private fun DraftCardHeader(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit
 /** What the card says under the amount, if there is anything worth saying. */
 private fun EntryDraftCard.subtitle(): String? = listOfNotNull(
     note,
-    if (lineItemCount > 0) "$lineItemCount items" else null,
+    // Singular matters more since ADR-0018: an itemised entry always has lines,
+    // so "1 items" went from a rare edge case to something on most cards.
+    when (lineItemCount) {
+        0 -> null
+        1 -> "1 item"
+        else -> "$lineItemCount items"
+    },
 ).joinToString(" · ").ifBlank { null }
 
 @Composable
 private fun DetailRows(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     LfCard {
         Column {
-            DetailRow(
-                label = "Category",
-                value = state.selectedCategory,
-                onClick = { onEvent(EntryEvent.PickerOpened(EntryPicker.Category)) },
-            )
-            state.categoryId?.let { parentId ->
-                LfDivider()
+            // Absent when itemised: such an entry files at line grain and
+            // stores no category of its own (ADR-0018). Leaving the rows here
+            // would offer a choice that is written nowhere.
+            if (!state.itemised) {
                 DetailRow(
-                    label = "Subcategory",
-                    value = state.selectedSubcategory,
-                    onClick = {
-                        onEvent(EntryEvent.PickerOpened(EntryPicker.Subcategory(parentId)))
-                    },
+                    label = "Category",
+                    value = state.selectedCategory,
+                    onClick = { onEvent(EntryEvent.PickerOpened(EntryPicker.Category())) },
                 )
+                state.categoryId?.let { parentId ->
+                    LfDivider()
+                    DetailRow(
+                        label = "Subcategory",
+                        value = state.selectedSubcategory,
+                        onClick = {
+                            onEvent(EntryEvent.PickerOpened(EntryPicker.Subcategory(parentId)))
+                        },
+                    )
+                }
+                LfDivider()
             }
-            LfDivider()
             DetailRow(
                 label = "Merchant",
                 value = state.selectedMerchant,
@@ -461,76 +504,40 @@ private fun DetailRow(label: String, value: String?, onClick: () -> Unit) {
 }
 
 /**
- * The multi-line editor (§5.4, shared in shape with the OCR review at P4).
+ * `Single item | Itemised` (SPEC.md §5.4, ADR-0018).
  *
- * The delta between the lines and the entry total is shown rather than
- * corrected: §5.3 allows saving an unbalanced set, and the approval records the
- * difference as an `UNALLOCATED` line so the parts always add up to the whole.
- * Hiding the delta here would make that row appear from nowhere.
+ * A second segmented control on one screen is a real cost, and it is paid
+ * deliberately: this is the choice that decides where the entry's spend is
+ * attributed, and a feature nobody can find is a feature nobody uses. It sits
+ * under the amount because that is the order of the decision -- how much, then
+ * what for.
  */
 @Composable
-private fun LineItemEditor(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-        Text(
-            text = "Line items",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textSecondary,
-        )
-
-        state.lineItems.forEach { line ->
-            LineItemCard(line, onEvent)
-        }
-
-        if (state.lineItems.isNotEmpty()) {
-            Text(
-                text = unallocatedLabel(state),
-                style = LfTheme.typography.bodyM,
-                color = if (state.unallocatedMinor == 0L) {
-                    LfTheme.colors.textSecondary
-                } else {
-                    LfTheme.colors.warn
-                },
-            )
-        }
-
-        LfActionRow {
-            LfButton(
-                text = "Add line item",
-                style = LfButtonStyle.Outlined,
-                onClick = { onEvent(EntryEvent.LineItemAdded) },
-            )
-        }
-    }
+private fun ModeSelector(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
+    LfSegmentedControl(
+        options = listOf("Single item", "Itemised"),
+        selectedIndex = if (state.itemised) 1 else 0,
+        onSelect = { onEvent(EntryEvent.ModeSelected(itemised = it == 1)) },
+    )
 }
 
-@Composable
-private fun LineItemCard(line: EntryLineItem, onEvent: (EntryEvent) -> Unit) {
-    LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-            LfTextField(
-                value = line.name,
-                onValueChange = { onEvent(EntryEvent.LineItemNameChanged(line.key, it)) },
-                label = "Item",
-            )
-            LfTextField(
-                // Raw text, parsed to minor units by the ViewModel -- the same
-                // contract as the entry amount, so the two fields in one form
-                // cannot behave differently.
-                value = line.amountText,
-                onValueChange = { onEvent(EntryEvent.LineItemAmountChanged(line.key, it)) },
-                label = "Amount",
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            )
-            LfDivider()
-            LfActionRow {
-                LfButton(
-                    text = "Remove",
-                    style = LfButtonStyle.Outlined,
-                    onClick = { onEvent(EntryEvent.LineItemRemoved(line.key)) },
-                )
-            }
-        }
-    }
+/**
+ * The shared editor's events, in this screen's vocabulary.
+ *
+ * The editor lives in `:core:ui` and knows nothing about entries, so the
+ * translation happens here rather than there -- which is what lets the Inbox
+ * drive the same component at P2 with its own event type.
+ */
+private fun LineItemEditorEvent.toEntryEvent(): EntryEvent = when (this) {
+    LineItemEditorEvent.AddRequested -> EntryEvent.LineItemAdded
+    is LineItemEditorEvent.Expanded -> EntryEvent.LineItemExpanded(key)
+    LineItemEditorEvent.Collapsed -> EntryEvent.LineItemCollapsed
+    is LineItemEditorEvent.NameChanged -> EntryEvent.LineItemNameChanged(key, value)
+    is LineItemEditorEvent.UnitPriceChanged -> EntryEvent.LineItemUnitPriceChanged(key, text)
+    is LineItemEditorEvent.QuantityChanged -> EntryEvent.LineItemQuantityChanged(key, text)
+    is LineItemEditorEvent.RemoveRequested -> EntryEvent.LineItemRemoved(key)
+    is LineItemEditorEvent.CategoryRequested -> EntryEvent.LineItemCategoryRequested(key)
+    is LineItemEditorEvent.SubcategoryRequested -> EntryEvent.LineItemSubcategoryRequested(key)
 }
 
 @Composable
@@ -550,16 +557,6 @@ private fun SaveBar(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
             )
         }
     }
-}
-
-private fun unallocatedLabel(state: EntryUiState): String = when {
-    state.unallocatedMinor == 0L -> "Line items match the total."
-    state.unallocatedMinor > 0L ->
-        "${MoneyFormat.symbolised(state.unallocatedMinor, state.currencyCode)} unallocated."
-
-    else ->
-        "Line items exceed the total by " +
-            MoneyFormat.symbolised(-state.unallocatedMinor, state.currencyCode) + "."
 }
 
 private fun Long.asLocalDate(): String =

@@ -32,14 +32,30 @@ internal data class EntryDraftPayload(
     val paymentMethodId: String? = null,
     val note: String = "",
     val occurredAt: Long = 0L,
+    /** `Single item | Itemised` (ADR-0018). Absent in payloads written before it. */
+    val itemised: Boolean = false,
     val lineItems: List<DraftLineItem> = emptyList(),
 )
 
+/**
+ * One line of an in-flight itemised entry.
+ *
+ * Every field added for ADR-0018 is optional with a default, so a draft written
+ * before it still reads: no [VERSION] bump, and nobody's half-typed entry is
+ * orphaned by the feature landing. [amountMinor] is the pre-ADR field and is
+ * what such a draft carries instead of a unit price; `toLine` treats it as the
+ * unit price at quantity one, which is exactly what it meant.
+ */
 @Serializable
 internal data class DraftLineItem(
     val key: String,
     val name: String = "",
+    /** Derived (`unit price x quantity`). Written for self-description, read only as a fallback. */
     val amountMinor: Long = 0L,
+    val unitPriceMinor: Long = 0L,
+    val quantityMilli: Long = 1_000L,
+    val categoryId: String? = null,
+    val subcategoryId: String? = null,
 )
 
 /**

@@ -37,6 +37,7 @@ internal fun EntryDialogs(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     state.picker?.let { PickerDialog(it, state, onEvent) }
     if (state.choosingDate) DateDialog(state, onEvent)
     if (state.confirmingDiscard) DiscardDialog(onEvent)
+    if (state.confirmingSingleItem) SingleItemDialog(state, onEvent)
     state.discardingDraft?.let { DiscardDraftDialog(it, onEvent) }
 }
 
@@ -158,6 +159,29 @@ private fun DiscardDraftDialog(draft: EntryDraftCard, onEvent: (EntryEvent) -> U
     )
 }
 
+/**
+ * Leaving itemised mode with lines entered.
+ *
+ * Confirmed rather than silent because the control that triggers it is a
+ * two-option toggle -- one stray tap -- and what it discards is typing that
+ * exists nowhere else. The same reasoning as discarding a draft (BUG6), and the
+ * body names the count so the user knows the size of what they are about to
+ * lose.
+ */
+@Composable
+private fun SingleItemDialog(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
+    val count = state.editor.rows.size
+    LfDialog(
+        title = if (count == 1) "Remove the item?" else "Remove all $count items?",
+        body = "Going back to a single item discards the breakdown you have " +
+            "entered. The entry keeps its total.",
+        confirmText = "Remove",
+        emphasis = LfDialogEmphasis.Warning,
+        onConfirm = { onEvent(EntryEvent.SingleItemConfirmed) },
+        onDismiss = { onEvent(EntryEvent.SingleItemDismissed) },
+    )
+}
+
 @Composable
 private fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
@@ -177,7 +201,7 @@ private data class PickerOption(val id: String, val label: String)
 
 private val EntryPicker.title: String
     get() = when (this) {
-        EntryPicker.Category -> "Category"
+        is EntryPicker.Category -> "Category"
         is EntryPicker.Subcategory -> "Subcategory"
         EntryPicker.Merchant -> "Merchant"
         EntryPicker.PaymentMethod -> "Paid with"
@@ -187,7 +211,7 @@ private val EntryPicker.body: String
     get() = when (this) {
         // Law 2: the two trees are disjoint, and saying so here is cheaper than
         // a user wondering why "Salary" is missing from an expense.
-        EntryPicker.Category -> "Expense and income categories are separate lists."
+        is EntryPicker.Category -> "Expense and income categories are separate lists."
         is EntryPicker.Subcategory -> "Only subcategories of the category you chose."
         EntryPicker.Merchant -> "Where the money went."
         EntryPicker.PaymentMethod -> "The instrument this came out of."
@@ -195,14 +219,14 @@ private val EntryPicker.body: String
 
 private val EntryPicker.emptyMessage: String
     get() = when (this) {
-        EntryPicker.Category -> "No categories yet. Add some in More → Organise."
+        is EntryPicker.Category -> "No categories yet. Add some in More → Organise."
         is EntryPicker.Subcategory -> "This category has no subcategories."
         EntryPicker.Merchant -> "No merchants yet. Add some in More → Organise."
         EntryPicker.PaymentMethod -> "No payment methods yet. Add some in More → Organise."
     }
 
 private fun EntryPicker.optionsFrom(state: EntryUiState): List<PickerOption> = when (this) {
-    EntryPicker.Category -> state.tree.map { PickerOption(it.parent.id, it.parent.name) }
+    is EntryPicker.Category -> state.tree.map { PickerOption(it.parent.id, it.parent.name) }
 
     is EntryPicker.Subcategory -> state.tree
         .firstOrNull { it.parent.id == parentId }
@@ -215,11 +239,21 @@ private fun EntryPicker.optionsFrom(state: EntryUiState): List<PickerOption> = w
     EntryPicker.PaymentMethod -> state.paymentMethods.map { PickerOption(it.id, it.label) }
 }
 
-private fun EntryPicker.selectedIdIn(state: EntryUiState): String? = when (this) {
-    EntryPicker.Category -> state.categoryId
-    is EntryPicker.Subcategory -> state.subcategoryId
-    EntryPicker.Merchant -> state.merchantId
-    EntryPicker.PaymentMethod -> state.paymentMethodId
+/**
+ * What is already chosen, so the open picker can tick it.
+ *
+ * Reads the *line* when the picker was opened for one. Without this the dialog
+ * shows nothing selected while editing a line that already has a category,
+ * which reads as "not set" and invites the user to set it again.
+ */
+private fun EntryPicker.selectedIdIn(state: EntryUiState): String? {
+    val line = lineKey?.let { key -> state.lineItems.firstOrNull { it.key == key } }
+    return when (this) {
+        is EntryPicker.Category -> line?.categoryId ?: state.categoryId.takeIf { line == null }
+        is EntryPicker.Subcategory -> line?.subcategoryId ?: state.subcategoryId.takeIf { line == null }
+        EntryPicker.Merchant -> state.merchantId
+        EntryPicker.PaymentMethod -> state.paymentMethodId
+    }
 }
 
 private const val PICKER_MAX_HEIGHT = 280

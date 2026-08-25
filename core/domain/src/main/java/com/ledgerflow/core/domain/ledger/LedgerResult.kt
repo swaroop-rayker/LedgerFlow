@@ -72,8 +72,67 @@ public sealed interface LedgerError {
     /** A zero or negative rate cannot relate the two amounts. */
     public data object ForeignRateNotPositive : LedgerError
 
+    /**
+     * A refusal about one line of an itemised entry (ADR-0018).
+     *
+     * Grouped under one interface because every one of them carries a
+     * [position] and every consumer wants it: an itemised grocery bill runs to
+     * a dozen lines, and a message that does not say *which* one sends the user
+     * hunting. The grouping is also what lets a screen answer all of them in
+     * one branch without an `else` -- exhaustiveness over this sub-hierarchy is
+     * still checked, so a sixth line refusal cannot ship unanswered.
+     */
+    public sealed interface LineItemRefusal : LedgerError {
+        /** Zero-based index into the request's lines. Screens render it +1. */
+        public val position: Int
+    }
+
     /** A line with no name is a row nobody can identify later. */
-    public data class LineItemNameBlank(val position: Int) : LedgerError
+    public data class LineItemNameBlank(override val position: Int) : LineItemRefusal
+
+    /**
+     * A line filed under a category that is gone or was never there.
+     *
+     * The line-item equivalents of [UnknownCategory], [CategoryNotInLedger] and
+     * [SubcategoryNotUnderCategory] below are separate cases rather than reuses
+     * of those, because the form needs to know *which line* to point at. An
+     * itemised grocery bill has a dozen of them and "unknown category" without
+     * a position sends the user hunting.
+     *
+     * They matter more here than on the entry, not less. An itemised entry
+     * files nothing at the entry level (ADR-0018) — every figure analytics and
+     * budgets will ever attribute comes off these rows, so a line with a bad
+     * category is spend that lands nowhere.
+     */
+    public data class LineItemUnknownCategory(
+        override val position: Int,
+        val id: String,
+    ) : LineItemRefusal
+
+    /**
+     * A line filed under the other book's tree (Law 2).
+     *
+     * The same violation [CategoryNotInLedger] describes, one level down, and
+     * genuinely reachable: the two trees are disjoint, so a debit line filed
+     * under "Salary" is two individually valid rows pointing at each other.
+     * Nothing in the schema catches it — `line_item.category_id` carries no
+     * foreign key at all.
+     */
+    public data class LineItemCategoryNotInLedger(
+        override val position: Int,
+        val id: String,
+        val ledger: LedgerType,
+    ) : LineItemRefusal
+
+    /** §6.1.1's parent invariant, applied to a line. */
+    public data class LineItemSubcategoryNotUnderCategory(
+        override val position: Int,
+        val subcategoryId: String,
+        val categoryId: String,
+    ) : LineItemRefusal
+
+    /** A line with a subcategory and no category has no parent to check against. */
+    public data class LineItemSubcategoryWithoutCategory(override val position: Int) : LineItemRefusal
 
     /**
      * No live entry with this id in this book.

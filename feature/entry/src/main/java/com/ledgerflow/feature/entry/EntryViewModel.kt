@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.format.QuantityFormat
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.DraftSummaryFields
@@ -26,6 +27,9 @@ import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.model.PaymentMethod
+import com.ledgerflow.core.model.Quantity
+import com.ledgerflow.core.ui.lineitem.LineItemEditorState
+import com.ledgerflow.core.ui.lineitem.LineItemRow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -187,8 +191,22 @@ public class EntryViewModel @Inject constructor(
 
             EntryEvent.LineItemAdded,
             is EntryEvent.LineItemNameChanged,
-            is EntryEvent.LineItemAmountChanged,
+            is EntryEvent.LineItemUnitPriceChanged,
+            is EntryEvent.LineItemQuantityChanged,
             is EntryEvent.LineItemRemoved,
+            is EntryEvent.LineItemExpanded,
+            EntryEvent.LineItemCollapsed,
+            -> onLineItemEvent(event)
+
+            is EntryEvent.LineItemCategoryRequested ->
+                form.update { it.copy(picker = EntryPicker.Category(lineKey = event.key)) }
+
+            is EntryEvent.LineItemSubcategoryRequested ->
+                form.update { it.lineSubcategoryPicker(event.key) }
+
+            is EntryEvent.ModeSelected,
+            EntryEvent.SingleItemConfirmed,
+            EntryEvent.SingleItemDismissed,
             -> onLineItemEvent(event)
 
             is EntryEvent.DraftOpened,
@@ -274,15 +292,31 @@ public class EntryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Files whatever the open picker was opened for.
+     *
+     * One function for both the entry and a line, because the invariant is the
+     * same at either level: changing a category invalidates the subcategory
+     * under it. §6.1.1 says the subcategory's parent *is* the category, so
+     * keeping a stale one would be the exact row the approval refuses --
+     * discovered at Save rather than at the tap that caused it.
+     */
     private fun applyPick(id: String?) {
         val picker = form.value.picker ?: return
+        val lineKey = picker.lineKey
+        if (lineKey != null) {
+            when (picker) {
+                is EntryPicker.Category ->
+                    editLine(lineKey) { it.copy(categoryId = id, subcategoryId = null) }
+                is EntryPicker.Subcategory -> editLine(lineKey) { it.copy(subcategoryId = id) }
+                else -> Unit
+            }
+            form.update { it.copy(picker = null) }
+            return
+        }
         edit { current ->
             when (picker) {
-                // Changing the category invalidates the subcategory: §6.1.1's
-                // invariant is that the subcategory's parent *is* the category,
-                // and keeping a stale one would be the exact row the approval
-                // refuses -- discovered at Save rather than at the tap.
-                EntryPicker.Category -> current.copy(categoryId = id, subcategoryId = null)
+                is EntryPicker.Category -> current.copy(categoryId = id, subcategoryId = null)
                 is EntryPicker.Subcategory -> current.copy(subcategoryId = id)
                 EntryPicker.Merchant -> current.copy(merchantId = id)
                 EntryPicker.PaymentMethod -> current.copy(paymentMethodId = id)
@@ -306,19 +340,56 @@ public class EntryViewModel @Inject constructor(
 
     private fun onLineItemEvent(event: EntryEvent) {
         when (event) {
-            EntryEvent.LineItemAdded -> edit {
-                it.copy(lineItems = it.lineItems + EntryLineItem(key = ids.generate()))
-            }
+            EntryEvent.LineItemAdded -> edit { it.withNewLine(ids.generate()) }
+
             is EntryEvent.LineItemNameChanged -> editLine(event.key) { it.copy(name = event.value) }
-            is EntryEvent.LineItemAmountChanged -> editLine(event.key) {
+
+            is EntryEvent.LineItemUnitPriceChanged -> editLine(event.key) {
                 it.copy(
-                    amountText = event.text,
-                    amountMinor = MoneyFormat.parse(event.text, currency.value),
+                    unitPriceText = event.text,
+                    unitPriceMinor = MoneyFormat.parse(event.text, currency.value),
                 )
             }
-            is EntryEvent.LineItemRemoved -> edit {
-                it.copy(lineItems = it.lineItems.filterNot { line -> line.key == event.key })
+
+            is EntryEvent.LineItemQuantityChanged -> editLine(event.key) {
+                it.copy(
+                    quantityText = event.text,
+                    quantityMilli = QuantityFormat.parse(event.text),
+                )
             }
+
+            is EntryEvent.LineItemRemoved -> edit { current ->
+                current.copy(
+                    lineItems = current.lineItems.filterNot { it.key == event.key },
+                    // Removing the open row leaves nothing expanded rather than
+                    // a dangling key -- the editor would draw every row
+                    // collapsed and the next tap would look like it did nothing.
+                    expandedLineKey = current.expandedLineKey.takeIf { it != event.key },
+                )
+            }
+
+            // Expansion is form state rather than a `remember` in the
+            // composable: a rotation mid-edit must not collapse the row being
+            // typed in. Not routed through `edit`, because opening a row is a
+            // read -- marking the form dirty here would have the 300 ms debounce
+            // rewrite a draft whose content nobody changed.
+            is EntryEvent.LineItemExpanded ->
+                form.update { it.copy(expandedLineKey = event.key) }
+            EntryEvent.LineItemCollapsed -> form.update { it.copy(expandedLineKey = null) }
+
+            // Single vs itemised (ADR-0018). The decision is a pure transform
+            // on the form, so it lives beside the others at the bottom of the
+            // file rather than as a fourth branch here.
+            //
+            // Routed through `edit`, which marks the form dirty. Harmless: the
+            // control only renders once there is an amount, so the form was
+            // already dirty before this could be tapped.
+            is EntryEvent.ModeSelected -> edit { it.withMode(event.itemised, ids.generate()) }
+
+            EntryEvent.SingleItemConfirmed -> edit { it.asSingleItem() }
+            EntryEvent.SingleItemDismissed ->
+                form.update { it.copy(confirmingSingleItem = false) }
+
             else -> Unit
         }
     }
@@ -542,7 +613,7 @@ public class EntryViewModel @Inject constructor(
 // honest reading is that it was right: a form-to-request mapper is not a
 // responsibility of the object that owns the form's lifetime.
 
-private data class Form(
+internal data class Form(
     /** Null until the first debounced write gives this form a row. */
     val draftId: String? = null,
     val editingEntryId: String? = null,
@@ -556,10 +627,14 @@ private data class Form(
     val paymentMethodId: String? = null,
     val note: String = "",
     val occurredAt: Long = 0L,
+    val itemised: Boolean = false,
     val lineItems: List<EntryLineItem> = emptyList(),
+    /** Which line is open for editing. One at a time keeps a long bill scannable. */
+    val expandedLineKey: String? = null,
     val picker: EntryPicker? = null,
     val choosingDate: Boolean = false,
     val confirmingDiscard: Boolean = false,
+    val confirmingSingleItem: Boolean = false,
     val discardingDraftId: String? = null,
     val dismissed: Boolean = false,
     val resumedFromDraft: Boolean = false,
@@ -610,7 +685,9 @@ private fun Form.toUiState(
         paymentMethodId = paymentMethodId,
         note = note,
         occurredAt = occurredAt,
+        itemised = itemised,
         lineItems = lineItems,
+        editor = editorState(categoryNames, currencyCode),
         tree = scoped.tree,
         merchants = scoped.merchants,
         paymentMethods = scoped.paymentMethods,
@@ -621,6 +698,7 @@ private fun Form.toUiState(
         picker = picker,
         choosingDate = choosingDate,
         confirmingDiscard = confirmingDiscard,
+        confirmingSingleItem = confirmingSingleItem,
         dismissed = dismissed,
         resumedFromDraft = resumedFromDraft,
         isRestoring = isRestoring,
@@ -635,18 +713,11 @@ private fun Form.toRequest(): ApprovalRequest = ApprovalRequest(
     ledger = ledger,
     amount = Money(amountMinor),
     occurredAt = occurredAt,
-    assignment = EntryAssignment(
-        categoryId = categoryId,
-        subcategoryId = subcategoryId,
-        merchantId = merchantId,
-        paymentMethodId = paymentMethodId,
-    ),
+    assignment = entryAssignment(),
     note = note.trim().ifEmpty { null },
     // §5.4: manual entry does not route through pending_transaction, so
     // there is nothing for source_ref_id to point at.
-    lineItems = lineItems
-        .filter { it.name.isNotBlank() || it.amountMinor != 0L }
-        .map { NewLineItem(name = it.name, total = Money(it.amountMinor)) },
+    lineItems = if (!itemised) emptyList() else lineItems.filter { it.hasContent }.map(::toNewLine),
 )
 
 /**
@@ -689,14 +760,12 @@ private fun EntryDraftPayload.toForm(draft: EntryDraft, now: Long, currencyCode:
     paymentMethodId = paymentMethodId,
     note = note,
     occurredAt = if (occurredAt == 0L) now else occurredAt,
-    lineItems = lineItems.map {
-        EntryLineItem(
-            key = it.key,
-            name = it.name,
-            amountText = it.amountMinor.asAmountText(currencyCode),
-            amountMinor = it.amountMinor,
-        )
-    },
+    // A draft written before ADR-0018 has lines but no `itemised` flag, and its
+    // lines are what the user broke the bill into. Opening it in single-item
+    // mode would hide them behind a control they never touched, so their
+    // presence is taken as the answer.
+    itemised = itemised || lineItems.isNotEmpty(),
+    lineItems = lineItems.map { it.toLine(currencyCode) },
     // **Not dirty.** Opening a draft is a read. Marking it dirty made the
     // debounce rewrite a row whose content had not changed, which bumped
     // `updated_at` and reshuffled the shelf -- so glancing at an entry
@@ -720,7 +789,21 @@ private fun Form.toPayload() = EntryDraftPayload(
     paymentMethodId = paymentMethodId,
     note = note,
     occurredAt = occurredAt,
-    lineItems = lineItems.map { DraftLineItem(it.key, it.name, it.amountMinor) },
+    itemised = itemised,
+    lineItems = lineItems.map {
+        DraftLineItem(
+            key = it.key,
+            name = it.name,
+            // Written as well as derived, so a payload read by anything that
+            // does not know the derivation still shows the right figure. It is
+            // never read back into the form -- see `toForm`.
+            amountMinor = it.amountMinor,
+            unitPriceMinor = it.unitPriceMinor,
+            quantityMilli = it.quantityMilli,
+            categoryId = it.categoryId,
+            subcategoryId = it.subcategoryId,
+        )
+    },
 )
 
 /**
@@ -810,7 +893,7 @@ private const val HOURS_PER_DAY = 24L
  * Zero is empty rather than "0.00" so a restored draft with no amount shows the
  * placeholder, exactly as a fresh form does.
  */
-private fun Long.asAmountText(currencyCode: String): String =
+internal fun Long.asAmountText(currencyCode: String): String =
     if (this == 0L) "" else MoneyFormat.plain(this, currencyCode)
 
 /**
@@ -822,6 +905,33 @@ private const val DRAFT_DEBOUNCE_MS = 300L
 
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val COMBO_LIMIT = 8
+
+/**
+ * A refusal about one line, in a sentence naming that line (ADR-0018).
+ *
+ * Split from [toMessage] rather than inlined into it, and not only to keep that
+ * `when` under detekt's complexity threshold: these five share a shape the
+ * others do not. Every one of them is about a row in a list the user is looking
+ * at, so every message opens with which row -- an itemised bill runs to a dozen
+ * lines, and "that category is gone" without a number sends the user hunting.
+ *
+ * Exhaustive over the sub-hierarchy with no `else`, for the same reason
+ * [toMessage] is: a sixth line refusal must not ship with nothing to say.
+ */
+private fun LedgerError.LineItemRefusal.lineMessage(): String {
+    val line = position + 1
+    return when (this) {
+        is LedgerError.LineItemNameBlank -> "Item $line needs a name."
+        is LedgerError.LineItemUnknownCategory ->
+            "Item $line is filed under a category that is no longer available."
+        is LedgerError.LineItemCategoryNotInLedger ->
+            "Item $line is filed under a category from the other ledger."
+        is LedgerError.LineItemSubcategoryNotUnderCategory ->
+            "Item $line's subcategory is not inside the category you chose for it."
+        is LedgerError.LineItemSubcategoryWithoutCategory ->
+            "Item $line needs a category before a subcategory."
+    }
+}
 
 /**
  * A refusal, in a sentence the user can act on.
@@ -843,7 +953,7 @@ private fun LedgerError.toMessage(): String = when (this) {
     LedgerError.BaseCurrencyMissing -> "Your ledger has no base currency yet. Finish setup first."
     is LedgerError.ForeignCurrencyIsBase -> "A foreign amount needs a different currency."
     LedgerError.ForeignRateNotPositive -> "Enter an exchange rate above zero."
-    is LedgerError.LineItemNameBlank -> "Line ${position + 1} needs a name."
+    is LedgerError.LineItemRefusal -> lineMessage()
 
     // Not reachable from this form -- it belongs to the Ledger's delete path,
     // which this screen has no way to reach. Spelled out rather than folded

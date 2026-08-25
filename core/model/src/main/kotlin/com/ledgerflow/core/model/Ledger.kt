@@ -116,8 +116,17 @@ public data class LineItem(
     val categoryId: String?,
     val subcategoryId: String?,
 ) {
+    /** [quantityMilli] as the type the arithmetic uses. */
+    public val quantity: Quantity get() = Quantity(quantityMilli)
+
     public companion object {
-        /** 1.000 = 1000, so half a kilo is representable without a `Double`. */
-        public const val UNIT_QUANTITY_MILLI: Long = 1000L
+        /**
+         * 1.000 = 1000, so half a kilo is representable without a `Double`.
+         *
+         * Delegates to [Quantity.SCALE] rather than restating the number: the
+         * scale is one fact, and two copies of it is how a call site ends up
+         * dividing by a thousand that the other half multiplied by ten.
+         */
+        public const val UNIT_QUANTITY_MILLI: Long = Quantity.SCALE
     }
 }

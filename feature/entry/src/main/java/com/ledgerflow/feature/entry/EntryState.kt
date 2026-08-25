@@ -4,7 +4,10 @@ import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.model.CategoryTree
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
+import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.model.PaymentMethod
+import com.ledgerflow.core.model.Quantity
+import com.ledgerflow.core.ui.lineitem.LineItemEditorState
 
 /**
  * The manual entry form (SPEC.md §5.4).
@@ -44,7 +47,25 @@ public data class EntryUiState(
     val note: String = "",
     val occurredAt: Long = 0L,
 
+    /**
+     * Whether this entry files at line grain (ADR-0018).
+     *
+     * The `Single item | Itemised` choice, and it is not cosmetic: an itemised
+     * entry stores **no** entry-level category, so this flag decides whether
+     * [categoryId] or the lines' own categories are what gets written.
+     */
+    val itemised: Boolean = false,
+
     val lineItems: List<EntryLineItem> = emptyList(),
+
+    /**
+     * The line editor's state, with names resolved and amounts formatted.
+     *
+     * Built in the ViewModel rather than by the screen because it is derived
+     * from the taxonomy and the base currency, neither of which a stateless
+     * composable should be looking up (CLAUDE.md §5).
+     */
+    val editor: LineItemEditorState = LineItemEditorState(),
 
     /** The taxonomy for [ledger], for the pickers. */
     val tree: List<CategoryTree> = emptyList(),
@@ -69,6 +90,15 @@ public data class EntryUiState(
     val picker: EntryPicker? = null,
     val choosingDate: Boolean = false,
     val confirmingDiscard: Boolean = false,
+
+    /**
+     * True while asking whether to drop the lines and go back to a single item.
+     *
+     * Leaving itemised mode destroys work the user typed, so it is confirmed
+     * for the same reason discarding a draft is (BUG6): an accidental tap on a
+     * two-option control loses it exactly as thoroughly as a process death.
+     */
+    val confirmingSingleItem: Boolean = false,
 
     /**
      * The stack card awaiting a discard confirmation.
@@ -146,21 +176,40 @@ public data class EntryUiState(
 }
 
 /**
- * One line of a multi-line entry, as the form holds it.
+ * One line of an itemised entry, as the form holds it (ADR-0018).
  *
- * [key] is a client-side identity for the `LazyColumn`-free editor and for the
- * draft payload; it is not the eventual `line_item.id`, which the approval
- * mints. Without it, removing the second of three rows re-keys the third and
- * Compose reuses the wrong text field.
+ * [key] is a client-side identity for the editor and for the draft payload; it
+ * is not the eventual `line_item.id`, which the approval mints. Without it,
+ * removing the second of three rows re-keys the third and Compose reuses the
+ * wrong text field.
+ *
+ * The line carries its own category and subcategory, and for an itemised entry
+ * those are the *only* filing there is -- the entry stores none. That is the
+ * whole point of the feature: a ₹1,000 bill at a shop selling across categories
+ * is not ₹1,000 of one category.
  */
 @Immutable
 public data class EntryLineItem(
     val key: String,
     val name: String = "",
     /** Raw text, for the same caret reason as [EntryUiState.amountText]. */
-    val amountText: String = "",
-    val amountMinor: Long = 0L,
-)
+    val unitPriceText: String = "",
+    val unitPriceMinor: Long = 0L,
+    /** Raw text. Blank reads as one -- see `QuantityFormat.parse`. */
+    val quantityText: String = "",
+    val quantityMilli: Long = Quantity.SCALE,
+    val categoryId: String? = null,
+    val subcategoryId: String? = null,
+) {
+    /**
+     * `unit price × quantity`, in integers (Law 3).
+     *
+     * Derived rather than stored, so the three numbers cannot disagree. It is
+     * also why the editor shows the line total read-only: a third editable
+     * figure would be a third thing to keep in step.
+     */
+    val amountMinor: Long get() = (Money(unitPriceMinor) * Quantity(quantityMilli)).minor
+}
 
 /** One unsaved entry in the stack. */
 @Immutable
@@ -212,15 +261,37 @@ public data class EntryComboChip(
  */
 public sealed interface EntryPicker {
 
-    public data object Category : EntryPicker
+    /**
+     * @param lineKey the line being filed, or null for the entry itself.
+     *
+     * One picker serves both, rather than a second pair of cases: the list, the
+     * empty message and the "Clear" affordance are identical, and the only
+     * difference is where the answer lands. A separate `LineCategory` case
+     * would have added a branch to five exhaustive `when`s to say the same
+     * thing twice.
+     */
+    public data class Category(val lineKey: String? = null) : EntryPicker
 
     /** Only reachable once a category is chosen — a subcategory needs its parent. */
-    public data class Subcategory(val parentId: String) : EntryPicker
+    public data class Subcategory(val parentId: String, val lineKey: String? = null) : EntryPicker
 
     public data object Merchant : EntryPicker
 
     public data object PaymentMethod : EntryPicker
 }
+
+/**
+ * The line this picker is filing, or null when it is the entry's own.
+ *
+ * One accessor rather than a `when` at every call site: three places need to
+ * know, and only the two category pickers can ever answer anything but null.
+ */
+public val EntryPicker.lineKey: String?
+    get() = when (this) {
+        is EntryPicker.Category -> lineKey
+        is EntryPicker.Subcategory -> lineKey
+        EntryPicker.Merchant, EntryPicker.PaymentMethod -> null
+    }
 
 public sealed interface EntryEvent {
 
@@ -243,10 +314,33 @@ public sealed interface EntryEvent {
 
     public data class ComboSelected(val index: Int) : EntryEvent
 
+    /** `Single item | Itemised` (ADR-0018). */
+    public data class ModeSelected(val itemised: Boolean) : EntryEvent
+
+    /** Leaving itemised mode with lines entered is confirmed before it happens. */
+    public data object SingleItemConfirmed : EntryEvent
+    public data object SingleItemDismissed : EntryEvent
+
     public data object LineItemAdded : EntryEvent
     public data class LineItemNameChanged(val key: String, val value: String) : EntryEvent
-    public data class LineItemAmountChanged(val key: String, val text: String) : EntryEvent
+    public data class LineItemUnitPriceChanged(val key: String, val text: String) : EntryEvent
+    public data class LineItemQuantityChanged(val key: String, val text: String) : EntryEvent
     public data class LineItemRemoved(val key: String) : EntryEvent
+
+    /** One line at a time is open for editing; the rest stay one-line summaries. */
+    public data class LineItemExpanded(val key: String) : EntryEvent
+    public data object LineItemCollapsed : EntryEvent
+
+    /**
+     * Filing one line.
+     *
+     * Separate events rather than the screen constructing an [EntryPicker]
+     * itself: the subcategory picker needs the *line's* category as its parent,
+     * which is a lookup into form state, and a stateless composable has no
+     * business doing it (CLAUDE.md §5).
+     */
+    public data class LineItemCategoryRequested(val key: String) : EntryEvent
+    public data class LineItemSubcategoryRequested(val key: String) : EntryEvent
 
     /** Load an unsaved entry from the stack into the form. */
     public data class DraftOpened(val id: String) : EntryEvent

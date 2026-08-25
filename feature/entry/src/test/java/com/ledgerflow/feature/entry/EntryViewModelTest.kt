@@ -154,7 +154,7 @@ class EntryViewModelTest {
         val subject = collected()
 
         subject.type("0.99")
-        subject.onEvent(EntryEvent.PickerOpened(EntryPicker.Category))
+        subject.onEvent(EntryEvent.PickerOpened(EntryPicker.Category()))
         subject.onEvent(EntryEvent.PickerItemSelected(groceries.id))
         subject.onEvent(EntryEvent.NoteChanged("lunch"))
         advanceTimeBy(DEBOUNCE_MS + 1)
@@ -391,12 +391,12 @@ class EntryViewModelTest {
     @Test
     fun changingCategory_clearsTheSubcategory() = runTest(dispatcher) {
         val subject = collected()
-        subject.choose(EntryPicker.Category, groceries.id)
+        subject.choose(EntryPicker.Category(), groceries.id)
         subject.choose(EntryPicker.Subcategory(groceries.id), vegetables.id)
         advanceUntilIdle()
         assertThat(subject.state.value.subcategoryId).isEqualTo(vegetables.id)
 
-        subject.choose(EntryPicker.Category, "cat-other")
+        subject.choose(EntryPicker.Category(), "cat-other")
         advanceUntilIdle()
 
         assertThat(subject.state.value.subcategoryId).isNull()
@@ -405,10 +405,10 @@ class EntryViewModelTest {
     @Test
     fun pickerSelection_ofNullClearsTheAssignment() = runTest(dispatcher) {
         val subject = collected()
-        subject.choose(EntryPicker.Category, groceries.id)
+        subject.choose(EntryPicker.Category(), groceries.id)
         advanceUntilIdle()
 
-        subject.choose(EntryPicker.Category, null)
+        subject.choose(EntryPicker.Category(), null)
         advanceUntilIdle()
 
         assertThat(subject.state.value.categoryId).isNull()
@@ -457,11 +457,11 @@ class EntryViewModelTest {
     fun lineItems_reportTheUnallocatedRemainder() = runTest(dispatcher) {
         val subject = collected()
         subject.type("100")
-        subject.onEvent(EntryEvent.LineItemAdded)
+        subject.itemise()
         advanceUntilIdle()
 
         val key = subject.state.value.lineItems.single().key
-        subject.onEvent(EntryEvent.LineItemAmountChanged(key, "60"))
+        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(key, "60"))
         advanceUntilIdle()
 
         assertThat(subject.state.value.unallocatedMinor).isEqualTo(40_00L)
@@ -470,7 +470,8 @@ class EntryViewModelTest {
     @Test
     fun lineItems_removeTakesTheRightRow() = runTest(dispatcher) {
         val subject = collected()
-        repeat(3) { subject.onEvent(EntryEvent.LineItemAdded) }
+        subject.itemise()
+        repeat(2) { subject.onEvent(EntryEvent.LineItemAdded) }
         advanceUntilIdle()
 
         val keys = subject.state.value.lineItems.map { it.key }
@@ -483,13 +484,237 @@ class EntryViewModelTest {
         assertThat(remaining.last().name).isEqualTo("third")
     }
 
+    // ── Itemised entries (ADR-0018) ──────────────────────────────
+
+    /**
+     * The category is not discarded by the switch, it moves down.
+     *
+     * The user has already answered "what is this"; the answer is still true of
+     * at least part of the bill, and making them pick it again for line one
+     * would be the app forgetting something it was just told.
+     */
+    @Test
+    fun itemising_movesTheEntryCategoryOntoTheFirstLine() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("1000")
+        subject.choose(EntryPicker.Category(), groceries.id)
+        subject.choose(EntryPicker.Subcategory(groceries.id), vegetables.id)
+        advanceUntilIdle()
+
+        subject.itemise()
+        advanceUntilIdle()
+
+        val line = subject.state.value.lineItems.single()
+        assertThat(line.categoryId).isEqualTo(groceries.id)
+        assertThat(line.subcategoryId).isEqualTo(vegetables.id)
+
+        // ADR-0018: the entry itself now files nothing.
+        assertThat(subject.state.value.categoryId).isNull()
+        assertThat(subject.state.value.subcategoryId).isNull()
+    }
+
+    /** The scenario the feature exists for: one payment, two categories. */
+    @Test
+    fun save_whenItemised_sendsTheLinesAndNoEntryCategory() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("1000")
+        subject.itemise()
+        advanceUntilIdle()
+
+        val first = subject.state.value.lineItems.single().key
+        subject.onEvent(EntryEvent.LineItemNameChanged(first, "Weekly shop"))
+        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(first, "600"))
+        subject.choose(EntryPicker.Category(lineKey = first), groceries.id)
+        subject.onEvent(EntryEvent.LineItemAdded)
+        advanceUntilIdle()
+
+        val second = subject.state.value.lineItems.last().key
+        subject.onEvent(EntryEvent.LineItemNameChanged(second, "Kettle"))
+        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(second, "400"))
+        advanceUntilIdle()
+
+        subject.onEvent(EntryEvent.SaveRequested)
+        advanceUntilIdle()
+
+        val request = ledger.approved.single()
+        assertThat(request.assignment.categoryId).isNull()
+        assertThat(request.lineItems.map { it.name })
+            .containsExactly("Weekly shop", "Kettle").inOrder()
+        assertThat(request.lineItems.map { it.total })
+            .containsExactly(Money(600_00L), Money(400_00L)).inOrder()
+    }
+
+    /**
+     * A second line inherits the first's filing.
+     *
+     * A twelve-line grocery bill is mostly one category with two exceptions, so
+     * this turns twelve category picks into two.
+     */
+    @Test
+    fun addingALine_inheritsThePreviousLinesCategory() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("100")
+        subject.itemise()
+        advanceUntilIdle()
+
+        val first = subject.state.value.lineItems.single().key
+        subject.choose(EntryPicker.Category(lineKey = first), groceries.id)
+        subject.onEvent(EntryEvent.LineItemAdded)
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.lineItems.last().categoryId).isEqualTo(groceries.id)
+    }
+
+    /** `unit price x quantity`, in integers, and never typed directly (Law 3). */
+    @Test
+    fun lineTotal_isUnitPriceTimesQuantity() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("1000")
+        subject.itemise()
+        advanceUntilIdle()
+
+        val key = subject.state.value.lineItems.single().key
+        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(key, "120"))
+        subject.onEvent(EntryEvent.LineItemQuantityChanged(key, "2"))
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.lineItems.single().amountMinor).isEqualTo(240_00L)
+        assertThat(subject.state.value.unallocatedMinor).isEqualTo(760_00L)
+    }
+
+    /** Half a kilo. The case the milli scale exists for. */
+    @Test
+    fun lineTotal_handlesAFractionalQuantity() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("100")
+        subject.itemise()
+        advanceUntilIdle()
+
+        val key = subject.state.value.lineItems.single().key
+        subject.onEvent(EntryEvent.LineItemUnitPriceChanged(key, "99.99"))
+        subject.onEvent(EntryEvent.LineItemQuantityChanged(key, "0.5"))
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.lineItems.single().amountMinor).isEqualTo(50_00L)
+    }
+
+    /** Leaving itemised mode destroys typing, so it asks first (BUG6's reasoning). */
+    @Test
+    fun leavingItemised_withLinesEntered_asksBeforeDiscarding() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("100")
+        subject.itemise()
+        advanceUntilIdle()
+
+        val key = subject.state.value.lineItems.single().key
+        subject.onEvent(EntryEvent.LineItemNameChanged(key, "Rice"))
+        subject.onEvent(EntryEvent.ModeSelected(itemised = false))
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.confirmingSingleItem).isTrue()
+        // Nothing has gone yet.
+        assertThat(subject.state.value.itemised).isTrue()
+        assertThat(subject.state.value.lineItems).hasSize(1)
+
+        subject.onEvent(EntryEvent.SingleItemConfirmed)
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.itemised).isFalse()
+        assertThat(subject.state.value.lineItems).isEmpty()
+    }
+
+    /**
+     * An untouched editor goes without a question.
+     *
+     * A confirmation over nothing is how people learn to dismiss dialogs unread,
+     * which is what makes the one that matters ineffective.
+     */
+    @Test
+    fun leavingItemised_withNothingEntered_doesNotAsk() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("100")
+        subject.itemise()
+        advanceUntilIdle()
+
+        subject.onEvent(EntryEvent.ModeSelected(itemised = false))
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.confirmingSingleItem).isFalse()
+        assertThat(subject.state.value.itemised).isFalse()
+    }
+
+    /** Single-item entries send no lines, whatever was typed before the switch. */
+    @Test
+    fun save_whenSingle_sendsNoLineItems() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("100")
+        subject.itemise()
+        advanceUntilIdle()
+
+        val key = subject.state.value.lineItems.single().key
+        subject.onEvent(EntryEvent.LineItemNameChanged(key, "Rice"))
+        subject.onEvent(EntryEvent.ModeSelected(itemised = false))
+        subject.onEvent(EntryEvent.SingleItemConfirmed)
+        subject.choose(EntryPicker.Category(), groceries.id)
+        advanceUntilIdle()
+
+        subject.onEvent(EntryEvent.SaveRequested)
+        advanceUntilIdle()
+
+        val request = ledger.approved.single()
+        assertThat(request.lineItems).isEmpty()
+        assertThat(request.assignment.categoryId).isEqualTo(groceries.id)
+    }
+
+    /** Changing a line's category clears its subcategory -- §6.1.1, one level down. */
+    @Test
+    fun changingALinesCategory_clearsItsSubcategory() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("100")
+        subject.itemise()
+        advanceUntilIdle()
+
+        val key = subject.state.value.lineItems.single().key
+        subject.choose(EntryPicker.Category(lineKey = key), groceries.id)
+        subject.choose(EntryPicker.Subcategory(groceries.id, lineKey = key), vegetables.id)
+        advanceUntilIdle()
+        assertThat(subject.state.value.lineItems.single().subcategoryId).isEqualTo(vegetables.id)
+
+        subject.choose(EntryPicker.Category(lineKey = key), "cat-other")
+        advanceUntilIdle()
+
+        assertThat(subject.state.value.lineItems.single().subcategoryId).isNull()
+    }
+
+    /** Only one line is open at a time, and removing it leaves none open. */
+    @Test
+    fun expansion_isSingleAndSurvivesRemoval() = runTest(dispatcher) {
+        val subject = collected()
+        subject.type("100")
+        subject.itemise()
+        subject.onEvent(EntryEvent.LineItemAdded)
+        advanceUntilIdle()
+
+        val keys = subject.state.value.lineItems.map { it.key }
+        // Adding opens the new row.
+        assertThat(subject.state.value.editor.expandedKey).isEqualTo(keys[1])
+
+        subject.onEvent(EntryEvent.LineItemExpanded(keys[0]))
+        advanceUntilIdle()
+        assertThat(subject.state.value.editor.expandedKey).isEqualTo(keys[0])
+
+        subject.onEvent(EntryEvent.LineItemRemoved(keys[0]))
+        advanceUntilIdle()
+        assertThat(subject.state.value.editor.expandedKey).isNull()
+    }
+
     // ── Saving ──────────────────────────────────────────────────────────────
 
     @Test
     fun save_sendsManualProvenanceAndTheTypedAmount() = runTest(dispatcher) {
         val subject = collected()
         subject.type("125")
-        subject.choose(EntryPicker.Category, groceries.id)
+        subject.choose(EntryPicker.Category(), groceries.id)
         advanceUntilIdle()
 
         subject.onEvent(EntryEvent.SaveRequested)
@@ -520,7 +745,7 @@ class EntryViewModelTest {
     fun save_dropsEmptyLineItems() = runTest(dispatcher) {
         val subject = collected()
         subject.type("50")
-        subject.onEvent(EntryEvent.LineItemAdded)
+        subject.itemise()
         advanceUntilIdle()
 
         subject.onEvent(EntryEvent.SaveRequested)
@@ -568,7 +793,7 @@ class EntryViewModelTest {
     fun save_emptiesTheFormForTheNextEntry() = runTest(dispatcher) {
         val subject = collected()
         subject.type("50")
-        subject.choose(EntryPicker.Category, groceries.id)
+        subject.choose(EntryPicker.Category(), groceries.id)
         advanceUntilIdle()
 
         subject.onEvent(EntryEvent.SaveRequested)
@@ -657,6 +882,15 @@ class EntryViewModelTest {
         onEvent(EntryEvent.PickerOpened(picker))
         onEvent(EntryEvent.PickerItemSelected(id))
     }
+
+    /**
+     * Into itemised mode, which seeds the first line (ADR-0018).
+     *
+     * So a test that wants N lines asks for N-1 more, not N -- switching mode is
+     * itself the first "add".
+     */
+    private fun EntryViewModel.itemise() =
+        onEvent(EntryEvent.ModeSelected(itemised = true))
 
     private fun category(
         id: String,

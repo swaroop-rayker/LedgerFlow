@@ -1,8 +1,11 @@
 package com.ledgerflow.core.data.ledger
 
 import com.ledgerflow.core.database.LedgerFlowDatabase
+import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.LedgerError
+import com.ledgerflow.core.domain.ledger.NewLineItem
+import com.ledgerflow.core.model.LedgerType
 
 /**
  * Everything that can refuse an approval (SPEC.md §6.1.1).
@@ -43,6 +46,7 @@ internal object LedgerApprovalRules {
             ?: rejectLineItems(request)
             ?: rejectCategory(database, request)
             ?: rejectSubcategory(database, request)
+            ?: rejectLineItemFiling(database, request)
             ?: rejectReferences(database, request)
 
     private fun rejectAmount(request: ApprovalRequest): LedgerError? =
@@ -102,6 +106,98 @@ internal object LedgerApprovalRules {
 
             else -> null
         }
+    }
+
+    /**
+     * The same filing rules as the entry's own, applied to every line
+     * (ADR-0018).
+     *
+     * This is not belt-and-braces. An itemised entry files nothing at the entry
+     * level -- `ledger_entry.category_id` is null and the truth lives on these
+     * rows -- so these are the only checks standing between a mis-filed line
+     * and spend that analytics attributes to a category from the other book, or
+     * to one that no longer exists. The schema cannot help: `line_item` carries
+     * no foreign key to `category` at all.
+     *
+     * Categories are read once each rather than once per line. A grocery bill
+     * is a dozen lines across three categories, all inside the approval's
+     * transaction, and the repeated reads would be the transaction's whole cost.
+     */
+    private suspend fun rejectLineItemFiling(
+        database: LedgerFlowDatabase,
+        request: ApprovalRequest,
+    ): LedgerError? {
+        if (request.lineItems.none { it.categoryId != null || it.subcategoryId != null }) {
+            return null
+        }
+
+        // Read once per distinct category, not once per line. A grocery bill is
+        // a dozen lines across three categories, and every one of these reads
+        // happens inside the approval's transaction.
+        val seen = mutableMapOf<String, CategoryEntity?>()
+        for ((position, item) in request.lineItems.withIndex()) {
+            val refusal = refuseLineFiling(database, seen, position, item, request.ledger)
+            if (refusal != null) return refusal
+        }
+        return null
+    }
+
+    /**
+     * One line's filing, checked against the same rules as the entry's own.
+     *
+     * The subcategory is looked up before the category has been cleared, which
+     * costs one memoised read on a path that is about to fail anyway. That buys
+     * a single `when` over every outcome instead of a ladder of early returns,
+     * and on the path that matters -- a valid line -- both reads were needed.
+     */
+    private suspend fun refuseLineFiling(
+        database: LedgerFlowDatabase,
+        seen: MutableMap<String, CategoryEntity?>,
+        position: Int,
+        item: NewLineItem,
+        ledger: LedgerType,
+    ): LedgerError? {
+        val categoryId = item.categoryId
+        if (categoryId == null) {
+            // A subcategory with no category has no parent to compare against
+            // -- the same hole §6.1.1 closes at the entry level, reachable here
+            // by clearing a line's category after choosing its subcategory.
+            return LedgerError.LineItemSubcategoryWithoutCategory(position)
+                .takeIf { item.subcategoryId != null }
+        }
+
+        val category = liveCategory(database, seen, categoryId)
+        val subcategoryId = item.subcategoryId
+        val subcategory = subcategoryId?.let { liveCategory(database, seen, it) }
+
+        return when {
+            category == null -> LedgerError.LineItemUnknownCategory(position, categoryId)
+
+            // Law 2, one level down: a debit line filed under "Salary" is two
+            // individually valid rows pointing at each other, and `line_item`
+            // carries no foreign key to `category` to catch it.
+            category.ledgerScope != ledger ->
+                LedgerError.LineItemCategoryNotInLedger(position, categoryId, ledger)
+
+            subcategoryId == null -> null
+
+            subcategory == null -> LedgerError.LineItemUnknownCategory(position, subcategoryId)
+
+            subcategory.parentId != categoryId ->
+                LedgerError.LineItemSubcategoryNotUnderCategory(position, subcategoryId, categoryId)
+
+            else -> null
+        }
+    }
+
+    /** Memoised, and soft-deleted rows read as absent -- as they do at the entry level. */
+    private suspend fun liveCategory(
+        database: LedgerFlowDatabase,
+        seen: MutableMap<String, CategoryEntity?>,
+        id: String,
+    ): CategoryEntity? {
+        if (id !in seen) seen[id] = database.categoryDao().byId(id)
+        return seen[id]?.takeIf { it.deletedAt == 0L }
     }
 
     private suspend fun rejectReferences(

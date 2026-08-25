@@ -1,5 +1,7 @@
 package com.ledgerflow.core.model
 
+import kotlin.math.absoluteValue
+
 /**
  * A monetary amount in **minor units** (paise, cents), always in the install's
  * base currency (SPEC.md §5.8).
@@ -20,6 +22,46 @@ public value class Money(public val minor: Long) : Comparable<Money> {
     public operator fun minus(other: Money): Money = Money(minor - other.minor)
 
     public operator fun times(count: Int): Money = Money(minor * count)
+
+    /**
+     * A unit price times a quantity — the line total of an itemised entry.
+     *
+     * Rounds to the nearest minor unit, **half away from zero**, with integer
+     * arithmetic only. Rounding is unavoidable rather than a design choice:
+     * 0.5 kg at ₹99.99/kg is 4999.5 paise and there is no such coin. Half away
+     * from zero rather than half up so that a `DISCOUNT` line, which is
+     * negative by convention, rounds by the same magnitude as the positive line
+     * it offsets — half *up* would make −4999.5 round to −4999 and 4999.5 round
+     * to 5000, so a discount cancelling an item would leave a stray paisa
+     * behind.
+     *
+     * The residue does not go missing. `ApproveTransactionUseCase` compares the
+     * summed lines against the entry total and writes any difference as an
+     * `UNALLOCATED` row (§5.4), so a bill whose parts round to a paisa off its
+     * own total still has parts that add up to the whole.
+     *
+     * No overflow guard, consistent with [plus] and [times] above: the amount
+     * field caps what can be typed, and the line editor caps the quantity. A
+     * product that overflows a `Long` is a bill of more than ninety quintillion
+     * paise, which is not a case worth making every call site handle.
+     */
+    public operator fun times(quantity: Quantity): Money {
+        val product = minor * quantity.milli
+        val truncated = product / Quantity.SCALE
+        val remainder = product % Quantity.SCALE
+        if (remainder == 0L) return Money(truncated)
+
+        // Kotlin's `/` truncates toward zero and `%` keeps the dividend's sign,
+        // so stepping one away from zero is exactly "round half away from zero"
+        // in both directions -- no branch on the sign of `minor` is needed
+        // beyond this one.
+        val roundsAway = remainder.absoluteValue * 2 >= Quantity.SCALE
+        return when {
+            !roundsAway -> Money(truncated)
+            product > 0L -> Money(truncated + 1)
+            else -> Money(truncated - 1)
+        }
+    }
 
     public operator fun unaryMinus(): Money = Money(-minor)
 
