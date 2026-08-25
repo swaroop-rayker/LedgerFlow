@@ -29,6 +29,11 @@ dependencies {
     implementation(project(":feature:analytics"))
     implementation(project(":feature:categories"))
     implementation(project(":feature:export"))
+    // No UI of its own, and that is the point at S11: what :app takes from it
+    // is the two capture components' manifest entries and the Hilt bindings
+    // that put both TransactionIngestSource implementations in the graph
+    // (SPEC.md §3.1). The Inbox that consumes them is P2.
+    implementation(project(":feature:ingest"))
     implementation(project(":feature:settings"))
 
     implementation(libs.androidx.activity.compose)

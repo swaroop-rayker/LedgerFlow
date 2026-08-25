@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SMS ingest — smsFull ONLY (SPEC.md §3.1, D-04).
+
+  This file is the entire reason the flavour split exists. RECEIVE_SMS is
+  Play-restricted: Google grants it to default SMS handlers and, rarely, through
+  a Permissions Declaration exception that finance apps are routinely refused.
+  So the permission and the receiver that needs it live in this source set and
+  nowhere else, and playSafe — the Play-eligible build — has no manifest at all.
+
+  If RECEIVE_SMS or READ_SMS ever appears in src/main or src/playSafe, D-04 is
+  broken and the Play build is no longer submittable. `restrictedPermissionCheck`
+  in the root build file fails the build if it does.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
+    <application>
+
+        <!--
+          exported="true" because the system delivers the broadcast from
+          outside the app; android:permission="android.permission.BROADCAST_SMS"
+          is what stops anyone else from doing so — it is signature-level, so
+          only the platform can send this receiver a fabricated SMS.
+
+          priority=999 is the ceiling for a non-privileged app. It buys ordering
+          only, never exclusivity: the receiver does not and must not call
+          abortBroadcast(), because the user's actual SMS app has to receive the
+          message too (CLAUDE.md §7).
+
+          Fully qualified name: a leading dot in a library manifest resolves
+          against the merged application package, not this module's namespace.
+        -->
+        <receiver
+            android:name="com.ledgerflow.feature.ingest.adapters.SmsIngestReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

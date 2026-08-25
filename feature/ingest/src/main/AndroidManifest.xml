@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Notification ingest — SHARED, so it merges into BOTH flavours (SPEC.md §3.1).
+
+  This is the co-equal primary source, not a fallback for the Play build. It
+  needs no Play-restricted permission: BIND_NOTIFICATION_LISTENER_SERVICE is
+  held by the SYSTEM and declared here so that only the system can bind the
+  service. The user's grant happens in Settings -> Notification access, which no
+  app can request in-app (§5.2).
+
+  There is deliberately NO uses-permission element in this file. The one
+  restricted permission LedgerFlow ever asks for is RECEIVE_SMS, and it lives in
+  src/smsFull/AndroidManifest.xml alone — putting it here would merge it into
+  playSafe and break D-04 in a single line.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <!--
+          exported="true" is required, not an oversight: the system binds this
+          service from outside the app. The permission attribute is what keeps
+          that safe — BIND_NOTIFICATION_LISTENER_SERVICE is signature-level, so
+          the system is the only possible binder.
+
+          The name is fully qualified. A leading-dot name in a LIBRARY manifest
+          resolves against the merged application's package, not this module's
+          namespace, so ".adapters.NotificationIngestService" would silently
+          point at com.ledgerflow.adapters.* and fail to bind at runtime.
+        -->
+        <service
+            android:name="com.ledgerflow.feature.ingest.adapters.NotificationIngestService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+    </application>
+
+</manifest>

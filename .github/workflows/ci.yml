@@ -138,6 +138,16 @@ jobs:
           check 'No INTERNET permission in release (Law 6).' \
                 '<uses-permission[^>]*android\.permission\.INTERNET' \
                 'app/src/release'
+          # D-04: RECEIVE_SMS/READ_SMS are Play-restricted and live in exactly
+          # one flavour's source set. Merged into src/main they would reach
+          # playSafe too, and the Play-eligible build would stop being
+          # submittable -- with no build failure and no on-device symptom to
+          # catch it. The pathspec excludes every src/smsFull/ manifest, so what
+          # is left is by definition the wrong place. Mirrors the
+          # `restrictedPermissionCheck` Gradle task.
+          check 'RECEIVE_SMS/READ_SMS belong to the smsFull source set only (D-04, SPEC.md §3.1).' \
+                '<uses-permission[^>]*android\.permission\.(RECEIVE|READ)_SMS' \
+                '*AndroidManifest.xml' ':!*/src/smsFull/*'
           exit $FAIL
 
       - run: ./gradlew detekt lintSmsFullDebug lintPlaySafeDebug --stacktrace
