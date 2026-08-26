@@ -1,0 +1,9 @@
+{
+  "sender": "VM-FEDBNK",
+  "expected": {
+    "ruleId": "generic-verb-then-amount",
+    "amountMinor": 100000,
+    "currency": "INR",
+    "direction": "DEBIT"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "packageName": "com.phonepe.app",
+  "sender": "PhonePe",
+  "expected": {
+    "ruleId": "notification-upi-paid",
+    "amountMinor": 8550,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "Chai Point",
+    "instrumentHint": "UPI"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "packageName": "com.google.android.apps.nbu.paisa.user",
+  "sender": "Google Pay",
+  "expected": {
+    "ruleId": "notification-upi-received",
+    "amountMinor": 150000,
+    "currency": "INR",
+    "direction": "CREDIT",
+    "merchantRaw": "Rahul",
+    "instrumentHint": "UPI"
+  }
+}

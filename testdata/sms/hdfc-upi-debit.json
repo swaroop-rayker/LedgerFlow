@@ -1,0 +1,12 @@
+{
+  "sender": "VM-HDFCBK",
+  "expected": {
+    "ruleId": "upi-debit-vpa",
+    "amountMinor": 24050,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "SWIGGY",
+    "accountLast4": "1234",
+    "instrumentHint": "UPI"
+  }
+}

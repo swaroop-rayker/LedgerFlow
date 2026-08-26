@@ -1,0 +1,11 @@
+{
+  "sender": "JD-ATMSBI",
+  "expected": {
+    "ruleId": "atm-withdrawal",
+    "amountMinor": 1000000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "accountLast4": "3344",
+    "instrumentHint": "ATM"
+  }
+}

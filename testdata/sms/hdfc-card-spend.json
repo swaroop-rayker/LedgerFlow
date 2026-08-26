@@ -1,0 +1,12 @@
+{
+  "sender": "VM-HDFCBK",
+  "expected": {
+    "ruleId": "card-spend-at-merchant",
+    "amountMinor": 249900,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "AMAZON",
+    "accountLast4": "5678",
+    "instrumentHint": "CARD"
+  }
+}

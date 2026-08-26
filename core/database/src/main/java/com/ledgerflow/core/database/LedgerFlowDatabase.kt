@@ -115,8 +115,12 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * out of the schema until P2 needed them. `pending_line_item` is still
          * absent on purpose: nothing at P2 can produce an itemised candidate,
          * so it lands at P4 with OCR (§16 Q7).
+         *
+         * v7 adds `parser_rule.instrument_hint` — one column, for a rule that
+         * knows the instrument its messages describe even when they do not say
+         * so. Additive; nothing existing is touched.
          */
-        public const val VERSION: Int = 6
+        public const val VERSION: Int = 7
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

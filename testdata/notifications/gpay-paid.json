@@ -1,0 +1,12 @@
+{
+  "packageName": "com.google.android.apps.nbu.paisa.user",
+  "sender": "Google Pay",
+  "expected": {
+    "ruleId": "notification-upi-paid",
+    "amountMinor": 24000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "Swiggy",
+    "instrumentHint": "UPI"
+  }
+}

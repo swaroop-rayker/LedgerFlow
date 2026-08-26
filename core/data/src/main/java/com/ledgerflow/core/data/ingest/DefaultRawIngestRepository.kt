@@ -7,10 +7,16 @@ import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
+import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.database.entity.SmsRawEntity
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
+import com.ledgerflow.core.domain.ingest.CapturedEvent
+import com.ledgerflow.core.domain.ingest.ExtractedDirection
+import com.ledgerflow.core.domain.ingest.ExtractionField
 import com.ledgerflow.core.domain.ingest.IngestSourceType
+import com.ledgerflow.core.domain.ingest.InstrumentHint
+import com.ledgerflow.core.domain.ingest.ParserRule
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.model.RawParseStatus
@@ -116,6 +122,42 @@ public class DefaultRawIngestRepository @Inject constructor(
         )
     }
 
+    override suspend fun capturedEvents(limit: Int): List<CapturedEvent> = withContext(io) {
+        val database = runCatching { session.requireDatabase() }.getOrNull()
+            ?: return@withContext emptyList()
+
+        runCatching {
+            val sms = database.smsRawDao().withStatus(RawParseStatus.CAPTURED, limit)
+                .map { row ->
+                    CapturedEvent(
+                        rawId = row.id,
+                        event = RawIngestEvent(
+                            sourceType = IngestSourceType.SMS,
+                            sender = row.sender,
+                            body = row.body,
+                            receivedAt = row.receivedAt,
+                        ),
+                    )
+                }
+            val notifications = database.notificationRawDao()
+                .withStatus(RawParseStatus.CAPTURED, limit)
+                .map { row ->
+                    CapturedEvent(
+                        rawId = row.id,
+                        event = RawIngestEvent(
+                            sourceType = IngestSourceType.NOTIFICATION,
+                            sender = row.packageName,
+                            body = row.body,
+                            receivedAt = row.postedAt,
+                            packageName = row.packageName,
+                            title = row.title,
+                        ),
+                    )
+                }
+            (sms + notifications).sortedBy { it.event.receivedAt }
+        }.getOrDefault(emptyList())
+    }
+
     override suspend fun triageCapturedSms(limit: Int): Int = withContext(io) {
         val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext 0
         val dao = database.smsRawDao()
@@ -178,6 +220,97 @@ public class DefaultRawIngestRepository @Inject constructor(
         Unit
     }
 
+    override suspend fun seedParserRules(): Unit = withContext(io) {
+        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext
+        val dao = database.parserRuleDao()
+
+        runCatching {
+            val file = readAsset<RuleSeedFile>(RULES_SEED)
+            // Shipped rules only. A rule the user wrote survives every ruleset
+            // load -- that is the whole reason these live in a table as well as
+            // in the asset (§5.1's rule editor).
+            dao.deleteShippedRules(file.version)
+            dao.insertAll(
+                file.rules.map { rule ->
+                    ParserRuleEntity(
+                        id = rule.id,
+                        rulesetVersion = file.version,
+                        priority = rule.priority,
+                        senderPattern = rule.senderPattern,
+                        bodyPattern = rule.bodyPattern,
+                        fieldMapJson = json.encodeToString(rule.fieldMap),
+                        direction = rule.direction,
+                        instrumentHint = rule.instrumentHint,
+                        confidenceBase = rule.confidenceBase,
+                        enabled = rule.enabled,
+                        isUserDefined = false,
+                    )
+                },
+            )
+        }
+        Unit
+    }
+
+    override suspend fun parserRules(): List<ParserRule> = withContext(io) {
+        val database = runCatching { session.requireDatabase() }.getOrNull()
+            ?: return@withContext emptyList()
+
+        runCatching {
+            database.parserRuleDao().enabledRules(RULESET_VERSION).mapNotNull(::toDomainRule)
+        }.getOrDefault(emptyList())
+    }
+
+    override suspend fun recordParseOutcome(
+        rawId: String,
+        ruleId: String?,
+        matched: Boolean,
+    ): Unit = withContext(io) {
+        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext
+        val status = if (matched) RawParseStatus.PARSED else RawParseStatus.UNMATCHED
+
+        runCatching {
+            // The row is in one of the two raw tables and the id says nothing
+            // about which. Updating both is cheaper and simpler than carrying a
+            // source around -- and keeps this free of the `if (source == SMS)`
+            // CLAUDE.md §0 forbids outside an adapter.
+            database.smsRawDao().updateStatus(rawId, status, ruleId)
+            database.notificationRawDao().updateStatus(rawId, status, ruleId)
+        }
+        Unit
+    }
+
+    /**
+     * A stored rule as the engine wants it, or null if the row is unusable.
+     *
+     * Null rather than throwing: one bad row -- a hand-edited rule with a typo
+     * in its field map -- must not stop every other rule from loading.
+     */
+    private fun toDomainRule(entity: ParserRuleEntity): ParserRule? = runCatching {
+        val fieldMap = json.decodeFromString<Map<String, String>>(entity.fieldMapJson)
+            .mapNotNull { (field, group) ->
+                ExtractionField.fromWireName(field)?.let { it to group }
+            }
+            .toMap()
+
+        ParserRule(
+            id = entity.id,
+            rulesetVersion = entity.rulesetVersion,
+            priority = entity.priority,
+            senderPattern = entity.senderPattern,
+            bodyPattern = entity.bodyPattern,
+            fieldMap = fieldMap,
+            direction = entity.direction?.let { name ->
+                ExtractedDirection.entries.firstOrNull { it.name == name }
+            },
+            instrumentHint = entity.instrumentHint?.let { name ->
+                InstrumentHint.entries.firstOrNull { it.name == name }
+            },
+            confidenceBase = entity.confidenceBase,
+            enabled = entity.enabled,
+            isUserDefined = entity.isUserDefined,
+        )
+    }.getOrNull()
+
     private inline fun <reified T> readAsset(path: String): T =
         context.assets.open(path).use { stream ->
             json.decodeFromString<T>(stream.readBytes().decodeToString())
@@ -213,6 +346,22 @@ public class DefaultRawIngestRepository @Inject constructor(
     private data class SenderSeedFile(val version: Int, val senders: List<SenderSeed>)
 
     @Serializable
+    private data class RuleSeedFile(val version: Int, val rules: List<RuleSeed>)
+
+    @Serializable
+    private data class RuleSeed(
+        val id: String,
+        val priority: Int,
+        val senderPattern: String,
+        val bodyPattern: String,
+        val fieldMap: Map<String, String>,
+        val direction: String? = null,
+        val instrumentHint: String? = null,
+        val confidenceBase: Double,
+        val enabled: Boolean = true,
+    )
+
+    @Serializable
     private data class SenderSeed(val pattern: String, val label: String? = null)
 
     private companion object {
@@ -221,7 +370,11 @@ public class DefaultRawIngestRepository @Inject constructor(
         /** D-09: 90 days, then the body goes and the row stays. */
         val RETENTION_MILLIS: Long = TimeUnit.DAYS.toMillis(90)
 
+        /** The ruleset this build ships and reads back (§5.1). */
+        const val RULESET_VERSION = 1
+
         const val PACKAGE_SEED = "ingest/package_allowlist.json"
         const val SENDER_SEED = "ingest/sender_allowlist.json"
+        const val RULES_SEED = "parser_rules/v1.json"
     }
 }

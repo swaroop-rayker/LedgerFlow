@@ -10,8 +10,10 @@ import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
 import com.ledgerflow.core.domain.ingest.IngestSourceType
+import com.ledgerflow.core.domain.ingest.InstrumentHint
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.vault.VaultInitRequest
 import com.ledgerflow.core.model.RawParseStatus
@@ -116,6 +118,66 @@ class RawIngestRepositoryInstrumentedTest {
         assertThat(repository.isPackageAllowed("com.google.android.apps.nbu.paisa.user")).isTrue()
         assertThat(repository.isSenderAllowed("VM-HDFCBK")).isTrue()
         assertThat(repository.isPackageAllowed("com.example.definitely.not.a.bank")).isFalse()
+    }
+
+    /**
+     * The shipped ruleset parses and lands too (§5.1).
+     *
+     * Same reasoning as the allowlists: the rules live in an **asset**, and an
+     * asset that fails to parse or is not packaged is a failure no unit test
+     * with a hand-built rule list would ever see. `GoldenCorpusTest` reads the
+     * same file off disk and proves the rules *work*; this proves they arrive on
+     * a device and survive the round trip through the table.
+     */
+    @Test
+    fun seedParserRules_loadsTheShippedRulesetFromAssets() = runBlocking {
+        repository.seedParserRules()
+
+        val rules = repository.parserRules()
+        assertThat(rules).isNotEmpty()
+        assertThat(rules.map { it.id }).contains("upi-debit-vpa")
+        // Priority order is what the engine relies on for first-match-wins.
+        assertThat(rules.map { it.priority }).isInOrder()
+        // The field map survived JSON round-tripping into the table.
+        assertThat(rules.first { it.id == "upi-debit-vpa" }.fieldMap).isNotEmpty()
+        // v7's column: a notification rule knows its instrument even though the
+        // message never says the word.
+        assertThat(rules.first { it.id == "notification-upi-paid" }.instrumentHint)
+            .isEqualTo(InstrumentHint.UPI)
+    }
+
+    /**
+     * Re-seeding replaces the shipped rules and leaves a user's own alone.
+     *
+     * That asymmetry is the entire reason rules live in a table as well as in
+     * the asset (§5.1's rule editor). A ruleset bump that wiped a rule someone
+     * wrote would be destroying work with no way to get it back.
+     */
+    @Test
+    fun seedParserRules_neverTouchesAUserWrittenRule() = runBlocking {
+        repository.seedParserRules()
+        val database = session.requireDatabase()
+        database.parserRuleDao().insertAll(
+            listOf(
+                ParserRuleEntity(
+                    id = "mine-1",
+                    rulesetVersion = 1,
+                    priority = 1,
+                    senderPattern = "MYBANK",
+                    bodyPattern = "paid (?<a>[0-9]+)",
+                    fieldMapJson = """{"amount":"a"}""",
+                    direction = "DEBIT",
+                    instrumentHint = null,
+                    confidenceBase = 0.6,
+                    enabled = true,
+                    isUserDefined = true,
+                ),
+            ),
+        )
+
+        repository.seedParserRules()
+
+        assertThat(repository.parserRules().map { it.id }).contains("mine-1")
     }
 
     /** Idempotent: every launch re-seeds, and the second run must change nothing. */

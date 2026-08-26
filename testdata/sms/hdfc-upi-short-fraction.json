@@ -1,0 +1,12 @@
+{
+  "sender": "VM-HDFCBK",
+  "expected": {
+    "ruleId": "upi-debit-vpa",
+    "amountMinor": 124050,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "LOCAL KIRANA",
+    "accountLast4": "1234",
+    "instrumentHint": "UPI"
+  }
+}

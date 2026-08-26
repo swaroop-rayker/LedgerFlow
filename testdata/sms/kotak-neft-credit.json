@@ -1,0 +1,12 @@
+{
+  "sender": "VM-KOTAKB",
+  "expected": {
+    "ruleId": "transfer-credit-neft-imps",
+    "amountMinor": 8500000,
+    "currency": "INR",
+    "direction": "CREDIT",
+    "accountLast4": "6677",
+    "instrumentHint": "NETBANKING",
+    "merchantRaw": "ACME CORP"
+  }
+}

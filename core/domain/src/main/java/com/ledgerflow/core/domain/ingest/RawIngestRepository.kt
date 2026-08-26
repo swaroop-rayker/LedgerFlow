@@ -1,5 +1,13 @@
 package com.ledgerflow.core.domain.ingest
 
+/**
+ * A raw row on its way through the pipeline: its id and the event it holds.
+ *
+ * The id is what [RawIngestRepository.recordParseOutcome] writes back against;
+ * the event is all the engine ever sees.
+ */
+public data class CapturedEvent(val rawId: String, val event: RawIngestEvent)
+
 /** What became of one captured event on its way into the raw tables. */
 public sealed interface CaptureOutcome {
 
@@ -64,6 +72,17 @@ public interface RawIngestRepository {
     public suspend fun record(event: RawIngestEvent): CaptureOutcome
 
     /**
+     * Messages captured but not yet resolved, oldest first, as the pipeline
+     * sees them.
+     *
+     * Returns [RawIngestEvent]s rather than rows so the engine downstream never
+     * learns which table they came from — the same type both capture adapters
+     * produce, which is what keeps everything past a capture adapter
+     * source-agnostic (CLAUDE.md §0).
+     */
+    public suspend fun capturedEvents(limit: Int): List<CapturedEvent>
+
+    /**
      * Applies the sender allowlist to SMS captured but not yet resolved,
      * returning how many were marked as not financial.
      *
@@ -84,4 +103,26 @@ public interface RawIngestRepository {
 
     /** Seeds the curated allowlists, leaving anything the user has changed alone (D-10). */
     public suspend fun seedAllowlists()
+
+    /**
+     * Puts the shipped ruleset in the `parser_rule` table (§5.1).
+     *
+     * Replaces the shipped rules for its version and **never touches a rule the
+     * user wrote** — that is the whole reason rules live in a table as well as
+     * in the asset. Runs on first launch and on version bump.
+     */
+    public suspend fun seedParserRules()
+
+    /** The enabled rules for the current ruleset, in the order the engine tries them. */
+    public suspend fun parserRules(): List<ParserRule>
+
+    /**
+     * Records what the engine made of one captured message.
+     *
+     * Sets `parse_status` and `matched_rule_id` on the raw row. It does **not**
+     * create a `pending_transaction` — that arrives with the next step, and
+     * §5.1's rule that an unparseable message still becomes a `PENDING` row is
+     * satisfied there rather than here.
+     */
+    public suspend fun recordParseOutcome(rawId: String, ruleId: String?, matched: Boolean)
 }

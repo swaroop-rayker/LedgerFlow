@@ -1,0 +1,12 @@
+{
+  "sender": "VM-ICICIB",
+  "expected": {
+    "ruleId": "upi-credit-vpa",
+    "amountMinor": 500000,
+    "currency": "INR",
+    "direction": "CREDIT",
+    "merchantRaw": "RAHUL K",
+    "accountLast4": "4321",
+    "instrumentHint": "UPI"
+  }
+}

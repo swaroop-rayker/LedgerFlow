@@ -1,0 +1,12 @@
+{
+  "packageName": "net.one97.paytm",
+  "sender": "Paytm",
+  "expected": {
+    "ruleId": "notification-upi-paid",
+    "amountMinor": 1200000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "BigBasket",
+    "instrumentHint": "UPI"
+  }
+}

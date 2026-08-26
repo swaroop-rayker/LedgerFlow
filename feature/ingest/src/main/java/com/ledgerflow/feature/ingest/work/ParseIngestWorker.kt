@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.ledgerflow.core.domain.usecase.TriageCapturedIngestUseCase
+import com.ledgerflow.feature.ingest.pipeline.ParseCapturedMessages
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
@@ -17,12 +18,13 @@ import dagger.assisted.AssistedInject
  * where there is time and where a failure can be retried.
  *
  * **What it does at this step, and what it deliberately does not.** It applies
- * the SMS sender allowlist and clears raw bodies past their retention (D-09).
- * It does **not** parse: the rule engine and `pending_transaction` are the next
- * steps, and a row this cannot yet judge is left `CAPTURED` rather than given a
- * verdict nothing produced. The class is named for what it becomes because the
- * next step extends this method rather than replacing the class — the same
- * reason the receiver was written in its final shape at S11.
+ * the SMS sender allowlist, clears raw bodies past their retention (D-09), and
+ * runs the rule engine over what is left, recording `matched_rule_id` and
+ * `PARSED` / `UNMATCHED` on each raw row. It does **not** create a
+ * `pending_transaction` — that is the next step, and §5.1's rule that an
+ * unparseable message still becomes a `PENDING` row is satisfied there. Until
+ * then an `UNMATCHED` row is a recorded verdict rather than a lost message,
+ * which is the distinction §5.1 actually cares about.
  *
  * Notifications need no allowlist pass here: theirs runs before the row exists
  * (§5.2's privacy rule), so by the time one is in `notification_raw` the
@@ -36,17 +38,23 @@ public class ParseIngestWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val triage: TriageCapturedIngestUseCase,
+    private val parse: ParseCapturedMessages,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = runCatching {
-        val report = triage()
+        // Order matters: the allowlist pass first, so a message from a
+        // non-financial sender leaves the queue before the engine matches its
+        // text against a single rule.
+        val triaged = triage()
+        val parsed = parse()
         // Counts only. Never a sender, never a body -- this log line runs on a
         // user's phone and the material it would otherwise carry is exactly what
         // CLAUDE.md §7 says must not be logged.
         Log.d(
             TAG,
-            "Triage: ${report.sendersFiltered} not allowlisted, " +
-                "${report.bodiesPurged} bodies purged.",
+            "Triage: ${triaged.sendersFiltered} not allowlisted, " +
+                "${triaged.bodiesPurged} bodies purged. " +
+                "Parse: ${parsed.parsed} matched, ${parsed.unmatched} unmatched.",
         )
         Result.success()
     }.getOrElse { throwable ->

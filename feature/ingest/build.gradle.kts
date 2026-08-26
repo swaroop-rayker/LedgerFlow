@@ -24,6 +24,10 @@ dependencies {
 
     testImplementation(libs.androidx.work.runtime.ktx)
 
+    // GoldenCorpusTest reads the shipped ruleset asset and testdata/ as plain
+    // files, so it needs a JSON parser on the test classpath.
+    testImplementation(libs.kotlinx.serialization.json)
+
     // SmsCaptureFromPduTest drives Android's own PDU parser. `SmsMessage` has no
     // public constructor, and adb cannot deliver an SMS either (BROADCAST_SMS is
     // signature-level), so the platform unwrap is reachable only on a device.

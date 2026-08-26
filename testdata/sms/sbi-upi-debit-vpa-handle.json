@@ -1,0 +1,12 @@
+{
+  "sender": "JD-SBIUPI",
+  "expected": {
+    "ruleId": "upi-debit-vpa",
+    "amountMinor": 9900,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "merchant@okhdfcbank",
+    "accountLast4": "7788",
+    "instrumentHint": "UPI"
+  }
+}

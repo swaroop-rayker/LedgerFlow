@@ -5,6 +5,7 @@ import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
 import com.ledgerflow.core.domain.usecase.SeedIngestAllowlistsUseCase
+import com.ledgerflow.core.domain.usecase.SeedParserRulesUseCase
 import com.ledgerflow.core.testing.ingest.FakeRawIngestRepository
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.VaultState
@@ -45,6 +46,7 @@ class AppViewModelTest {
         openVaultOnLaunch = OpenVaultOnLaunchUseCase(vault),
         purgeAbandonedDrafts = PurgeAbandonedDraftsUseCase(drafts),
         seedIngestAllowlists = SeedIngestAllowlistsUseCase(ingest),
+        seedParserRules = SeedParserRulesUseCase(ingest),
     )
 
     /**

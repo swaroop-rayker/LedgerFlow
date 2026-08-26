@@ -1,0 +1,12 @@
+{
+  "sender": "AD-HDFCBK",
+  "expected": {
+    "ruleId": "upi-debit-vpa",
+    "amountMinor": 12400000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "BUILDERS PVT LTD",
+    "accountLast4": "9911",
+    "instrumentHint": "UPI"
+  }
+}

@@ -6,6 +6,7 @@ import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
 import com.ledgerflow.core.domain.usecase.SeedIngestAllowlistsUseCase
+import com.ledgerflow.core.domain.usecase.SeedParserRulesUseCase
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
 import com.ledgerflow.core.domain.vault.VaultState
@@ -52,6 +53,7 @@ public class AppViewModel @Inject constructor(
     private val openVaultOnLaunch: OpenVaultOnLaunchUseCase,
     private val purgeAbandonedDrafts: PurgeAbandonedDraftsUseCase,
     private val seedIngestAllowlists: SeedIngestAllowlistsUseCase,
+    private val seedParserRules: SeedParserRulesUseCase,
 ) : ViewModel() {
 
     /**
@@ -101,6 +103,10 @@ public class AppViewModel @Inject constructor(
             // SeedIngestAllowlistsUseCase. It waits for Ready for the same
             // reason the draft sweep does: there is no database before that.
             seedIngestAllowlists()
+
+            // The ruleset lives in the vault beside the allowlists, and for the
+            // same reason: there is nothing to write to until it opens.
+            seedParserRules()
         }
     }
 

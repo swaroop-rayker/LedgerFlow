@@ -101,6 +101,14 @@ public class NotificationIngestService : NotificationListenerService() {
      * Duplicates are dropped: `bigText` is very often `text` repeated, and a
      * doubled body would skew every `contains` a rule performs.
      *
+     * **Joined with a newline, not a space,** and that is load-bearing. A
+     * notification's title is usually the whole transaction ("Paid Rs.240 to
+     * Swiggy") and the text below it is chatter ("Transaction successful").
+     * Space-joining destroys that boundary, and a lazy merchant capture then
+     * runs straight through the chatter -- found by the golden corpus, which
+     * read a merchant of "grocer@ybl Transaction successful". A newline keeps
+     * the fields separable while still being one body for one ruleset.
+     *
      * The app's **user-visible label** becomes `sender` (D-11) — "Google Pay",
      * not the package name repeated and not the notification's title. The title
      * is carried separately, because it is per-notification content and a poor
@@ -127,7 +135,7 @@ public class NotificationIngestService : NotificationListenerService() {
         return RawIngestEvent(
             sourceType = IngestSourceType.NOTIFICATION,
             sender = appLabelFor(packageName),
-            body = parts.joinToString(separator = " "),
+            body = parts.joinToString(separator = "\n"),
             receivedAt = postedAt,
             packageName = packageName,
             title = title,

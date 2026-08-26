@@ -1,0 +1,11 @@
+{
+  "sender": "AD-ICICIB",
+  "expected": {
+    "ruleId": "transfer-credit-neft-imps",
+    "amountMinor": 150000,
+    "currency": "INR",
+    "direction": "CREDIT",
+    "accountLast4": "8899",
+    "instrumentHint": "NETBANKING"
+  }
+}

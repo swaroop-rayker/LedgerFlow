@@ -1,0 +1,9 @@
+{
+  "sender": "VM-RBLBNK",
+  "expected": {
+    "ruleId": "generic-amount-then-verb",
+    "amountMinor": 75000,
+    "currency": "INR",
+    "direction": "CREDIT"
+  }
+}

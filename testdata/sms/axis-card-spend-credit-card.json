@@ -1,0 +1,12 @@
+{
+  "sender": "AD-AXISBK",
+  "expected": {
+    "ruleId": "card-spend-at-merchant",
+    "amountMinor": 85075,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "RELIANCE FRESH",
+    "accountLast4": "2211",
+    "instrumentHint": "CARD"
+  }
+}

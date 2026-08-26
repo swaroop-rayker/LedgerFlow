@@ -1,0 +1,12 @@
+{
+  "sender": "VM-PNBSMS",
+  "expected": {
+    "ruleId": "upi-debit-vpa",
+    "amountMinor": 30000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "CHAI POINT",
+    "accountLast4": "1122",
+    "instrumentHint": "UPI"
+  }
+}

@@ -260,6 +260,22 @@ public data class ParserRuleEntity(
     @ColumnInfo(name = "direction")
     val direction: String?,
 
+    /**
+     * `UPI` / `CARD` / ... when the rule itself knows how the money moved.
+     *
+     * Added in v7. A rule that only matches GPay, PhonePe, Paytm and BHIM is
+     * describing a UPI payment whether or not the notification says the word —
+     * and most do not. Carried on the rule rather than inferred from the
+     * package downstream, because inferring it there would be the pipeline
+     * branching on source, which CLAUDE.md §0 forbids outside an adapter.
+     *
+     * A `String?` for the same reason [direction] is: rule data comes from an
+     * asset a user can edit, and an unrecognised value must be storable and then
+     * rejected with a message rather than decoding to null at the Room boundary.
+     */
+    @ColumnInfo(name = "instrument_hint")
+    val instrumentHint: String?,
+
     /** Starting confidence before per-field adjustments. Not money — a real is correct here (Law 3). */
     @ColumnInfo(name = "confidence_base")
     val confidenceBase: Double,

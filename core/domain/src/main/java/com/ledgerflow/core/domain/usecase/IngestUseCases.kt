@@ -70,6 +70,19 @@ public class TriageCapturedIngestUseCase @Inject constructor(
 public data class TriageReport(val sendersFiltered: Int, val bodiesPurged: Int)
 
 /**
+ * Puts the shipped ruleset in place (SPEC.md §5.1).
+ *
+ * Runs alongside the allowlist seeding, on unlock, for the same reason: the
+ * rules live in the vault, so there is nothing to write to until it opens.
+ * Idempotent, and it never disturbs a rule the user wrote.
+ */
+public class SeedParserRulesUseCase @Inject constructor(
+    private val repository: RawIngestRepository,
+) {
+    public suspend operator fun invoke(): Unit = repository.seedParserRules()
+}
+
+/**
  * Puts the curated allowlists in place on first run (D-10).
  *
  * Idempotent, and deliberately additive: a package the user disabled stays

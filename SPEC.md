@@ -134,6 +134,16 @@ Rationale: in the current Indian payments landscape, a `NotificationListenerServ
 - **`playSafe` binds an SMS source too**, permanently reporting `UNSUPPORTED_IN_BUILD`. Same fully-qualified class name as `smsFull`'s adapter, resolved by source set, so the shared Hilt module binds "the SMS source" once and no call site branches. An absent binding would compile equally well and would leave the Play build unable to explain why SMS ingest is missing.
 - Both capture components are declared and bind on device: the `smsFull` receiver (`RECEIVE_SMS`, priority 999, never abortive) and `NotificationIngestService` in both flavours. At P1 both were inert — the receiver normalized into a `RawIngestEvent` and handed it to an `IngestEventSink` that **discarded** it, and the service did not override `onNotificationPosted` at all, because the package allowlist did not exist and there is no way to read a notification body before it without breaking the §5.2 privacy rule.
 - **P2-2 made capture real, and it was the one class the seam predicted:** the sink became `PersistingIngestEventSink` (write the raw row, enqueue `ParseIngestWorker`, return) and neither adapter changed. `onNotificationPosted` gained its override, whose first act is the package check — `NotificationAllowlistOrderTest` asserts the gate precedes the read *inside the function body*, and fails against a planted read-first version.
+- **P2-3 made the engine live.** `ParserRuleEngine` is pure Kotlin and shared by
+  both sources — the only source-specific line in it is which field a rule's
+  `senderPattern` is tested against. The shipped ruleset is
+  `assets/parser_rules/v1.json`, loaded into `parser_rule` on unlock, replacing
+  shipped rules and never a rule the user wrote. The worker now records
+  `matched_rule_id` and `PARSED`/`UNMATCHED` on each raw row; it still creates no
+  `pending_transaction`, which is the next step. Schema **v7** adds
+  `parser_rule.instrument_hint`, because a rule matching only UPI apps knows the
+  instrument its messages never name, and inferring it downstream would be the
+  pipeline branching on source.
 - **P2-2 also introduced WorkManager**, configured through `LedgerFlowApplication` as a `Configuration.Provider` with the Hilt worker factory; its manifest initialiser is removed, because the default one runs before Hilt has a graph and would leave an `@HiltWorker` unconstructable at runtime with nothing at compile time to say so. It brings `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` and `FOREGROUND_SERVICE` into the merged manifest. **None of them is `INTERNET`** and Law 6 is intact (`restrictedPermissionCheck` covers it), but the app's permission list is now four longer than it was, which for an offline-first product is worth stating rather than discovering.
 - `RECEIVE_SMS` appears in `src/smsFull/AndroidManifest.xml` and nowhere else, enforced by `restrictedPermissionCheck` (Gradle) and a mirrored CI step rather than by memory. The same check bans `INTERNET` in every source set of every module (Law 6).
 

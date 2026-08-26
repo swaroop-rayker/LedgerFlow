@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "upi-debit-vpa",
+      "priority": 10,
+      "senderPattern": "(HDFCBK|ICICIB|ICICIT|SBIUPI|SBIINB|AXISBK|KOTAKB|PNBSMS|BOBTXN|CANBNK|IDFCFB|YESBNK|INDUSB|UNIONB|FEDBNK|RBLBNK|AUBANK|PAYTMB)",
+      "bodyPattern": "(?=.*\\bUPI\\b)(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?<direction>debited)\\s+from\\s+(?:a/c|acct|account)\\s*(?:no\\.?)?\\s*[Xx\\*]+(?<accountLast4>\\d{3,4}).*?(?:\\bto\\b|\\btowards\\b)\\s+(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\.|\\bon\\b|\\bUPI\\b|\\bRef\\b|$)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction",
+        "accountLast4": "accountLast4",
+        "merchantRaw": "merchantRaw"
+      },
+      "direction": "DEBIT",
+      "instrumentHint": null,
+      "confidenceBase": 0.9,
+      "enabled": true
+    },
+    {
+      "id": "upi-credit-vpa",
+      "priority": 11,
+      "senderPattern": "(HDFCBK|ICICIB|ICICIT|SBIUPI|SBIINB|AXISBK|KOTAKB|PNBSMS|BOBTXN|CANBNK|IDFCFB|YESBNK|INDUSB|UNIONB|FEDBNK|RBLBNK|AUBANK|PAYTMB)",
+      "bodyPattern": "(?=.*\\bUPI\\b)(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?<direction>credited)\\s+to\\s+(?:a/c|acct|account)\\s*(?:no\\.?)?\\s*[Xx\\*]+(?<accountLast4>\\d{3,4}).*?\\bfrom\\s+(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\.|\\bon\\b|\\bUPI\\b|\\bRef\\b|$)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction",
+        "accountLast4": "accountLast4",
+        "merchantRaw": "merchantRaw"
+      },
+      "direction": "CREDIT",
+      "instrumentHint": null,
+      "confidenceBase": 0.9,
+      "enabled": true
+    },
+    {
+      "id": "card-spend-at-merchant",
+      "priority": 20,
+      "senderPattern": "(HDFCBK|ICICIB|ICICIT|AXISBK|KOTAKB|SBIINB|INDUSB|YESBNK|RBLBNK|IDFCFB)",
+      "bodyPattern": "(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?<direction>spent|debited)\\s+(?:on|using)\\s+(?:your\\s+)?(?<instrumentHint>credit card|debit card|card)\\s*(?:no\\.?)?\\s*[Xx\\*]*(?<accountLast4>\\d{3,4})?.*?\\bat\\s+(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\bon\\s+(?<occurredAt>\\d{2}[-/]\\d{2}[-/]\\d{2,4}))?\\s*(?:\\.|$)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction",
+        "instrumentHint": "instrumentHint",
+        "accountLast4": "accountLast4",
+        "merchantRaw": "merchantRaw",
+        "occurredAt": "occurredAt"
+      },
+      "direction": "DEBIT",
+      "instrumentHint": null,
+      "confidenceBase": 0.88,
+      "enabled": true
+    },
+    {
+      "id": "atm-withdrawal",
+      "priority": 30,
+      "senderPattern": "(HDFCBK|ICICIB|SBIINB|ATMSBI|AXISBK|KOTAKB|PNBSMS|BOBTXN|CANBNK)",
+      "bodyPattern": "(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?<direction>withdrawn|debited)\\s+.*?(?<instrumentHint>ATM).*?(?:a/c|acct|account)\\s*(?:no\\.?)?\\s*[Xx\\*]+(?<accountLast4>\\d{3,4})",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction",
+        "instrumentHint": "instrumentHint",
+        "accountLast4": "accountLast4"
+      },
+      "direction": "DEBIT",
+      "instrumentHint": null,
+      "confidenceBase": 0.85,
+      "enabled": true
+    },
+    {
+      "id": "transfer-credit-neft-imps",
+      "priority": 40,
+      "senderPattern": "(HDFCBK|ICICIB|SBIINB|AXISBK|KOTAKB|PNBSMS|BOBTXN|CANBNK|UNIONB|FEDBNK)",
+      "bodyPattern": "(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?<direction>credited)\\s+to\\s+(?:a/c|acct|account)\\s*(?:no\\.?)?\\s*[Xx\\*]+(?<accountLast4>\\d{3,4}).*?(?<instrumentHint>NEFT|IMPS|RTGS)(?:.*?\\bfrom\\s+(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\.|\\bRef\\b|$))?",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction",
+        "accountLast4": "accountLast4",
+        "instrumentHint": "instrumentHint",
+        "merchantRaw": "merchantRaw"
+      },
+      "direction": "CREDIT",
+      "instrumentHint": null,
+      "confidenceBase": 0.85,
+      "enabled": true
+    },
+    {
+      "id": "notification-upi-paid",
+      "priority": 50,
+      "senderPattern": "(com\\.google\\.android\\.apps\\.nbu\\.paisa\\.user|com\\.phonepe\\.app|net\\.one97\\.paytm|in\\.org\\.npci\\.upiapp)",
+      "bodyPattern": "(?<direction>Paid|Sent)\\s+(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+to\\s+(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\.|\\busing\\b|\\bfrom\\b|$)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction",
+        "merchantRaw": "merchantRaw"
+      },
+      "direction": "DEBIT",
+      "instrumentHint": "UPI",
+      "confidenceBase": 0.9,
+      "enabled": true
+    },
+    {
+      "id": "notification-upi-received",
+      "priority": 51,
+      "senderPattern": "(com\\.google\\.android\\.apps\\.nbu\\.paisa\\.user|com\\.phonepe\\.app|net\\.one97\\.paytm|in\\.org\\.npci\\.upiapp)",
+      "bodyPattern": "(?<direction>Received|Got)\\s+(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+from\\s+(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\.|\\busing\\b|$)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction",
+        "merchantRaw": "merchantRaw"
+      },
+      "direction": "CREDIT",
+      "instrumentHint": "UPI",
+      "confidenceBase": 0.9,
+      "enabled": true
+    },
+    {
+      "id": "generic-amount-then-verb",
+      "priority": 900,
+      "senderPattern": ".*",
+      "bodyPattern": "(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?:has been\\s+)?(?<direction>debited|credited|spent|withdrawn|paid|received)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction"
+      },
+      "direction": null,
+      "instrumentHint": null,
+      "confidenceBase": 0.45,
+      "enabled": true
+    },
+    {
+      "id": "generic-verb-then-amount",
+      "priority": 901,
+      "senderPattern": ".*",
+      "bodyPattern": "(?<direction>debited|credited|spent|withdrawn|paid|received)\\s+(?:with\\s+|by\\s+)?(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction"
+      },
+      "direction": null,
+      "instrumentHint": null,
+      "confidenceBase": 0.45,
+      "enabled": true
+    }
+  ]
+}

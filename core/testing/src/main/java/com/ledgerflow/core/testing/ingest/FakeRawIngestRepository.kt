@@ -1,7 +1,9 @@
 package com.ledgerflow.core.testing.ingest
 
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
+import com.ledgerflow.core.domain.ingest.CapturedEvent
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
+import com.ledgerflow.core.domain.ingest.ParserRule
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 
 /**
@@ -28,6 +30,15 @@ public class FakeRawIngestRepository(
         private set
 
     public var purgedBodies: Int = 0
+
+    public var ruleSeedCount: Int = 0
+        private set
+
+    /** Rules [parserRules] hands back. Empty unless a test sets them. */
+    public var rules: List<ParserRule> = emptyList()
+
+    /** Every outcome recorded, as (rawId, ruleId, matched). */
+    public val parseOutcomes: MutableList<Triple<String, String?, Boolean>> = mutableListOf()
 
     private val seenHashes = mutableSetOf<String>()
 
@@ -58,6 +69,9 @@ public class FakeRawIngestRepository(
         }
     }
 
+    override suspend fun capturedEvents(limit: Int): List<CapturedEvent> =
+        recorded.take(limit).mapIndexed { index, event -> CapturedEvent("raw-${index + 1}", event) }
+
     override suspend fun triageCapturedSms(limit: Int): Int =
         recorded.count { !isSenderAllowed(it.sender) }
 
@@ -65,6 +79,16 @@ public class FakeRawIngestRepository(
 
     override suspend fun seedAllowlists() {
         seedCount++
+    }
+
+    override suspend fun seedParserRules() {
+        ruleSeedCount++
+    }
+
+    override suspend fun parserRules(): List<ParserRule> = rules
+
+    override suspend fun recordParseOutcome(rawId: String, ruleId: String?, matched: Boolean) {
+        parseOutcomes += Triple(rawId, ruleId, matched)
     }
 
     private companion object {

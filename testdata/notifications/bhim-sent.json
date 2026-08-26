@@ -1,0 +1,12 @@
+{
+  "packageName": "in.org.npci.upiapp",
+  "sender": "BHIM",
+  "expected": {
+    "ruleId": "notification-upi-paid",
+    "amountMinor": 50000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "grocer@ybl",
+    "instrumentHint": "UPI"
+  }
+}
