@@ -20,14 +20,13 @@ import androidx.compose.ui.unit.sp
 /**
  * Type scale (SPEC.md §9.2).
  *
+ * Every style is Inter -- the bundled variable font §9.2 asks for. See
+ * [LfFontFamily] for the binary, its licence, and why each weight has to name
+ * its axis explicitly.
+ *
  * The amount styles carry `fontFeatureSettings = "tnum"` -- tabular figures.
  * Without it, proportional digits make a column of amounts ragged and
  * genuinely harder to compare, which is most of what this app is for.
- *
- * Note: §9.2 specifies a bundled variable font (Inter or Manrope). That is not
- * wired yet -- the font binary has to be added to the repo and the licence
- * recorded. Until then this uses the platform default, which still honours
- * "tnum" on Android. Tracked as a Step 6 follow-up.
  */
 @Immutable
 public data class LfTypography(
@@ -43,7 +42,21 @@ public data class LfTypography(
     val mnemonicWord: TextStyle,
 )
 
+/** Tabular figures, so a column of amounts lines up. §9.2 makes it mandatory. */
 private const val TABULAR_FIGURES = "tnum"
+
+/**
+ * Inter's `ss02`, which the font itself calls "Disambiguation": `l` gains a
+ * tail, `1` a foot, `0` a slash.
+ *
+ * Only [LfTypography.mnemonicWord] uses it. That style has always claimed to
+ * keep similar glyphs distinct, and under the platform default that was an
+ * aspiration -- there was no such feature to ask for. A recovery word copied
+ * wrong off the screen is the one transcription error in this app with no
+ * recovery path of its own, so where the font can actually draw the difference,
+ * it should.
+ */
+private const val DISAMBIGUATION = "ss02"
 
 /**
  * Applied to every style so an explicit `lineHeight` cannot clip glyphs.
@@ -68,12 +81,15 @@ private fun lfTextStyle(
     fontSize: TextUnit,
     lineHeight: TextUnit,
     fontWeight: FontWeight = FontWeight.Normal,
-    tabularFigures: Boolean = false,
+    features: List<String> = emptyList(),
 ): TextStyle = TextStyle(
+    fontFamily = LfFontFamily,
     fontSize = fontSize,
     lineHeight = lineHeight,
     fontWeight = fontWeight,
-    fontFeatureSettings = if (tabularFigures) TABULAR_FIGURES else null,
+    // Null rather than "", which some renderers treat as a feature string to
+    // parse rather than as "no features".
+    fontFeatureSettings = features.takeIf { it.isNotEmpty() }?.joinToString(", "),
     lineHeightStyle = LfLineHeight,
     platformStyle = PlatformTextStyle(includeFontPadding = false),
 )
@@ -85,9 +101,14 @@ public val LfDefaultTypography: LfTypography = LfTypography(
     bodyL = lfTextStyle(16.sp, 24.sp),
     bodyM = lfTextStyle(14.sp, 20.sp),
     label = lfTextStyle(12.sp, 16.sp, FontWeight.Medium),
-    amountL = lfTextStyle(28.sp, 32.sp, FontWeight.SemiBold, tabularFigures = true),
-    amountM = lfTextStyle(18.sp, 22.sp, FontWeight.Medium, tabularFigures = true),
-    mnemonicWord = lfTextStyle(16.sp, 22.sp, FontWeight.Medium, tabularFigures = true),
+    amountL = lfTextStyle(28.sp, 32.sp, FontWeight.SemiBold, listOf(TABULAR_FIGURES)),
+    amountM = lfTextStyle(18.sp, 22.sp, FontWeight.Medium, listOf(TABULAR_FIGURES)),
+    mnemonicWord = lfTextStyle(
+        16.sp,
+        22.sp,
+        FontWeight.Medium,
+        listOf(TABULAR_FIGURES, DISAMBIGUATION),
+    ),
 )
 
 /** Spacing scale. Nothing in the app may hardcode a dp value (CLAUDE.md §5). */
@@ -215,7 +236,14 @@ public fun LfTheme(
         LocalLfSpacing provides LfSpacing(),
         LocalLfMotion provides LfMotion(),
     ) {
-        MaterialTheme(colorScheme = materialScheme, content = content)
+        // Typography as well as colours, for the same reason: a Material widget
+        // that renders its own text would otherwise come out in the platform
+        // font on a screen that is otherwise Inter. See [LfMaterialTypography].
+        MaterialTheme(
+            colorScheme = materialScheme,
+            typography = LfMaterialTypography,
+            content = content,
+        )
     }
 }
 

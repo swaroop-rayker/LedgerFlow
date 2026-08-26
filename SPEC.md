@@ -891,6 +891,16 @@ Single variable font family (Inter or Manrope, bundled — no runtime download).
 
 Scale: `displayL 34/40` · `titleL 22/28` · `titleM 18/24` · `bodyL 16/24` · `bodyM 14/20` · `label 12/16` · `amountL 28/32 tnum` · `amountM 18/22 tnum`.
 
+**Settled: Inter.** `InterVariable.ttf` from the Inter 4.1 release, unmodified, at `core/designsystem/src/main/res/font/`, ~859 KB against §11's provisional 15 MB budget. SIL Open Font License 1.1. Manrope was the other candidate and is a fifth of the size; Inter was chosen for the finance-specific features it carries beyond `tnum` — `zero` and `case` — and for the larger glyph set. Neither candidate has Arabic, so AED's "د.إ" falls back to the system font either way.
+
+The OFL requires the licence to travel with every copy of the font, and an APK is a copy. It ships at `assets/licenses/Inter-OFL.txt` — **`assets/`, not `res/raw/`**, because release builds set `isShrinkResources = true` and an unreferenced raw resource is stripped, which would ship the font without its licence in release only, with nothing failing.
+
+**Weights are cut in XML, not by `variationSettings`.** Compose's `Font(resId, …, variationSettings)` applies the axis but yields metrics systematically heavier than the master Inter actually draws. A `res/font/inter_*.xml` `<font-family>` carrying `android:fontVariationSettings` yields metrics identical to Inter's shipped static instances, which is the ground truth. Measured on device and pinned by `LfFontAxisTest`.
+
+**Six weights are registered, not three.** The scale uses 400/500/600; 700/800/900 exist because Android's "Bold text" accessibility setting is a `fontWeightAdjustment` added to every requested weight before matching (`+300` on the primary device). With only three registered, all three requests match the heaviest entry and the type hierarchy collapses to a single weight for exactly the users who turned the setting on. The extra cuts come from the same file and cost no binary size. See §9.6.
+
+`mnemonicWord` additionally enables Inter's `ss02` ("Disambiguation": `l` gains a tail, `1` a foot, `0` a slash). That style has always claimed to keep similar glyphs distinct; under the platform default there was no such feature to ask for. A recovery word transcribed wrong is the one copying error in this app with no recovery path of its own.
+
 ### 9.3 Navigation
 - **Single Activity**, Navigation Compose with type-safe routes (`@Serializable` route objects).
 - **Bottom bar (4 items) + centre FAB:** `Dashboard` · `Ledger` · **[ + FAB ]** · `Analytics` · `More`.
@@ -906,6 +916,8 @@ Spring-based, `MotionScheme` tokens. Durations: micro 120 ms, standard 240 ms, e
 
 ### 9.6 Accessibility (not optional)
 Min touch target 48 dp. Content descriptions on every icon-only control. Amounts announced as "spent 1,240 rupees on groceries", not "₹1240". Full TalkBack pass per release. Contrast AA minimum. Font scale to 2.0x without truncation or overlap.
+
+**The font scale is not the only text setting that changes layout.** Android's "Bold text" accessibility option raises every requested font weight before font matching, and the primary test device has it on (`font_weight_adjustment = 300`). It is a real user setting, respected rather than worked around: §9.2 registers weights far enough up the scale that the hierarchy survives it. A manual pass with it enabled is on the matrix (`TESTING.md` H2), because no preview and no screenshot config exercises it.
 
 **Decorative glyphs are pinned to their shape, not to the text scale.** `LfCategoryDot` draws a category's initial inside a 24 dp circle. Sized in `sp` the letter scaled while the circle did not, so at 2.0x its em box matched the circle's *diameter* and the curve clipped it on all four sides — visible on every row of the Ledger list. The initial carries nothing the adjacent label does not (it is excluded from semantics for exactly that reason), so it is sized from the swatch via `Dp.toSp()` and renders identically at every font scale. A row's *text* still scales in full, and degrades by wrapping the name rather than clipping it (§8/BUG9).
 

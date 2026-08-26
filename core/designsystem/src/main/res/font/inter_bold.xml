@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Inter Bold (700), cut from the one bundled variable file. See LfFonts.kt for
+  why the axis is declared here rather than handed to a Compose Font, and for
+  the measurements that settled it.
+
+  (No double hyphen may appear in an XML comment. aapt2 rejects the file with a
+  bare ParseError naming only a column, which is a slow thing to work out.)
+-->
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:font="@font/inter_variable"
+        android:fontWeight="700"
+        android:fontStyle="normal"
+        android:fontVariationSettings="'wght' 700" />
+</font-family>
