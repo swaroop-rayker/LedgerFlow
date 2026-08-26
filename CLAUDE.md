@@ -251,7 +251,8 @@ is a write that makes past totals change again.
   afterwards for exactly that reason.
 
 ### `:core:database` migrations
-- A pre-migration `.lfbk` backup is written and verified before any migration runs. Don't remove this.
+- A pre-migration snapshot is written and verified before any migration runs (`PreMigrationGuard`). Don't remove this. It is a **copy of the encrypted database file, not a `.lfbk`** — ADR-0019: a `.lfbk` is phrase-derived and the app never holds the phrase at launch, so the `.lfbk` form this line used to claim was never implementable. Don't "fix" it back.
+- **The snapshot is not a backup and must never be presented as one.** It is not portable, it dies with the device, and it is deleted on the first clean launch after the migration. The same rule as the purge dialog: the app tells the user to export, it does not pretend it can back up for them.
 - Migrations use `CREATE new / INSERT SELECT / DROP old / RENAME`, not `ALTER` chains — `ALTER` chains can half-apply and leave a corrupt schema.
 - `PRAGMA foreign_key_check` after every migration; a violation aborts and rolls back.
 

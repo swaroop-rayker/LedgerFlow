@@ -25,6 +25,71 @@ public sealed interface VaultState {
 
     /** Keystore did not deliver. The 24 words are the way through. */
     public data class NeedsRecovery(val reason: RecoveryReason) : VaultState
+
+    /**
+     * A schema migration is running behind its own screen (SPEC.md §8.1).
+     *
+     * Distinct from [Working], which is a spinner inside a screen that already
+     * has the user's attention. This *is* the screen: the app is not usable, the
+     * work is not cancellable — a half-taken snapshot is worse than none — and
+     * the cold-start budget explicitly does not apply to a version-upgrade
+     * launch.
+     */
+    public data class Upgrading(val from: Int, val to: Int) : VaultState
+
+    /**
+     * The upgrade could not safely start, or did not finish.
+     *
+     * **The database has not been migrated and is not open.** Blocking is the
+     * correct outcome here: migrating without a rollback point is the whole of
+     * what BUG8 is about, so refusing to start is better than starting and
+     * hoping.
+     */
+    public data class UpgradeBlocked(val reason: UpgradeBlockReason) : VaultState
+}
+
+/**
+ * Why an upgrade did not proceed (SPEC.md §8.1, ADR-0019).
+ *
+ * Separated by remedy, the same way [RecoveryReason] is: each of these puts a
+ * different sentence and a different action in front of the user, and collapsing
+ * them would produce a screen that says "something went wrong" — which is the
+ * screen that makes a recoverable situation feel terminal.
+ */
+public sealed interface UpgradeBlockReason {
+
+    /**
+     * Not enough free space for the snapshot plus the migration's own working
+     * room. The figures are named on screen so "free up space" is actionable
+     * rather than vague.
+     */
+    public data class InsufficientStorage(
+        val requiredBytes: Long,
+        val availableBytes: Long,
+    ) : UpgradeBlockReason
+
+    /**
+     * The rollback point could not be taken or did not verify.
+     *
+     * An unverified snapshot is not a snapshot, exactly as an unverified `.lfbk`
+     * is not a backup. The original database is untouched.
+     */
+    public data object SnapshotFailed : UpgradeBlockReason
+
+    /**
+     * The migration threw. [restored] says whether the snapshot went back —
+     * the only automatic restore in the app.
+     *
+     * `false` is the genuinely bad case and the screen must not soften it: the
+     * user needs to know before they do anything else.
+     */
+    public data class MigrationFailed(val restored: Boolean) : UpgradeBlockReason
+
+    /**
+     * The database was written by a newer build (BUG3). Never migrated
+     * downward, never opened.
+     */
+    public data class Downgrade(val onDisk: Int, val supported: Int) : UpgradeBlockReason
 }
 
 /**

@@ -6,6 +6,7 @@ import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
 import com.ledgerflow.core.domain.vault.RecoveryReason
+import com.ledgerflow.core.domain.vault.UpgradeBlockReason
 import com.ledgerflow.core.domain.vault.VaultState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -22,6 +23,19 @@ public sealed interface AppRoute {
     public data object Onboarding : AppRoute
     public data class Recovery(val reason: RecoveryReason) : AppRoute
     public data object Ready : AppRoute
+
+    /**
+     * A schema migration is running (SPEC.md §8.1).
+     *
+     * Unlike [VaultState.Working] this **does** get its own route: the app is
+     * genuinely unusable, there is no screen underneath that owns the user's
+     * context, and §8.1 requires a dedicated screen rather than a spinner over
+     * whatever was there.
+     */
+    public data class Upgrading(val from: Int, val to: Int) : AppRoute
+
+    /** The migration did not go ahead. The database was not changed. */
+    public data class UpgradeBlocked(val reason: UpgradeBlockReason) : AppRoute
 }
 
 /**
@@ -55,6 +69,8 @@ public class AppViewModel @Inject constructor(
                 VaultState.NeedsOnboarding -> AppRoute.Onboarding
                 VaultState.Unlocked -> AppRoute.Ready
                 is VaultState.NeedsRecovery -> AppRoute.Recovery(state.reason)
+                is VaultState.Upgrading -> AppRoute.Upgrading(state.from, state.to)
+                is VaultState.UpgradeBlocked -> AppRoute.UpgradeBlocked(state.reason)
                 VaultState.Working -> previous
             }
         }

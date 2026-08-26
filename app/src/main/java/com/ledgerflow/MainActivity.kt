@@ -20,6 +20,8 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.feature.onboarding.OnboardingScreen
 import com.ledgerflow.feature.onboarding.OnboardingViewModel
 import com.ledgerflow.feature.onboarding.recovery.RecoveryScreen
+import com.ledgerflow.feature.onboarding.upgrade.UpgradeBlockedScreen
+import com.ledgerflow.feature.onboarding.upgrade.UpgradingScreen
 import com.ledgerflow.feature.onboarding.recovery.RecoveryViewModel
 import com.ledgerflow.navigation.LedgerFlowShell
 import dagger.hilt.android.AndroidEntryPoint
@@ -86,6 +88,12 @@ private fun LedgerFlowApp() {
             LaunchedEffect(current.reason) { viewModel.setReason(current.reason) }
             RecoveryScreen(state = state, onEvent = viewModel::onEvent)
         }
+
+        // §8.1: a dedicated screen that owns the upgrade, not a spinner over
+        // whatever happened to be showing.
+        is AppRoute.Upgrading -> UpgradingScreen(from = current.from, to = current.to)
+
+        is AppRoute.UpgradeBlocked -> UpgradeBlockedScreen(reason = current.reason)
 
         AppRoute.Ready -> LedgerFlowShell()
     }

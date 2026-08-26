@@ -181,7 +181,7 @@ approximate — run it on the device, not an emulator.
 | I3 | P1 | **Entry in ≤ 4 taps** | A repeat expense, from launch to saved, in four taps. If it takes five, the flow regressed. |
 | I4 | P1 | **Export a real dataset** | CSV export of a full vault completes without an ANR and the files open correctly in a spreadsheet. |
 | I5 | P3 | **Analytics at 5Y** | Chart rendered in ≤ 300 ms, 60fps pan and zoom. |
-| I6 | P3 | **Upgrading screen** | On a build that ships a migration: the pre-migration backup runs on a dedicated screen with determinate progress, not on the cold-start path, and the app never looks frozen (SPEC §8.1). |
+| I6 | P1 | **Upgrading screen** | On a build that ships a migration: the snapshot is taken and the migration runs behind the dedicated Upgrading screen, not on the cold-start path, and the app never looks frozen (SPEC §8.1, ADR-0019). There is no progress bar and that is deliberate — a file copy is instant. Afterwards `files/premigration/` holds the snapshot; relaunch once more and it is gone. |
 
 ---
 
@@ -190,7 +190,7 @@ approximate — run it on the device, not an emulator.
 | # | Phase | Test | Expected |
 |---|---|---|---|
 | J1 | P1 | **Low storage** | Fill the device to near-full, then export and (when it ships) back up. The failure is explicit and names what is needed. Nothing is half-written. |
-| J2 | P3 | **Low storage blocks a migration** | With less than `2.2 × dbSize` free, launch a build carrying a migration. The migration does **not** run; the app says how much space is needed. Blocking is correct here. |
+| J2 | P1 | **Low storage blocks a migration** | With less than `2.2 × dbSize` free, launch a build carrying a migration. The migration does **not** run; the app says how much space is needed, in MB, and the ledger is untouched. Blocking is correct here. |
 | J3 | P1 | **Nothing persistent in `cacheDir`** | Clear the app's cache from App info. Relaunch. Nothing is lost. Law 5 says `cacheDir` is decode scratch only; this is how you find out it was not. |
 
 ---

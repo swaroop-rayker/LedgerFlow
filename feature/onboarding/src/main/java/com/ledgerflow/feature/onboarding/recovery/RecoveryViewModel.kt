@@ -150,5 +150,13 @@ public class RecoveryViewModel @Inject constructor(
         is VaultOutcome.PhraseRejected -> RecoveryFailure.PhraseRejected(validation)
         VaultOutcome.PhraseDidNotMatch -> RecoveryFailure.PhraseDidNotMatch
         is VaultOutcome.Failed -> RecoveryFailure.Other(reason)
+
+        // The phrase was right and the vault opened far enough to find a
+        // pending schema upgrade that then could not proceed (§8.1). Nothing
+        // about that is a *recovery* failure, and reporting it as one here
+        // would leave the user retyping twenty-four correct words at a screen
+        // that cannot help. The shell routes to the upgrade screen off the
+        // vault's own state, so this reports no failure and lets it.
+        is VaultOutcome.UpgradeBlocked -> null
     }
 }

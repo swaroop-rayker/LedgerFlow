@@ -66,4 +66,13 @@ public sealed interface VaultOutcome {
 
     /** Everything else, carrying the reason the Recovery screen should explain. */
     public data class Failed(val reason: RecoveryReason) : VaultOutcome
+
+    /**
+     * A schema upgrade was needed and did not go ahead (SPEC.md §8.1).
+     *
+     * Not a [Failed]: the vault is intact and the key is fine, so the Recovery
+     * screen would be both wrong and alarming. What the user needs is the
+     * upgrade screen saying what stopped it.
+     */
+    public data class UpgradeBlocked(val reason: UpgradeBlockReason) : VaultOutcome
 }

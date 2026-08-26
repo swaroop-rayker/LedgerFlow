@@ -13,10 +13,14 @@ import com.ledgerflow.core.database.DatabaseCanary
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.LedgerFlowDatabaseFactory
 import com.ledgerflow.core.database.WalCheckpointObserver
+import com.ledgerflow.core.database.migration.MigrationAssessment
+import com.ledgerflow.core.database.migration.PreMigrationGuard
+import com.ledgerflow.core.database.migration.SnapshotResult
 import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.RecoveryReason
+import com.ledgerflow.core.domain.vault.UpgradeBlockReason
 import com.ledgerflow.core.domain.vault.VaultInitRequest
 import com.ledgerflow.core.domain.vault.VaultOutcome
 import com.ledgerflow.core.domain.vault.VaultRepository
@@ -33,6 +37,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 import kotlinx.coroutines.withContext
 
 /**
@@ -226,10 +231,22 @@ public class VaultSession @Inject constructor(
         dek: Dek,
         seedMetadata: VaultInitRequest? = null,
     ): VaultOutcome = withContext(io) {
+        // BUG8(d), ADR-0019. All of this happens *before* Room is asked to open
+        // the file, because asking Room is what runs the migration.
+        val migratingFrom = when (val prepared = prepareForMigration(dek)) {
+            is MigrationPreparation.Blocked ->
+                return@withContext VaultOutcome.UpgradeBlocked(prepared.reason)
+            is MigrationPreparation.Proceed -> prepared.migratingFrom
+        }
+
         val opened = runCatching { LedgerFlowDatabaseFactory.create(context, dek, databaseName) }
-            .getOrElse { return@withContext VaultOutcome.Failed(RecoveryReason.DatabaseUnopenable) }
+            .getOrElse { return@withContext failedOpen(migratingFrom) }
 
         val result = runCatching {
+            // Room opens lazily, so the migration has not run yet. Touching the
+            // database forces it here, where a failure is still attributable to
+            // the upgrade and the snapshot is still the right answer.
+            opened.openHelper.writableDatabase
             if (seedMetadata != null) {
                 DatabaseCanary.write(opened)
                 opened.appMetaDao().putAll(initialMetadata(seedMetadata))
@@ -237,7 +254,7 @@ public class VaultSession @Inject constructor(
             DatabaseCanary.verify(opened)
         }.getOrElse {
             opened.close()
-            return@withContext VaultOutcome.Failed(RecoveryReason.DatabaseUnopenable)
+            return@withContext failedOpen(migratingFrom)
         }
 
         when (result) {
@@ -251,6 +268,85 @@ public class VaultSession @Inject constructor(
                 registerWalCheckpoint(opened)
                 dek.destroy()
                 VaultOutcome.Unlocked
+            }
+        }
+    }
+
+    /**
+     * An open that threw, attributed correctly.
+     *
+     * If a migration was pending, this is a failed migration and the snapshot
+     * goes back — the app's only automatic restore (§8.1). If not, the file
+     * simply would not open, which is Recovery's business (§7.3). Reporting the
+     * second as the first would put an upgrade screen in front of a user whose
+     * remedy is their twenty-four words.
+     */
+    private fun failedOpen(migratingFrom: Int?): VaultOutcome {
+        if (migratingFrom == null) return VaultOutcome.Failed(RecoveryReason.DatabaseUnopenable)
+        val restored = guard().restore(migratingFrom)
+        return VaultOutcome.UpgradeBlocked(UpgradeBlockReason.MigrationFailed(restored))
+    }
+
+    /** What [prepareForMigration] decided. */
+    private sealed interface MigrationPreparation {
+        /**
+         * Safe to open. [migratingFrom] is the version a snapshot was taken at,
+         * or null when nothing was pending — which is also what tells a failed
+         * open whether there is anything to restore.
+         */
+        data class Proceed(val migratingFrom: Int?) : MigrationPreparation
+        data class Blocked(val reason: UpgradeBlockReason) : MigrationPreparation
+    }
+
+    private fun guard(): PreMigrationGuard = PreMigrationGuard(
+        databaseFile = context.getDatabasePath(databaseName),
+        // filesDir, never cacheDir: the OS may clear cacheDir between taking the
+        // snapshot and needing it back (Law 5).
+        snapshotDir = File(context.filesDir, SNAPSHOT_DIR),
+    )
+
+    /**
+     * Takes the rollback point, or explains why the upgrade cannot start
+     * (SPEC.md §8.1, ADR-0019).
+     *
+     * The snapshot is a copy of the encrypted database file rather than a
+     * `.lfbk`: a `.lfbk` is phrase-derived (ADR-0011) and this path holds a DEK
+     * and no phrase. ADR-0019 has the reasoning and the amendment to §8.1.
+     *
+     * [MigrationAssessment.Unreadable] deliberately proceeds rather than
+     * blocking. It means the file will not open under this key at all, which is
+     * §7.3's problem and not an upgrade's — and the open below will produce the
+     * Recovery routing that actually helps.
+     */
+    private fun prepareForMigration(dek: Dek): MigrationPreparation {
+        val guard = guard()
+        return when (val assessment = guard.assess(dek.bytes())) {
+            MigrationAssessment.NotNeeded -> {
+                // A clean launch at the current version has now happened, so a
+                // snapshot from the previous one has done its job (§8.1).
+                guard.discardStaleSnapshot()
+                MigrationPreparation.Proceed(migratingFrom = null)
+            }
+
+            is MigrationAssessment.Unreadable -> MigrationPreparation.Proceed(migratingFrom = null)
+
+            is MigrationAssessment.Downgrade -> MigrationPreparation.Blocked(
+                UpgradeBlockReason.Downgrade(assessment.onDisk, assessment.supported),
+            )
+
+            is MigrationAssessment.Required -> {
+                _state.value = VaultState.Upgrading(assessment.from, assessment.to)
+                when (val snapshot = guard.takeSnapshot(dek.bytes(), assessment.from)) {
+                    is SnapshotResult.Success -> MigrationPreparation.Proceed(assessment.from)
+                    is SnapshotResult.InsufficientStorage -> MigrationPreparation.Blocked(
+                        UpgradeBlockReason.InsufficientStorage(
+                            snapshot.requiredBytes,
+                            snapshot.availableBytes,
+                        ),
+                    )
+                    is SnapshotResult.Failure ->
+                        MigrationPreparation.Blocked(UpgradeBlockReason.SnapshotFailed)
+                }
             }
         }
     }
@@ -284,6 +380,7 @@ public class VaultSession @Inject constructor(
 
     private fun VaultOutcome.toState(): VaultState = when (this) {
         VaultOutcome.Unlocked -> VaultState.Unlocked
+        is VaultOutcome.UpgradeBlocked -> VaultState.UpgradeBlocked(reason)
         is VaultOutcome.Failed -> VaultState.NeedsRecovery(reason)
         is VaultOutcome.PhraseRejected -> VaultState.NeedsRecovery(RecoveryReason.KeystoreUnavailable)
         VaultOutcome.PhraseDidNotMatch -> VaultState.NeedsRecovery(RecoveryReason.KeystoreUnavailable)
@@ -320,5 +417,14 @@ public class VaultSession @Inject constructor(
 
         /** KEK-A + KEK-B. ADR-0011 settled that there is no third. */
         public const val DEK_WRAP_VERSION: String = "2"
+
+        /**
+         * Where a pre-migration snapshot lives, under `filesDir` (Law 5).
+         *
+         * Not `cacheDir`: the OS may clear it between the snapshot being taken
+         * and the migration failing, which would remove the rollback point at
+         * exactly the moment it is needed.
+         */
+        private const val SNAPSHOT_DIR: String = "premigration"
     }
 }
