@@ -21,10 +21,29 @@
       "enabled": true
     },
     {
+      "id": "hdfc-upi-credit-alert",
+      "priority": 6,
+      "senderPattern": "(HDFCBK|ICICIB|ICICIT|SBIUPI|SBIINB|AXISBK|KOTAKB|PNBSMS|BOBTXN|CANBNK|IDFCFB|YESBNK|INDUSB|UNIONB|FEDBNK|RBLBNK|AUBANK|PAYTMB)",
+      "bodyPattern": "(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?<direction>credited)\\s+to\\s+[^\\n]*?(?:a/c|acct|account)\\s*(?:no\\.?)?\\s*[Xx\\*]+(?<accountLast4>\\d{3,4})\\s+on\\s+(?<occurredAt>\\d{2}[-/]\\d{2}[-/]\\d{2,4})\\s+from\\s+(?:VPA\\s+)?(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\(\\s*UPI\\s+(?<referenceNo>\\w+)\\s*\\)|\\.|$)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "direction": "direction",
+        "accountLast4": "accountLast4",
+        "merchantRaw": "merchantRaw",
+        "occurredAt": "occurredAt",
+        "referenceNo": "referenceNo"
+      },
+      "direction": "CREDIT",
+      "instrumentHint": "UPI",
+      "confidenceBase": 0.95,
+      "enabled": true
+    },
+    {
       "id": "upi-debit-vpa",
       "priority": 10,
       "senderPattern": "(HDFCBK|ICICIB|ICICIT|SBIUPI|SBIINB|AXISBK|KOTAKB|PNBSMS|BOBTXN|CANBNK|IDFCFB|YESBNK|INDUSB|UNIONB|FEDBNK|RBLBNK|AUBANK|PAYTMB)",
-      "bodyPattern": "(?=.*\\bUPI\\b)(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?<direction>debited)\\s+from\\s+(?:a/c|acct|account)\\s*(?:no\\.?)?\\s*[Xx\\*]+(?<accountLast4>\\d{3,4}).*?(?:\\bto\\b|\\btowards\\b)\\s+(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\.|\\bon\\b|\\bUPI\\b|\\bRef\\b|$)",
+      "bodyPattern": "(?=.*\\bUPI\\b)(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)\\s+(?<direction>debited)\\s+from\\s+[^\\n]*?(?:a/c|acct|account)\\s*(?:no\\.?)?\\s*[Xx\\*]+(?<accountLast4>\\d{3,4}).*?(?:\\bto\\b|\\btowards\\b)\\s+(?<merchantRaw>[^\\n]{2,40}?)\\s*(?:\\.|\\bon\\b|\\bUPI\\b|\\bRef\\b|$)",
       "fieldMap": {
         "amount": "amount",
         "currency": "currency",

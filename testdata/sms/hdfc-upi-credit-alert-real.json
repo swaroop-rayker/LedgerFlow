@@ -1,0 +1,15 @@
+{
+  "sender": "VM-HDFCBK",
+  "note": "REAL format, from the owner's phone (2026-08-26). Structure and wording verbatim; the account last4, the payer's VPA local-part and the UPI reference were substituted. Nothing a rule matches on was changed.",
+  "expected": {
+    "ruleId": "hdfc-upi-credit-alert",
+    "amountMinor": 100,
+    "currency": "INR",
+    "direction": "CREDIT",
+    "merchantRaw": "payer@fam",
+    "accountLast4": "1234",
+    "instrumentHint": "UPI",
+    "referenceNo": "888888888888",
+    "occurredAtLocalDate": "2026-08-26"
+  }
+}
