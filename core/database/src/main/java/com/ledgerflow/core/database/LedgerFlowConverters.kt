@@ -6,6 +6,8 @@ import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.LineItemKind
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.model.PaymentMethodType
+import com.ledgerflow.core.model.PendingStatus
+import com.ledgerflow.core.model.RawParseStatus
 
 /**
  * Room type converters.
@@ -53,4 +55,20 @@ public class LedgerFlowConverters {
     @TypeConverter
     public fun stringToLineItemKind(value: String?): LineItemKind? =
         value?.let { name -> LineItemKind.entries.firstOrNull { it.name == name } }
+
+    // ── v6: ingest (SPEC.md §5.1, §5.2) ───────────────────────────────────
+
+    @TypeConverter
+    public fun rawParseStatusToString(value: RawParseStatus?): String? = value?.name
+
+    @TypeConverter
+    public fun stringToRawParseStatus(value: String?): RawParseStatus? =
+        value?.let { name -> RawParseStatus.entries.firstOrNull { it.name == name } }
+
+    @TypeConverter
+    public fun pendingStatusToString(value: PendingStatus?): String? = value?.name
+
+    @TypeConverter
+    public fun stringToPendingStatus(value: String?): PendingStatus? =
+        value?.let { name -> PendingStatus.entries.firstOrNull { it.name == name } }
 }

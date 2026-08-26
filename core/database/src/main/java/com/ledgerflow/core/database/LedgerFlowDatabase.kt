@@ -23,7 +23,13 @@ import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
+import com.ledgerflow.core.database.entity.NotificationRawEntity
+import com.ledgerflow.core.database.entity.PackageAllowlistEntity
+import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
+import com.ledgerflow.core.database.entity.PendingTransactionEntity
+import com.ledgerflow.core.database.entity.SenderAllowlistEntity
+import com.ledgerflow.core.database.entity.SmsRawEntity
 
 /**
  * The encrypted ledger database.
@@ -50,6 +56,13 @@ import com.ledgerflow.core.database.entity.PaymentMethodEntity
         MerchantAliasEntity::class,
         CategoryGroupEntity::class,
         CategoryGroupMemberEntity::class,
+        // v6 (SPEC.md §5.1, §5.2, §6.1) — the ingest and approval queue.
+        SmsRawEntity::class,
+        NotificationRawEntity::class,
+        PackageAllowlistEntity::class,
+        SenderAllowlistEntity::class,
+        ParserRuleEntity::class,
+        PendingTransactionEntity::class,
     ],
     views = [
         DebitEntryView::class,
@@ -79,8 +92,19 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * v3 drops `draft_entry`'s unique slot index so a book can hold many
          * in-flight entries at once (ADR-0013, superseding D-06) — see
          * `MIGRATION_2_3`.
+         *
+         * v4 and v5 denormalise summary columns out of `draft_entry`'s payload
+         * so the drafts stack can render a row without parsing JSON.
+         *
+         * v6 adds the ingest side: the two raw tables, the two allowlists, the
+         * parser ruleset, and `pending_transaction` — the approval queue Law 1
+         * is about. Purely additive; no existing table is touched. `sms_raw`
+         * and `notification_raw` were named in §6.1 from the start and stayed
+         * out of the schema until P2 needed them. `pending_line_item` is still
+         * absent on purpose: nothing at P2 can produce an itemised candidate,
+         * so it lands at P4 with OCR (§16 Q7).
          */
-        public const val VERSION: Int = 5
+        public const val VERSION: Int = 6
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

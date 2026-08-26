@@ -124,4 +124,4 @@ public val MIGRATION_1_2: Migration = object : Migration(1, 2) {
  * recoverable, an upgrade that wipes is not.
  */
 public val LedgerFlowMigrations: Array<Migration> =
-    arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+    arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
