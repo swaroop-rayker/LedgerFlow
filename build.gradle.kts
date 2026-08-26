@@ -151,6 +151,12 @@ tasks.register("restrictedPermissionCheck") {
     }
 }
 
+/** Does this module carry instrumented tests worth compiling in the gate? */
+fun Project.hasAndroidTests(): Boolean =
+    file("src/androidTest").isDirectory ||
+        file("src/androidTestSmsFull").isDirectory ||
+        file("src/androidTestPlaySafe").isDirectory
+
 tasks.register("preMergeCheck") {
     group = "verification"
     description = "Full PR gate: both flavours assemble, unit tests, detekt, Android Lint."
@@ -166,6 +172,23 @@ tasks.register("preMergeCheck") {
     dependsOn("restrictedPermissionCheck")
     dependsOn(":app:assembleSmsFullDebug", ":app:assemblePlaySafeDebug")
     dependsOn(":app:lintSmsFullDebug", ":app:lintPlaySafeDebug")
+
+    // Instrumented tests are COMPILED here even though they cannot be run --
+    // they need a device, and that is the CI `instrumented` job's business.
+    //
+    // Compiling them is not busywork. `Bug6_DraftSurvivesProcessDeathTest` --
+    // one of the Seven Laws' named regression tests -- stopped compiling when
+    // ADR-0018 reshaped the entry form's events, and nothing said so for two
+    // sessions, because every task in this gate ignores androidTest sources.
+    // A regression test that does not build is a regression test that is not
+    // running, and the build reported success throughout.
+    dependsOn(
+        verifiableModules
+            .filter { path -> subprojects.single { it.path == path }.hasAndroidTests() }
+            .flatMap {
+                listOf("$it:assembleSmsFullDebugAndroidTest", "$it:assemblePlaySafeDebugAndroidTest")
+            },
+    )
     dependsOn(verifiableModules.map { "$it:detekt" })
     dependsOn(verifiableModules.map { "$it:test" })
 }

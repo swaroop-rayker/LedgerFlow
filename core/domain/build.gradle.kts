@@ -52,6 +52,13 @@ dependencies {
  * in the repository and these tests run again.
  */
 tasks.withType<Test>().configureEach {
+    // The repository-wide input below contains `core/database/src/androidTest/assets`,
+    // which `syncRoomSchemasToTestAssets` generates (it has to live under `src/`
+    // -- see that task for the three AGP 9 APIs that do not work). Gradle
+    // rightly refuses an input location that overlaps another task's output
+    // without a declared dependency, so declare it.
+    dependsOn(":core:database:syncRoomSchemasToTestAssets")
+
     inputs.files(
         rootProject.fileTree(rootProject.projectDir) {
             include("core/**/src/main/**/*.kt")

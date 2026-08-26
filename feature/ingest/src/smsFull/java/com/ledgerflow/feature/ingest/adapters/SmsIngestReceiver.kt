@@ -147,7 +147,7 @@ internal fun normalizeSmsParts(parts: List<SmsPart>, receivedAt: Long): List<Raw
  * SMS" — that rule is about an *allowlisted sender* whose text did not parse,
  * and a part with no sender at all can be neither allowlisted nor parsed.
  */
-private fun Intent.toSmsParts(): List<SmsPart> =
+internal fun Intent.toSmsParts(): List<SmsPart> =
     Telephony.Sms.Intents.getMessagesFromIntent(this)
         .orEmpty()
         .filterNotNull()

@@ -33,7 +33,14 @@ val syncRoomSchemasToTestAssets = tasks.register<Sync>("syncRoomSchemasToTestAss
     into(layout.projectDirectory.dir("src/androidTest/assets"))
 }
 
-tasks.matching { it.name.contains("AndroidTestAssets") }.configureEach {
+// Every androidTest-flavoured task, not just the asset merger.
+//
+// Narrowing this to "AndroidTestAssets" was enough while only the asset merge
+// read the directory. It is not: Android Lint's androidTest analysis reads
+// `src/androidTest/assets` too, and Gradle rejects the build with an implicit
+// dependency error the moment both run in one invocation -- which is exactly
+// what happened when `preMergeCheck` started compiling instrumented sources.
+tasks.matching { it.name.contains("AndroidTest", ignoreCase = true) }.configureEach {
     dependsOn(syncRoomSchemasToTestAssets)
 }
 
@@ -58,8 +65,8 @@ dependencies {
 
 /**
  * The structural guards in this module read the **repository's** sources at run
- * time, not this module's compiled classes: `LedgerIsolationTest``
- * walk `core/`, `feature/` and `app/` looking for call sites.
+ * time, not this module's compiled classes: `LedgerIsolationTest`
+ * walks `core/`, `feature/` and `app/` looking for call sites.
  *
  * Gradle cannot see that. Without this, the test task's inputs are just this
  * module's own code, so a change anywhere else leaves the task UP-TO-DATE and
@@ -73,6 +80,13 @@ dependencies {
  * in the repository and these tests run again.
  */
 tasks.withType<Test>().configureEach {
+    // The repository-wide input below contains `core/database/src/androidTest/assets`,
+    // which `syncRoomSchemasToTestAssets` generates (it has to live under `src/`
+    // -- see that task for the three AGP 9 APIs that do not work). Gradle
+    // rightly refuses an input location that overlaps another task's output
+    // without a declared dependency, so declare it.
+    dependsOn(":core:database:syncRoomSchemasToTestAssets")
+
     inputs.files(
         rootProject.fileTree(rootProject.projectDir) {
             include("core/**/src/main/**/*.kt")

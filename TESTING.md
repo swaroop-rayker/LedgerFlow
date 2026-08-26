@@ -131,11 +131,13 @@ has not been tested.
 
 | # | Phase | Test | Expected |
 |---|---|---|---|
-| F1 | P2 | **Real bank SMS** | A genuine debit SMS from a real bank produces a `PENDING` row. Nothing reaches the ledger without a tap (Law 1). |
+| F1a | **P2** *(runnable now)* | **Real bank SMS is captured** | Send any SMS to the device from another number, or wait for a real bank alert. A row appears in `sms_raw`. **This one cannot be automated at all**: `adb shell am broadcast` is refused for `SMS_RECEIVED` because `BROADCAST_SMS` is signature-level, and the platform's PDU parser is covered instead by `SmsCaptureFromPduTest`. A real message is the only way to prove the receiver is registered, permitted and firing on this device. |
+| F1b | P2 | **Real bank SMS becomes a pending row** | A genuine debit SMS from an allowlisted sender produces a `PENDING` row once the rule engine ships. Nothing reaches the ledger without a tap (Law 1). |
 | F2 | P2 | **Unparseable SMS is still captured** | An SMS from an allowlisted sender that the rules cannot parse produces a `PENDING` row with `confidence = 0`. It is never silently dropped. |
 | F3 | P2 | **Real UPI notification** | A genuine GPay/PhonePe notification produces a `PENDING` row. |
 | F4 | P2 | **Cross-source dedupe on a real payment** | One real UPI payment that fires both a bank SMS and an app notification produces **one** pending row, with the other visible under "Suppressed". |
-| F5 | P2 | **Non-allowlisted package is never read** | A notification from a package outside the allowlist leaves nothing in `notification_raw` and nothing in the logs. This is a stated privacy guarantee, not an implementation detail. |
+| F5 | **P2** *(runnable now)* | **Non-allowlisted package is never read** | Grant notification access, then trigger a notification from an app that is *not* on the allowlist (any messaging app). Nothing appears in `notification_raw` and nothing appears in the logs. This is a stated privacy guarantee, not an implementation detail; `NotificationAllowlistOrderTest` guards the code order, and this is the only check that the guarantee holds against the real system. |
+| F7 | **P2** *(runnable now)* | **A non-financial SMS is marked, not dropped** | Send an ordinary personal SMS to the device. It lands in `sms_raw` and the worker marks it `SENDER_NOT_ALLOWLISTED` — kept, per §5.1, and cleared by D-09's retention at 90 days rather than deleted. Confirm it produces no pending row and nothing user-visible. |
 | F6 | P2 | **Every failure becomes a fixture** | Any real message that fails to parse is added to `testdata/` as a golden fixture before the fix. The corpus only grows. |
 
 ---

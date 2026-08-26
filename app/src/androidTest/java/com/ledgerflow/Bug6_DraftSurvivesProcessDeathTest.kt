@@ -138,7 +138,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
         delay(RESTORE_SETTLE_MS)
 
         before.onEvent(EntryEvent.AmountChanged("125"))
-        before.select(EntryPicker.Category, groceries.id)
+        before.select(EntryPicker.Category(), groceries.id)
         before.select(EntryPicker.Subcategory(groceries.id), vegetables.id)
         before.onEvent(EntryEvent.NoteChanged("weekly shop, half typed"))
         before.onEvent(EntryEvent.LineItemAdded)
@@ -153,7 +153,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
 
         val lineItemKey = before.state.value.lineItems.singleOrNull()?.key
         before.onEvent(EntryEvent.LineItemNameChanged(requireNotNull(lineItemKey), "Rice"))
-        before.onEvent(EntryEvent.LineItemAmountChanged(lineItemKey, "60"))
+        before.onEvent(EntryEvent.LineItemUnitPriceChanged(lineItemKey, "60"))
         first.awaitDraftContaining("\"name\":\"Rice\"")
 
         val expected = before.state.value
