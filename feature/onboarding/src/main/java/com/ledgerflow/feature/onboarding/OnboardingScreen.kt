@@ -39,9 +39,14 @@ import com.ledgerflow.core.domain.vault.RecoveryKitFormat
  * The onboarding gate (SPEC.md §7.4).
  *
  * Stateless: every screen takes a state and emits events (CLAUDE.md §5). All
- * screens sit inside [LfScaffold], which consumes `WindowInsets.safeDrawing`,
- * so edge-to-edge is handled from the very first screen rather than retrofitted
- * (BUG5).
+ * screens sit inside [LfScaffold], which consumes the system bars and the
+ * display cutout for layout and the keyboard exactly once, so edge-to-edge is
+ * handled from the very first screen rather than retrofitted (BUG5).
+ * (Deliberately not `safeDrawing` -- that set includes the IME; see
+ * `LfScaffold` for the two measured failures that produced the split.)
+ *
+ * The step's one primary action is pinned to the scaffold rather than scrolled
+ * with the content -- see [PrimaryActionBar].
  */
 @Composable
 public fun OnboardingScreen(
@@ -57,7 +62,17 @@ public fun OnboardingScreen(
     RecoveryKitPicker(state, onEvent, kitFileName)
     state.kitConfirmFormat?.let { RecoveryKitConfirmDialog(it, onEvent) }
 
-    LfScaffold(modifier = modifier) { padding ->
+    LfScaffold(
+        modifier = modifier,
+        bottomBar = {
+            PrimaryActionBar(
+                state = state,
+                onEvent = onEvent,
+                onContinue = onGeneratePhrase,
+                onChooseFolder = { chooseBackupTree() },
+            )
+        },
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -67,14 +82,11 @@ public fun OnboardingScreen(
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
         ) {
             when (state.step) {
-                OnboardingStep.BaseCurrency -> BaseCurrencyStep(state, onEvent, onGeneratePhrase)
+                OnboardingStep.BaseCurrency -> BaseCurrencyStep(state, onEvent)
                 OnboardingStep.PhraseDisplay -> PhraseDisplayStep(state, onEvent)
                 OnboardingStep.WordChallenge -> WordChallengeStep(state, onEvent)
                 OnboardingStep.RecoveryKit -> RecoveryKitStep(onEvent)
-                OnboardingStep.BackupLocation -> BackupLocationStep(
-                    onEvent = onEvent,
-                    onChooseFolder = { chooseBackupTree() },
-                )
+                OnboardingStep.BackupLocation -> BackupLocationStep(onEvent)
                 OnboardingStep.Complete -> CompleteStep(state)
             }
             state.errorMessage?.let { ErrorFooter(it, onEvent) }
@@ -130,6 +142,113 @@ private fun rememberBackupTreeLauncher(onEvent: (OnboardingEvent) -> Unit): () -
     return { launcher.launch(null) }
 }
 
+/**
+ * What the step's primary action is, if it has one.
+ *
+ * Separated from [PrimaryActionBar] so the mapping is an exhaustive `when` over
+ * [OnboardingStep] with no `else` (CLAUDE.md §5): a seventh step then fails to
+ * compile here rather than shipping a screen whose only action is missing.
+ */
+private data class PrimaryAction(
+    val label: String,
+    val enabled: Boolean,
+    val loading: Boolean,
+    val onClick: () -> Unit,
+)
+
+private fun primaryActionOf(
+    state: OnboardingUiState,
+    onEvent: (OnboardingEvent) -> Unit,
+    onContinue: () -> Unit,
+    onChooseFolder: () -> Unit,
+): PrimaryAction? = when (state.step) {
+    OnboardingStep.BaseCurrency -> PrimaryAction(
+        label = "Continue",
+        enabled = true,
+        loading = state.isWorking,
+        onClick = onContinue,
+    )
+
+    OnboardingStep.PhraseDisplay -> PrimaryAction(
+        label = "I've written them down",
+        enabled = state.phraseRevealed,
+        loading = false,
+        onClick = { onEvent(OnboardingEvent.PhraseAcknowledged) },
+    )
+
+    OnboardingStep.WordChallenge -> PrimaryAction(
+        label = "Confirm",
+        enabled = state.challengeSatisfied,
+        loading = false,
+        onClick = { onEvent(OnboardingEvent.ChallengeSubmitted) },
+    )
+
+    // The text file, not the PDF: it is the copy that goes in a password
+    // manager, and the one the step's own body copy leads with.
+    OnboardingStep.RecoveryKit -> PrimaryAction(
+        label = "Save as text file",
+        enabled = true,
+        loading = false,
+        onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text)) },
+    )
+
+    OnboardingStep.BackupLocation -> PrimaryAction(
+        label = "Choose a folder",
+        enabled = true,
+        loading = false,
+        onClick = onChooseFolder,
+    )
+
+    // Nothing to press. The step is a progress report that advances itself.
+    OnboardingStep.Complete -> null
+}
+
+/**
+ * The step's primary action, pinned to the scaffold rather than scrolled with
+ * the content.
+ *
+ * Every step's CTA used to sit at the bottom of the scrolling `Column`. That is
+ * reachable at font scale 1.0 and not at 2.0: measured on the device, **three
+ * of the five gate steps had their CTA off screen** — the phrase step behind
+ * twenty-four words, the word challenge behind three fields and an error, and,
+ * least expected, the very first screen, where the currency list alone pushes
+ * "Continue" past the fold. Onboarding is a gate, so that is not a degraded
+ * experience; it is a user who cannot enter the app at all unless they think to
+ * scroll. §9.6 requires 2.0 to work, not merely to render, and `RecoveryScreen`
+ * already pins its one action for the same reason.
+ *
+ * **Only the primary action moves.** "Save as PDF", "Skip", "Not now" stay in
+ * the content: they are alternatives to the action, and a bar of three stacked
+ * buttons at 2.0 costs the scrolling area more than it gives back — the header
+ * and body copy are what the user has to read before choosing at all. The
+ * corollary is that a step must never put its *only* way forward in a secondary
+ * action.
+ *
+ * Padding is horizontal `lg` to line up with the content's inset, and `sm`
+ * vertically: [LfScaffold] has already inset this bar for the navigation bar,
+ * so a uniform `lg` here would stack 24dp on top of an inset that exists for
+ * the same purpose, and it comes out of the one part of the screen that
+ * scrolls (CLAUDE.md §5).
+ */
+@Composable
+private fun PrimaryActionBar(
+    state: OnboardingUiState,
+    onEvent: (OnboardingEvent) -> Unit,
+    onContinue: () -> Unit,
+    onChooseFolder: () -> Unit,
+) {
+    val action = primaryActionOf(state, onEvent, onContinue, onChooseFolder) ?: return
+    LfButton(
+        text = action.label,
+        onClick = action.onClick,
+        enabled = action.enabled,
+        loading = action.loading,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = LfTheme.spacing.lg, vertical = LfTheme.spacing.sm),
+    )
+}
+
 @Composable
 private fun ErrorFooter(message: String, onEvent: (OnboardingEvent) -> Unit) {
     Text(text = message, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
@@ -149,11 +268,7 @@ private fun StepHeading(title: String, body: String) {
 }
 
 @Composable
-private fun BaseCurrencyStep(
-    state: OnboardingUiState,
-    onEvent: (OnboardingEvent) -> Unit,
-    onContinue: () -> Unit,
-) {
+private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent) -> Unit) {
     StepHeading(
         title = "Choose your currency",
         // Stated plainly because §5.8 makes it permanent in v1. Discovering
@@ -191,7 +306,6 @@ private fun BaseCurrencyStep(
             }
         }
     }
-    LfButton(text = "Continue", onClick = onContinue, loading = state.isWorking)
 }
 
 @Composable
@@ -244,12 +358,6 @@ private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEven
             }
         }
     }
-
-    LfButton(
-        text = "I've written them down",
-        onClick = { onEvent(OnboardingEvent.PhraseAcknowledged) },
-        enabled = state.phraseRevealed,
-    )
 }
 
 @Composable
@@ -277,15 +385,10 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
         )
     }
 
-    LfButton(
-        text = "Confirm",
-        onClick = { onEvent(OnboardingEvent.ChallengeSubmitted) },
-        enabled = state.challengeSatisfied,
-    )
-
-    // There is deliberately NO skip button here, and there must never be one
-    // (SPEC.md §7.4, CLAUDE.md §7). A "remind me later" would defeat the entire
-    // durability design. If you are adding one, stop.
+    // "Confirm" is pinned in [PrimaryActionBar]. There is deliberately NO skip
+    // button here or there, and there must never be one (SPEC.md §7.4,
+    // CLAUDE.md §7). A "remind me later" would defeat the entire durability
+    // design. If you are adding one, stop.
 }
 
 @Composable
@@ -295,10 +398,8 @@ private fun RecoveryKitStep(onEvent: (OnboardingEvent) -> Unit) {
         body = "Your 24 words plus instructions for restoring your data. The text " +
             "file is what goes in a password manager; the PDF is what you print.",
     )
-    LfButton(
-        text = "Save as text file",
-        onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text)) },
-    )
+    // "Save as text file" is the pinned primary; these two are the
+    // alternatives to it.
     LfButton(
         text = "Save as PDF",
         onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Pdf)) },
@@ -343,16 +444,12 @@ private fun RecoveryKitFormat.label(): String = when (this) {
 }
 
 @Composable
-private fun BackupLocationStep(
-    onEvent: (OnboardingEvent) -> Unit,
-    onChooseFolder: () -> Unit,
-) {
+private fun BackupLocationStep(onEvent: (OnboardingEvent) -> Unit) {
     StepHeading(
         title = "Where should backups go?",
         body = "LedgerFlow writes an encrypted backup every night. Only your recovery " +
             "phrase can open it, so the location doesn't need to be private.",
     )
-    LfButton(text = "Choose a folder", onClick = onChooseFolder)
     LfButton(
         text = "Not now",
         onClick = { onEvent(OnboardingEvent.BackupLocationDeclined) },

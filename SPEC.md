@@ -803,6 +803,8 @@ There is no optional-passphrase step. It was specified here and is removed by D-
 
 This is friction. It is intentional. It is the single control that makes "data permanently unrecoverable" structurally impossible.
 
+**Because it is a gate, each step's primary action is pinned to the scaffold rather than scrolled with the content.** Measured at font scale 2.0 on a real device, three of the five steps had their CTA below the fold — including the very first, where the currency list pushes "Continue" off screen. A user who does not think to scroll cannot enter the app at all, which turns a §9.6 accessibility miss into a total block. Secondary actions ("Save as PDF", "Skip", "Not now") stay in the content, so the bar is one control tall; the corollary is that a step may never put its only way forward in a secondary action. `OnboardingCtaReachabilityTest` asserts each step's CTA is on screen at 2.0, and asserts the word challenge still has no skip.
+
 ### 7.5 Android Auto Backup
 `android:allowBackup="false"` and `android:dataExtractionRules` deny-all.
 
