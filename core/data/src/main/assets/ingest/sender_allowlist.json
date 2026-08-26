@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "senders": [
+    {
+      "pattern": "*-HDFCBK",
+      "label": "HDFC Bank"
+    },
+    {
+      "pattern": "*-ICICIB",
+      "label": "ICICI Bank"
+    },
+    {
+      "pattern": "*-ICICIT",
+      "label": "ICICI Bank"
+    },
+    {
+      "pattern": "*-SBIINB",
+      "label": "State Bank of India"
+    },
+    {
+      "pattern": "*-SBIUPI",
+      "label": "State Bank of India"
+    },
+    {
+      "pattern": "*-ATMSBI",
+      "label": "State Bank of India"
+    },
+    {
+      "pattern": "*-AXISBK",
+      "label": "Axis Bank"
+    },
+    {
+      "pattern": "*-KOTAKB",
+      "label": "Kotak Mahindra"
+    },
+    {
+      "pattern": "*-PNBSMS",
+      "label": "Punjab National Bank"
+    },
+    {
+      "pattern": "*-BOBTXN",
+      "label": "Bank of Baroda"
+    },
+    {
+      "pattern": "*-CANBNK",
+      "label": "Canara Bank"
+    },
+    {
+      "pattern": "*-INDBNK",
+      "label": "Indian Bank"
+    },
+    {
+      "pattern": "*-IDFCFB",
+      "label": "IDFC FIRST"
+    },
+    {
+      "pattern": "*-YESBNK",
+      "label": "YES Bank"
+    },
+    {
+      "pattern": "*-INDUSB",
+      "label": "IndusInd"
+    },
+    {
+      "pattern": "*-CENTBK",
+      "label": "Central Bank"
+    },
+    {
+      "pattern": "*-UNIONB",
+      "label": "Union Bank"
+    },
+    {
+      "pattern": "*-IDBIBK",
+      "label": "IDBI Bank"
+    },
+    {
+      "pattern": "*-FEDBNK",
+      "label": "Federal Bank"
+    },
+    {
+      "pattern": "*-RBLBNK",
+      "label": "RBL Bank"
+    },
+    {
+      "pattern": "*-AUBANK",
+      "label": "AU Small Finance"
+    },
+    {
+      "pattern": "*-PAYTMB",
+      "label": "Paytm Payments Bank"
+    },
+    {
+      "pattern": "*-GPAY*",
+      "label": "Google Pay"
+    },
+    {
+      "pattern": "*-PHONPE",
+      "label": "PhonePe"
+    },
+    {
+      "pattern": "*-AMZNPA",
+      "label": "Amazon Pay"
+    }
+  ]
+}

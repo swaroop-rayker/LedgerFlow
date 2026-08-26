@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
+import com.ledgerflow.core.domain.usecase.SeedIngestAllowlistsUseCase
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
 import com.ledgerflow.core.domain.vault.VaultState
@@ -50,6 +51,7 @@ public class AppViewModel @Inject constructor(
     observeVaultState: ObserveVaultStateUseCase,
     private val openVaultOnLaunch: OpenVaultOnLaunchUseCase,
     private val purgeAbandonedDrafts: PurgeAbandonedDraftsUseCase,
+    private val seedIngestAllowlists: SeedIngestAllowlistsUseCase,
 ) : ViewModel() {
 
     /**
@@ -92,6 +94,13 @@ public class AppViewModel @Inject constructor(
         viewModelScope.launch {
             route.first { it is AppRoute.Ready }
             purgeAbandonedDrafts()
+
+            // D-10's curated allowlists, once the vault is open (they live in
+            // it). Idempotent and additive, so this runs every launch and a
+            // package the user disabled stays disabled -- see
+            // SeedIngestAllowlistsUseCase. It waits for Ready for the same
+            // reason the draft sweep does: there is no database before that.
+            seedIngestAllowlists()
         }
     }
 

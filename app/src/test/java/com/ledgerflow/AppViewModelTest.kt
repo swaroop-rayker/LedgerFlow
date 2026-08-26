@@ -4,6 +4,8 @@ import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
+import com.ledgerflow.core.domain.usecase.SeedIngestAllowlistsUseCase
+import com.ledgerflow.core.testing.ingest.FakeRawIngestRepository
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.VaultState
 import com.ledgerflow.core.testing.ledger.FakeDraftRepository
@@ -36,11 +38,13 @@ class AppViewModelTest {
     }
 
     private val drafts = FakeDraftRepository()
+    private val ingest = FakeRawIngestRepository()
 
     private fun viewModel(vault: FakeVaultRepository) = AppViewModel(
         observeVaultState = ObserveVaultStateUseCase(vault),
         openVaultOnLaunch = OpenVaultOnLaunchUseCase(vault),
         purgeAbandonedDrafts = PurgeAbandonedDraftsUseCase(drafts),
+        seedIngestAllowlists = SeedIngestAllowlistsUseCase(ingest),
     )
 
     /**

@@ -26,6 +26,8 @@ import com.ledgerflow.core.domain.vault.RecoveryKitRepository
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.StorageMaintenance
 import com.ledgerflow.core.domain.vault.VaultRepository
+import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
+import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -145,4 +147,20 @@ public interface TaxonomyModule {
 
     @Binds
     public fun paymentMethodRepository(impl: DefaultPaymentMethodRepository): PaymentMethodRepository
+}
+
+/**
+ * Raw ingest capture (SPEC.md §5.1, §5.2). Schema v6.
+ *
+ * Bound here, in `:core:data`, so `:feature:ingest` sees only the port. That is
+ * the usual module rule, and here it also keeps the privacy guarantee legible:
+ * the capture adapters can ask "is this package allowed" and cannot reach a
+ * table to answer it themselves.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+public interface IngestModule {
+
+    @Binds
+    public fun rawIngestRepository(impl: DefaultRawIngestRepository): RawIngestRepository
 }

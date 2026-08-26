@@ -13,4 +13,14 @@ dependencies {
     // caveats -- the compat wrappers are the reason the two adapters can state
     // their status in one line each rather than in a version fork.
     implementation(libs.androidx.core.ktx)
+
+    // ParseIngestWorker: the receiver has ~10 seconds (CLAUDE.md §7), so every
+    // lookup the pipeline needs happens in a Worker instead. hilt-work is what
+    // lets that worker be constructed with its use cases rather than reaching
+    // for a service locator.
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
+    testImplementation(libs.androidx.work.runtime.ktx)
 }

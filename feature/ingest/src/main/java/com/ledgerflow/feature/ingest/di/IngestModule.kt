@@ -1,15 +1,20 @@
 package com.ledgerflow.feature.ingest.di
 
+import android.content.Context
+import androidx.work.WorkManager
 import com.ledgerflow.core.domain.ingest.TransactionIngestSource
 import com.ledgerflow.feature.ingest.adapters.NotificationAdapter
 import com.ledgerflow.feature.ingest.adapters.SmsAdapter
-import com.ledgerflow.feature.ingest.pipeline.DiscardingIngestEventSink
 import com.ledgerflow.feature.ingest.pipeline.IngestEventSink
+import com.ledgerflow.feature.ingest.pipeline.PersistingIngestEventSink
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
+import javax.inject.Singleton
 
 /**
  * Where the flavour difference actually lives, and the only place it does
@@ -42,9 +47,33 @@ internal abstract class IngestModule {
     internal abstract fun smsSource(adapter: SmsAdapter): TransactionIngestSource
 
     /**
-     * S11's sink drops what it is given; P2 swaps this one line for the
-     * raw-row write plus `ParseIngestWorker`, and no adapter changes.
+     * The one line P2 swapped to make capture real.
+     *
+     * S11 bound a sink that discarded, so the adapters, the `goAsync()` shape
+     * and the Hilt graph were all exercised on device before anything was
+     * persisted. Neither adapter changed when this became the persisting one --
+     * which is what the [IngestEventSink] seam existed to buy.
      */
     @Binds
-    internal abstract fun ingestEventSink(sink: DiscardingIngestEventSink): IngestEventSink
+    internal abstract fun ingestEventSink(sink: PersistingIngestEventSink): IngestEventSink
+}
+
+/**
+ * [WorkManager] itself.
+ *
+ * Not bound by hilt-work, which supplies the *factory* that constructs workers,
+ * not the manager that schedules them. `getInstance` is the only supported way
+ * to obtain it, and it must not be called before
+ * `LedgerFlowApplication.workManagerConfiguration` exists -- which is why the
+ * sink injects a `Provider` and resolves this lazily rather than at graph
+ * construction.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+internal object IngestWorkModule {
+
+    @Provides
+    @Singleton
+    internal fun workManager(@ApplicationContext context: Context): WorkManager =
+        WorkManager.getInstance(context)
 }

@@ -1,6 +1,8 @@
 plugins {
     id("ledgerflow.android.library")
     id("ledgerflow.android.hilt")
+    // The curated ingest allowlists ship as JSON assets (D-10), read here.
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -21,6 +23,7 @@ dependencies {
     // transaction wrapper. runInTransaction takes a blocking lambda and
     // suspend DAO calls cannot run inside it.
     implementation(libs.androidx.room.ktx)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit4)
     testImplementation(libs.truth)

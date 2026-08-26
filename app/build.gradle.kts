@@ -44,6 +44,12 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.hilt.navigation.compose)
 
+    // LedgerFlowApplication is WorkManager's Configuration.Provider, so :app
+    // holds the factory even though the only worker lives in :feature:ingest.
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
     // :core:testing carries the domain-port fakes. Test scope only -- nothing in
     // main source may see it.
     testImplementation(project(":core:testing"))

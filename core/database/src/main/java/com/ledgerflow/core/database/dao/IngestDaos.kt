@@ -1,0 +1,197 @@
+package com.ledgerflow.core.database.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Upsert
+import com.ledgerflow.core.database.entity.NotificationRawEntity
+import com.ledgerflow.core.database.entity.PackageAllowlistEntity
+import com.ledgerflow.core.database.entity.ParserRuleEntity
+import com.ledgerflow.core.database.entity.SenderAllowlistEntity
+import com.ledgerflow.core.database.entity.SmsRawEntity
+import com.ledgerflow.core.model.RawParseStatus
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * Captured SMS (SPEC.md §5.1). Schema v6.
+ *
+ * The insert is `IGNORE`, not `ABORT`: `body_hash` is unique and the network
+ * genuinely re-delivers messages, so a duplicate is an expected event rather
+ * than an error. `-1` back means "already had it", which the caller treats as
+ * success — the message is captured, just not twice.
+ */
+@Dao
+public interface SmsRawDao {
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    public suspend fun insert(row: SmsRawEntity): Long
+
+    /** Rows the worker has not triaged yet, oldest first so ordering is stable. */
+    @Query(
+        "SELECT * FROM sms_raw WHERE parse_status = :status ORDER BY received_at LIMIT :limit",
+    )
+    public suspend fun withStatus(status: RawParseStatus, limit: Int): List<SmsRawEntity>
+
+    @Query("SELECT * FROM sms_raw WHERE id = :id")
+    public suspend fun byId(id: String): SmsRawEntity?
+
+    @Query("UPDATE sms_raw SET parse_status = :status, matched_rule_id = :ruleId WHERE id = :id")
+    public suspend fun updateStatus(id: String, status: RawParseStatus, ruleId: String?)
+
+    /**
+     * D-09: the body goes, the row stays.
+     *
+     * Blanking rather than deleting, so the parse result and anything derived
+     * from it keep their provenance. A body of `''` past the expiry means
+     * "purged" — no SMS is captured with an empty body.
+     */
+    @Query(
+        "UPDATE sms_raw SET body = '' WHERE body != '' AND retention_expires_at <= :now",
+    )
+    public suspend fun purgeExpiredBodies(now: Long): Int
+
+    @Query("SELECT COUNT(*) FROM sms_raw")
+    public suspend fun count(): Int
+}
+
+/** Captured notifications (SPEC.md §5.2). Schema v6. See [SmsRawDao] on `IGNORE`. */
+@Dao
+public interface NotificationRawDao {
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    public suspend fun insert(row: NotificationRawEntity): Long
+
+    @Query(
+        "SELECT * FROM notification_raw WHERE parse_status = :status " +
+            "ORDER BY posted_at LIMIT :limit",
+    )
+    public suspend fun withStatus(status: RawParseStatus, limit: Int): List<NotificationRawEntity>
+
+    @Query("SELECT * FROM notification_raw WHERE id = :id")
+    public suspend fun byId(id: String): NotificationRawEntity?
+
+    @Query(
+        "UPDATE notification_raw SET parse_status = :status, matched_rule_id = :ruleId " +
+            "WHERE id = :id",
+    )
+    public suspend fun updateStatus(id: String, status: RawParseStatus, ruleId: String?)
+
+    @Query(
+        "UPDATE notification_raw SET body = '', title = NULL " +
+            "WHERE body != '' AND retention_expires_at <= :now",
+    )
+    public suspend fun purgeExpiredBodies(now: Long): Int
+
+    @Query("SELECT COUNT(*) FROM notification_raw")
+    public suspend fun count(): Int
+}
+
+/**
+ * The packages LedgerFlow may read notifications from (D-10). Schema v6.
+ *
+ * **[isAllowed] is the privacy guarantee's implementation.** §5.2 requires the
+ * check to run before any body access, so this is the first thing
+ * `NotificationIngestService` calls and nothing reads `sbn.notification.extras`
+ * until it returns true.
+ */
+@Dao
+public interface PackageAllowlistDao {
+
+    @Query(
+        "SELECT COUNT(*) > 0 FROM package_allowlist " +
+            "WHERE package_name = :packageName AND enabled = 1",
+    )
+    public suspend fun isAllowed(packageName: String): Boolean
+
+    @Query("SELECT * FROM package_allowlist ORDER BY package_name")
+    public fun observeAll(): Flow<List<PackageAllowlistEntity>>
+
+    /**
+     * Seeds or updates the curated list.
+     *
+     * `Upsert` would overwrite a user's `enabled = 0`, so the seeder inserts
+     * only what is missing — see [insertMissing]. This exists for the Settings
+     * screen, where an explicit write is the point.
+     */
+    @Upsert
+    public suspend fun upsert(rows: List<PackageAllowlistEntity>)
+
+    /**
+     * The seeding path: adds packages the user has never seen, and leaves every
+     * existing row exactly as it is.
+     *
+     * D-10 makes the curated list user-editable, which means a package the user
+     * disabled must stay disabled across app updates. `IGNORE` on the primary
+     * key is what makes re-running the seeder idempotent rather than a reset of
+     * the user's choices.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    public suspend fun insertMissing(rows: List<PackageAllowlistEntity>)
+
+    @Query("SELECT COUNT(*) FROM package_allowlist")
+    public suspend fun count(): Int
+}
+
+/**
+ * Which SMS senders count as financial (SPEC.md §5.1). Schema v6.
+ *
+ * Matched with `GLOB`, not `=`: Indian sender IDs carry a rotating two-letter
+ * operator prefix, so `VM-HDFCBK`, `AD-HDFCBK` and `JD-HDFCBK` are one bank and
+ * a pattern like `*-HDFCBK` is the only thing that catches all of them. `GLOB`
+ * rather than `LIKE` because it is case-sensitive and `*`/`?` behave the way the
+ * patterns in the seed file are written; senders are normalised to upper case
+ * before the comparison.
+ */
+@Dao
+public interface SenderAllowlistDao {
+
+    @Query(
+        "SELECT COUNT(*) > 0 FROM sender_allowlist " +
+            "WHERE enabled = 1 AND :sender GLOB sender_pattern",
+    )
+    public suspend fun matches(sender: String): Boolean
+
+    @Query("SELECT * FROM sender_allowlist ORDER BY sender_pattern")
+    public fun observeAll(): Flow<List<SenderAllowlistEntity>>
+
+    /** Seeding. See [PackageAllowlistDao.insertMissing] on why this is `IGNORE`. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    public suspend fun insertMissing(rows: List<SenderAllowlistEntity>)
+
+    @Query("SELECT COUNT(*) FROM sender_allowlist")
+    public suspend fun count(): Int
+}
+
+/**
+ * The versioned extraction ruleset (SPEC.md §5.1). Schema v6.
+ *
+ * Declared now because the table is; the engine that reads it is P2-3. Only the
+ * loader's half exists here, so a ruleset can be seeded and inspected before
+ * anything matches against it.
+ */
+@Dao
+public interface ParserRuleDao {
+
+    @Query(
+        "SELECT * FROM parser_rule WHERE ruleset_version = :version AND enabled = 1 " +
+            "ORDER BY priority, id",
+    )
+    public suspend fun enabledRules(version: Int): List<ParserRuleEntity>
+
+    /**
+     * Replaces the shipped rules for one ruleset version.
+     *
+     * Scoped to `is_user_defined = 0` so a ruleset bump never touches a rule the
+     * user wrote (§5.1's rule editor) — that is the whole reason these live in a
+     * table rather than only in the asset.
+     */
+    @Query("DELETE FROM parser_rule WHERE ruleset_version = :version AND is_user_defined = 0")
+    public suspend fun deleteShippedRules(version: Int)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    public suspend fun insertAll(rows: List<ParserRuleEntity>)
+
+    @Query("SELECT COUNT(*) FROM parser_rule")
+    public suspend fun count(): Int
+}

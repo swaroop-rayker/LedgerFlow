@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!--
       allowBackup=false is mandatory (SPEC.md §7.5). Android Auto Backup copies
@@ -24,6 +25,27 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          WorkManager's own initialiser is removed on purpose (SPEC.md §5.1).
+
+          Its default provider runs at content-provider time, before Hilt has a
+          graph, and installs a worker factory that cannot construct an
+          @HiltWorker, so ParseIngestWorker would fail to instantiate at runtime
+          with nothing at compile time to say so. LedgerFlowApplication
+          implements Configuration.Provider instead, which also keeps
+          WorkManager's database off the cold-start path (§11).
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
 
     </application>
 

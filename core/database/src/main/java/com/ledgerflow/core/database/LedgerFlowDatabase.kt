@@ -11,7 +11,12 @@ import com.ledgerflow.core.database.dao.LedgerEntryDao
 import com.ledgerflow.core.database.dao.LedgerTaxonomyDao
 import com.ledgerflow.core.database.dao.MerchantAliasDao
 import com.ledgerflow.core.database.dao.MerchantDao
+import com.ledgerflow.core.database.dao.NotificationRawDao
+import com.ledgerflow.core.database.dao.PackageAllowlistDao
+import com.ledgerflow.core.database.dao.ParserRuleDao
 import com.ledgerflow.core.database.dao.PaymentMethodDao
+import com.ledgerflow.core.database.dao.SenderAllowlistDao
+import com.ledgerflow.core.database.dao.SmsRawDao
 import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.database.entity.CategoryGroupEntity
@@ -83,6 +88,13 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun draftEntryDao(): DraftEntryDao
     public abstract fun merchantAliasDao(): MerchantAliasDao
     public abstract fun categoryGroupDao(): CategoryGroupDao
+
+    // v6 — ingest (SPEC.md §5.1, §5.2).
+    public abstract fun smsRawDao(): SmsRawDao
+    public abstract fun notificationRawDao(): NotificationRawDao
+    public abstract fun packageAllowlistDao(): PackageAllowlistDao
+    public abstract fun senderAllowlistDao(): SenderAllowlistDao
+    public abstract fun parserRuleDao(): ParserRuleDao
 
     public companion object {
         /**

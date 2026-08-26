@@ -5,17 +5,35 @@ import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.StrictMode
 import android.os.strictmode.Violation
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 /**
  * Application entry point and Hilt's object-graph root.
  *
- * WorkManager configuration and the crash handler arrive with the steps that
- * introduce them. What is here now is the `@HiltAndroidApp` trigger and
- * StrictMode.
+ * The crash handler arrives with the step that introduces it. What is here now
+ * is the `@HiltAndroidApp` trigger, StrictMode, and WorkManager's configuration.
+ *
+ * **WorkManager is configured here rather than initialised by its manifest
+ * provider**, and the provider is removed in the manifest for that reason. Its
+ * default initialiser runs at content-provider time and builds workers with a
+ * factory that knows nothing about Hilt, which would leave `ParseIngestWorker`
+ * unable to reach the repositories it is constructed with. Providing a
+ * [Configuration] instead defers initialisation to the first `getInstance` call
+ * and hands WorkManager the Hilt factory -- which also keeps its database open
+ * off the cold-start path (§11).
  */
 @HiltAndroidApp
-public class LedgerFlowApplication : Application() {
+public class LedgerFlowApplication : Application(), Configuration.Provider {
+
+    @Inject internal lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
 
     override fun onCreate() {
         super.onCreate()
