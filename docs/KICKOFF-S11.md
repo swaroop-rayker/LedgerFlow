@@ -58,7 +58,8 @@ drift from the first.
 | **S10** | **`:feature:export` — CSV via SAF** | ✅ (`4f939d8`, `57ae275`, `fdbf5dc`, ADR-0017) |
 | **S11** | **`:feature:ingest` — `TransactionIngestSource` abstraction + flavour skeleton only** | ✅ (`756398b`) |
 | — | *Off-plan, owner-directed: itemised entries (ADR-0018) and the three defects it exposed* | ✅, unscheduled (`1716832`, `16db110`, `ff43609`, `da65982`, `ea0b1ae`) |
-| **S12** | **`TESTING.md` + carryover (bundled font, onboarding CTA pinning)** | ⬅ **do this** |
+| **S12** | **`TESTING.md` + carryover (bundled font, onboarding CTA pinning)** | ✅ (`3e6ad5b`, `76f940b`, `d21329f`) |
+| P2-1 … P2-3 | Ingest: schema v6/v7, capture live, rule engine + golden corpus | ✅ — **see `docs/KICKOFF-P2-4.md`**, which logs that session and scopes the next |
 
 ### Verified state as of `fdbf5dc`
 
