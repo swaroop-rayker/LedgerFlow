@@ -8,6 +8,8 @@ import com.ledgerflow.core.domain.ingest.InstrumentHint
 import com.ledgerflow.core.domain.ingest.ParserRule
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonNull
@@ -203,6 +205,19 @@ class GoldenCorpusTest {
             }
             expected["instrumentHint"]?.let {
                 assertThat(actual.instrumentHint.name).isEqualTo(it.jsonPrimitive.content)
+            }
+            expected["referenceNo"]?.let {
+                assertThat(actual.referenceNo).isEqualTo(it.jsonPrimitive.content)
+            }
+            // Compared as a local date, not an epoch: the parser reads a local
+            // date because a bank message states one, so an epoch expectation
+            // would be a different number on a machine in another zone -- and a
+            // fixture that only passes in IST is not a fixture.
+            expected["occurredAtLocalDate"]?.let {
+                val actualDate = actual.occurredAt?.let { millis ->
+                    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                }
+                assertThat(actualDate?.toString()).isEqualTo(it.jsonPrimitive.content)
             }
         }
     }

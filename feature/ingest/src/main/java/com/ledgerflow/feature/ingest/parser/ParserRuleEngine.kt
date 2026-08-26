@@ -144,13 +144,26 @@ public class ParserRuleEngine(rules: List<ParserRule>) {
                 CompiledRule(
                     rule = rule,
                     sender = Regex(rule.senderPattern, RegexOption.IGNORE_CASE),
-                    // MULTILINE so `$` means end-of-line: the notification
-                    // adapter joins a notification's fields with newlines, and
-                    // a rule anchoring a merchant capture to the end of the
-                    // title is how it avoids swallowing the chatter below it.
+                    // MULTILINE so `$` means end-of-line, and DOT_MATCHES_ALL
+                    // so `.` crosses one.
+                    //
+                    // **Real bank SMS are multi-line.** The first real message
+                    // this project saw put the amount, the account, the merchant
+                    // and the date on four separate lines, and without
+                    // DOT_MATCHES_ALL a rule cannot span them at all -- it
+                    // matched nothing, not even the generic fallback.
+                    //
+                    // That is only safe because every merchant capture is bound
+                    // to a negated newline class: a greedy `.` across
+                    // newlines would otherwise swallow a notification's
+                    // chatter, which is a bug the corpus already caught once.
                     body = Regex(
                         rule.bodyPattern,
-                        setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE),
+                        setOf(
+                            RegexOption.IGNORE_CASE,
+                            RegexOption.MULTILINE,
+                            RegexOption.DOT_MATCHES_ALL,
+                        ),
                     ),
                 )
             }.getOrNull()

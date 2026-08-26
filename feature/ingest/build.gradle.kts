@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.PathSensitivity
+
 plugins {
     id("ledgerflow.android.feature")
 }
@@ -34,4 +36,27 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.truth)
+}
+
+/**
+ * `GoldenCorpusTest` reads `testdata/` and the shipped ruleset asset as plain
+ * files at run time, and Gradle cannot see either.
+ *
+ * Without this the corpus -- which is the parser's actual specification -- does
+ * not re-run when a fixture is added or a rule is edited. It went unnoticed for
+ * exactly one commit: adding a real bank SMS that the ruleset could not parse
+ * produced a green build, because the task was up to date and never executed.
+ * A spec that does not run when you change the thing it specifies is worse than
+ * no spec, and this is the third place in this repository where that same shape
+ * has bitten.
+ */
+tasks.withType<Test>().configureEach {
+    inputs.files(
+        rootProject.fileTree(rootProject.projectDir) {
+            include("testdata/**")
+            include("core/data/src/main/assets/parser_rules/**")
+        },
+    )
+        .withPropertyName("goldenCorpusAndShippedRuleset")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }
