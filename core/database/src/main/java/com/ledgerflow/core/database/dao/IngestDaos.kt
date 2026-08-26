@@ -8,8 +8,10 @@ import androidx.room.Upsert
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
 import com.ledgerflow.core.database.entity.ParserRuleEntity
+import com.ledgerflow.core.database.entity.PendingTransactionEntity
 import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.database.entity.SmsRawEntity
+import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.model.RawParseStatus
 import kotlinx.coroutines.flow.Flow
 
@@ -193,5 +195,56 @@ public interface ParserRuleDao {
     public suspend fun insertAll(rows: List<ParserRuleEntity>)
 
     @Query("SELECT COUNT(*) FROM parser_rule")
+    public suspend fun count(): Int
+}
+
+/**
+ * The approval queue (SPEC.md §5.1, §6.1). Schema v6, first written at P2-4.
+ *
+ * **This DAO is Law 1's holding pen.** Parsers, workers and receivers insert
+ * here; nothing here is a ledger row, appears in a total or reaches a rollup.
+ * The only thing that turns one of these into a `ledger_entry` is
+ * `ApproveTransactionUseCase`, and it is guarded separately by
+ * `LedgerSingleWriterTest` — P2-4 opens no door into `ledger_entry` and this
+ * interface deliberately has no method that could.
+ *
+ * The insert is `ABORT`, not `IGNORE`: unlike a re-delivered SMS, a second
+ * candidate for the same raw row is not an expected event, and the caller checks
+ * [idForRawRef] inside the same transaction rather than letting a conflict
+ * strategy absorb something nobody meant to happen.
+ */
+@Dao
+public interface PendingTransactionDao {
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    public suspend fun insert(row: PendingTransactionEntity)
+
+    /**
+     * The candidate this raw row already produced, if any — P2-4's idempotency
+     * check.
+     *
+     * Unindexed on purpose, for now. `raw_ref_id` is nullable (manual and, at
+     * P4, OCR candidates have no raw row) and a *unique* index on it would be
+     * the strongest possible guarantee — SQLite treats NULLs as distinct, so it
+     * would cost those rows nothing. It is not here because it needs schema v8
+     * and a migration on a live device, and the transaction the caller wraps
+     * this in already provides the property. **If P2-5 or P2-6 needs to look a
+     * candidate up by raw row on a hot path, that index is the change to make**
+     * rather than living with the scan.
+     */
+    @Query("SELECT id FROM pending_transaction WHERE raw_ref_id = :rawRefId LIMIT 1")
+    public suspend fun idForRawRef(rawRefId: String): String?
+
+    @Query("SELECT * FROM pending_transaction WHERE id = :id")
+    public suspend fun byId(id: String): PendingTransactionEntity?
+
+    /** Newest first, as §6.1's `INDEX(status, created_at DESC)` serves. The Inbox reads this at P2-6. */
+    @Query(
+        "SELECT * FROM pending_transaction WHERE status = :status " +
+            "ORDER BY created_at DESC LIMIT :limit",
+    )
+    public suspend fun withStatus(status: PendingStatus, limit: Int): List<PendingTransactionEntity>
+
+    @Query("SELECT COUNT(*) FROM pending_transaction")
     public suspend fun count(): Int
 }

@@ -144,6 +144,31 @@ Rationale: in the current Indian payments landscape, a `NotificationListenerServ
   `parser_rule.instrument_hint`, because a rule matching only UPI apps knows the
   instrument its messages never name, and inferring it downstream would be the
   pipeline branching on source.
+- **P2-4 gave the pipeline an output.** Every message the engine resolves now
+  becomes a `pending_transaction` row with status `PENDING`, written in the
+  **same transaction** as the verdict on the raw row — which is what makes the
+  worker idempotent: the queue is "raw rows still at `CAPTURED`", so a row that
+  carries a verdict provably carries its candidate, and a re-run cannot deposit a
+  second one. §5.1's never-drop rule is implemented rather than deferred: an
+  unmatched message from an allowlisted sender lands with `confidence = 0` and
+  `needs_manual_fill = 1`, and a `SENDER_NOT_ALLOWLISTED` row produces nothing,
+  because triage removes it from the queue before the engine sees it. The
+  `extracted_json` payload is versioned inside the envelope rather than in a
+  column — `pending_transaction` has no `payload_version` and adding one would be
+  a schema bump to carry an integer that fits in the JSON it describes. **No
+  schema change: still v7.** Three P2-4 decisions are recorded where they bind —
+  merchant resolution in §5.1, the `occurredAt` fallback below, and the unwritten
+  `FAILED` status in §6.1.
+- **`dedupe_key` is computed and stored at P2-4; acting on a collision is P2-5.**
+  When the message states no date the *payload* keeps a null `occurredAt` — the
+  review screen asks rather than asserting a time the bank never gave — while the
+  **key alone** falls back to capture time, which is sound because its whole job
+  is "same transaction, two sources, within three minutes" and both sources
+  capture within seconds of each other. A candidate with **no extracted amount**
+  gets a deliberately non-colliding key instead: four blank components would make
+  every unparseable message in one minute look like a duplicate of every other,
+  which is §5.1's never-drop rule defeated by the dedupe layer instead of by the
+  parser.
 - **P2-2 also introduced WorkManager**, configured through `LedgerFlowApplication` as a `Configuration.Provider` with the Hilt worker factory; its manifest initialiser is removed, because the default one runs before Hilt has a graph and would leave an `@HiltWorker` unconstructable at runtime with nothing at compile time to say so. It brings `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` and `FOREGROUND_SERVICE` into the merged manifest. **None of them is `INTERNET`** and Law 6 is intact (`restrictedPermissionCheck` covers it), but the app's permission list is now four longer than it was, which for an offline-first product is worth stating rather than discovering.
 - `RECEIVE_SMS` appears in `src/smsFull/AndroidManifest.xml` and nowhere else, enforced by `restrictedPermissionCheck` (Gradle) and a mirrored CI step rather than by memory. The same check bans `INTERNET` in every source set of every module (Law 6).
 
@@ -228,6 +253,7 @@ SMS arrives
 - User-visible rule editor in Settings → "SMS Parsing" (advanced), including a **test bench**: paste an SMS, see what the engine extracts.
 - Unmatched SMS from allowlisted senders → still creates a `PENDING` entry with `confidence = 0` and `needsManualFill = true`, plus is logged for rule improvement. **Never silently dropped.**
 - **A merchant that does not exist yet is created, never a refusal.** An extracted `merchantRaw` resolves through `MerchantRepository.createOrGet`, **not** `findByName`: the first time a shop appears in an SMS there is by definition no row for it, and treating that as a failure would make the pipeline reject exactly the transactions it exists to capture. `createOrGet` returns the existing merchant when the name normalises onto one, un-hides a hidden row that holds the key (BUG11), and creates otherwise — so **no ingest path may fail for a missing merchant**. The same rule and the same call the manual form uses (§5.4); one door, so the two cannot disagree about what "the same shop" means. Fuzzy matching (§5.5's Jaro-Winkler ≥ 0.88) sits *in front* of this as a suggestion at review time, and never as a gate on committing the entry.
+- **When the resolution happens: at approval, not at parse time** (owner decision, P2-4). A `pending_transaction` row carries only `merchantRaw`, exactly as the message wrote it; `createOrGet` runs inside `ApproveTransactionUseCase`. Resolving at parse time would create a permanent taxonomy row for every candidate the user later discards and for every garbled merchant string a rule ever mis-extracted, and it would leave the Jaro-Winkler suggestion above with nothing to suggest, because the row would already exist. The guarantee is unchanged — ingest may never *fail* for a merchant that does not exist yet, and a candidate carrying a raw name cannot fail for one.
 
 **Notification behaviour:**
 - Channel `inbox_high` — importance HIGH, no sound by default (configurable).
@@ -607,6 +633,13 @@ pending_transaction(
   extracted_json TEXT NOT NULL,      -- typed payload, versioned
   confidence REAL NOT NULL,
   status TEXT NOT NULL,              -- 'PENDING' | 'APPROVED' | 'DISCARDED' | 'FAILED'
+                                     -- FAILED is written by nothing as of P2-4, deliberately:
+                                     -- `Unmatched` is a result, not a failure, and is already
+                                     -- represented by a confidence-0 PENDING row. A worker
+                                     -- exception is transient and gets a WorkManager retry,
+                                     -- which beats a row the user must triage for an error
+                                     -- that would have cleared itself. Reachable for a cause
+                                     -- that is genuinely terminal.
   needs_manual_fill INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL, reviewed_at INTEGER NULL,
   approved_entry_id TEXT NULL
@@ -1178,6 +1211,10 @@ Added in v0.3.0 — gaps found during the Phase 0 spec audit and deliberately *n
 Added in v0.5.0 — found while wiring the unlock flow at P1:
 
 11. **§7.3 step 3 has no entry point at first run.** Steps 1 and 2 (Keystore, then the 24 words) are implemented and verified on device. Step 3 — "restore from a `.lfbk` backup file", and the type-DELETE "start fresh" dialog — is only reachable from the Recovery screen, which itself is only reachable when a phrase wrap already exists on disk. A user reinstalling after a factory reset has **no wrap and no database**, so `openOnLaunch` routes them to onboarding and hands them a *new* phrase; there is no "I already have a recovery phrase and a backup file" branch in the §7.4 gate. `DatabaseBackupManager` can already do the restore, so this is a missing route rather than missing machinery. Sub-question: does the branch belong on the first onboarding screen (discoverable, but adds a fork to the one flow §7.4 deliberately keeps linear), or behind a quieter affordance? Needed before the first release, not before P1 ships.
+
+Added at P2-4, when `pending_transaction` acquired a writer:
+
+13. **The backup no longer covers every table, and the guard cannot see it.** `BackupPayload` has **10 `List` properties**; schema v7 has **16 tables**. `sms_raw`, `notification_raw`, `package_allowlist`, `sender_allowlist`, `parser_rule` and `pending_transaction` are in neither a `.lfbk` nor the CSV export. `ExportCoversEveryTableTest` counts `BackupPayload`'s own fields and asserts the CSV matches, so it is internally consistent and **never compares against the schema** — which is why it stayed green through both v6 and v7. This was harmless while those tables were empty. It stopped being harmless the moment P2-4 landed: a restore now silently drops the user's unreviewed approval queue, their edited allowlists, and any parser rule they wrote by hand. The fix is two-part and the second half is the one that lasts — add the missing tables, **and re-point the test at `core/database/schemas/{VERSION}.json`** so the next table cannot drift in unnoticed. Owner decision at P2-4: fixed as its own commit rather than inside the ingest work, since it touches the backup writer (a §7 danger zone) and the ingest pipeline does not.
 
 Added while building the `TransactionIngestSource` abstraction at P1:
 

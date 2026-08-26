@@ -15,6 +15,7 @@ import com.ledgerflow.core.database.dao.NotificationRawDao
 import com.ledgerflow.core.database.dao.PackageAllowlistDao
 import com.ledgerflow.core.database.dao.ParserRuleDao
 import com.ledgerflow.core.database.dao.PaymentMethodDao
+import com.ledgerflow.core.database.dao.PendingTransactionDao
 import com.ledgerflow.core.database.dao.SenderAllowlistDao
 import com.ledgerflow.core.database.dao.SmsRawDao
 import com.ledgerflow.core.database.entity.AppMetaEntity
@@ -95,6 +96,15 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun packageAllowlistDao(): PackageAllowlistDao
     public abstract fun senderAllowlistDao(): SenderAllowlistDao
     public abstract fun parserRuleDao(): ParserRuleDao
+
+    /**
+     * The approval queue. Declared at v6, first written at P2-4.
+     *
+     * Reaching it is not reaching the ledger: Law 1's single writer into
+     * `ledger_entry` is `ApproveTransactionUseCase` and nothing on this DAO can
+     * take that path.
+     */
+    public abstract fun pendingTransactionDao(): PendingTransactionDao
 
     public companion object {
         /**

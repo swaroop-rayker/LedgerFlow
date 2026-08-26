@@ -12,10 +12,18 @@ import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
+import com.ledgerflow.core.domain.ingest.ExtractedDirection
+import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.ingest.IngestSourceType
 import com.ledgerflow.core.domain.ingest.InstrumentHint
+import com.ledgerflow.core.domain.ingest.PendingCandidate
+import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.vault.VaultInitRequest
+import com.ledgerflow.core.model.EntrySource
+import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.model.RawParseStatus
 import java.io.File
 import java.security.KeyStore
@@ -283,5 +291,176 @@ class RawIngestRepositoryInstrumentedTest {
             .isInstanceOf(CaptureOutcome.Failed::class.java)
         assertThat(repository.purgeExpiredBodies()).isEqualTo(0)
         assertThat(repository.triageCapturedSms(limit = 10)).isEqualTo(0)
+    }
+
+    // ── P2-4: pending_transaction ────────────────────────────────────────────
+    //
+    // These are instrumented rather than JVM tests for the reason the P2-4
+    // idempotency guarantee actually rests on: it is a *database* transaction
+    // spanning two tables. A fake can be written to behave atomically; only real
+    // Room and real SQLCipher can be observed to.
+
+    private fun candidate(
+        amountMinor: Long? = 78_800L,
+        source: EntrySource = EntrySource.SMS,
+        confidence: Double = 0.9,
+    ) = PendingCandidate(
+        source = source,
+        extracted = ExtractedTransaction(
+            amount = amountMinor?.let(::Money),
+            direction = ExtractedDirection.DEBIT,
+            merchantRaw = "COFFEE HOUSE",
+            accountLast4 = "1234",
+            instrumentHint = InstrumentHint.UPI,
+            confidence = confidence,
+        ),
+        dedupeKey = "78800|DEBIT|28333333|1234",
+    )
+
+    private suspend fun captureOneSms(body: String = "Sent Rs.788.00 To COFFEE HOUSE"): String {
+        val outcome = repository.record(sms(body))
+        return (outcome as CaptureOutcome.Recorded).rawId
+    }
+
+    /**
+     * The candidate lands, and it lands with the verdict.
+     *
+     * The `PARSED` assertion is not decoration: the two writes are one
+     * transaction, and a candidate present with the raw row still `CAPTURED`
+     * would mean the atomicity claim is false in the direction that produces
+     * duplicates.
+     */
+    @Test
+    fun recordParseOutcome_writesTheCandidateAndTheVerdictTogether() = runBlocking {
+        val rawId = captureOneSms()
+
+        val outcome = repository.recordParseOutcome(rawId, "upi-debit-vpa", candidate())
+
+        assertThat(outcome).isInstanceOf(PendingWriteOutcome.Created::class.java)
+        val pendingId = (outcome as PendingWriteOutcome.Created).pendingId
+
+        val database = session.requireDatabase()
+        val row = database.pendingTransactionDao().byId(pendingId)
+        assertThat(row).isNotNull()
+        assertThat(row?.status).isEqualTo(PendingStatus.PENDING)
+        assertThat(row?.source).isEqualTo(EntrySource.SMS)
+        assertThat(row?.rawRefId).isEqualTo(rawId)
+        assertThat(row?.dedupeKey).isEqualTo("78800|DEBIT|28333333|1234")
+        assertThat(row?.suppressedById).isNull()
+        assertThat(row?.approvedEntryId).isNull()
+        assertThat(row?.reviewedAt).isNull()
+        // The payload is readable back, which is what :feature:inbox needs at P2-6.
+        assertThat(row?.extractedJson).contains("\"amountMinor\":78800")
+
+        assertThat(database.smsRawDao().byId(rawId)?.parseStatus).isEqualTo(RawParseStatus.PARSED)
+        assertThat(database.smsRawDao().byId(rawId)?.matchedRuleId).isEqualTo("upi-debit-vpa")
+    }
+
+    /**
+     * **§5.1's never-drop rule, at the table.** A financial SMS no rule
+     * understands still becomes a `PENDING` row with `confidence = 0` and
+     * `needs_manual_fill = 1`. The owner's own first real HDFC message was one
+     * of these.
+     */
+    @Test
+    fun recordParseOutcome_unmatchedMessage_stillWritesAPendingRowWithZeroConfidence() =
+        runBlocking {
+            val rawId = captureOneSms("Wording no rule in this build has ever seen.")
+
+            val outcome = repository.recordParseOutcome(
+                rawId,
+                ruleId = null,
+                candidate = PendingCandidate(
+                    source = EntrySource.SMS,
+                    extracted = ExtractedTransaction(),
+                    dedupeKey = "raw:$rawId",
+                ),
+            )
+
+            val pendingId = (outcome as PendingWriteOutcome.Created).pendingId
+            val database = session.requireDatabase()
+            val row = database.pendingTransactionDao().byId(pendingId)
+
+            assertThat(row?.confidence).isEqualTo(0.0)
+            assertThat(row?.needsManualFill).isTrue()
+            assertThat(row?.status).isEqualTo(PendingStatus.PENDING)
+            assertThat(database.smsRawDao().byId(rawId)?.parseStatus)
+                .isEqualTo(RawParseStatus.UNMATCHED)
+        }
+
+    /**
+     * **Idempotency.** WorkManager re-runs the worker routinely. A raw row that
+     * already produced a candidate produces no second one, or the user's Inbox
+     * grows a copy of every transaction each time the phone wakes.
+     */
+    @Test
+    fun recordParseOutcome_runTwice_createsOnlyOnePendingRow() = runBlocking {
+        val rawId = captureOneSms()
+
+        val first = repository.recordParseOutcome(rawId, "upi-debit-vpa", candidate())
+        val second = repository.recordParseOutcome(rawId, "upi-debit-vpa", candidate())
+
+        assertThat(first).isInstanceOf(PendingWriteOutcome.Created::class.java)
+        assertThat(second).isInstanceOf(PendingWriteOutcome.AlreadyPending::class.java)
+        assertThat((second as PendingWriteOutcome.AlreadyPending).pendingId)
+            .isEqualTo((first as PendingWriteOutcome.Created).pendingId)
+        assertThat(session.requireDatabase().pendingTransactionDao().count()).isEqualTo(1)
+    }
+
+    /**
+     * Two genuinely different messages are two candidates, even when they share
+     * a dedupe key.
+     *
+     * Storing the key is P2-4; *acting* on a collision is P2-5. If this step
+     * suppressed anything, P2-5 would have nothing left to write and the
+     * suppressed row §3.1 requires to stay visible would never have existed.
+     */
+    @Test
+    fun recordParseOutcome_twoRawRows_produceTwoCandidatesEvenOnAKeyCollision() = runBlocking {
+        val first = captureOneSms("Sent Rs.788.00 To COFFEE HOUSE")
+        val second = repository.record(
+            sms("Sent Rs.788.00 to COFFEE HOUSE", sender = "AD-HDFCBK", at = NOW + 90_000L),
+        ).let { (it as CaptureOutcome.Recorded).rawId }
+
+        repository.recordParseOutcome(first, "upi-debit-vpa", candidate())
+        repository.recordParseOutcome(second, "upi-debit-vpa", candidate())
+
+        val dao = session.requireDatabase().pendingTransactionDao()
+        assertThat(dao.count()).isEqualTo(2)
+        assertThat(dao.withStatus(PendingStatus.PENDING, limit = 10).map { it.dedupeKey })
+            .containsExactly("78800|DEBIT|28333333|1234", "78800|DEBIT|28333333|1234")
+    }
+
+    /**
+     * **Law 1 at the table.** A candidate is not a ledger row: nothing P2-4
+     * writes reaches `ledger_entry`, and the Inbox queue is invisible to every
+     * total in the app.
+     */
+    @Test
+    fun recordParseOutcome_writesNothingIntoTheLedger() = runBlocking {
+        val rawId = captureOneSms()
+
+        repository.recordParseOutcome(rawId, "upi-debit-vpa", candidate())
+
+        val database = session.requireDatabase()
+        assertThat(database.pendingTransactionDao().count()).isEqualTo(1)
+        // Per book, never summed. Law 2: no query touching `ledger_entry` may
+        // combine the two, and that holds for a test's assertion as much as for
+        // a dashboard figure (ADR-0002).
+        assertThat(database.ledgerEntryDao().countForLedger(LedgerType.DEBIT)).isEqualTo(0)
+        assertThat(database.ledgerEntryDao().countForLedger(LedgerType.CREDIT)).isEqualTo(0)
+    }
+
+    /**
+     * A locked vault refuses rather than throwing, same as every other method
+     * here — and leaves the raw row at `CAPTURED` so the next pass retries it.
+     */
+    @Test
+    fun recordParseOutcome_onALockedVault_refusesRatherThanThrows() = runBlocking {
+        val rawId = captureOneSms()
+        session.close()
+
+        assertThat(repository.recordParseOutcome(rawId, null, candidate()))
+            .isInstanceOf(PendingWriteOutcome.Failed::class.java)
     }
 }

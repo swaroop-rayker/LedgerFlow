@@ -17,14 +17,19 @@ import dagger.assisted.AssistedInject
  * row and enqueues this. Everything that needs a database lookup happens here,
  * where there is time and where a failure can be retried.
  *
- * **What it does at this step, and what it deliberately does not.** It applies
- * the SMS sender allowlist, clears raw bodies past their retention (D-09), and
- * runs the rule engine over what is left, recording `matched_rule_id` and
- * `PARSED` / `UNMATCHED` on each raw row. It does **not** create a
- * `pending_transaction` — that is the next step, and §5.1's rule that an
- * unparseable message still becomes a `PENDING` row is satisfied there. Until
- * then an `UNMATCHED` row is a recorded verdict rather than a lost message,
- * which is the distinction §5.1 actually cares about.
+ * **What it does at this step.** It applies the SMS sender allowlist, clears raw
+ * bodies past their retention (D-09), runs the rule engine over what is left,
+ * and — since P2-4 — writes the `pending_transaction` candidate each verdict
+ * produces, in the same transaction as the verdict itself. §5.1's rule that an
+ * unparseable message from an allowlisted sender still becomes a `PENDING` row
+ * with `confidence = 0` is satisfied here, which is what makes "never silently
+ * dropped" a property of the shipped pipeline rather than of a future step.
+ *
+ * **Nothing it writes reaches the ledger.** Law 1: a candidate waits for a
+ * human, and only `ApproveTransactionUseCase` may insert into `ledger_entry`.
+ *
+ * Re-running it is safe and expected. WorkManager retries on backoff, and a raw
+ * row that already produced a candidate produces no second one.
  *
  * Notifications need no allowlist pass here: theirs runs before the row exists
  * (§5.2's privacy rule), so by the time one is in `notification_raw` the
@@ -54,7 +59,9 @@ public class ParseIngestWorker @AssistedInject constructor(
             TAG,
             "Triage: ${triaged.sendersFiltered} not allowlisted, " +
                 "${triaged.bodiesPurged} bodies purged. " +
-                "Parse: ${parsed.parsed} matched, ${parsed.unmatched} unmatched.",
+                "Parse: ${parsed.parsed} matched, ${parsed.unmatched} unmatched. " +
+                "Pending: ${parsed.created} created, ${parsed.alreadyPending} already there, " +
+                "${parsed.failed} deferred.",
         )
         Result.success()
     }.getOrElse { throwable ->

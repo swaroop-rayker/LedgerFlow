@@ -4,6 +4,8 @@ import com.ledgerflow.core.domain.ingest.CaptureOutcome
 import com.ledgerflow.core.domain.ingest.CapturedEvent
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.ingest.ParserRule
+import com.ledgerflow.core.domain.ingest.PendingCandidate
+import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 
 /**
@@ -39,6 +41,18 @@ public class FakeRawIngestRepository(
 
     /** Every outcome recorded, as (rawId, ruleId, matched). */
     public val parseOutcomes: MutableList<Triple<String, String?, Boolean>> = mutableListOf()
+
+    /**
+     * Every candidate written, keyed by the raw row that produced it.
+     *
+     * A map rather than a list because P2-4's property is exactly "one raw row,
+     * at most one candidate" — a list would let a test pass while holding two
+     * entries for the same `rawId`, which is the bug.
+     */
+    public val pending: MutableMap<String, PendingCandidate> = mutableMapOf()
+
+    /** Set to make the next [recordParseOutcome] fail, as a locked vault would. */
+    public var failPendingWrites: Boolean = false
 
     private val seenHashes = mutableSetOf<String>()
 
@@ -87,8 +101,26 @@ public class FakeRawIngestRepository(
 
     override suspend fun parserRules(): List<ParserRule> = rules
 
-    override suspend fun recordParseOutcome(rawId: String, ruleId: String?, matched: Boolean) {
-        parseOutcomes += Triple(rawId, ruleId, matched)
+    /**
+     * Both writes, or neither — the fake keeps the real one's atomicity.
+     *
+     * A fake that recorded the verdict and skipped the candidate on failure
+     * would make the pipeline look idempotent for a reason the database does not
+     * actually provide, which is the kind of agreement between test double and
+     * test that the corpus lesson is about.
+     */
+    override suspend fun recordParseOutcome(
+        rawId: String,
+        ruleId: String?,
+        candidate: PendingCandidate,
+    ): PendingWriteOutcome {
+        if (failPendingWrites) return PendingWriteOutcome.Failed("fake refused")
+
+        pending[rawId]?.let { return PendingWriteOutcome.AlreadyPending("pending-$rawId") }
+
+        parseOutcomes += Triple(rawId, ruleId, ruleId != null)
+        pending[rawId] = candidate
+        return PendingWriteOutcome.Created("pending-$rawId")
     }
 
     private companion object {

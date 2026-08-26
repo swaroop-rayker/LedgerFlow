@@ -1,5 +1,7 @@
 package com.ledgerflow.core.domain.ingest
 
+import com.ledgerflow.core.model.EntrySource
+
 /**
  * Which capture adapter produced an event (SPEC.md §3.1).
  *
@@ -17,6 +19,25 @@ public enum class IngestSourceType {
 
     /** A bank/UPI/card app notification, captured by a listener service. Both flavours. */
     NOTIFICATION,
+    ;
+
+    /**
+     * The same fact as `pending_transaction.source` / `ledger_entry.source`
+     * spells it (SPEC.md §6.1).
+     *
+     * Two enums for one idea, kept apart because [EntrySource] has values no
+     * capture adapter can produce (`MANUAL`, `IMPORT`) and this one must stay
+     * exhaustive over the adapters that exist. The mapping lives **here** rather
+     * than at the call site so that the pipeline never writes a `when` on a
+     * source type at all — a total translation between two enums is not the
+     * `if (source == SMS)` CLAUDE.md §0 forbids, but a `when` in
+     * `:feature:ingest`'s pipeline package reads exactly like one and would
+     * invite the next branch to be added beside it.
+     */
+    public fun toEntrySource(): EntrySource = when (this) {
+        SMS -> EntrySource.SMS
+        NOTIFICATION -> EntrySource.NOTIFICATION
+    }
 }
 
 /**

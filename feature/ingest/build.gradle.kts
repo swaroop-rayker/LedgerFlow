@@ -26,6 +26,10 @@ dependencies {
 
     testImplementation(libs.androidx.work.runtime.ktx)
 
+    // :core:testing carries FakeRawIngestRepository, the domain-port fake the
+    // pipeline tests drive. Test scope only -- nothing in main may see it.
+    testImplementation(project(":core:testing"))
+
     // GoldenCorpusTest reads the shipped ruleset asset and testdata/ as plain
     // files, so it needs a JSON parser on the test classpath.
     testImplementation(libs.kotlinx.serialization.json)

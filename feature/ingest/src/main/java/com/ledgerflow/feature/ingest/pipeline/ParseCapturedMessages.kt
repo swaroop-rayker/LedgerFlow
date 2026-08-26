@@ -1,18 +1,38 @@
 package com.ledgerflow.feature.ingest.pipeline
 
+import com.ledgerflow.core.domain.ingest.CapturedEvent
+import com.ledgerflow.core.domain.ingest.DedupeKey
+import com.ledgerflow.core.domain.ingest.ExtractedTransaction
+import com.ledgerflow.core.domain.ingest.PendingCandidate
+import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.feature.ingest.parser.ExtractionResult
 import com.ledgerflow.feature.ingest.parser.ParserRuleEngine
 import javax.inject.Inject
 
-/** What one parse pass made of the queue. */
-public data class ParseReport(val parsed: Int, val unmatched: Int) {
+/**
+ * What one parse pass made of the queue.
+ *
+ * [parsed] and [unmatched] count *verdicts*; [created] counts the candidates
+ * those verdicts produced. They are reported separately rather than assumed
+ * equal because the difference is the interesting number: [alreadyPending] is
+ * the worker re-running over work it finished, and [failed] is a row that kept
+ * its `CAPTURED` status and will be tried again.
+ */
+public data class ParseReport(
+    val parsed: Int,
+    val unmatched: Int,
+    val created: Int = 0,
+    val alreadyPending: Int = 0,
+    val failed: Int = 0,
+) {
     public val total: Int get() = parsed + unmatched
 }
 
 /**
- * Runs the rule engine over everything captured but not yet resolved
- * (SPEC.md §5.1, §5.2).
+ * Runs the rule engine over everything captured but not yet resolved, and turns
+ * each verdict into the candidate the user will review (SPEC.md §5.1, §5.2).
+ * P2-4.
  *
  * **Lives in `:feature:ingest`, not in a `:core:domain` use case**, and that is
  * the module rule rather than an accident: the engine is here, `:core:domain`
@@ -20,12 +40,17 @@ public data class ParseReport(val parsed: Int, val unmatched: Int) {
  * into the layer every feature depends on. The repository port is how this
  * reaches the database, so the direction of dependency stays right.
  *
- * **What it does not do yet.** It records the verdict on the raw row —
- * `matched_rule_id` and `PARSED` / `UNMATCHED` — and creates no
- * `pending_transaction`. §5.1's rule that an unparseable message from an
- * allowlisted sender still becomes a `PENDING` row with `confidence = 0` is
- * satisfied by the next step; this one makes the engine live and observable
- * without inventing rows the Inbox cannot yet show.
+ * **Every message that reaches this class becomes a `pending_transaction` row**,
+ * matched or not. That is §5.1's never-drop rule, and the unmatched path is the
+ * whole point of it: a bank SMS no rule understands still arrives in the Inbox
+ * with `confidence = 0` and `needs_manual_fill = 1`, where the user can enter it
+ * by hand and where it stays as the material a future rule is written against.
+ * A message from a sender that is *not* allowlisted never reaches here — triage
+ * takes it out of the queue first (§5.1), and a notification from a
+ * non-allowlisted package was never captured at all (§5.2).
+ *
+ * **Nothing here reaches the ledger.** Law 1: a candidate waits for a human, and
+ * only `ApproveTransactionUseCase` may insert into `ledger_entry`.
  *
  * The ruleset is loaded **once per pass**, not once per message: the engine
  * compiles every regex on construction, and doing that per message in a worker
@@ -37,30 +62,71 @@ public class ParseCapturedMessages @Inject constructor(
 
     public suspend operator fun invoke(limit: Int = DEFAULT_LIMIT): ParseReport {
         val rules = repository.parserRules()
+        // No ruleset means every message would be recorded as UNMATCHED against
+        // a ruleset that never ran, which is a verdict the corpus could not
+        // distinguish from a real miss. Leaving the rows CAPTURED is honest and
+        // the next pass, after seeding, resolves them.
         if (rules.isEmpty()) return ParseReport(parsed = 0, unmatched = 0)
 
         val engine = ParserRuleEngine(rules)
         var parsed = 0
         var unmatched = 0
+        var created = 0
+        var alreadyPending = 0
+        var failed = 0
 
         repository.capturedEvents(limit).forEach { captured ->
+            val ruleId: String?
+            val extracted: ExtractedTransaction
+
             when (val result = engine.extract(captured.event)) {
                 is ExtractionResult.Matched -> {
-                    repository.recordParseOutcome(captured.rawId, result.ruleId, matched = true)
+                    ruleId = result.ruleId
+                    extracted = result.extracted
                     parsed++
                 }
 
                 ExtractionResult.Unmatched -> {
-                    // Recorded, never dropped (§5.1). This is the row a future
-                    // rule will be written against, and the one the review
-                    // screen will ask the user to fill in by hand.
-                    repository.recordParseOutcome(captured.rawId, ruleId = null, matched = false)
+                    ruleId = null
+                    // The default is §5.1's `confidence = 0` candidate: no
+                    // amount, no direction, nothing invented. `needsManualFill`
+                    // follows from it rather than being set here, so the
+                    // matched-but-useless case gets the same treatment.
+                    extracted = ExtractedTransaction()
                     unmatched++
                 }
             }
+
+            when (repository.recordParseOutcome(captured.rawId, ruleId, captured.candidate(extracted))) {
+                is PendingWriteOutcome.Created -> created++
+                is PendingWriteOutcome.AlreadyPending -> alreadyPending++
+                is PendingWriteOutcome.Failed -> failed++
+            }
         }
-        return ParseReport(parsed, unmatched)
+        return ParseReport(parsed, unmatched, created, alreadyPending, failed)
     }
+
+    /**
+     * The candidate one captured message becomes.
+     *
+     * `toEntrySource()` rather than a `when` on the source type: the mapping
+     * lives on the enum in `:core:domain` so that this package — which is
+     * downstream of every capture adapter — contains no branch on where a
+     * message came from at all (CLAUDE.md §0).
+     *
+     * The merchant is **not** resolved here. §5.1's `createOrGet` runs at
+     * approval (owner decision, P2-4), so a candidate the user discards leaves
+     * no merchant behind and §5.5's fuzzy suggestion still has something to
+     * suggest at review time.
+     */
+    private fun CapturedEvent.candidate(extracted: ExtractedTransaction) = PendingCandidate(
+        source = event.sourceType.toEntrySource(),
+        extracted = extracted,
+        // Capture time is the fallback only, and only inside the key: the
+        // payload keeps a null `occurredAt` so the review screen asks rather
+        // than asserting a date the bank never gave. See DedupeKey.compute.
+        dedupeKey = DedupeKey.compute(extracted, event.receivedAt, rawId),
+    )
 
     private companion object {
         /**

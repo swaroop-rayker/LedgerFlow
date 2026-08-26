@@ -1,6 +1,7 @@
 package com.ledgerflow.core.data.ingest
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.id.Uuid7Generator
@@ -8,6 +9,7 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
 import com.ledgerflow.core.database.entity.ParserRuleEntity
+import com.ledgerflow.core.database.entity.PendingTransactionEntity
 import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.database.entity.SmsRawEntity
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
@@ -17,8 +19,11 @@ import com.ledgerflow.core.domain.ingest.ExtractionField
 import com.ledgerflow.core.domain.ingest.IngestSourceType
 import com.ledgerflow.core.domain.ingest.InstrumentHint
 import com.ledgerflow.core.domain.ingest.ParserRule
+import com.ledgerflow.core.domain.ingest.PendingCandidate
+import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
+import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.model.RawParseStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.MessageDigest
@@ -263,20 +268,73 @@ public class DefaultRawIngestRepository @Inject constructor(
     override suspend fun recordParseOutcome(
         rawId: String,
         ruleId: String?,
-        matched: Boolean,
-    ): Unit = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext
-        val status = if (matched) RawParseStatus.PARSED else RawParseStatus.UNMATCHED
+        candidate: PendingCandidate,
+    ): PendingWriteOutcome = withContext(io) {
+        val database = runCatching { session.requireDatabase() }.getOrNull()
+            ?: return@withContext PendingWriteOutcome.Failed("vault is locked")
+        val status = if (ruleId != null) RawParseStatus.PARSED else RawParseStatus.UNMATCHED
+        val pendingDao = database.pendingTransactionDao()
 
         runCatching {
-            // The row is in one of the two raw tables and the id says nothing
-            // about which. Updating both is cheaper and simpler than carrying a
-            // source around -- and keeps this free of the `if (source == SMS)`
-            // CLAUDE.md §0 forbids outside an adapter.
-            database.smsRawDao().updateStatus(rawId, status, ruleId)
-            database.notificationRawDao().updateStatus(rawId, status, ruleId)
+            // One transaction, and that is what makes the worker idempotent:
+            // the queue is "raw rows still at CAPTURED", so a row that carries a
+            // verdict provably carries its candidate too. A process death
+            // between the two writes would otherwise lose a candidate, or
+            // deposit a second one on the next pass.
+            database.withTransaction {
+                val existing = pendingDao.idForRawRef(rawId)
+                if (existing != null) {
+                    // Belt and braces on top of the transaction. parse_status is
+                    // an ordinary column that a future maintenance path could
+                    // reset; the duplicate Inbox row that would follow is
+                    // invisible to everything except a user counting.
+                    return@withTransaction PendingWriteOutcome.AlreadyPending(existing)
+                }
+
+                val pendingId = ids.generate()
+                pendingDao.insert(
+                    PendingTransactionEntity(
+                        id = pendingId,
+                        source = candidate.source,
+                        dedupeKey = candidate.dedupeKey,
+                        // P2-5's job. A candidate is never born suppressed --
+                        // the row that loses a dedupe is chosen after both
+                        // exist, and §3.1 keeps the loser visible.
+                        suppressedById = null,
+                        // The parameter, not a field on the candidate: this is
+                        // the same id the check above used and the same row the
+                        // verdict lands on, so there is one value and no way for
+                        // two of them to disagree.
+                        rawRefId = rawId,
+                        extractedJson = ExtractedTransactionJson.encode(candidate.extracted),
+                        confidence = candidate.confidence,
+                        // Law 1: the only status an automated source may write.
+                        // APPROVED belongs to ApproveTransactionUseCase and
+                        // DISCARDED to the user; FAILED is written by nothing --
+                        // see the port's KDoc.
+                        status = PendingStatus.PENDING,
+                        needsManualFill = candidate.needsManualFill,
+                        createdAt = clock.nowMillis(),
+                        reviewedAt = null,
+                        approvedEntryId = null,
+                    ),
+                )
+
+                // The row is in one of the two raw tables and the id says nothing
+                // about which. Updating both is cheaper and simpler than carrying a
+                // source around -- and keeps this free of the `if (source == SMS)`
+                // CLAUDE.md §0 forbids outside an adapter.
+                database.smsRawDao().updateStatus(rawId, status, ruleId)
+                database.notificationRawDao().updateStatus(rawId, status, ruleId)
+
+                PendingWriteOutcome.Created(pendingId)
+            }
+        }.getOrElse { throwable ->
+            // The raw row keeps CAPTURED, so the next pass retries it. Returning
+            // rather than throwing is the same rule the rest of this class
+            // follows: a worker that throws is a crash in a background process.
+            PendingWriteOutcome.Failed(throwable.message ?: throwable::class.java.name)
         }
-        Unit
     }
 
     /**
