@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.PathSensitivity
+
 plugins {
     id("ledgerflow.android.library")
     id("ledgerflow.android.room")
@@ -52,4 +54,33 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.truth)
+}
+
+/**
+ * The structural guards in this module read the **repository's** sources at run
+ * time, not this module's compiled classes: `LedgerIsolationTest``
+ * walk `core/`, `feature/` and `app/` looking for call sites.
+ *
+ * Gradle cannot see that. Without this, the test task's inputs are just this
+ * module's own code, so a change anywhere else leaves the task UP-TO-DATE and
+ * **the guard silently does not run** — which is strictly worse than not having
+ * it, because the green build says it did. That is not hypothetical: a taxonomy
+ * DAO rewrite broke one of these assertions and it went unnoticed for three
+ * sessions, only surfacing when an unrelated change to `:core:model` happened to
+ * invalidate the task.
+ *
+ * Declaring the sources as an input is the fix: touch any production Kotlin file
+ * in the repository and these tests run again.
+ */
+tasks.withType<Test>().configureEach {
+    inputs.files(
+        rootProject.fileTree(rootProject.projectDir) {
+            include("core/**/src/main/**/*.kt")
+            include("feature/**/src/main/**/*.kt")
+            include("app/**/src/main/**/*.kt")
+            exclude("**/build/**")
+        },
+    )
+        .withPropertyName("repositoryProductionSources")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }

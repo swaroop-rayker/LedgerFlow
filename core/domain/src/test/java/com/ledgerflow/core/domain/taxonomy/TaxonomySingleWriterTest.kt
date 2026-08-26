@@ -142,6 +142,23 @@ class TaxonomySingleWriterTest {
     }
 
     /**
+     * Each `@Query` in a DAO file, keyed by the function it annotates.
+     *
+     * Kotlin string concatenation is flattened first: a statement written across
+     * several literals would otherwise be truncated at the first closing quote,
+     * and a guard that matches half a statement passes for the wrong reason.
+     */
+    private fun queriesOf(file: String): Map<String, String> {
+        val flattened = file.replace(Regex(""""\s*\+\s*""""), "")
+        return Regex(
+            """@Query\(\s*"(.*?)",?\s*\)\s*public suspend fun (\w+)""",
+            RegexOption.DOT_MATCHES_ALL,
+        )
+            .findAll(flattened)
+            .associate { it.groupValues[2] to it.groupValues[1] }
+    }
+
+    /**
      * The purge counts binned entries, and the soft delete does not.
      *
      * Four statements that look like two, which is exactly why this is asserted
@@ -149,14 +166,36 @@ class TaxonomySingleWriterTest {
      * `countForMerchant` would narrow the purge check to visible entries, and
      * nothing would fail until a user restored something from the bin months
      * later and found its merchant gone.
+     *
+     * **Asserted per statement rather than as a literal, and that rewrite has a
+     * history.** The original form matched two exact SQL strings. ADR-0018 then
+     * widened `countForCategory` to reach line-grain categories, which aliased
+     * the table and reordered the predicate — the statement stayed correct and
+     * the guard stopped matching it. It went unnoticed for three sessions
+     * because these tests read the repository at runtime, which Gradle cannot
+     * see as a task input, so the task was up to date and never ran. The build
+     * files now declare those sources; this assertion is on the property, so
+     * the next legitimate rewrite of the SQL does not break it either. Same
+     * lesson as ADR-0002's amendment about string proxies.
      */
     @Test
     fun thePurgeCountsAreTheOnesThatIncludeBinnedEntries() {
-        val daos = productionSources().single { it.name == "LedgerTaxonomyDao.kt" }.readText()
+        val queries = queriesOf(
+            productionSources().single { it.name == "LedgerTaxonomyDao.kt" }.readText(),
+        )
 
-        // The soft-delete counts ask about live rows only.
-        assertThat(daos).contains("AND category_id = :categoryId AND deleted_at IS NULL")
-        assertThat(daos).contains("AND merchant_id = :merchantId AND deleted_at IS NULL")
+        // The soft-delete counts ask about live rows only...
+        listOf("countForCategory", "countForMerchant").forEach { name ->
+            assertThat(queries).containsKey(name)
+            assertThat(queries.getValue(name)).contains("deleted_at IS NULL")
+        }
+
+        // ...and the purge counts must not, or a purge check would ignore
+        // everything sitting in the bin.
+        listOf("countAllForCategory", "countAllForMerchant").forEach { name ->
+            assertThat(queries).containsKey(name)
+            assertThat(queries.getValue(name)).doesNotContain("deleted_at")
+        }
 
         val repositories = listOf(
             "DefaultCategoryRepository.kt" to "countAllForCategory",
