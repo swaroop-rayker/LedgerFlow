@@ -121,6 +121,15 @@ Rationale: in the current Indian payments landscape, a `NotificationListenerServ
 | Flavour | `smsFull` only | **both** flavours |
 | Delivery | sideload / internal testing | Play-eligible |
 
+**What the owner's device actually does, measured at P2-5 — the premise above does not hold there.** On the owner's phone the payment app posts **no transaction notifications at all**. What appears in the shade is the *SMS's own notification*, posted by the messaging app, carrying a body identical to the SMS that follows it. So on that device notifications are not a higher-recall second source; they are the same source twice.
+
+This does not reopen D-04, and notification ingest stays exactly as it is. `playSafe` has no SMS at all, so notifications are its **only** source and the flavour is unshippable without them; and "the payment app is silent" is one person's app selection rather than a property of the landscape. But the claim that notification ingest "captures strictly more than SMS does" is now known to be false for at least one real setup, and it should stop being stated as though it were surveyed. This is the third time real data has contradicted an invented assumption in this pipeline — after the parser rules and the sender allowlist — and it arrived the same way, from one real message.
+
+Two consequences worth recording:
+
+- **Notification ingest currently captures nothing on that device**, and that is correct rather than broken. No messaging app is on the curated package allowlist (D-10), so §5.2's filter refuses the SMS notification before any body is read; and the four UPI packages the notification rules match never post. Every capture comes through SMS.
+- **If a user adds their messaging app to the allowlist** — reachable once P5 ships the Settings editor, and a natural thing to try — every bank SMS is then captured twice, from two different origins, so `body_hash` will not absorb it. P2-5's cross-source dedupe does: verified against the owner's real HDFC body, the notification copy falls to `generic-verb-then-amount` (amount and direction only, confidence 0.45), which shares the SMS candidate's `amount|direction` bucket and contradicts none of its fields, so it is suppressed in favour of the confidence-0.9 SMS extraction. The gap is a body that matches *no* rule at all: it would extract no amount, take a non-colliding key, and stand as a second row. That is the deliberate cost of keeping §5.1's never-drop rule ahead of dedupe for amountless candidates, and it is the safe direction — a visible duplicate rather than an invisible drop. Allowlisting a general messaging app also means LedgerFlow reads the notification body of *every* SMS, personal ones included, which is the guarantee §5.2 exists to make and a reason the curated default contains no such package.
+
 **Product flavours** (`productFlavors { smsFull; playSafe }`):
 - `smsFull` — Source A + Source B. Sideload / internal-testing track. Full feature set.
 - `playSafe` — Source B + OCR + manual only. No restricted permissions. Play-eligible.
