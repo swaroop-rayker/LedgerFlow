@@ -193,6 +193,26 @@ Two consequences worth recording:
   named test CLAUDE.md §7 requires,
   `Dedupe_SameTxnAcrossSources_ProducesOnePending`, is instrumented and was
   verified to fail with the mechanism disabled. **No schema change: still v7.**
+- **P2-6 gave the queue a screen, and the pipeline its first end-to-end run on
+  real hardware.** `:feature:inbox` ships the Inbox (four filters, one-tap
+  approve, swipe-to-discard with an undo snackbar) and its own compact review
+  screen; §9.3's centre speed dial lands with it, since the Inbox is the second
+  live option it was waiting for. Approval goes through
+  `ApprovePendingUseCase`, which **composes** Law 1's single writer rather than
+  becoming a second one, and resolves the merchant through `createOrGet` at
+  that moment (the P2-4 decision). The review screen is its own, not
+  `:feature:entry` prefilled: a candidate is not a draft, and routing one
+  through `draft_entry` would put a half-reviewed message in the drafts stack
+  where discarding it in one place leaves it alive in the other.
+  **No schema change: still v7.**
+- **The approval's two writes have a guard between them.** Committing the entry
+  and marking the candidate live in different repositories and cannot share a
+  transaction without the Inbox reaching into `ledger_entry`. A process death
+  between them would leave the entry committed and the row still `PENDING`, and
+  a second approval would write a second entry for one payment. So every
+  approval first asks `ledger_entry` whether this candidate already produced
+  one — `source_ref_id`, per book (ADR-0002) — and completes the half-finished
+  state instead of doubling it.
 - **P2-2 also introduced WorkManager**, configured through `LedgerFlowApplication` as a `Configuration.Provider` with the Hilt worker factory; its manifest initialiser is removed, because the default one runs before Hilt has a graph and would leave an `@HiltWorker` unconstructable at runtime with nothing at compile time to say so. It brings `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` and `FOREGROUND_SERVICE` into the merged manifest. **None of them is `INTERNET`** and Law 6 is intact (`restrictedPermissionCheck` covers it), but the app's permission list is now four longer than it was, which for an offline-first product is worth stating rather than discovering.
 - `RECEIVE_SMS` appears in `src/smsFull/AndroidManifest.xml` and nowhere else, enforced by `restrictedPermissionCheck` (Gradle) and a mirrored CI step rather than by memory. The same check bans `INTERNET` in every source set of every module (Law 6).
 

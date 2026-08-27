@@ -467,6 +467,88 @@ public interface PendingTransactionDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     public suspend fun insertAll(rows: List<PendingTransactionEntity>)
 
+    // ── P2-6: the Inbox reads ────────────────────────────────────────────────
+    //
+    // Four statements rather than one taking a filter, because §5.1's four
+    // filters are not four values of one column. Three select on `status`; the
+    // fourth selects on `suppressed_by_id IS NOT NULL`, and "suppressed" is
+    // deliberately not a status (a row can be suppressed *and* discarded). One
+    // parameterised query would have to encode that asymmetry as a branch in
+    // SQL, where it could not be read.
+    //
+    // `Flow` for every read, per CLAUDE.md §5. The Inbox has to update under the
+    // user when a message lands while they are looking at it.
+
+    /**
+     * The queue proper: awaiting a human, and not a suppressed duplicate.
+     *
+     * Excluding suppressed rows here is what makes the default filter mean
+     * "work to do". They remain reachable through [observeSuppressed] — §3.1
+     * requires a suppressed row to stay visible, not to stay in the queue.
+     */
+    @Query(
+        "SELECT * FROM pending_transaction " +
+            "WHERE status = 'PENDING' AND suppressed_by_id IS NULL " +
+            "ORDER BY created_at DESC",
+    )
+    public fun observePending(): Flow<List<PendingTransactionEntity>>
+
+    /** §3.1's retained cross-source duplicates, whatever their status. */
+    @Query(
+        "SELECT * FROM pending_transaction WHERE suppressed_by_id IS NOT NULL " +
+            "ORDER BY created_at DESC",
+    )
+    public fun observeSuppressed(): Flow<List<PendingTransactionEntity>>
+
+    /**
+     * One status, for the Discarded and Failed filters.
+     *
+     * Suppressed rows are **not** excluded: a duplicate the user then discarded
+     * belongs in Discarded too, and hiding it there would make a row the user
+     * acted on invisible from the filter named after that action.
+     */
+    @Query("SELECT * FROM pending_transaction WHERE status = :status ORDER BY created_at DESC")
+    public fun observeWithStatus(status: PendingStatus): Flow<List<PendingTransactionEntity>>
+
+    /** §9.3's `Inbox (n)`. Matches [observePending] exactly, or the badge lies. */
+    @Query(
+        "SELECT COUNT(*) FROM pending_transaction " +
+            "WHERE status = 'PENDING' AND suppressed_by_id IS NULL",
+    )
+    public fun observePendingCount(): Flow<Int>
+
+    /**
+     * §5.1's Discard, and its undo.
+     *
+     * Both are scoped so they can only move a row *between* the two states they
+     * name. Discard refuses an already-approved row -- that one has a
+     * `ledger_entry` behind it, and marking its candidate discarded would leave
+     * the entry with an audit trail that says the user rejected it.
+     */
+    @Query(
+        "UPDATE pending_transaction SET status = 'DISCARDED', reviewed_at = :now " +
+            "WHERE id = :id AND status = 'PENDING'",
+    )
+    public suspend fun discard(id: String, now: Long): Int
+
+    @Query(
+        "UPDATE pending_transaction SET status = 'PENDING', reviewed_at = NULL " +
+            "WHERE id = :id AND status = 'DISCARDED'",
+    )
+    public suspend fun restore(id: String): Int
+
+    /**
+     * Records that a candidate became an entry.
+     *
+     * `status = 'PENDING'` again, so a second approval cannot overwrite the
+     * `approved_entry_id` of the first and orphan the entry it named.
+     */
+    @Query(
+        "UPDATE pending_transaction SET status = 'APPROVED', reviewed_at = :now, " +
+            "approved_entry_id = :entryId WHERE id = :id AND status = 'PENDING'",
+    )
+    public suspend fun markApproved(id: String, entryId: String, now: Long): Int
+
     @Query("SELECT COUNT(*) FROM pending_transaction")
     public suspend fun count(): Int
 }

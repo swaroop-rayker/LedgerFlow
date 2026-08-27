@@ -135,7 +135,7 @@ coverage.
 | **P2-3** | Rule engine + shipped ruleset + golden corpus | ✅ `f96e116` |
 | **P2-4** | `ParseIngestWorker` → `pending_transaction` | ✅ |
 | **P2-5** | Cross-source dedupe (±3 min window, `DUPLICATE_SUPPRESSED`) | ✅ |
-| P2-6 | `:feature:inbox` — list, filters, review, approve/discard | pending |
+| **P2-6** | `:feature:inbox` — list, filters, review, approve/discard | ✅ (bulk approve deferred) |
 | P2-7 | Notifications — `inbox_high`, deep link, actions, grouping | pending |
 | P2-8 | Notification-listener permission UX, rebind, health banner | pending |
 | P2-9 | Exit criteria — 50+50 corpus, named dedupe test | pending |

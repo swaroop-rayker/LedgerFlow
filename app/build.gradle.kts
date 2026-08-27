@@ -33,6 +33,7 @@ dependencies {
     // is the two capture components' manifest entries and the Hilt bindings
     // that put both TransactionIngestSource implementations in the graph
     // (SPEC.md §3.1). The Inbox that consumes them is P2.
+    implementation(project(":feature:inbox"))
     implementation(project(":feature:ingest"))
     implementation(project(":feature:settings"))
 

@@ -57,6 +57,25 @@ public sealed interface Destination {
     /** The bin, reached from More. Everything deleted, both books (ADR-0015). */
     @Serializable
     public data object DeletedEntries : Destination
+
+    /** The approval queue, reached from the centre action's dial (§9.3). */
+    @Serializable
+    public data object Inbox : Destination
+
+    /**
+     * Reviewing one candidate, reached from the Inbox — and at P2-7 from the
+     * `ledgerflow://inbox/{pendingId}` deep link §5.1 specifies.
+     *
+     * **The property name is a contract**, exactly as [Entry.draftId] is.
+     * Navigation Compose derives the argument name from it, and
+     * `:feature:inbox` reads that argument out of its `SavedStateHandle` by
+     * string because it cannot reference this type — routes live in `:app` so
+     * features never depend on each other. `ReviewViewModel.PENDING_ID_ARG` is
+     * the other half, and `InboxReviewArgumentTest` fails the build if the two
+     * drift.
+     */
+    @Serializable
+    public data class InboxReview(val pendingId: String) : Destination
 }
 
 /** The bottom bar's four destinations, in the order §9.3 specifies. */

@@ -26,7 +26,9 @@ import com.ledgerflow.core.domain.vault.RecoveryKitRepository
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.StorageMaintenance
 import com.ledgerflow.core.domain.vault.VaultRepository
+import com.ledgerflow.core.data.inbox.DefaultPendingRepository
 import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
+import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import dagger.Binds
 import dagger.Module
@@ -163,4 +165,14 @@ public interface IngestModule {
 
     @Binds
     public fun rawIngestRepository(impl: DefaultRawIngestRepository): RawIngestRepository
+
+    /**
+     * The Inbox's read side (P2-6).
+     *
+     * Separate from [rawIngestRepository] on purpose: that one is the capture
+     * pipeline's write port, called from a receiver with ten seconds; this one
+     * is a screen's read port, and the two have opposite constraints.
+     */
+    @Binds
+    public fun pendingRepository(impl: DefaultPendingRepository): PendingRepository
 }

@@ -648,6 +648,27 @@ public interface LedgerEntryDao {
     @Query("SELECT COUNT(*) FROM ledger_entry WHERE ledger = :ledger")
     public suspend fun countForLedger(ledger: LedgerType): Int
 
+    /**
+     * The entry one `pending_transaction` already produced, if any — P2-6's
+     * approval idempotency guard.
+     *
+     * Committing the entry and marking the candidate approved are two writes in
+     * two repositories and cannot share a transaction. A process death between
+     * them leaves the entry committed and the candidate still `PENDING`, and a
+     * second approval would write a second entry for one payment. Consulted
+     * first, that state is completed rather than doubled.
+     *
+     * **Binds `:ledger`** like every other statement naming this table
+     * (ADR-0002). The caller knows the book, because a candidate cannot be
+     * approved without one being chosen -- Law 2 does not allow it to be
+     * guessed.
+     */
+    @Query(
+        "SELECT id FROM ledger_entry WHERE ledger = :ledger AND source_ref_id = :refId " +
+            "AND deleted_at IS NULL LIMIT 1",
+    )
+    public suspend fun entryIdForSourceRef(ledger: LedgerType, refId: String): String?
+
     @Query("SELECT * FROM line_item ORDER BY id")
     public suspend fun allLineItems(): List<LineItemEntity>
 
