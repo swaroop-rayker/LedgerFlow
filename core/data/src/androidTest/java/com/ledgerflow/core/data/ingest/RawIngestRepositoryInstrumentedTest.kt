@@ -293,6 +293,57 @@ class RawIngestRepositoryInstrumentedTest {
         assertThat(repository.triageCapturedSms(limit = 10)).isEqualTo(0)
     }
 
+    /**
+     * **The owner's real sender IDs, from their own phone.** Every one carries a
+     * trailing DLT suffix, and the shipped allowlist did not.
+     *
+     * TRAI's DLT header format is `XX-ENTITY-C`, where the final character is
+     * the route class -- `T` transactional, `S` service, `P` promotional, `G`
+     * government. The seeded patterns were written as `*-HDFCBK`, which is what
+     * the *entity* looks like; `GLOB` anchors the whole string, so the real
+     * `VM-HDFCBK-T` matched nothing and every bank SMS on the device was triaged
+     * `SENDER_NOT_ALLOWLISTED`.
+     *
+     * Instrumented because `GLOB` is SQLite's, not Kotlin's. A JVM test with
+     * `fnmatch` would agree with whatever I believed about the semantics rather
+     * than with the database that actually decides.
+     */
+    @Test
+    fun isSenderAllowed_acceptsTheRealDltHeaders_fromTheOwnersDevice() = runBlocking {
+        repository.seedAllowlists()
+
+        // Observed on SM-S721B, 2026-08-27. The first is the payment that did
+        // not register; the rest are the other financial senders on the device.
+        assertThat(repository.isSenderAllowed("VM-HDFCBK-T")).isTrue()
+        assertThat(repository.isSenderAllowed("AD-HDFCBK-S")).isTrue()
+        assertThat(repository.isSenderAllowed("AX-SBYONO-S")).isTrue()
+        assertThat(repository.isSenderAllowed("AD-SBYONO-S")).isTrue()
+
+        // The bare entity form must keep working -- older headers still use it,
+        // and a user-written pattern is allowed to be exact.
+        assertThat(repository.isSenderAllowed("VM-HDFCBK")).isTrue()
+    }
+
+    /**
+     * Promotional headers stay out, and that is a decision rather than an
+     * oversight.
+     *
+     * §5.1's never-drop rule makes an allowlisted sender's unparseable message a
+     * `PENDING` row with `confidence = 0`. Admitting the `-P` route class would
+     * therefore turn every bank marketing SMS into an Inbox item the user has to
+     * dismiss by hand -- the never-drop rule weaponised against the queue it
+     * exists to protect. A bank's promotional header is not a transaction.
+     */
+    @Test
+    fun isSenderAllowed_rejectsThePromotionalRouteClass() = runBlocking {
+        repository.seedAllowlists()
+
+        assertThat(repository.isSenderAllowed("VM-HDFCBK-P")).isFalse()
+        assertThat(repository.isSenderAllowed("AD-SBYONO-P")).isFalse()
+        // Still nothing like a bank.
+        assertThat(repository.isSenderAllowed("VM-PIZZAS-T")).isFalse()
+    }
+
     // ── P2-4: pending_transaction ────────────────────────────────────────────
     //
     // These are instrumented rather than JVM tests for the reason the P2-4

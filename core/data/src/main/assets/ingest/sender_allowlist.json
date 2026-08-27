@@ -1,8 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "senders": [
     {
       "pattern": "*-HDFCBK",
+      "label": "HDFC Bank"
+    },
+    {
+      "pattern": "*-HDFCBK-[^P]",
       "label": "HDFC Bank"
     },
     {
@@ -10,7 +14,15 @@
       "label": "ICICI Bank"
     },
     {
+      "pattern": "*-ICICIB-[^P]",
+      "label": "ICICI Bank"
+    },
+    {
       "pattern": "*-ICICIT",
+      "label": "ICICI Bank"
+    },
+    {
+      "pattern": "*-ICICIT-[^P]",
       "label": "ICICI Bank"
     },
     {
@@ -18,7 +30,23 @@
       "label": "State Bank of India"
     },
     {
+      "pattern": "*-SBIINB-[^P]",
+      "label": "State Bank of India"
+    },
+    {
       "pattern": "*-SBIUPI",
+      "label": "State Bank of India"
+    },
+    {
+      "pattern": "*-SBIUPI-[^P]",
+      "label": "State Bank of India"
+    },
+    {
+      "pattern": "*-SBYONO",
+      "label": "State Bank of India"
+    },
+    {
+      "pattern": "*-SBYONO-[^P]",
       "label": "State Bank of India"
     },
     {
@@ -26,7 +54,15 @@
       "label": "State Bank of India"
     },
     {
+      "pattern": "*-ATMSBI-[^P]",
+      "label": "State Bank of India"
+    },
+    {
       "pattern": "*-AXISBK",
+      "label": "Axis Bank"
+    },
+    {
+      "pattern": "*-AXISBK-[^P]",
       "label": "Axis Bank"
     },
     {
@@ -34,7 +70,15 @@
       "label": "Kotak Mahindra"
     },
     {
+      "pattern": "*-KOTAKB-[^P]",
+      "label": "Kotak Mahindra"
+    },
+    {
       "pattern": "*-PNBSMS",
+      "label": "Punjab National Bank"
+    },
+    {
+      "pattern": "*-PNBSMS-[^P]",
       "label": "Punjab National Bank"
     },
     {
@@ -42,7 +86,15 @@
       "label": "Bank of Baroda"
     },
     {
+      "pattern": "*-BOBTXN-[^P]",
+      "label": "Bank of Baroda"
+    },
+    {
       "pattern": "*-CANBNK",
+      "label": "Canara Bank"
+    },
+    {
+      "pattern": "*-CANBNK-[^P]",
       "label": "Canara Bank"
     },
     {
@@ -50,7 +102,15 @@
       "label": "Indian Bank"
     },
     {
+      "pattern": "*-INDBNK-[^P]",
+      "label": "Indian Bank"
+    },
+    {
       "pattern": "*-IDFCFB",
+      "label": "IDFC FIRST"
+    },
+    {
+      "pattern": "*-IDFCFB-[^P]",
       "label": "IDFC FIRST"
     },
     {
@@ -58,7 +118,15 @@
       "label": "YES Bank"
     },
     {
+      "pattern": "*-YESBNK-[^P]",
+      "label": "YES Bank"
+    },
+    {
       "pattern": "*-INDUSB",
+      "label": "IndusInd"
+    },
+    {
+      "pattern": "*-INDUSB-[^P]",
       "label": "IndusInd"
     },
     {
@@ -66,7 +134,15 @@
       "label": "Central Bank"
     },
     {
+      "pattern": "*-CENTBK-[^P]",
+      "label": "Central Bank"
+    },
+    {
       "pattern": "*-UNIONB",
+      "label": "Union Bank"
+    },
+    {
+      "pattern": "*-UNIONB-[^P]",
       "label": "Union Bank"
     },
     {
@@ -74,7 +150,15 @@
       "label": "IDBI Bank"
     },
     {
+      "pattern": "*-IDBIBK-[^P]",
+      "label": "IDBI Bank"
+    },
+    {
       "pattern": "*-FEDBNK",
+      "label": "Federal Bank"
+    },
+    {
+      "pattern": "*-FEDBNK-[^P]",
       "label": "Federal Bank"
     },
     {
@@ -82,11 +166,23 @@
       "label": "RBL Bank"
     },
     {
+      "pattern": "*-RBLBNK-[^P]",
+      "label": "RBL Bank"
+    },
+    {
       "pattern": "*-AUBANK",
       "label": "AU Small Finance"
     },
     {
+      "pattern": "*-AUBANK-[^P]",
+      "label": "AU Small Finance"
+    },
+    {
       "pattern": "*-PAYTMB",
+      "label": "Paytm Payments Bank"
+    },
+    {
+      "pattern": "*-PAYTMB-[^P]",
       "label": "Paytm Payments Bank"
     },
     {
@@ -98,7 +194,15 @@
       "label": "PhonePe"
     },
     {
+      "pattern": "*-PHONPE-[^P]",
+      "label": "PhonePe"
+    },
+    {
       "pattern": "*-AMZNPA",
+      "label": "Amazon Pay"
+    },
+    {
+      "pattern": "*-AMZNPA-[^P]",
       "label": "Amazon Pay"
     }
   ]

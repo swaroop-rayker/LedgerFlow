@@ -204,6 +204,22 @@ public interface PackageAllowlistDao {
  * rather than `LIKE` because it is case-sensitive and `*`/`?` behave the way the
  * patterns in the seed file are written; senders are normalised to upper case
  * before the comparison.
+ *
+ * **`GLOB` anchors the whole string, and that is what the v1 seed got wrong.**
+ * A real TRAI DLT header is `XX-ENTITY-C`, with a trailing route class -- `T`
+ * transactional, `S` service, `P` promotional, `G` government. `*-HDFCBK` is the
+ * *entity* tail, so it matched none of the owner's actual messages: every bank
+ * SMS on a real device was triaged `SENDER_NOT_ALLOWLISTED` and the app captured
+ * nothing for two phases without anything failing. The seed carries both forms
+ * from v2 -- the bare entity, and `*-HDFCBK-[^P]` for the suffixed header.
+ * Promotional is excluded on purpose: §5.1 turns an allowlisted sender's
+ * unparseable message into a `confidence = 0` PENDING row, so admitting `-P`
+ * would make every bank marketing SMS an Inbox item to dismiss by hand.
+ *
+ * `[^...]` negation is SQLite's, verified on device rather than assumed --
+ * `RawIngestRepositoryInstrumentedTest` asserts against real headers observed on
+ * the owner's phone, and is instrumented for exactly that reason: a JVM test
+ * would agree with whatever we believed `GLOB` meant.
  */
 @Dao
 public interface SenderAllowlistDao {
