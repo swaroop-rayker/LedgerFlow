@@ -25,6 +25,8 @@ import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.taxonomy.MerchantNormalizer
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.ui.picker.LfPickerDialog
+import com.ledgerflow.core.ui.picker.LfPickerOption
 
 /**
  * Everything this screen can raise over itself.
@@ -43,68 +45,40 @@ internal fun EntryDialogs(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     state.discardingDraft?.let { DiscardDraftDialog(it, onEvent) }
 }
 
+/**
+ * The entry form's picker, over the shared component.
+ *
+ * The dialog itself moved to `:core:ui` when the Inbox's review screen needed
+ * the same one (CHANGE#2). What stays here is the translation: which options
+ * this picker offers, what is selected, and the merchant-only search and
+ * create. `:core:ui` knows no domain type, so that mapping cannot live there.
+ */
 @Composable
 private fun PickerDialog(
     picker: EntryPicker,
     state: EntryUiState,
     onEvent: (EntryEvent) -> Unit,
 ) {
-    val options = picker.optionsFrom(state)
-
-    LfDialog(
+    val canCreate = state.canCreateMerchant(picker)
+    LfPickerDialog(
         title = picker.title,
         body = picker.body,
-        // "Clear" rather than "OK": tapping a row is the selection, so the
-        // confirming action is the one thing a row cannot do — un-choose.
-        confirmText = "Clear",
-        onConfirm = { onEvent(EntryEvent.PickerItemSelected(null)) },
+        options = picker.optionsFrom(state).map { LfPickerOption(it.id, it.label) },
+        selectedId = picker.selectedIdIn(state),
+        onSelect = { onEvent(EntryEvent.PickerItemSelected(it)) },
         onDismiss = { onEvent(EntryEvent.PickerDismissed) },
-        detail = {
-            Column {
-                // Merchants only. §5.4 promises autocomplete for this one field,
-                // and it is the only picker whose list grows without bound --
-                // categories are a tree the user curates, payment methods are a
-                // handful. A search box over six payment methods is clutter.
-                if (picker is EntryPicker.Merchant) {
-                    LfTextField(
-                        value = state.merchantQuery,
-                        onValueChange = { onEvent(EntryEvent.MerchantQueryChanged(it)) },
-                        label = "Search or add",
-                    )
-                }
-                Column(
-                    modifier = Modifier
-                        .heightIn(max = PICKER_MAX_HEIGHT.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    // The offer to create comes first, not last. It is what the
-                    // user is here for once they have typed a name the list
-                    // does not contain, and a list of near-misses above it is
-                    // exactly the wrong order to read them in.
-                    if (state.canCreateMerchant(picker)) {
-                        ChoiceRow(
-                            label = "Add \"${state.merchantQuery.trim()}\"",
-                            selected = false,
-                            emphasised = true,
-                            onClick = { onEvent(EntryEvent.MerchantCreateRequested) },
-                        )
-                    }
-                    if (options.isEmpty() && !state.canCreateMerchant(picker)) {
-                        Text(
-                            text = picker.emptyMessage,
-                            style = LfTheme.typography.bodyM,
-                            color = LfTheme.colors.textSecondary,
-                        )
-                    }
-                    options.forEach { option ->
-                        ChoiceRow(
-                            label = option.label,
-                            selected = option.id == picker.selectedIdIn(state),
-                            onClick = { onEvent(EntryEvent.PickerItemSelected(option.id)) },
-                        )
-                    }
-                }
-            }
+        emptyMessage = picker.emptyMessage,
+        // Merchants only. §5.4 promises autocomplete for this one field, and it
+        // is the only picker whose list grows without bound -- categories are a
+        // tree the user curates, payment methods are a handful. A search box
+        // over six payment methods is clutter.
+        query = if (picker is EntryPicker.Merchant) state.merchantQuery else null,
+        onQueryChange = { onEvent(EntryEvent.MerchantQueryChanged(it)) },
+        createLabel = if (canCreate) "Add \"${state.merchantQuery.trim()}\"" else null,
+        onCreate = if (canCreate) {
+            { onEvent(EntryEvent.MerchantCreateRequested) }
+        } else {
+            null
         },
     )
 }
@@ -209,31 +183,6 @@ private fun SingleItemDialog(state: EntryUiState, onEvent: (EntryEvent) -> Unit)
     )
 }
 
-@Composable
-private fun ChoiceRow(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    emphasised: Boolean = false,
-) {
-    Text(
-        text = label,
-        style = LfTheme.typography.bodyL,
-        // `emphasised` is the create row, which is an *action* rather than a
-        // choice -- it reads in the accent colour for the same reason a
-        // selected row does, because both are the row that does something.
-        color = if (selected || emphasised) LfTheme.colors.accent else LfTheme.colors.textPrimary,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .padding(vertical = LfTheme.spacing.sm),
-    )
-}
-
-/** One row of a picker. */
-private data class PickerOption(val id: String, val label: String)
-
 /**
  * Whether to offer creating the typed merchant.
  *
@@ -282,20 +231,20 @@ private val EntryPicker.emptyMessage: String
         EntryPicker.PaymentMethod -> "No payment methods yet. Add some in More → Organise."
     }
 
-private fun EntryPicker.optionsFrom(state: EntryUiState): List<PickerOption> = when (this) {
-    is EntryPicker.Category -> state.tree.map { PickerOption(it.parent.id, it.parent.name) }
+private fun EntryPicker.optionsFrom(state: EntryUiState): List<LfPickerOption> = when (this) {
+    is EntryPicker.Category -> state.tree.map { LfPickerOption(it.parent.id, it.parent.name) }
 
     is EntryPicker.Subcategory -> state.tree
         .firstOrNull { it.parent.id == parentId }
         ?.children
         .orEmpty()
-        .map { PickerOption(it.id, it.name) }
+        .map { LfPickerOption(it.id, it.name) }
 
     EntryPicker.Merchant -> state.merchants
         .filter { it.canonicalName.contains(state.merchantQuery.trim(), ignoreCase = true) }
-        .map { PickerOption(it.id, it.canonicalName) }
+        .map { LfPickerOption(it.id, it.canonicalName) }
 
-    EntryPicker.PaymentMethod -> state.paymentMethods.map { PickerOption(it.id, it.label) }
+    EntryPicker.PaymentMethod -> state.paymentMethods.map { LfPickerOption(it.id, it.label) }
 }
 
 /**
@@ -315,4 +264,3 @@ private fun EntryPicker.selectedIdIn(state: EntryUiState): String? {
     }
 }
 
-private const val PICKER_MAX_HEIGHT = 280

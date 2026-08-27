@@ -205,6 +205,23 @@ Two consequences worth recording:
   through `draft_entry` would put a half-reviewed message in the drafts stack
   where discarding it in one place leaves it alive in the other.
   **No schema change: still v7.**
+- **The review screen does not ask which book, because the message already
+  said** (owner, P2-6 redesign). "debited" is spend and "credited" is income,
+  the parser reads that into `direction` before the screen opens, and a control
+  asking again was confusing. The one exception is §5.1's never-drop row — a
+  message no rule understood, with no direction to derive from. Those get a
+  **Book row in the details card**, in the same picker style as Category, and no
+  other candidate does; without it such a row would be visible and unapprovable.
+  A book is never defaulted: Law 2's ledgers never meet to correct a wrong
+  guess, so filing income as spend would surface only as money missing later.
+- **The review screen is the manual entry form's, to the field.** Same detail
+  rows, same pickers, same `Single item | Itemised` control, same line editor —
+  and *literally* the same composables: `LfPickerDialog`, `LfChoiceRow` and
+  `LfDetailRow` moved from `:feature:entry` into `:core:ui` beside the line-item
+  editor that was already shared. Two pickers written separately would drift on
+  the first change to either, and the drift would read as the two screens
+  disagreeing about how you choose a category. One component driven by two
+  ViewModels makes the parity structural rather than a thing to remember.
 - **The approval's two writes have a guard between them.** Committing the entry
   and marking the candidate live in different repositories and cannot share a
   transaction without the Inbox reaching into `ledger_entry`. A process death

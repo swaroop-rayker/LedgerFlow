@@ -21,8 +21,7 @@ import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.designsystem.component.LfChip
-import com.ledgerflow.core.designsystem.component.LfChipStyle
+import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
@@ -31,23 +30,29 @@ import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.ui.lineitem.LfLineItemEditor
+import com.ledgerflow.core.ui.picker.LfDetailRow
 
 /**
- * Reviewing one candidate (SPEC.md §5.1). P2-6.
+ * Reviewing one candidate (SPEC.md §5.1). P2-6, redesigned.
  *
- * **Its own screen rather than the entry form**, decided at P2-6. A pending row
- * is not a draft: routing one through `:feature:entry` would put a half-reviewed
- * candidate into `draft_entry` and the drafts stack, where discarding it in one
- * place would leave it alive in the other. The two queues gate different things
- * — one a commit, one unsaved typing (§5.4) — and merging them would blur that.
+ * **The manual entry form's screen, filled in from a message.** Same detail
+ * rows, same pickers, same `Single item | Itemised` control, same line editor —
+ * the pickers and rows are literally the same composables from `:core:ui`, so
+ * the two screens cannot drift. That is the owner's requirement made structural
+ * rather than a thing to remember.
  *
- * §5.1 asks for "fields prefilled and focus on Category picker". Everything else
- * here corrects what the parser read; the category is the one thing it never
- * supplies, so it is the section with nothing pre-chosen.
+ * **There is no book control.** The message already said: "debited" is spend,
+ * "credited" is income, and the parser read that before this screen opened.
+ * Asking again was confusing and is gone. The one exception is a candidate the
+ * parser could not read at all — §5.1's never-drop rows — where there is nothing
+ * to derive from; those get a Book row in the details card, in the same picker
+ * style as every other row, and only then.
  *
- * One card shape for every section, hairline-bordered by [LfCard], with the
- * actions pinned rather than scrolled — the user's decision should not require
- * finding the bottom of a form.
+ * Its own screen rather than `:feature:entry` prefilled: a candidate is not a
+ * draft, and routing one through `draft_entry` would put a half-reviewed
+ * message into the drafts stack, where discarding it in one place leaves it
+ * alive in the other.
  */
 @Composable
 public fun ReviewScreen(
@@ -59,7 +64,7 @@ public fun ReviewScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(state.approved) { if (state.approved) onDone() }
+    LaunchedEffect(state.finished) { if (state.finished) onDone() }
 
     state.message?.let { message ->
         LaunchedEffect(message) {
@@ -67,6 +72,8 @@ public fun ReviewScreen(
             onEvent(ReviewEvent.MessageShown)
         }
     }
+
+    ReviewDialogs(state, onEvent)
 
     LfScaffold(
         modifier = modifier,
@@ -84,132 +91,117 @@ public fun ReviewScreen(
             return@LfScaffold
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = LfTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            LfScreenTitle(title = "Review", subtitle = state.provenanceLine())
+        ReviewForm(state, onEvent, Modifier.padding(padding))
+    }
+}
 
-            BookCard(state, onEvent)
-            DetailsCard(state, onEvent)
-            CategoryCard(state, onEvent)
+/** The form itself, in the entry screen's order: how much, then what for. */
+@Composable
+private fun ReviewForm(
+    state: ReviewUiState,
+    onEvent: (ReviewEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = LfTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+    ) {
+        LfScreenTitle(title = "Review", subtitle = state.provenanceLine())
+
+        LfTextField(
+            value = state.amountText,
+            onValueChange = { onEvent(ReviewEvent.AmountChanged(it)) },
+            label = "Amount",
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        // Under the amount, because that is the order of the decision:
+        // how much, then what for (§5.4, ADR-0018).
+        LfSegmentedControl(
+            options = listOf("Single item", "Itemised"),
+            selectedIndex = if (state.itemised) 1 else 0,
+            onSelect = { onEvent(ReviewEvent.ModeSelected(itemised = it == 1)) },
+        )
+
+        if (state.itemised) {
+            LfLineItemEditor(
+                state = state.editorState(),
+                onEvent = { onEvent(it.toReviewEvent()) },
+            )
         }
+
+        DetailRows(state, onEvent)
+
+        LfTextField(
+            value = state.noteText,
+            onValueChange = { onEvent(ReviewEvent.NoteChanged(it)) },
+            label = "Note",
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
 /**
- * The book, first and unskippable.
+ * The entry form's details card, row for row.
  *
- * No pre-selection when the parser could not read a direction. Law 2 keeps the
- * two ledgers apart precisely because nothing downstream reconciles them, so a
- * default here would be a guess that files income as spend and never surfaces.
+ * Category and Subcategory are absent when itemised: such an entry files at
+ * line grain and stores no category of its own (ADR-0018), so leaving the rows
+ * here would offer a choice that is written nowhere.
+ *
+ * Book appears **only** when the parser could not read a direction. On every
+ * ordinary candidate the message decided it and there is nothing to ask.
  */
 @Composable
-private fun BookCard(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit) {
+private fun DetailRows(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = "Book",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
-            )
-            val books = LedgerType.entries
-            LfSegmentedControl(
-                options = books.map { it.label() },
-                selectedIndex = state.ledger?.let(books::indexOf) ?: -1,
-                onSelect = { onEvent(ReviewEvent.LedgerChosen(books[it])) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (state.ledger == null) {
-                Text(
-                    text = "The message did not say. Choose one.",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textTertiary,
+        Column {
+            if (state.bookIsUnread) {
+                LfDetailRow(
+                    label = "Book",
+                    value = state.ledger?.label(),
+                    placeholder = "Choose",
+                    onClick = { onEvent(ReviewEvent.PickerOpened(ReviewPicker.Book)) },
                 )
+                LfDivider()
             }
-        }
-    }
-}
-
-@Composable
-private fun DetailsCard(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit) {
-    LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-            LfTextField(
-                value = state.amountText,
-                onValueChange = { onEvent(ReviewEvent.AmountChanged(it)) },
-                label = "Amount",
-                modifier = Modifier.fillMaxWidth(),
-            )
-            LfTextField(
-                value = state.merchantText,
-                onValueChange = { onEvent(ReviewEvent.MerchantChanged(it)) },
-                label = "Payee",
-                supportingText = "Added to your merchants when you approve.",
-                modifier = Modifier.fillMaxWidth(),
-            )
-            LfTextField(
-                value = state.noteText,
-                onValueChange = { onEvent(ReviewEvent.NoteChanged(it)) },
-                label = "Note",
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
-
-/**
- * §5.1's emphasis: the one field the parser never fills.
- *
- * Chips rather than a dropdown so the common case is one tap, and inside an
- * [LfActionRow] so a long category list wraps as whole chips at font scale 2.0
- * rather than clipping a label (BUG9).
- */
-@Composable
-private fun CategoryCard(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit) {
-    LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = "Category",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
-            )
-            if (state.ledger == null) {
-                Text(
-                    text = "Choose a book first.",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textTertiary,
+            if (!state.itemised) {
+                LfDetailRow(
+                    label = "Category",
+                    value = state.selectedCategory,
+                    onClick = { onEvent(ReviewEvent.PickerOpened(ReviewPicker.Category())) },
                 )
-                return@LfCard
-            }
-            LfActionRow(alignment = LfActionAlignment.Start) {
-                // Uncategorised is an answer, not a missing one -- approval
-                // accepts a null category, so offering it explicitly is honest.
-                LfChip(
-                    label = "Uncategorised",
-                    style = if (state.categoryId == null) {
-                        LfChipStyle.Selected
-                    } else {
-                        LfChipStyle.Assist
-                    },
-                    onClick = { onEvent(ReviewEvent.CategoryChosen(null)) },
-                )
-                state.categories.forEach { category ->
-                    LfChip(
-                        label = category.displayName().trim(),
-                        style = if (category.id == state.categoryId) {
-                            LfChipStyle.Selected
-                        } else {
-                            LfChipStyle.Assist
+                state.categoryId?.let { parentId ->
+                    LfDivider()
+                    LfDetailRow(
+                        label = "Subcategory",
+                        value = state.selectedSubcategory,
+                        onClick = {
+                            onEvent(ReviewEvent.PickerOpened(ReviewPicker.Subcategory(parentId)))
                         },
-                        onClick = { onEvent(ReviewEvent.CategoryChosen(category.id)) },
                     )
                 }
+                LfDivider()
             }
+            LfDetailRow(
+                label = "Merchant",
+                value = state.selectedMerchant,
+                onClick = { onEvent(ReviewEvent.PickerOpened(ReviewPicker.Merchant)) },
+            )
+            LfDivider()
+            LfDetailRow(
+                label = "Paid with",
+                value = state.selectedPaymentMethod,
+                onClick = { onEvent(ReviewEvent.PickerOpened(ReviewPicker.PaymentMethod)) },
+            )
+            LfDivider()
+            LfDetailRow(
+                label = "Date",
+                value = state.occurredAt.asLocalDate(),
+                onClick = { onEvent(ReviewEvent.DateRequested) },
+            )
         }
     }
 }
@@ -217,8 +209,8 @@ private fun CategoryCard(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit) {
 /**
  * Pinned, so the decision never requires finding the bottom of the form.
  *
- * `xs` padding only: [LfScaffold] has already inset this for the navigation bar,
- * and a uniform `lg` here would stack 24dp on an inset that exists for the same
+ * `xs` padding only: [LfScaffold] has already inset this for the navigation
+ * bar, and a uniform `lg` would stack 24dp on an inset that exists for the same
  * purpose — out of the one thing on screen that scrolls.
  */
 @Composable
@@ -246,15 +238,14 @@ private fun ReviewActions(
     }
 }
 
-private fun LedgerType.label(): String = when (this) {
+internal fun LedgerType.label(): String = when (this) {
     LedgerType.DEBIT -> "Expense"
     LedgerType.CREDIT -> "Income"
 }
 
 private fun ReviewUiState.provenanceLine(): String = buildList {
     add(sourceLabel)
-    add(occurredAtLabel)
-    rawBodyHint?.let(::add)
+    referenceHint?.let(::add)
     if (needsManualFill) add("nothing was extracted")
 }.filter { it.isNotEmpty() }.joinToString(" · ")
 
@@ -263,7 +254,6 @@ private fun ReviewUiState.provenanceLine(): String = buildList {
 private val sampleCategories = listOf(
     Category("c1", null, LedgerType.DEBIT, "Food", "cart", 0x00FF8800, 1, true),
     Category("c2", "c1", LedgerType.DEBIT, "Groceries", "cart", 0x00FF8800, 2, false),
-    Category("c3", null, LedgerType.DEBIT, "Transport", "car", 0x006E8BFF, 3, true),
 )
 
 @PreviewScreenSizes
@@ -278,11 +268,11 @@ private fun ReviewScreenPreview() {
                 loading = false,
                 ledger = LedgerType.DEBIT,
                 amountText = "2.00",
-                merchantText = "RAMESH KUMAR",
+                rawMerchantName = "RAMESH KUMAR",
                 categories = sampleCategories,
                 sourceLabel = "From an SMS",
-                occurredAtLabel = "27 Aug 2026",
-                rawBodyHint = "Ref 999999999998",
+                occurredAt = 1_787_810_214_627L,
+                referenceHint = "Ref 999999999998",
             ),
             onEvent = {},
             onDone = {},
@@ -291,7 +281,10 @@ private fun ReviewScreenPreview() {
     }
 }
 
-/** The §5.1 never-drop case: nothing extracted, so every field is the user's. */
+/**
+ * §5.1's never-drop case: nothing extracted, so the Book row appears and every
+ * other field is the user's to fill.
+ */
 @PreviewFontScale
 @PreviewLightDark
 @Composable
@@ -302,9 +295,10 @@ private fun ReviewUnparsedPreview() {
                 pendingId = "2",
                 loading = false,
                 ledger = null,
+                bookIsUnread = true,
                 needsManualFill = true,
                 sourceLabel = "From an SMS",
-                occurredAtLabel = "27 Aug 2026",
+                occurredAt = 1_787_810_214_627L,
             ),
             onEvent = {},
             onDone = {},

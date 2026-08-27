@@ -6,6 +6,7 @@ import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.LedgerResult
+import com.ledgerflow.core.domain.ledger.NewLineItem
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
 import com.ledgerflow.core.model.EntryAssignment
@@ -58,16 +59,32 @@ public class RestorePendingUseCase @Inject constructor(
     public suspend operator fun invoke(id: String): Boolean = repository.restore(id)
 }
 
-/** What the user decided on the review screen, over what the parser extracted. */
+/**
+ * What the user decided on the review screen, over what the parser extracted.
+ *
+ * [merchantId] and [merchantName] are the two halves of §5.1's merchant rule.
+ * An id means the user picked an existing merchant and nothing needs creating;
+ * a name means the message carried a payee that matches nothing yet, and
+ * `createOrGet` makes it real at approval. An id wins when both are present.
+ */
 public data class ApprovalEdits(
     val ledger: LedgerType? = null,
     val amount: Money? = null,
     val occurredAt: Long? = null,
+    val merchantId: String? = null,
     val merchantName: String? = null,
     val categoryId: String? = null,
     val subcategoryId: String? = null,
     val paymentMethodId: String? = null,
     val note: String? = null,
+    /**
+     * Itemised lines (ADR-0018). Empty for a single-item candidate.
+     *
+     * An itemised entry files at line grain and carries no category of its own,
+     * which is why [categoryId] and these are not both meaningful at once — the
+     * review screen clears one when the user chooses the other.
+     */
+    val lineItems: List<NewLineItem> = emptyList(),
 )
 
 /**
@@ -187,6 +204,7 @@ public class ApprovePendingUseCase @Inject constructor(
                 paymentMethodId = edits.paymentMethodId,
             ),
             note = edits.note,
+            lineItems = edits.lineItems,
             // The audit trail back to the message. `source_ref_id` is what
             // `findApprovedEntryId` looks the entry up by, so this is not
             // decoration -- it is the idempotency guard's other half.
@@ -206,6 +224,11 @@ public class ApprovePendingUseCase @Inject constructor(
         candidate: PendingTransaction,
         edits: ApprovalEdits,
     ): String? {
+        // A merchant the user picked needs no resolving -- it already exists,
+        // and running it through `createOrGet` would look it up by name to find
+        // the row we were handed the id of.
+        edits.merchantId?.let { return it }
+
         val name = (edits.merchantName ?: candidate.extracted.merchantRaw)
             ?.trim()
             ?.takeIf { it.isNotEmpty() }

@@ -53,6 +53,7 @@ import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.ui.picker.LfDetailRow
 import com.ledgerflow.core.ui.lineitem.LfLineItemEditor
 import com.ledgerflow.core.ui.lineitem.LineItemEditorEvent
 import com.ledgerflow.core.model.LedgerType
@@ -436,14 +437,14 @@ private fun DetailRows(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
             // stores no category of its own (ADR-0018). Leaving the rows here
             // would offer a choice that is written nowhere.
             if (!state.itemised) {
-                DetailRow(
+                LfDetailRow(
                     label = "Category",
                     value = state.selectedCategory,
                     onClick = { onEvent(EntryEvent.PickerOpened(EntryPicker.Category())) },
                 )
                 state.categoryId?.let { parentId ->
                     LfDivider()
-                    DetailRow(
+                    LfDetailRow(
                         label = "Subcategory",
                         value = state.selectedSubcategory,
                         onClick = {
@@ -453,53 +454,24 @@ private fun DetailRows(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
                 }
                 LfDivider()
             }
-            DetailRow(
+            LfDetailRow(
                 label = "Merchant",
                 value = state.selectedMerchant,
                 onClick = { onEvent(EntryEvent.PickerOpened(EntryPicker.Merchant)) },
             )
             LfDivider()
-            DetailRow(
+            LfDetailRow(
                 label = "Paid with",
                 value = state.selectedPaymentMethod,
                 onClick = { onEvent(EntryEvent.PickerOpened(EntryPicker.PaymentMethod)) },
             )
             LfDivider()
-            DetailRow(
+            LfDetailRow(
                 label = "Date",
                 value = state.occurredAt.asLocalDate(),
                 onClick = { onEvent(EntryEvent.DateRequested) },
             )
         }
-    }
-}
-
-@Composable
-private fun DetailRow(label: String, value: String?, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .padding(vertical = LfTheme.spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-    ) {
-        Text(
-            text = label,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
-            // A row label is a control label (BUG9): whole, on one line. The
-            // value beside it is what wraps if anything has to.
-            maxLines = 1,
-            softWrap = false,
-        )
-        Text(
-            text = value ?: "None",
-            style = LfTheme.typography.bodyL,
-            color = if (value == null) LfTheme.colors.textTertiary else LfTheme.colors.textPrimary,
-            modifier = Modifier.weight(1f),
-        )
     }
 }
 
