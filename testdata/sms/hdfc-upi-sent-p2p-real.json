@@ -1,0 +1,15 @@
+{
+  "sender": "VM-HDFCBK-T",
+  "note": "REAL format, from the owner's phone (2026-08-27) -- the live test payment whose failure to register exposed the v1 sender-allowlist defect (SPEC.md 16 Q15). Structure and wording verbatim. Three substitutions, because testdata/ is committed: the account last4, the UPI reference, and the payee -- who is a real person rather than a business, which is why this one is redacted where NANDHANA PALACE in the sibling fixture is not. Nothing a rule matches on was changed. Two things this covers that no other fixture does: the sender carries its real TRAI DLT route-class suffix, and the payee is a person, so merchantRaw is a human name rather than a shop.",
+  "expected": {
+    "ruleId": "hdfc-upi-sent-multiline",
+    "amountMinor": 200,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "RAMESH KUMAR",
+    "accountLast4": "1234",
+    "instrumentHint": "UPI",
+    "referenceNo": "999999999998",
+    "occurredAtLocalDate": "2026-08-27"
+  }
+}
