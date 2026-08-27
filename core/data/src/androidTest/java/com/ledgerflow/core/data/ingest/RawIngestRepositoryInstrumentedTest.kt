@@ -415,21 +415,29 @@ class RawIngestRepositoryInstrumentedTest {
      * suppressed anything, P2-5 would have nothing left to write and the
      * suppressed row §3.1 requires to stay visible would never have existed.
      */
+    // `: Unit` is load-bearing, not decoration. This body ends on Truth's
+    // `containsExactly`, which returns `Ordered` rather than void -- so an
+    // expression-bodied `= runBlocking { ... }` infers that as the return type,
+    // JUnit4 rejects the method as "should be void", and it fails the **whole
+    // class** with an `initializationError` before a single test runs. Nothing
+    // in `preMergeCheck` can see it: the sources compile fine and the check is
+    // JUnit's, at load time, on a device.
     @Test
-    fun recordParseOutcome_twoRawRows_produceTwoCandidatesEvenOnAKeyCollision() = runBlocking {
-        val first = captureOneSms("Sent Rs.788.00 To COFFEE HOUSE")
-        val second = repository.record(
-            sms("Sent Rs.788.00 to COFFEE HOUSE", sender = "AD-HDFCBK", at = NOW + 90_000L),
-        ).let { (it as CaptureOutcome.Recorded).rawId }
+    fun recordParseOutcome_twoRawRows_produceTwoCandidatesEvenOnAKeyCollision(): Unit =
+        runBlocking {
+            val first = captureOneSms("Sent Rs.788.00 To COFFEE HOUSE")
+            val second = repository.record(
+                sms("Sent Rs.788.00 to COFFEE HOUSE", sender = "AD-HDFCBK", at = NOW + 90_000L),
+            ).let { (it as CaptureOutcome.Recorded).rawId }
 
-        repository.recordParseOutcome(first, "upi-debit-vpa", candidate())
-        repository.recordParseOutcome(second, "upi-debit-vpa", candidate())
+            repository.recordParseOutcome(first, "upi-debit-vpa", candidate())
+            repository.recordParseOutcome(second, "upi-debit-vpa", candidate())
 
-        val dao = session.requireDatabase().pendingTransactionDao()
-        assertThat(dao.count()).isEqualTo(2)
-        assertThat(dao.withStatus(PendingStatus.PENDING, limit = 10).map { it.dedupeKey })
-            .containsExactly("78800|DEBIT|28333333|1234", "78800|DEBIT|28333333|1234")
-    }
+            val dao = session.requireDatabase().pendingTransactionDao()
+            assertThat(dao.count()).isEqualTo(2)
+            assertThat(dao.withStatus(PendingStatus.PENDING, limit = 10).map { it.dedupeKey })
+                .containsExactly("78800|DEBIT|28333333|1234", "78800|DEBIT|28333333|1234")
+        }
 
     /**
      * **Law 1 at the table.** A candidate is not a ledger row: nothing P2-4
