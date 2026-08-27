@@ -13,16 +13,21 @@ import javax.inject.Inject
 /**
  * What one parse pass made of the queue.
  *
- * [parsed] and [unmatched] count *verdicts*; [created] counts the candidates
- * those verdicts produced. They are reported separately rather than assumed
- * equal because the difference is the interesting number: [alreadyPending] is
- * the worker re-running over work it finished, and [failed] is a row that kept
- * its `CAPTURED` status and will be tried again.
+ * [parsed] and [unmatched] count *verdicts*; the rest count what those verdicts
+ * produced. They are reported separately rather than assumed equal because the
+ * differences are the interesting numbers: [suppressed] is §3.1's cross-source
+ * dedupe firing, [alreadyPending] is the worker re-running over work it
+ * finished, and [failed] is a row that kept its `CAPTURED` status and will be
+ * tried again.
+ *
+ * [created] and [suppressed] both mean a row was written. Nothing the pipeline
+ * resolves goes uncounted, and nothing it resolves goes unwritten.
  */
 public data class ParseReport(
     val parsed: Int,
     val unmatched: Int,
     val created: Int = 0,
+    val suppressed: Int = 0,
     val alreadyPending: Int = 0,
     val failed: Int = 0,
 ) {
@@ -49,6 +54,13 @@ public data class ParseReport(
  * takes it out of the queue first (§5.1), and a notification from a
  * non-allowlisted package was never captured at all (§5.2).
  *
+ * **Cross-source dedupe happens beneath this class, not in it** (§3.1). The
+ * repository decides on the write, inside the same transaction as the insert,
+ * because two messages for one payment routinely arrive seconds apart and a
+ * check made up here could let both pass. What this class does is compute the
+ * key and count the outcome -- a suppressed candidate is still a row, still
+ * visible under the Inbox's "Suppressed" filter, and never a drop.
+ *
  * **Nothing here reaches the ledger.** Law 1: a candidate waits for a human, and
  * only `ApproveTransactionUseCase` may insert into `ledger_entry`.
  *
@@ -72,6 +84,7 @@ public class ParseCapturedMessages @Inject constructor(
         var parsed = 0
         var unmatched = 0
         var created = 0
+        var suppressed = 0
         var alreadyPending = 0
         var failed = 0
 
@@ -97,13 +110,26 @@ public class ParseCapturedMessages @Inject constructor(
                 }
             }
 
-            when (repository.recordParseOutcome(captured.rawId, ruleId, captured.candidate(extracted))) {
-                is PendingWriteOutcome.Created -> created++
+            val outcome = repository.recordParseOutcome(
+                captured.rawId,
+                ruleId,
+                captured.candidate(extracted),
+            )
+            when (outcome) {
+                is PendingWriteOutcome.Created -> {
+                    created++
+                    // A flip: this arrival scored higher than one already there,
+                    // so the incumbent became the suppressed row (§3.1). Counted
+                    // here so the two numbers still add up to rows written.
+                    if (outcome.supersededPendingId != null) suppressed++
+                }
+
+                is PendingWriteOutcome.Suppressed -> suppressed++
                 is PendingWriteOutcome.AlreadyPending -> alreadyPending++
                 is PendingWriteOutcome.Failed -> failed++
             }
         }
-        return ParseReport(parsed, unmatched, created, alreadyPending, failed)
+        return ParseReport(parsed, unmatched, created, suppressed, alreadyPending, failed)
     }
 
     /**
@@ -122,10 +148,11 @@ public class ParseCapturedMessages @Inject constructor(
     private fun CapturedEvent.candidate(extracted: ExtractedTransaction) = PendingCandidate(
         source = event.sourceType.toEntrySource(),
         extracted = extracted,
-        // Capture time is the fallback only, and only inside the key: the
-        // payload keeps a null `occurredAt` so the review screen asks rather
-        // than asserting a date the bank never gave. See DedupeKey.compute.
-        dedupeKey = DedupeKey.compute(extracted, event.receivedAt, rawId),
+        // Amount and direction only. The ±3 minute window and the
+        // account/merchant comparison live where they work -- on `created_at`
+        // and in DuplicateMatcher -- because measured against the real corpus
+        // both of §3.1's other components diverge by source. See DedupeKey.
+        dedupeKey = DedupeKey.compute(extracted, rawId),
     )
 
     private companion object {

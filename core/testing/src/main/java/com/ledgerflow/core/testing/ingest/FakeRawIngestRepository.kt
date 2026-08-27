@@ -2,6 +2,8 @@ package com.ledgerflow.core.testing.ingest
 
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
 import com.ledgerflow.core.domain.ingest.CapturedEvent
+import com.ledgerflow.core.domain.ingest.DedupeKey
+import com.ledgerflow.core.domain.ingest.DuplicateMatcher
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.ingest.ParserRule
 import com.ledgerflow.core.domain.ingest.PendingCandidate
@@ -50,6 +52,21 @@ public class FakeRawIngestRepository(
      * entries for the same `rawId`, which is the bug.
      */
     public val pending: MutableMap<String, PendingCandidate> = mutableMapOf()
+
+    /**
+     * Which candidates lost a dedupe, keyed by raw id, valued by the winner's
+     * pending id — the fake's `suppressed_by_id`.
+     *
+     * A suppressed candidate stays in [pending]: §3.1 retains the row and shows
+     * it under the Inbox's "Suppressed" filter, so a fake that removed it would
+     * let a test assert "one pending row" about a pipeline that had actually
+     * dropped one.
+     */
+    public val suppressedBy: MutableMap<String, String> = mutableMapOf()
+
+    /** Candidates that won, or were never contested. What the Inbox lists. */
+    public val liveCandidates: Map<String, PendingCandidate>
+        get() = pending.filterKeys { it !in suppressedBy }
 
     /** Set to make the next [recordParseOutcome] fail, as a locked vault would. */
     public var failPendingWrites: Boolean = false
@@ -119,8 +136,43 @@ public class FakeRawIngestRepository(
         pending[rawId]?.let { return PendingWriteOutcome.AlreadyPending("pending-$rawId") }
 
         parseOutcomes += Triple(rawId, ruleId, ruleId != null)
+
+        // §3.1's dedupe, through the same DuplicateMatcher production uses.
+        // Reimplementing the rule here is the trap: the fake would then agree
+        // with whatever the test author believed rather than with the code, and
+        // a pipeline test could pass against a rule that does not ship.
+        //
+        // No window, because there is no clock -- everything the fake holds is
+        // "recent". That makes it stricter than production, never looser, so a
+        // dedupe the fake reports is a dedupe the database would also make.
+        val winner = pending.entries
+            .filter { (otherRaw, other) ->
+                otherRaw != rawId &&
+                    suppressedBy[otherRaw] == null &&
+                    !DedupeKey.isUnkeyed(candidate.dedupeKey) &&
+                    other.dedupeKey == candidate.dedupeKey &&
+                    DuplicateMatcher.isSameTransaction(candidate.extracted, other.extracted)
+            }
+            .maxByOrNull { it.value.confidence }
+
         pending[rawId] = candidate
-        return PendingWriteOutcome.Created("pending-$rawId")
+
+        return when {
+            winner == null -> PendingWriteOutcome.Created("pending-$rawId")
+
+            winner.value.confidence >= candidate.confidence -> {
+                suppressedBy[rawId] = "pending-${winner.key}"
+                PendingWriteOutcome.Suppressed("pending-$rawId", "pending-${winner.key}")
+            }
+
+            else -> {
+                suppressedBy[winner.key] = "pending-$rawId"
+                PendingWriteOutcome.Created(
+                    pendingId = "pending-$rawId",
+                    supersededPendingId = "pending-${winner.key}",
+                )
+            }
+        }
     }
 
     private companion object {

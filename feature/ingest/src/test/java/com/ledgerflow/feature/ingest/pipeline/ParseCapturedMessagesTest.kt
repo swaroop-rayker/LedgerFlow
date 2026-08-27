@@ -48,6 +48,33 @@ class ParseCapturedMessagesTest {
         confidenceBase = 0.9,
     )
 
+    /** The paying app's notification: an amount and a payee, no account, no date. */
+    private val notificationRule = ParserRule(
+        id = "test-notification-paid",
+        rulesetVersion = 1,
+        priority = 20,
+        senderPattern = "paisa",
+        bodyPattern = """Paid Rs\.(?<amount>[\d,.]+) to (?<merchantRaw>[^\n]+)""",
+        fieldMap = mapOf(
+            ExtractionField.AMOUNT to "amount",
+            ExtractionField.MERCHANT_RAW to "merchantRaw",
+        ),
+        direction = ExtractedDirection.DEBIT,
+        confidenceBase = 0.7,
+    )
+
+    private suspend fun captureNotification(body: String) {
+        repository.record(
+            RawIngestEvent(
+                sourceType = IngestSourceType.NOTIFICATION,
+                sender = "Google Pay",
+                body = body,
+                receivedAt = CAPTURED_AT + 8_000L,
+                packageName = "com.google.android.apps.nbu.paisa.user",
+            ),
+        )
+    }
+
     private suspend fun capture(body: String, sender: String = SENDER) {
         repository.record(
             RawIngestEvent(
@@ -164,9 +191,54 @@ class ParseCapturedMessagesTest {
 
         parse()
 
-        // §3.1's four components, with the account winning the discriminator.
-        assertThat(repository.pending.values.single().dedupeKey)
-            .isEqualTo("78800|DEBIT|${CAPTURED_AT / 60_000L}|1234")
+        // Amount and direction. The minute and the discriminator left the key
+        // because both diverge by source on real messages -- see DedupeKey.
+        assertThat(repository.pending.values.single().dedupeKey).isEqualTo("78800|DEBIT")
+    }
+
+    /**
+     * §3.1 end to end through the pipeline: one payment, two sources, one row to
+     * review.
+     *
+     * The repository fake decides suppression through the same
+     * `DuplicateMatcher` production uses, so what this covers is the pipeline's
+     * half -- computing a key both sources land in, and counting the outcome
+     * without losing a row.
+     */
+    @Test
+    fun invoke_onePaymentSeenByBothSources_leavesOneLiveCandidate() = runTest {
+        repository.rules = listOf(debitRule, notificationRule)
+        capture(realDebitSms)
+        captureNotification("Paid Rs.788.00 to COFFEE HOUSE")
+
+        val report = parse()
+
+        assertThat(report.total).isEqualTo(2)
+        // Both written -- §3.1 retains the loser and shows it under "Suppressed".
+        assertThat(repository.pending).hasSize(2)
+        assertThat(report.suppressed).isEqualTo(1)
+        // ...and only one is live.
+        assertThat(repository.liveCandidates).hasSize(1)
+    }
+
+    /**
+     * Two unparseable messages are never duplicates of each other (§5.1).
+     *
+     * They share no amount, so they get non-colliding keys. Without that, the
+     * second would be suppressed as a copy of the first and a financial SMS
+     * would go invisible by way of the dedupe layer.
+     */
+    @Test
+    fun invoke_twoUnmatchedMessages_bothStayLive() = runTest {
+        repository.rules = listOf(debitRule)
+        capture("One wording no rule understands.")
+        capture("Another wording no rule understands.")
+
+        val report = parse()
+
+        assertThat(report.unmatched).isEqualTo(2)
+        assertThat(report.suppressed).isEqualTo(0)
+        assertThat(repository.liveCandidates).hasSize(2)
     }
 
     @Test

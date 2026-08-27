@@ -42,6 +42,17 @@ public interface SmsRawDao {
     public suspend fun updateStatus(id: String, status: RawParseStatus, ruleId: String?)
 
     /**
+     * §3.1's `DUPLICATE_SUPPRESSED`, **without touching `matched_rule_id`**.
+     *
+     * A retroactive flip re-marks a row that was already `PARSED`, and which
+     * rule parsed it is still true and still what the rule test bench reads.
+     * Reusing [updateStatus] would need the caller to carry the rule id back
+     * from a row it has no reason to have read.
+     */
+    @Query("UPDATE sms_raw SET parse_status = :status WHERE id = :id")
+    public suspend fun updateStatusOnly(id: String, status: RawParseStatus)
+
+    /**
      * D-09: the body goes, the row stays.
      *
      * Blanking rather than deleting, so the parse result and anything derived
@@ -98,6 +109,10 @@ public interface NotificationRawDao {
             "WHERE id = :id",
     )
     public suspend fun updateStatus(id: String, status: RawParseStatus, ruleId: String?)
+
+    /** See [SmsRawDao.updateStatusOnly]. */
+    @Query("UPDATE notification_raw SET parse_status = :status WHERE id = :id")
+    public suspend fun updateStatusOnly(id: String, status: RawParseStatus)
 
     @Query(
         "UPDATE notification_raw SET body = '', title = NULL " +
@@ -345,6 +360,53 @@ public interface PendingTransactionDao {
 
     @Query("SELECT * FROM pending_transaction WHERE id = :id")
     public suspend fun byId(id: String): PendingTransactionEntity?
+
+    /**
+     * Candidates sharing a dedupe bucket inside §3.1's ±3 minute window — P2-5's
+     * lookup.
+     *
+     * This is the statement `Index(dedupe_key, created_at)` exists for: an
+     * equality on the key and a range on the time, served as one index scan.
+     *
+     * **Already-suppressed rows are excluded.** A row that lost a dedupe must
+     * not go on to win one; a third arrival is compared against the row that
+     * survived, and matching it transitively matches the rest of the group. That
+     * also keeps `suppressed_by_id` one hop rather than a chain the Inbox would
+     * have to walk.
+     *
+     * Every status is otherwise in scope, `APPROVED` included. If the user has
+     * already approved the SMS candidate when the notification lands, the
+     * notification is still a duplicate of it, and suppressing it is exactly
+     * what stops the same payment reaching the ledger twice.
+     */
+    @Query(
+        "SELECT * FROM pending_transaction " +
+            "WHERE dedupe_key = :key AND suppressed_by_id IS NULL " +
+            "AND created_at BETWEEN :from AND :to " +
+            "ORDER BY created_at",
+    )
+    public suspend fun inDedupeWindow(
+        key: String,
+        from: Long,
+        to: Long,
+    ): List<PendingTransactionEntity>
+
+    /**
+     * Marks one candidate as the loser of a dedupe (§3.1).
+     *
+     * Scoped to `status = 'PENDING'`, and that predicate is load-bearing rather
+     * than defensive. A retroactive flip -- the later, richer extraction winning
+     * -- must never suppress a row the user has already **approved**: that row
+     * has a `ledger_entry` behind it, and hiding its candidate would orphan the
+     * only record of how the entry got there. An approved or discarded row has
+     * been decided by a human and this statement affects no rows, which the
+     * caller reads as "do not flip".
+     */
+    @Query(
+        "UPDATE pending_transaction SET suppressed_by_id = :winnerId " +
+            "WHERE id = :id AND status = 'PENDING' AND suppressed_by_id IS NULL",
+    )
+    public suspend fun suppress(id: String, winnerId: String): Int
 
     /** Newest first, as §6.1's `INDEX(status, created_at DESC)` serves. The Inbox reads this at P2-6. */
     @Query(

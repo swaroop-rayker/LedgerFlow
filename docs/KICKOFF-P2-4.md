@@ -133,8 +133,8 @@ coverage.
 | **P2-1** | Schema v6 — the ingest tables | ✅ `d8f7ad0` |
 | **P2-2** | Capture goes live (persisting sink, allowlist filter, worker) | ✅ `57b5230` |
 | **P2-3** | Rule engine + shipped ruleset + golden corpus | ✅ `f96e116` |
-| **P2-4** | **`ParseIngestWorker` → `pending_transaction`** | ⬅ **do this** |
-| P2-5 | Cross-source dedupe (±3 min key, `DUPLICATE_SUPPRESSED`) | pending |
+| **P2-4** | `ParseIngestWorker` → `pending_transaction` | ✅ |
+| **P2-5** | Cross-source dedupe (±3 min window, `DUPLICATE_SUPPRESSED`) | ✅ |
 | P2-6 | `:feature:inbox` — list, filters, review, approve/discard | pending |
 | P2-7 | Notifications — `inbox_high`, deep link, actions, grouping | pending |
 | P2-8 | Notification-listener permission UX, rebind, health banner | pending |

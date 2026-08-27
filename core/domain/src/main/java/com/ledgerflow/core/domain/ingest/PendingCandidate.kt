@@ -70,8 +70,33 @@ public data class PendingCandidate(
  */
 public sealed interface PendingWriteOutcome {
 
-    /** Written. [pendingId] is the `pending_transaction` row. */
-    public data class Created(val pendingId: String) : PendingWriteOutcome
+    /**
+     * Written, and it is the one the user will review.
+     *
+     * [supersededPendingId] is non-null when this candidate arrived second and
+     * scored *higher* than an existing one, so the incumbent was suppressed in
+     * its favour (§3.1: keep the higher-confidence extraction). That is the
+     * common order rather than the exotic one -- the paying app's notification
+     * fires first and is sparser, and the bank SMS lands seconds later carrying
+     * the account and the reference.
+     */
+    public data class Created(
+        val pendingId: String,
+        val supersededPendingId: String? = null,
+    ) : PendingWriteOutcome
+
+    /**
+     * Written, and suppressed against a candidate that was already there (§3.1).
+     *
+     * **Not a discard.** The row exists, keeps its extraction, and is visible
+     * under the Inbox's "Suppressed" filter; [winnerPendingId] is the walk back
+     * to the row that won. A duplicate the user cannot see is indistinguishable
+     * from a message that was dropped, which §5.1 forbids.
+     */
+    public data class Suppressed(
+        val pendingId: String,
+        val winnerPendingId: String,
+    ) : PendingWriteOutcome
 
     /**
      * This raw row had already produced a candidate.

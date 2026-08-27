@@ -6,6 +6,8 @@ import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.database.LedgerFlowDatabase
+import com.ledgerflow.core.database.dao.PendingTransactionDao
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
 import com.ledgerflow.core.database.entity.ParserRuleEntity
@@ -14,6 +16,8 @@ import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.database.entity.SmsRawEntity
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
 import com.ledgerflow.core.domain.ingest.CapturedEvent
+import com.ledgerflow.core.domain.ingest.DedupeKey
+import com.ledgerflow.core.domain.ingest.DuplicateMatcher
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractionField
 import com.ledgerflow.core.domain.ingest.IngestSourceType
@@ -292,15 +296,25 @@ public class DefaultRawIngestRepository @Inject constructor(
                 }
 
                 val pendingId = ids.generate()
+                val now = clock.nowMillis()
+
+                // §3.1's cross-source dedupe. Inside the same transaction as the
+                // insert, deliberately: two messages for one payment routinely
+                // arrive seconds apart, and a check that ran before the write
+                // could let both pass and both insert.
+                val winner = findDuplicate(pendingDao, candidate, now)
                 pendingDao.insert(
                     PendingTransactionEntity(
                         id = pendingId,
                         source = candidate.source,
                         dedupeKey = candidate.dedupeKey,
-                        // P2-5's job. A candidate is never born suppressed --
-                        // the row that loses a dedupe is chosen after both
-                        // exist, and §3.1 keeps the loser visible.
-                        suppressedById = null,
+                        // Non-null when this candidate lost a dedupe. The row
+                        // is still written and still visible -- §3.1 keeps the
+                        // loser under the Inbox's "Suppressed" filter, because a
+                        // duplicate the user cannot see is indistinguishable
+                        // from a message that was dropped.
+                        suppressedById = winner?.takeIf { it.confidence >= candidate.confidence }
+                            ?.id,
                         // The parameter, not a field on the candidate: this is
                         // the same id the check above used and the same row the
                         // verdict lands on, so there is one value and no way for
@@ -314,7 +328,7 @@ public class DefaultRawIngestRepository @Inject constructor(
                         // see the port's KDoc.
                         status = PendingStatus.PENDING,
                         needsManualFill = candidate.needsManualFill,
-                        createdAt = clock.nowMillis(),
+                        createdAt = now,
                         reviewedAt = null,
                         approvedEntryId = null,
                     ),
@@ -327,7 +341,39 @@ public class DefaultRawIngestRepository @Inject constructor(
                 database.smsRawDao().updateStatus(rawId, status, ruleId)
                 database.notificationRawDao().updateStatus(rawId, status, ruleId)
 
-                PendingWriteOutcome.Created(pendingId)
+                when {
+                    winner == null -> PendingWriteOutcome.Created(pendingId)
+
+                    // The incumbent scored at least as well: this arrival is the
+                    // duplicate. Ties keep the row that was already there, which
+                    // makes the outcome independent of delivery order.
+                    winner.confidence >= candidate.confidence -> {
+                        markRawDuplicateSuppressed(database, rawId)
+                        PendingWriteOutcome.Suppressed(pendingId, winner.id)
+                    }
+
+                    // §3.1: keep the higher-confidence extraction. The richer
+                    // message usually arrives second -- the paying app notifies
+                    // first and sparsely, the bank SMS follows with the account
+                    // and the reference -- so this is the common path, not the
+                    // exotic one.
+                    else -> {
+                        // Refuses on an APPROVED or DISCARDED incumbent, which is
+                        // the point: that row has been decided by a human and may
+                        // already have a `ledger_entry` behind it.
+                        val flipped = pendingDao.suppress(winner.id, pendingId) > 0
+                        if (flipped) {
+                            markRawDuplicateSuppressed(database, winner.rawRefId)
+                            PendingWriteOutcome.Created(pendingId, supersededPendingId = winner.id)
+                        } else {
+                            // The incumbent could not be suppressed, so it stands
+                            // and this one yields to it rather than both standing.
+                            pendingDao.suppress(pendingId, winner.id)
+                            markRawDuplicateSuppressed(database, rawId)
+                            PendingWriteOutcome.Suppressed(pendingId, winner.id)
+                        }
+                    }
+                }
             }
         }.getOrElse { throwable ->
             // The raw row keeps CAPTURED, so the next pass retries it. Returning
@@ -335,6 +381,58 @@ public class DefaultRawIngestRepository @Inject constructor(
             // follows: a worker that throws is a crash in a background process.
             PendingWriteOutcome.Failed(throwable.message ?: throwable::class.java.name)
         }
+    }
+
+    /**
+     * The candidate this one is a duplicate of, or null.
+     *
+     * Two stages, and the split is §3.1's own: the key puts candidates in a
+     * bucket and the window bounds it, both served by one index scan; then
+     * [DuplicateMatcher] decides whether anything the two both carry actually
+     * contradicts. An unkeyed candidate -- no amount extracted -- can never
+     * match, which is what stops two unparseable messages in one window from
+     * suppressing each other and turning §5.1's never-drop rule into a drop.
+     *
+     * The **highest-confidence** compatible row wins rather than the nearest in
+     * time, so that a third arrival is judged against the best of the group.
+     */
+    private suspend fun findDuplicate(
+        dao: PendingTransactionDao,
+        candidate: PendingCandidate,
+        now: Long,
+    ): PendingTransactionEntity? {
+        if (DedupeKey.isUnkeyed(candidate.dedupeKey)) return null
+
+        return dao.inDedupeWindow(
+            key = candidate.dedupeKey,
+            from = now - DuplicateMatcher.WINDOW_MILLIS,
+            to = now + DuplicateMatcher.WINDOW_MILLIS,
+        )
+            .filter { row ->
+                val extracted = ExtractedTransactionJson.decode(row.extractedJson)
+                // A payload this build cannot read is not evidence of a
+                // duplicate. Treating an unreadable row as a match would
+                // suppress a good candidate on the strength of a bad one.
+                extracted != null &&
+                    DuplicateMatcher.isSameTransaction(candidate.extracted, extracted)
+            }
+            .maxByOrNull { it.confidence }
+    }
+
+    /**
+     * §3.1: the suppressed candidate's raw row records `DUPLICATE_SUPPRESSED`.
+     *
+     * Both tables again, for the same reason the verdict write does it: the id
+     * says nothing about which table holds the row, and asking would mean
+     * branching on source.
+     */
+    private suspend fun markRawDuplicateSuppressed(
+        database: LedgerFlowDatabase,
+        rawId: String?,
+    ) {
+        val id = rawId ?: return
+        database.smsRawDao().updateStatusOnly(id, RawParseStatus.DUPLICATE_SUPPRESSED)
+        database.notificationRawDao().updateStatusOnly(id, RawParseStatus.DUPLICATE_SUPPRESSED)
     }
 
     /**

@@ -169,10 +169,44 @@ Rationale: in the current Indian payments landscape, a `NotificationListenerServ
   every unparseable message in one minute look like a duplicate of every other,
   which is §5.1's never-drop rule defeated by the dedupe layer instead of by the
   parser.
+- **P2-5 made dedupe real, and rewrote the key to do it.** `recordParseOutcome`
+  now decides suppression *inside the same transaction as the insert* — two
+  messages for one payment routinely arrive seconds apart, and a check made
+  before the write could let both pass. The loser is written, kept and marked
+  with `suppressed_by_id`, and its raw row records `DUPLICATE_SUPPRESSED`
+  without losing `matched_rule_id`. §3.1's "keep the higher-confidence
+  extraction" is honoured retroactively: the paying app notifies first and
+  sparsely, the bank SMS follows with the account and the reference, so the
+  richer message usually arrives *second* and the incumbent is suppressed in its
+  favour. **Except when the incumbent is already `APPROVED`** — that row has a
+  `ledger_entry` behind it and suppressing its candidate would orphan the only
+  record of how the entry got there, so the later arrival yields instead. The
+  named test CLAUDE.md §7 requires,
+  `Dedupe_SameTxnAcrossSources_ProducesOnePending`, is instrumented and was
+  verified to fail with the mechanism disabled. **No schema change: still v7.**
 - **P2-2 also introduced WorkManager**, configured through `LedgerFlowApplication` as a `Configuration.Provider` with the Hilt worker factory; its manifest initialiser is removed, because the default one runs before Hilt has a graph and would leave an `@HiltWorker` unconstructable at runtime with nothing at compile time to say so. It brings `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` and `FOREGROUND_SERVICE` into the merged manifest. **None of them is `INTERNET`** and Law 6 is intact (`restrictedPermissionCheck` covers it), but the app's permission list is now four longer than it was, which for an offline-first product is worth stating rather than discovering.
 - `RECEIVE_SMS` appears in `src/smsFull/AndroidManifest.xml` and nowhere else, enforced by `restrictedPermissionCheck` (Gradle) and a mirrored CI step rather than by memory. The same check bans `INTERNET` in every source set of every module (Law 6).
 
-**Cross-source dedupe** is mandatory: a UPI payment commonly fires *both* a bank SMS and a GPay notification. Dedupe key = `(amountMinor, direction, roundToMinute(occurredAt), accountLast4 ?: merchantNormalized)` within a **±3 minute** window. On collision, keep the higher-confidence extraction and record the second in `sms_raw`/`notification_raw` as `DUPLICATE_SUPPRESSED` (visible in the Inbox's "Suppressed" filter — never invisible).
+**Cross-source dedupe** is mandatory: a UPI payment commonly fires *both* a bank SMS and a GPay notification. On collision, keep the higher-confidence extraction and record the second in `sms_raw`/`notification_raw` as `DUPLICATE_SUPPRESSED` (visible in the Inbox's "Suppressed" filter — never invisible).
+
+**The key, as shipped at P2-5, is not the one this section originally specified.** The original was `(amountMinor, direction, roundToMinute(occurredAt), accountLast4 ?: merchantNormalized)` within a ±3 minute window. Measured against the real corpus, **both of its variable components diverge by source**, so it could never match an SMS against a notification:
+
+- **The minute.** `DateText` resolves a bare `On 27/08/26` through `LocalDate.atStartOfDay`, so a real HDFC debit's `occurredAt` is *midnight*. A notification for the same payment extracts no date at all — 0 of 5 matched notification fixtures do — and falls back to capture time. The two buckets coincide only for a payment made in the first minute of a day.
+- **The discriminator.** SMS carries `accountLast4` (14 of 16 matched fixtures); notifications never do (0 of 5). `accountLast4 ?: merchantNormalized` therefore *guarantees* the two sources pick different fields — the one component meant to identify a transaction is the one they cannot share.
+
+So each moved to where it works, and the shape is now:
+
+| Part | Where it lives | Why |
+|---|---|---|
+| `amountMinor`, `direction` | `pending_transaction.dedupe_key` | The bucket. Coarse enough to contain both sources' view of one payment; a credit is still never suppressed against a debit. |
+| ±3 minutes | range on `created_at` | **Capture time**, not `occurredAt`: the two sources observe the same payment within seconds, whatever the message claims. This is what `INDEX(dedupe_key, created_at)` was always shaped for — had the minute belonged in the key, `created_at` would not need to be in that index. |
+| `accountLast4`, `merchantNormalized`, `referenceNo` | `DuplicateMatcher` | **Contradiction, not agreement.** Two candidates in one bucket and window are the same transaction *unless a field they both carry disagrees*. A field one side lacks proves nothing. |
+
+A candidate with **no extracted amount** gets a deliberately non-colliding key, so two unparseable messages in one window can never suppress each other — §5.1's never-drop rule, defended against the dedupe layer rather than only against the parser.
+
+**What this accepts:** two genuinely different payments of the same amount and direction, inside three minutes, with nothing distinguishing them, will merge. §3.1 makes that recoverable rather than lossy — the suppressed row is retained and visible. A missed merge shows the user a duplicate; a wrong merge hides a row that is still there. Neither is free and only one is invisible.
+
+**A known false negative:** where the bank SMS names a payee ("RAMESH KUMAR") and the app's notification shows a VPA ("ramesh@okhdfcbank"), the two normalise differently and read as a contradiction, so the payment is not merged. That errs toward showing two rows, which is the safe direction, and is left for P2-9 to revisit once the corpus holds 50+50 real messages rather than being guessed at now.
 
 ---
 

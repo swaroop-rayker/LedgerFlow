@@ -11,7 +11,9 @@ import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.ParserRuleEntity
+import com.ledgerflow.core.database.entity.PendingTransactionEntity
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
+import com.ledgerflow.core.domain.ingest.DedupeKey
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.ingest.IngestSourceType
@@ -351,22 +353,71 @@ class RawIngestRepositoryInstrumentedTest {
     // spanning two tables. A fake can be written to behave atomically; only real
     // Room and real SQLCipher can be observed to.
 
+    /**
+     * A bank SMS as the ruleset extracts one: account, payee, reference.
+     *
+     * The key is built by [DedupeKey] rather than typed out, so a change to the
+     * bucket rule reaches these tests instead of leaving them asserting a shape
+     * production no longer writes.
+     */
     private fun candidate(
         amountMinor: Long? = 78_800L,
         source: EntrySource = EntrySource.SMS,
         confidence: Double = 0.9,
-    ) = PendingCandidate(
-        source = source,
-        extracted = ExtractedTransaction(
+        merchantRaw: String? = "COFFEE HOUSE",
+        accountLast4: String? = "1234",
+        referenceNo: String? = null,
+        rawRefId: String = "unused",
+    ): PendingCandidate {
+        val extracted = ExtractedTransaction(
             amount = amountMinor?.let(::Money),
             direction = ExtractedDirection.DEBIT,
-            merchantRaw = "COFFEE HOUSE",
-            accountLast4 = "1234",
+            merchantRaw = merchantRaw,
+            accountLast4 = accountLast4,
             instrumentHint = InstrumentHint.UPI,
+            referenceNo = referenceNo,
             confidence = confidence,
-        ),
-        dedupeKey = "78800|DEBIT|28333333|1234",
+        )
+        return PendingCandidate(
+            source = source,
+            extracted = extracted,
+            dedupeKey = DedupeKey.compute(extracted, rawRefId),
+        )
+    }
+
+    /**
+     * The paying app's notification for the same payment: an amount and a payee,
+     * no account and no date. That is not a simplification -- 0 of 5 matched
+     * notification fixtures extract either.
+     */
+    private fun notificationCandidate(
+        amountMinor: Long = 78_800L,
+        confidence: Double = 0.7,
+        merchantRaw: String? = "Coffee House",
+    ) = candidate(
+        amountMinor = amountMinor,
+        source = EntrySource.NOTIFICATION,
+        confidence = confidence,
+        merchantRaw = merchantRaw,
+        accountLast4 = null,
     )
+
+    private suspend fun captureOneNotification(body: String = "Paid Rs.788 to Coffee House"): String {
+        val outcome = repository.record(
+            RawIngestEvent(
+                sourceType = IngestSourceType.NOTIFICATION,
+                sender = "Google Pay",
+                body = body,
+                receivedAt = NOW,
+                packageName = "com.google.android.apps.nbu.paisa.user",
+            ),
+        )
+        return (outcome as CaptureOutcome.Recorded).rawId
+    }
+
+    private suspend fun liveCandidates() = session.requireDatabase().pendingTransactionDao()
+        .withStatus(PendingStatus.PENDING, limit = 50)
+        .filter { it.suppressedById == null }
 
     private suspend fun captureOneSms(body: String = "Sent Rs.788.00 To COFFEE HOUSE"): String {
         val outcome = repository.record(sms(body))
@@ -396,7 +447,9 @@ class RawIngestRepositoryInstrumentedTest {
         assertThat(row?.status).isEqualTo(PendingStatus.PENDING)
         assertThat(row?.source).isEqualTo(EntrySource.SMS)
         assertThat(row?.rawRefId).isEqualTo(rawId)
-        assertThat(row?.dedupeKey).isEqualTo("78800|DEBIT|28333333|1234")
+        // Amount and direction. The minute and the discriminator moved out of the
+        // key at P2-5 -- both diverge by source on real messages (see DedupeKey).
+        assertThat(row?.dedupeKey).isEqualTo("78800|DEBIT")
         assertThat(row?.suppressedById).isNull()
         assertThat(row?.approvedEntryId).isNull()
         assertThat(row?.reviewedAt).isNull()
@@ -459,36 +512,179 @@ class RawIngestRepositoryInstrumentedTest {
     }
 
     /**
-     * Two genuinely different messages are two candidates, even when they share
-     * a dedupe key.
+     * **`Dedupe_SameTxnAcrossSources_ProducesOnePending`** — the named test
+     * CLAUDE.md §7 requires, and the reason §3.1 exists.
      *
-     * Storing the key is P2-4; *acting* on a collision is P2-5. If this step
-     * suppressed anything, P2-5 would have nothing left to write and the
-     * suppressed row §3.1 requires to stay visible would never have existed.
+     * One UPI payment fires a bank SMS *and* a GPay notification. The SMS
+     * carries an account and a reference; the notification carries a payee and
+     * nothing else. They must reach the user as one row to review, and the other
+     * must still be there to look at.
      */
-    // `: Unit` is load-bearing, not decoration. This body ends on Truth's
-    // `containsExactly`, which returns `Ordered` rather than void -- so an
-    // expression-bodied `= runBlocking { ... }` infers that as the return type,
-    // JUnit4 rejects the method as "should be void", and it fails the **whole
-    // class** with an `initializationError` before a single test runs. Nothing
-    // in `preMergeCheck` can see it: the sources compile fine and the check is
-    // JUnit's, at load time, on a device.
     @Test
-    fun recordParseOutcome_twoRawRows_produceTwoCandidatesEvenOnAKeyCollision(): Unit =
+    fun Dedupe_SameTxnAcrossSources_ProducesOnePending() = runBlocking {
+        val smsRaw = captureOneSms()
+        val notifRaw = captureOneNotification()
+
+        val first = repository.recordParseOutcome(smsRaw, "hdfc-upi-sent", candidate())
+        val second = repository.recordParseOutcome(
+            notifRaw,
+            "notification-upi-paid",
+            notificationCandidate(),
+        )
+
+        assertThat(first).isInstanceOf(PendingWriteOutcome.Created::class.java)
+        assertThat(second).isInstanceOf(PendingWriteOutcome.Suppressed::class.java)
+
+        // One row to review...
+        assertThat(liveCandidates()).hasSize(1)
+        assertThat(liveCandidates().single().source).isEqualTo(EntrySource.SMS)
+
+        // ...and the loser retained and reachable, never discarded (§3.1).
+        val database = session.requireDatabase()
+        assertThat(database.pendingTransactionDao().count()).isEqualTo(2)
+        val suppressed = (second as PendingWriteOutcome.Suppressed)
+        assertThat(database.pendingTransactionDao().byId(suppressed.pendingId)?.suppressedById)
+            .isEqualTo((first as PendingWriteOutcome.Created).pendingId)
+
+        // §3.1: the suppressed candidate's raw row records it.
+        assertThat(database.notificationRawDao().byId(notifRaw)?.parseStatus)
+            .isEqualTo(RawParseStatus.DUPLICATE_SUPPRESSED)
+        // ...and the winner's does not.
+        assertThat(database.smsRawDao().byId(smsRaw)?.parseStatus)
+            .isEqualTo(RawParseStatus.PARSED)
+    }
+
+    /**
+     * The order this actually happens in.
+     *
+     * The paying app notifies first and sparsely; the bank SMS lands seconds
+     * later carrying the account and the reference. §3.1 says keep the
+     * higher-confidence extraction, so the incumbent is suppressed in favour of
+     * the arrival — the flip is the common path, not the exotic one.
+     */
+    @Test
+    fun recordParseOutcome_whenTheRicherMessageArrivesSecond_theIncumbentIsSuppressed() =
         runBlocking {
-            val first = captureOneSms("Sent Rs.788.00 To COFFEE HOUSE")
-            val second = repository.record(
-                sms("Sent Rs.788.00 to COFFEE HOUSE", sender = "AD-HDFCBK", at = NOW + 90_000L),
-            ).let { (it as CaptureOutcome.Recorded).rawId }
+            val notifRaw = captureOneNotification()
+            val smsRaw = captureOneSms()
 
-            repository.recordParseOutcome(first, "upi-debit-vpa", candidate())
-            repository.recordParseOutcome(second, "upi-debit-vpa", candidate())
+            val first = repository.recordParseOutcome(
+                notifRaw,
+                "notification-upi-paid",
+                notificationCandidate(),
+            )
+            val second = repository.recordParseOutcome(smsRaw, "hdfc-upi-sent", candidate())
 
-            val dao = session.requireDatabase().pendingTransactionDao()
-            assertThat(dao.count()).isEqualTo(2)
-            assertThat(dao.withStatus(PendingStatus.PENDING, limit = 10).map { it.dedupeKey })
-                .containsExactly("78800|DEBIT|28333333|1234", "78800|DEBIT|28333333|1234")
+            val winner = (second as PendingWriteOutcome.Created)
+            assertThat(winner.supersededPendingId)
+                .isEqualTo((first as PendingWriteOutcome.Created).pendingId)
+
+            assertThat(liveCandidates()).hasSize(1)
+            assertThat(liveCandidates().single().source).isEqualTo(EntrySource.SMS)
+
+            val database = session.requireDatabase()
+            // The notification's raw row is re-marked, and keeps the rule that
+            // parsed it -- `updateStatusOnly`, not `updateStatus`.
+            assertThat(database.notificationRawDao().byId(notifRaw)?.parseStatus)
+                .isEqualTo(RawParseStatus.DUPLICATE_SUPPRESSED)
+            assertThat(database.notificationRawDao().byId(notifRaw)?.matchedRuleId)
+                .isEqualTo("notification-upi-paid")
         }
+
+    /**
+     * **An approved candidate is never suppressed retroactively.**
+     *
+     * It has a `ledger_entry` behind it, and hiding the candidate would orphan
+     * the only record of how that entry got there. The DAO's `status = 'PENDING'`
+     * predicate is what enforces this; the later, richer arrival yields instead.
+     */
+    @Test
+    fun recordParseOutcome_neverFlipsAnApprovedIncumbent() = runBlocking {
+        val notifRaw = captureOneNotification()
+        val smsRaw = captureOneSms()
+        val database = session.requireDatabase()
+
+        // An already-approved candidate for the same payment, inserted directly
+        // rather than by driving approval -- this test is about what dedupe does
+        // when it meets one, not about how it got there.
+        database.pendingTransactionDao().insert(
+            PendingTransactionEntity(
+                id = "already-approved",
+                source = EntrySource.NOTIFICATION,
+                dedupeKey = notificationCandidate().dedupeKey,
+                suppressedById = null,
+                rawRefId = notifRaw,
+                extractedJson = """{"v":1,"amountMinor":78800,"direction":"DEBIT",""" +
+                    """"merchantRaw":"Coffee House","confidence":0.7}""",
+                confidence = 0.7,
+                status = PendingStatus.APPROVED,
+                needsManualFill = false,
+                createdAt = NOW,
+                reviewedAt = NOW,
+                approvedEntryId = "entry-1",
+            ),
+        )
+
+        // The bank SMS arrives after, and scores higher.
+        val outcome = repository.recordParseOutcome(smsRaw, "hdfc-upi-sent", candidate())
+
+        // It yields rather than orphaning the entry behind the approved row.
+        assertThat(outcome).isInstanceOf(PendingWriteOutcome.Suppressed::class.java)
+        assertThat(database.pendingTransactionDao().byId("already-approved")?.suppressedById)
+            .isNull()
+        assertThat(database.smsRawDao().byId(smsRaw)?.parseStatus)
+            .isEqualTo(RawParseStatus.DUPLICATE_SUPPRESSED)
+    }
+
+    /**
+     * Two genuinely different payments of the same amount, seconds apart, stay
+     * two candidates when something they both carry disagrees.
+     */
+    @Test
+    fun recordParseOutcome_differentPayees_areNotDuplicates() = runBlocking {
+        val firstRaw = captureOneSms("Sent Rs.788.00 To COFFEE HOUSE")
+        val secondRaw = repository.record(
+            sms("Sent Rs.788.00 To BOOK SHOP", sender = "AD-HDFCBK", at = NOW + 30_000L),
+        ).let { (it as CaptureOutcome.Recorded).rawId }
+
+        repository.recordParseOutcome(firstRaw, "hdfc-upi-sent", candidate())
+        val second = repository.recordParseOutcome(
+            secondRaw,
+            "hdfc-upi-sent",
+            candidate(merchantRaw = "BOOK SHOP", accountLast4 = null),
+        )
+
+        assertThat(second).isInstanceOf(PendingWriteOutcome.Created::class.java)
+        assertThat(liveCandidates()).hasSize(2)
+    }
+
+    /**
+     * **§5.1's never-drop rule, defended against the dedupe layer.**
+     *
+     * Two unparseable messages have no amount, so they get non-colliding keys
+     * and can never suppress each other. Without that, the second unmatched
+     * alert of the window would vanish as a "duplicate" of the first — a
+     * financial SMS made invisible by dedupe rather than by the parser.
+     */
+    @Test
+    fun recordParseOutcome_twoUnparseableMessages_bothSurvive() = runBlocking {
+        val firstRaw = captureOneSms("Wording no rule understands.")
+        val secondRaw = repository.record(
+            sms("Different wording no rule understands.", at = NOW + 20_000L),
+        ).let { (it as CaptureOutcome.Recorded).rawId }
+
+        fun blank(rawId: String) = PendingCandidate(
+            source = EntrySource.SMS,
+            extracted = ExtractedTransaction(),
+            dedupeKey = DedupeKey.compute(ExtractedTransaction(), rawId),
+        )
+
+        repository.recordParseOutcome(firstRaw, null, blank(firstRaw))
+        val second = repository.recordParseOutcome(secondRaw, null, blank(secondRaw))
+
+        assertThat(second).isInstanceOf(PendingWriteOutcome.Created::class.java)
+        assertThat(liveCandidates()).hasSize(2)
+    }
 
     /**
      * **Law 1 at the table.** A candidate is not a ledger row: nothing P2-4

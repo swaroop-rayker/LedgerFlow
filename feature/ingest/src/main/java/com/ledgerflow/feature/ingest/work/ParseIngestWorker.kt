@@ -60,8 +60,8 @@ public class ParseIngestWorker @AssistedInject constructor(
             "Triage: ${triaged.sendersFiltered} not allowlisted, " +
                 "${triaged.bodiesPurged} bodies purged. " +
                 "Parse: ${parsed.parsed} matched, ${parsed.unmatched} unmatched. " +
-                "Pending: ${parsed.created} created, ${parsed.alreadyPending} already there, " +
-                "${parsed.failed} deferred.",
+                "Pending: ${parsed.created} created, ${parsed.suppressed} suppressed, " +
+                "${parsed.alreadyPending} already there, ${parsed.failed} deferred.",
         )
         Result.success()
     }.getOrElse { throwable ->
