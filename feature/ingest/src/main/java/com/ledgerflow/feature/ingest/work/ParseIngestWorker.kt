@@ -58,6 +58,7 @@ public class ParseIngestWorker @AssistedInject constructor(
         Log.d(
             TAG,
             "Triage: ${triaged.sendersFiltered} not allowlisted, " +
+                "${triaged.sendersReadmitted} re-admitted, " +
                 "${triaged.bodiesPurged} bodies purged. " +
                 "Parse: ${parsed.parsed} matched, ${parsed.unmatched} unmatched. " +
                 "Pending: ${parsed.created} created, ${parsed.suppressed} suppressed, " +

@@ -42,6 +42,25 @@ public interface SmsRawDao {
     public suspend fun updateStatus(id: String, status: RawParseStatus, ruleId: String?)
 
     /**
+     * SMS the sender allowlist rejected, whose body is still on disk — SPEC.md
+     * §16 Q14's candidates for reconsideration.
+     *
+     * `body != ''` is the D-09 test, and it is why this can work at all:
+     * retention blanks the body at 90 days and keeps the row, so a message past
+     * its window has a record but nothing left to re-parse. Re-admitting one
+     * would produce a `PENDING` row with an empty message behind it, which is
+     * worse than leaving it marked.
+     *
+     * Served by `INDEX(parse_status, received_at)` — the same index the capture
+     * queue uses, read from the other end.
+     */
+    @Query(
+        "SELECT * FROM sms_raw WHERE parse_status = :status AND body != '' " +
+            "ORDER BY received_at LIMIT :limit",
+    )
+    public suspend fun rejectedWithBody(status: RawParseStatus, limit: Int): List<SmsRawEntity>
+
+    /**
      * §3.1's `DUPLICATE_SUPPRESSED`, **without touching `matched_rule_id`**.
      *
      * A retroactive flip re-marks a row that was already `PARSED`, and which
@@ -247,6 +266,19 @@ public interface SenderAllowlistDao {
 
     @Query("SELECT * FROM sender_allowlist ORDER BY sender_pattern")
     public fun observeAll(): Flow<List<SenderAllowlistEntity>>
+
+    /**
+     * The enabled patterns, ordered — the input to §16 Q14's change
+     * fingerprint.
+     *
+     * `enabled = 1` rather than every row, because a disabled pattern admits
+     * nothing: toggling one off and on again lands on the same fingerprint it
+     * started from, and re-triage runs on the way back rather than on both
+     * edges. Ordered so the fingerprint depends on the set and not on the order
+     * SQLite happened to return it in.
+     */
+    @Query("SELECT sender_pattern FROM sender_allowlist WHERE enabled = 1 ORDER BY sender_pattern")
+    public suspend fun enabledPatterns(): List<String>
 
     /** Seeding. See [PackageAllowlistDao.insertMissing] on why this is `IGNORE`. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)

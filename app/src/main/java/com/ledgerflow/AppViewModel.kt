@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
+import com.ledgerflow.core.domain.ingest.IngestWorkTrigger
 import com.ledgerflow.core.domain.usecase.SeedIngestAllowlistsUseCase
 import com.ledgerflow.core.domain.usecase.SeedParserRulesUseCase
 import com.ledgerflow.core.domain.vault.RecoveryReason
@@ -54,6 +55,7 @@ public class AppViewModel @Inject constructor(
     private val purgeAbandonedDrafts: PurgeAbandonedDraftsUseCase,
     private val seedIngestAllowlists: SeedIngestAllowlistsUseCase,
     private val seedParserRules: SeedParserRulesUseCase,
+    private val ingestWork: IngestWorkTrigger,
 ) : ViewModel() {
 
     /**
@@ -107,6 +109,15 @@ public class AppViewModel @Inject constructor(
             // The ruleset lives in the vault beside the allowlists, and for the
             // same reason: there is nothing to write to until it opens.
             seedParserRules()
+
+            // Both of the above can change what the pipeline would now make of
+            // messages it has already seen -- a seed that adds sender patterns
+            // (§16 Q14) or parser rules. Nothing else would ask: the worker is
+            // otherwise only enqueued by a capture, so on a quiet account the
+            // fix for a wrongly-rejected message could sit unrun for days. The
+            // pass is idempotent and collapses under KEEP, so asking on every
+            // launch costs a query that finds nothing.
+            ingestWork.requestParsePass()
         }
     }
 

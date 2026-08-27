@@ -93,6 +93,37 @@ public interface RawIngestRepository {
     public suspend fun triageCapturedSms(limit: Int): Int
 
     /**
+     * Reconsiders SMS the sender allowlist rejected, when the allowlist has
+     * changed since the last pass. Returns how many were re-admitted (SPEC.md
+     * §16 Q14).
+     *
+     * **This is the one place a terminal status becomes non-terminal**, and it
+     * exists because the alternative was found to be indefensible. The shipped
+     * v1 patterns matched no real TRAI DLT header, so every bank SMS on a real
+     * device was marked `SENDER_NOT_ALLOWLISTED` — and without this, fixing the
+     * patterns would have left every message received before the fix
+     * permanently invisible, including the owner's own test payment. It is not
+     * only a migration concern: §5.1 ships a user-editable allowlist, so a user
+     * who notices their bank is missing and adds it would hit the same dead end
+     * by ordinary use.
+     *
+     * D-09 is what makes it possible at all. Retention keeps the raw body for
+     * 90 days precisely so a message stays replayable against a later ruleset
+     * (§16 Q1); a row whose body has been blanked is past that window and is
+     * left marked rather than re-admitted with nothing behind it.
+     *
+     * **Re-admission means `CAPTURED`, not `PENDING`.** The row rejoins the
+     * queue at the point it left, so the rule engine and §5.1's never-drop rule
+     * apply to it exactly as they would to a message that had just arrived.
+     * Nothing here creates a candidate, and nothing here reaches the ledger.
+     *
+     * Bounded like every other sweep. When the pass fills [limit] the change
+     * marker is deliberately **not** advanced, so the next worker run continues
+     * the backlog rather than abandoning what it did not reach.
+     */
+    public suspend fun retriageRejectedSms(limit: Int): Int
+
+    /**
      * D-09: blanks raw bodies past their retention, keeping the rows.
      *
      * Returns how many bodies were cleared. The parse result and any

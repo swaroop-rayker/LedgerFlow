@@ -47,7 +47,15 @@ class AppViewModelTest {
         purgeAbandonedDrafts = PurgeAbandonedDraftsUseCase(drafts),
         seedIngestAllowlists = SeedIngestAllowlistsUseCase(ingest),
         seedParserRules = SeedParserRulesUseCase(ingest),
+        // A lambda, not a fake: what matters here is routing, and the only
+        // thing to say about the trigger is that asking for a pass is not
+        // routing. `parsePassesRequested` is asserted by the one test that
+        // cares -- §16 Q14's re-triage has to be *asked for* at launch, or the
+        // allowlist change that enables it sits unrun until the next SMS.
+        ingestWork = { parsePassesRequested++ },
     )
+
+    private var parsePassesRequested = 0
 
     /**
      * `route` is a `stateIn` over a `scan`, so it starts at [AppRoute.Loading]
@@ -138,6 +146,34 @@ class AppViewModelTest {
         routeOf(FakeVaultRepository(VaultState.Unlocked))
 
         assertThat(drafts.purgeCalls).isEqualTo(1)
+    }
+
+    /**
+     * **Launch asks the pipeline to look again** (SPEC.md §16 Q14).
+     *
+     * Seeding can change what the pipeline would now make of messages it has
+     * already seen -- a shipped seed adding sender patterns, or parser rules.
+     * Nothing else would ask: the worker is otherwise enqueued only by a
+     * capture, so on a quiet account the fix for a wrongly-rejected message sits
+     * unrun until the next SMS happens to arrive. Found on the owner's device,
+     * where the allowlist fix landed and the stuck message stayed stuck.
+     */
+    @Test
+    fun launch_asksForAParsePass_onceTheVaultIsOpen() = runTest(dispatcher) {
+        routeOf(FakeVaultRepository(VaultState.Unlocked))
+
+        assertThat(parsePassesRequested).isEqualTo(1)
+    }
+
+    /**
+     * ...and not before. There is no database to seed against, so a pass would
+     * find nothing and the request would be noise.
+     */
+    @Test
+    fun launch_doesNotAskForAParsePass_beforeTheVaultOpens() = runTest(dispatcher) {
+        routeOf(FakeVaultRepository(VaultState.NeedsOnboarding))
+
+        assertThat(parsePassesRequested).isEqualTo(0)
     }
 
     /** A user who came in through Recovery gets the same housekeeping. */

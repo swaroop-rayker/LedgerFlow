@@ -12,6 +12,7 @@ import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PendingTransactionEntity
+import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
 import com.ledgerflow.core.domain.ingest.DedupeKey
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
@@ -30,6 +31,7 @@ import com.ledgerflow.core.model.RawParseStatus
 import java.io.File
 import java.security.KeyStore
 import java.security.SecureRandom
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -346,6 +348,140 @@ class RawIngestRepositoryInstrumentedTest {
         assertThat(repository.isSenderAllowed("VM-PIZZAS-T")).isFalse()
     }
 
+    // ── §16 Q14: re-triage after an allowlist change ─────────────────────────
+
+    /**
+     * **The owner's stuck payment, recovered.**
+     *
+     * A message rejected under the v1 patterns is reconsidered once the
+     * allowlist gains a pattern that accepts it. Without this the v1 defect was
+     * permanent for everything received before the fix — the pattern change made
+     * the *next* bank SMS work and could not reach the last one.
+     *
+     * The rejection is produced by triage rather than written by hand, so what
+     * is under test is the real round trip: rejected by one allowlist,
+     * re-admitted by another.
+     */
+    @Test
+    fun retriage_afterTheAllowlistLearnsTheSender_readmitsTheMessage() = runBlocking {
+        val database = session.requireDatabase()
+        // An allowlist that does not know this bank yet.
+        database.senderAllowlistDao().insertMissing(
+            listOf(SenderAllowlistEntity("*-OTHERB", "Some other bank", true)),
+        )
+        val rawId = captureOneSms("Sent Rs.2.00 From HDFC Bank A/C *1234 To RAMESH KUMAR")
+
+        assertThat(repository.triageCapturedSms(limit = 10)).isEqualTo(1)
+        assertThat(database.smsRawDao().byId(rawId)?.parseStatus)
+            .isEqualTo(RawParseStatus.SENDER_NOT_ALLOWLISTED)
+
+        // The v2 seed arrives, carrying the DLT-suffixed patterns.
+        repository.seedAllowlists()
+
+        assertThat(repository.retriageRejectedSms(limit = 50)).isEqualTo(1)
+        // Back in the queue at the point it left, not straight to a candidate.
+        assertThat(database.smsRawDao().byId(rawId)?.parseStatus)
+            .isEqualTo(RawParseStatus.CAPTURED)
+        assertThat(repository.capturedEvents(limit = 10).map { it.rawId }).contains(rawId)
+    }
+
+    /**
+     * It runs once per change, not once per worker pass.
+     *
+     * The rejected pile is the user's ordinary personal SMS and grows without
+     * bound; re-checking all of it every time a text arrives would be the
+     * expensive kind of thorough. The fingerprint is what makes the sweep rare.
+     */
+    @Test
+    fun retriage_isANoOp_whenTheAllowlistHasNotChanged() = runBlocking {
+        repository.seedAllowlists()
+        captureOneSms("Personal message from a friend.", sender = "+919876543210")
+        repository.triageCapturedSms(limit = 10)
+
+        // First call establishes the marker...
+        repository.retriageRejectedSms(limit = 50)
+        // ...and the second finds nothing to reconsider.
+        assertThat(repository.retriageRejectedSms(limit = 50)).isEqualTo(0)
+    }
+
+    /**
+     * A sender the allowlist still does not know stays rejected.
+     *
+     * Re-triage reconsiders; it does not admit. Personal SMS must not become
+     * Inbox rows because someone added their bank.
+     */
+    @Test
+    fun retriage_leavesAStillUnknownSenderRejected() = runBlocking {
+        val rawId = captureOneSms("Dinner at 8?", sender = "+919876543210")
+        repository.triageCapturedSms(limit = 10)
+
+        repository.seedAllowlists()
+        assertThat(repository.retriageRejectedSms(limit = 50)).isEqualTo(0)
+
+        assertThat(session.requireDatabase().smsRawDao().byId(rawId)?.parseStatus)
+            .isEqualTo(RawParseStatus.SENDER_NOT_ALLOWLISTED)
+    }
+
+    /**
+     * **D-09 bounds it.** A body blanked by retention has nothing left to parse,
+     * so re-admitting the row would produce a `PENDING` candidate backed by an
+     * empty message — worse than leaving it marked.
+     *
+     * This is why the 90-day window and this feature are the same design: the
+     * body is kept precisely so a message stays replayable (§16 Q1), and past
+     * that window there is nothing to replay.
+     */
+    @Test
+    fun retriage_skipsRowsWhoseBodyRetentionHasCleared() = runBlocking {
+        val database = session.requireDatabase()
+        database.senderAllowlistDao().insertMissing(
+            listOf(SenderAllowlistEntity("*-OTHERB", "Some other bank", true)),
+        )
+        val rawId = captureOneSms("Sent Rs.2.00 From HDFC Bank A/C *1234 To RAMESH KUMAR")
+        repository.triageCapturedSms(limit = 10)
+
+        // Retention catches up with it.
+        now = NOW + TimeUnit.DAYS.toMillis(91)
+        assertThat(repository.purgeExpiredBodies()).isEqualTo(1)
+
+        repository.seedAllowlists()
+        assertThat(repository.retriageRejectedSms(limit = 50)).isEqualTo(0)
+        assertThat(database.smsRawDao().byId(rawId)?.parseStatus)
+            .isEqualTo(RawParseStatus.SENDER_NOT_ALLOWLISTED)
+    }
+
+    /**
+     * A full page leaves the marker alone, so the next run continues.
+     *
+     * Advancing it on a partial sweep would strand every row the pass did not
+     * reach — permanently, because nothing would ever look at them again. That
+     * is the failure this feature exists to undo, reintroduced by its own
+     * pagination.
+     */
+    @Test
+    fun retriage_whenThePageIsFull_doesNotAdvanceTheMarker() = runBlocking {
+        val database = session.requireDatabase()
+        database.senderAllowlistDao().insertMissing(
+            listOf(SenderAllowlistEntity("*-OTHERB", "Some other bank", true)),
+        )
+        repeat(3) { index ->
+            repository.record(
+                sms("Sent Rs.${index + 1}.00 From HDFC Bank A/C *1234 To SHOP", at = NOW + index),
+            )
+        }
+        repository.triageCapturedSms(limit = 10)
+        repository.seedAllowlists()
+
+        // One row at a time. The marker must not advance while a backlog remains.
+        assertThat(repository.retriageRejectedSms(limit = 1)).isEqualTo(1)
+        assertThat(repository.retriageRejectedSms(limit = 1)).isEqualTo(1)
+        assertThat(repository.retriageRejectedSms(limit = 1)).isEqualTo(1)
+
+        assertThat(
+            database.smsRawDao().withStatus(RawParseStatus.CAPTURED, limit = 10),
+        ).hasSize(3)
+    }
+
     // ── P2-4: pending_transaction ────────────────────────────────────────────
     //
     // These are instrumented rather than JVM tests for the reason the P2-4
@@ -419,8 +555,11 @@ class RawIngestRepositoryInstrumentedTest {
         .withStatus(PendingStatus.PENDING, limit = 50)
         .filter { it.suppressedById == null }
 
-    private suspend fun captureOneSms(body: String = "Sent Rs.788.00 To COFFEE HOUSE"): String {
-        val outcome = repository.record(sms(body))
+    private suspend fun captureOneSms(
+        body: String = "Sent Rs.788.00 To COFFEE HOUSE",
+        sender: String = "VM-HDFCBK-T",
+    ): String {
+        val outcome = repository.record(sms(body, sender = sender))
         return (outcome as CaptureOutcome.Recorded).rawId
     }
 

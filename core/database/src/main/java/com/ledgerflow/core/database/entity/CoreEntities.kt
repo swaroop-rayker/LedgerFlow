@@ -33,6 +33,23 @@ public data class AppMetaEntity(
          */
         public const val KEY_CANARY: String = "canary"
         public const val CANARY_VALUE: String = "LedgerFlow-canary-v1"
+
+        /**
+         * A fingerprint of the enabled sender-allowlist patterns (SPEC.md §16
+         * Q14).
+         *
+         * The trigger for re-triaging SMS the allowlist previously rejected.
+         * Fingerprinting the *patterns* rather than tracking edit events is
+         * what makes one mechanism cover both causes: a shipped seed adding
+         * patterns, and a user adding their bank in Settings at P5. An edit
+         * hook would have to be remembered at every future call site; a
+         * fingerprint cannot be forgotten, because it is derived from the thing
+         * that actually changed.
+         *
+         * Absent means "never checked", which is treated as changed — that is
+         * the upgrade path onto the v2 seed that fixed the DLT-suffix defect.
+         */
+        public const val KEY_SENDER_ALLOWLIST_FINGERPRINT: String = "senderAllowlistFingerprint"
     }
 }
 

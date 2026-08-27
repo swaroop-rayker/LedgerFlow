@@ -9,6 +9,7 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.dao.PendingTransactionDao
 import com.ledgerflow.core.database.entity.NotificationRawEntity
+import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
 import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PendingTransactionEntity
@@ -189,6 +190,75 @@ public class DefaultRawIngestRepository @Inject constructor(
             // would be worse than leaving it in flight.
         }
         filtered
+    }
+
+    override suspend fun retriageRejectedSms(limit: Int): Int = withContext(io) {
+        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext 0
+
+        runCatching {
+            val fingerprint = senderAllowlistFingerprint(database)
+            val seen = database.appMetaDao()
+                .value(AppMetaEntity.KEY_SENDER_ALLOWLIST_FINGERPRINT)
+
+            // Unchanged since the last pass, so no rejected row can have become
+            // admissible and there is nothing to scan. This early return is what
+            // keeps the sweep off every worker run: the rejected pile is the
+            // user's ordinary personal SMS and grows without bound, and
+            // re-checking all of it each time the phone receives a text would be
+            // the expensive kind of thorough.
+            //
+            // A null marker means "never checked", which counts as changed. That
+            // is the upgrade path onto the v2 seed that fixed the DLT-suffix
+            // defect, and it is what recovers messages rejected before it.
+            if (seen == fingerprint) return@runCatching 0
+
+            val dao = database.smsRawDao()
+            val rejected = dao.rejectedWithBody(RawParseStatus.SENDER_NOT_ALLOWLISTED, limit)
+
+            var readmitted = 0
+            rejected.forEach { row ->
+                if (isSenderAllowed(row.sender)) {
+                    // Back to CAPTURED, not straight to a candidate: the row
+                    // rejoins the queue where it left it, and the rule engine
+                    // and §5.1's never-drop rule apply to it exactly as they
+                    // would to a message that had just arrived.
+                    dao.updateStatusOnly(row.id, RawParseStatus.CAPTURED)
+                    readmitted++
+                }
+            }
+
+            // Only once the backlog is drained. A full page means there may be
+            // more behind it, and advancing the marker here would strand
+            // whatever this pass did not reach -- permanently, since nothing
+            // else would ever look at those rows again.
+            if (rejected.size < limit) {
+                database.appMetaDao().put(
+                    AppMetaEntity(AppMetaEntity.KEY_SENDER_ALLOWLIST_FINGERPRINT, fingerprint),
+                )
+            }
+            readmitted
+        }.getOrDefault(0)
+    }
+
+    /**
+     * A stable digest of the enabled sender patterns (§16 Q14).
+     *
+     * Fingerprinting the patterns rather than hooking every edit is what makes
+     * one mechanism serve both causes -- a shipped seed gaining patterns, and a
+     * user adding their bank in Settings at P5. An edit hook has to be
+     * remembered at each new call site; a value derived from the thing that
+     * changed cannot be forgotten.
+     *
+     * Truncated to 16 hex characters. This is a change detector, not a security
+     * boundary: it is compared against a value this app wrote to its own
+     * encrypted database, and 64 bits is far past the point where an accidental
+     * collision between two allowlists is worth thinking about.
+     */
+    private suspend fun senderAllowlistFingerprint(database: LedgerFlowDatabase): String {
+        val patterns = database.senderAllowlistDao().enabledPatterns()
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(patterns.joinToString("\u0000").toByteArray())
+        return digest.take(FINGERPRINT_BYTES).joinToString("") { "%02x".format(it) }
     }
 
     override suspend fun purgeExpiredBodies(): Int = withContext(io) {
@@ -522,6 +592,16 @@ public class DefaultRawIngestRepository @Inject constructor(
 
     private companion object {
         val WHITESPACE = Regex("\\s+")
+
+        /**
+         * 64 bits of the allowlist digest (§16 Q14).
+         *
+         * A change detector, not a security boundary: it is compared against a
+         * value this app wrote to its own encrypted database, and an accidental
+         * collision between two allowlists at this width is not worth the
+         * column it would take to avoid.
+         */
+        const val FINGERPRINT_BYTES = 8
 
         /** D-09: 90 days, then the body goes and the row stays. */
         val RETENTION_MILLIS: Long = TimeUnit.DAYS.toMillis(90)

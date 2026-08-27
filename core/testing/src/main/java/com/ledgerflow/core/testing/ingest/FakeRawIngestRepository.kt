@@ -106,6 +106,21 @@ public class FakeRawIngestRepository(
     override suspend fun triageCapturedSms(limit: Int): Int =
         recorded.count { !isSenderAllowed(it.sender) }
 
+    /**
+     * Rows the fake will report as re-admitted, and whether it has already done
+     * so — the fingerprint gate, modelled rather than reimplemented.
+     */
+    public var readmitOnNextTriage: Int = 0
+
+    override suspend fun retriageRejectedSms(limit: Int): Int {
+        val readmitted = minOf(readmitOnNextTriage, limit)
+        // Once, like the real one: the marker advances and a second pass over an
+        // unchanged allowlist finds nothing. A fake that re-admitted on every
+        // call would let a test assert progress that production does not make.
+        readmitOnNextTriage = 0
+        return readmitted
+    }
+
     override suspend fun purgeExpiredBodies(): Int = purgedBodies
 
     override suspend fun seedAllowlists() {

@@ -1,15 +1,11 @@
 package com.ledgerflow.feature.ingest.pipeline
 
 import android.util.Log
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
+import com.ledgerflow.core.domain.ingest.IngestWorkTrigger
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.usecase.RecordCapturedEventUseCase
-import com.ledgerflow.feature.ingest.work.ParseIngestWorker
 import javax.inject.Inject
-import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
@@ -29,24 +25,25 @@ import javax.inject.Singleton
  * take a `BroadcastReceiver` with it and the user would see LedgerFlow crash
  * every time a text arrived.
  *
- * `Provider<WorkManager>` rather than the instance: `WorkManager.getInstance`
- * touches disk on first call, and resolving it eagerly would put that on
- * whatever thread built the Hilt graph.
+ * Enqueueing moved behind [IngestWorkTrigger] when a second caller appeared:
+ * app launch also has to be able to ask for a pass, because §16 Q14's
+ * re-triage is triggered by the allowlist changing rather than by a message
+ * arriving.
  */
 @Singleton
 public class PersistingIngestEventSink @Inject constructor(
     private val recordCapturedEvent: RecordCapturedEventUseCase,
-    private val workManager: Provider<WorkManager>,
+    private val ingestWork: IngestWorkTrigger,
 ) : IngestEventSink {
 
     override suspend fun submit(event: RawIngestEvent) {
         when (val outcome = recordCapturedEvent(event)) {
-            is CaptureOutcome.Recorded -> enqueueParse()
+            is CaptureOutcome.Recorded -> ingestWork.requestParsePass()
 
             // Already on disk from an earlier delivery. The worker may still owe
             // it a pass, so this enqueues too -- the work is idempotent and
             // KEEP collapses a burst into one run.
-            CaptureOutcome.AlreadySeen -> enqueueParse()
+            CaptureOutcome.AlreadySeen -> ingestWork.requestParsePass()
 
             CaptureOutcome.NotAllowed -> Unit
 
@@ -59,23 +56,6 @@ public class PersistingIngestEventSink @Inject constructor(
                     "(${event.body.length} chars): ${outcome.reason}",
             )
         }
-    }
-
-    /**
-     * One pass, however many messages arrived.
-     *
-     * [ExistingWorkPolicy.KEEP] on a unique name: a burst of five bank SMS in a
-     * second should produce one worker run over five rows, not five runs racing
-     * each other over the same table. A run already in flight keeps going and
-     * picks up whatever landed while it worked; if it has already passed them,
-     * the next enqueue starts a fresh one.
-     */
-    private fun enqueueParse() {
-        workManager.get().enqueueUniqueWork(
-            ParseIngestWorker.UNIQUE_NAME,
-            ExistingWorkPolicy.KEEP,
-            OneTimeWorkRequestBuilder<ParseIngestWorker>().build(),
-        )
     }
 
     private companion object {

@@ -38,20 +38,36 @@ public class RecordCapturedEventUseCase @Inject constructor(
 }
 
 /**
- * The worker's pass over captured messages (SPEC.md §5.1).
+ * The worker's pass over raw rows, before the engine sees them (SPEC.md §5.1).
  *
- * At P2 this applies the SMS sender allowlist and clears bodies past their
- * retention (D-09). Parsing joins it at the next step — the ruleset does not
- * exist yet, and a row it cannot judge stays `CAPTURED` rather than being given
- * a verdict nothing produced.
+ * Clears bodies past their retention (D-09), reconsiders SMS the allowlist
+ * previously rejected (§16 Q14), and applies the allowlist to what is newly
+ * captured. Parsing follows in the same worker run.
+ *
+ * **The order is the contract.**
+ *
+ * 1. Purge first, so a body that expired this minute is not re-admitted a step
+ *    later with nothing left behind it to parse.
+ * 2. Re-triage second, so anything the allowlist has newly come to accept is
+ *    back at `CAPTURED` *before* the engine runs and is parsed in this same
+ *    pass rather than waiting for the next message to arrive.
+ * 3. Triage last, over everything now at `CAPTURED`. A row re-admitted in
+ *    step 2 passes it by construction — it was re-admitted because the sender
+ *    is allowed — so the redundant re-check costs a lookup and buys the
+ *    property that exactly one place decides what "allowlisted" means.
  */
 public class TriageCapturedIngestUseCase @Inject constructor(
     private val repository: RawIngestRepository,
 ) {
     public suspend operator fun invoke(limit: Int = DEFAULT_LIMIT): TriageReport {
         val purged = repository.purgeExpiredBodies()
+        val readmitted = repository.retriageRejectedSms(limit)
         val filtered = repository.triageCapturedSms(limit)
-        return TriageReport(sendersFiltered = filtered, bodiesPurged = purged)
+        return TriageReport(
+            sendersFiltered = filtered,
+            bodiesPurged = purged,
+            sendersReadmitted = readmitted,
+        )
     }
 
     private companion object {
@@ -66,8 +82,19 @@ public class TriageCapturedIngestUseCase @Inject constructor(
     }
 }
 
-/** What one triage pass did. Reported so a run that does nothing is distinguishable from one that failed. */
-public data class TriageReport(val sendersFiltered: Int, val bodiesPurged: Int)
+/**
+ * What one triage pass did. Reported so a run that does nothing is
+ * distinguishable from one that failed.
+ *
+ * [sendersReadmitted] is §16 Q14's re-triage: messages the allowlist once
+ * rejected and now accepts. It is normally 0 and is briefly non-zero after the
+ * allowlist changes, which is exactly when someone reading a log wants to know.
+ */
+public data class TriageReport(
+    val sendersFiltered: Int,
+    val bodiesPurged: Int,
+    val sendersReadmitted: Int = 0,
+)
 
 /**
  * Puts the shipped ruleset in place (SPEC.md §5.1).

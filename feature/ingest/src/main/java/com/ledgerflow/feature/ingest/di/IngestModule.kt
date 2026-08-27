@@ -2,11 +2,13 @@ package com.ledgerflow.feature.ingest.di
 
 import android.content.Context
 import androidx.work.WorkManager
+import com.ledgerflow.core.domain.ingest.IngestWorkTrigger
 import com.ledgerflow.core.domain.ingest.TransactionIngestSource
 import com.ledgerflow.feature.ingest.adapters.NotificationAdapter
 import com.ledgerflow.feature.ingest.adapters.SmsAdapter
 import com.ledgerflow.feature.ingest.pipeline.IngestEventSink
 import com.ledgerflow.feature.ingest.pipeline.PersistingIngestEventSink
+import com.ledgerflow.feature.ingest.work.WorkManagerIngestWorkTrigger
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -56,6 +58,18 @@ internal abstract class IngestModule {
      */
     @Binds
     internal abstract fun ingestEventSink(sink: PersistingIngestEventSink): IngestEventSink
+
+    /**
+     * The port `:app` uses to ask for a pass at launch (§16 Q14).
+     *
+     * A domain port rather than the concrete class, because the caller is
+     * `AppViewModel` -- which is unit-tested, and no JVM unit test has a
+     * `WorkManager`.
+     */
+    @Binds
+    internal abstract fun ingestWorkTrigger(
+        trigger: WorkManagerIngestWorkTrigger,
+    ): IngestWorkTrigger
 }
 
 /**
