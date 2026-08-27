@@ -278,16 +278,69 @@ class RawIngestRepositoryInstrumentedTest {
     }
 
     /**
-     * A locked vault answers "no" rather than throwing.
+     * **`Bug_SmsWithTheAppClosed_IsStillCaptured`** — §5.1's never-drop rule,
+     * for the case that was breaking it in production.
      *
-     * That is the correct answer for the privacy gate: reading a notification
-     * that could not then be stored would break §5.2's rule for no benefit. It
-     * also matters that nothing here propagates — the caller is a
-     * `NotificationListenerService` and an exception would take it down.
+     * Everything that opened the vault ran from `AppViewModel`, so a message
+     * arriving with no Activity alive reached a receiver whose database call
+     * failed, and the SMS was logged and lost. Found on the owner's device: a
+     * live UPI payment vanished, while three credits that landed minutes later
+     * with the app open were captured. For the whole of P2, capture only worked
+     * while somebody was looking at it.
+     *
+     * `session.close()` is exactly that state — no database, key material
+     * intact — which is what a process the OEM reaped and the system restarted
+     * for a broadcast looks like.
      */
     @Test
-    fun aLockedVault_refusesRatherThanThrows() = runBlocking {
+    fun Bug_SmsWithTheAppClosed_IsStillCaptured() = runBlocking {
         session.close()
+
+        val outcome = repository.record(sms("Sent Rs.69.00 To RAMESH KUMAR"))
+
+        assertThat(outcome).isInstanceOf(CaptureOutcome.Recorded::class.java)
+        // On disk, verbatim, before anything judged it -- which is the whole
+        // point of writing first (§5.1).
+        val rawId = (outcome as CaptureOutcome.Recorded).rawId
+        assertThat(session.requireDatabase().smsRawDao().byId(rawId)?.body)
+            .isEqualTo("Sent Rs.69.00 To RAMESH KUMAR")
+    }
+
+    /**
+     * ...and the rest of the pipeline opens it too.
+     *
+     * `ParseIngestWorker` wakes on its own schedule with no Activity behind it,
+     * so a triage or parse pass that needed the UI to have run first would leave
+     * captured messages sitting at `CAPTURED` until the user next opened the
+     * app — the same defect one step later.
+     */
+    @Test
+    fun theWorkersPasses_openTheVaultToo() = runBlocking {
+        repository.seedAllowlists()
+        repository.record(sms("Dinner at 8?", sender = "+919876543210"))
+        session.close()
+
+        // Each of these is reachable from the worker with nothing else running.
+        assertThat(repository.triageCapturedSms(limit = 10)).isEqualTo(1)
+        assertThat(repository.isSenderAllowed("VM-HDFCBK-T")).isTrue()
+        assertThat(repository.parserRules()).isEmpty()
+    }
+
+    /**
+     * A vault that genuinely cannot open refuses, and does not throw.
+     *
+     * The distinction the fix rests on: "locked because nobody opened it yet" is
+     * recoverable and must not lose the message, while "there is no vault" is
+     * not, and the honest answer is to refuse. §7.3 routes the user to Recovery
+     * on their next launch; **nothing here wipes anything**, and a
+     * `NotificationListenerService` must not be taken down by an exception
+     * either.
+     */
+    @Test
+    fun aVaultThatCannotOpen_refusesRatherThanThrows() = runBlocking {
+        session.close()
+        keyDirectory.deleteRecursively()
+        deleteKeystoreEntry()
 
         assertThat(repository.isPackageAllowed("com.google.android.apps.nbu.paisa.user")).isFalse()
         assertThat(repository.isSenderAllowed("VM-HDFCBK")).isFalse()
@@ -846,13 +899,34 @@ class RawIngestRepositoryInstrumentedTest {
     }
 
     /**
-     * A locked vault refuses rather than throwing, same as every other method
-     * here — and leaves the raw row at `CAPTURED` so the next pass retries it.
+     * A closed vault is opened, not treated as a dead end.
+     *
+     * `ParseIngestWorker` wakes with no Activity alive, so this path is reached
+     * with the vault shut more often than not. Refusing here would leave the raw
+     * row at `CAPTURED` until the user next opened the app — the message would
+     * survive, but the candidate would not appear until someone looked, which is
+     * the same defect `Bug_SmsWithTheAppClosed_IsStillCaptured` covers one step
+     * earlier.
      */
     @Test
-    fun recordParseOutcome_onALockedVault_refusesRatherThanThrows() = runBlocking {
+    fun recordParseOutcome_onAClosedVault_opensItAndWrites() = runBlocking {
         val rawId = captureOneSms()
         session.close()
+
+        assertThat(repository.recordParseOutcome(rawId, "hdfc-upi-sent", candidate()))
+            .isInstanceOf(PendingWriteOutcome.Created::class.java)
+    }
+
+    /**
+     * ...but a vault that cannot be opened still refuses rather than throwing,
+     * and leaves the raw row at `CAPTURED` so a later pass can retry it.
+     */
+    @Test
+    fun recordParseOutcome_whenTheVaultCannotOpen_refusesRatherThanThrows() = runBlocking {
+        val rawId = captureOneSms()
+        session.close()
+        keyDirectory.deleteRecursively()
+        deleteKeystoreEntry()
 
         assertThat(repository.recordParseOutcome(rawId, null, candidate()))
             .isInstanceOf(PendingWriteOutcome.Failed::class.java)

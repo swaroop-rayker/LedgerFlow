@@ -230,6 +230,29 @@ Two consequences worth recording:
   approval first asks `ledger_entry` whether this candidate already produced
   one — `source_ref_id`, per book (ADR-0002) — and completes the half-finished
   state instead of doubling it.
+- **Capture used to work only while the app was open, and that was a §5.1
+  breach for the whole of P2.** Everything that opened the vault ran from
+  `AppViewModel`, so an SMS arriving with no Activity alive reached a receiver
+  whose database call failed; `PersistingIngestEventSink` logged it and the
+  message was gone — no raw row, no retry, nothing to replay. Found on the
+  owner's device when a live UPI payment vanished while three credits that
+  landed minutes later, with the app open, were captured.
+
+  `VaultSession.openForBackgroundWork()` is the fix: every entry point in
+  `DefaultRawIngestRepository` now opens the vault if nothing else has. It calls
+  the same `openOnLaunch()` the UI does — mutex-guarded, idempotent, **no new
+  wrap and no new key material**. A headless unlock is what the hierarchy was
+  designed for: §7 forbids `setUserAuthenticationRequired(true)` on the
+  DEK-wrapping key precisely so the Keystore unwrap needs no user present, and
+  background capture is the reason that rule exists.
+
+  Two boundaries worth stating. A vault that genuinely **cannot** open — no
+  onboarding, or a lost Keystore wrap — still refuses rather than throwing, and
+  never wipes; §7.3 routes the user to Recovery on their next launch. And an app
+  the user has **force-stopped from Settings** receives no broadcasts at all
+  until they launch it again; that is Android's rule and no code here can change
+  it. The case this fixes is the common one: a process the OEM reaped, which the
+  system restarts for the broadcast.
 - **P2-2 also introduced WorkManager**, configured through `LedgerFlowApplication` as a `Configuration.Provider` with the Hilt worker factory; its manifest initialiser is removed, because the default one runs before Hilt has a graph and would leave an `@HiltWorker` unconstructable at runtime with nothing at compile time to say so. It brings `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` and `FOREGROUND_SERVICE` into the merged manifest. **None of them is `INTERNET`** and Law 6 is intact (`restrictedPermissionCheck` covers it), but the app's permission list is now four longer than it was, which for an offline-first product is worth stating rather than discovering.
 - `RECEIVE_SMS` appears in `src/smsFull/AndroidManifest.xml` and nowhere else, enforced by `restrictedPermissionCheck` (Gradle) and a mirrored CI step rather than by memory. The same check bans `INTERNET` in every source set of every module (Law 6).
 
@@ -1317,6 +1340,8 @@ Added at P2-4, when `pending_transaction` acquired a writer:
     Nothing could have caught it. The corpus tests the *parser*, and the parser was never reached. Every fixture and every test to that point supplied a sender the allowlist had been written against — the same closed loop as the synthetic parser rules, one layer earlier, and it took a real message to break it for the same reason.
 
     v2 carries both forms per bank: the bare entity, and `*-ENTITY-[^P]` for the suffixed header. `-P` (promotional) is excluded deliberately — §5.1 turns an allowlisted sender's unparseable message into a `confidence = 0` PENDING row, so admitting promotional headers would make every bank marketing SMS an Inbox item to dismiss by hand. `*-SBYONO` was also missing entirely and is added. The regression test is **instrumented**, against the real headers observed on the owner's device, because `GLOB` semantics (including whether `[^...]` negation is even supported) are SQLite's and a JVM test would only confirm what we already believed. Seeding uses `insertMissing`, so the new patterns reach an existing install without disturbing anything the user has toggled.
+
+16. **A message that arrives when the vault cannot open is still only a log line.** The background-unlock fix above closes the common case, but the residual one — onboarding never completed, or a Keystore wrap that is gone — leaves `CaptureOutcome.Failed` handled by `Log.e` and nothing else. §5.1 says a financial SMS is never *silently* dropped, and a log line on a user's phone is silent. It needs somewhere outside the vault to record that it happened (a DataStore counter, say) and somewhere to say so (§5.2 already specifies a Dashboard health banner for a dead listener, which is the natural home). Not built with the unlock fix because it is a different mechanism with its own storage question, and because in that state the user's next launch takes them to Recovery anyway — the message is one of several things they are about to lose, rather than a silent loss on a working install.
 
 Added while building the `TransactionIngestSource` abstraction at P1:
 

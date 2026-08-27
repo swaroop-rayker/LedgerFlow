@@ -103,6 +103,40 @@ public class VaultSession @Inject constructor(
     }
 
     /**
+     * The open database, opening it first if nothing else has (SPEC.md §5.1).
+     *
+     * **This is what makes background capture work at all.** Everything that
+     * unlocks the vault used to run from `AppViewModel`, which exists only while
+     * the UI does — so an SMS arriving with the app closed reached a receiver
+     * whose `requireDatabase()` threw, and the message was logged and dropped.
+     * §5.1 says a financial SMS is never silently dropped, and for the whole of
+     * P2 it was, on every message that arrived while the user was not looking.
+     * Found on the owner's device: a live UPI payment vanished while three
+     * credits that landed minutes later, with the app open, were captured.
+     *
+     * **A headless unlock is what the key hierarchy was designed for.** §7
+     * forbids `setUserAuthenticationRequired(true)` on the DEK-wrapping key
+     * precisely so the Keystore unwrap needs no user present; background capture
+     * is the reason that rule exists. This adds no wrap and no key material — it
+     * calls the same [openOnLaunch] the UI does, which is mutex-guarded and
+     * returns immediately when the database is already open.
+     *
+     * Null means the vault genuinely cannot be opened: onboarding was never
+     * completed, or the Keystore wrap is gone and §7.3 wants the Recovery
+     * screen. The caller must refuse honestly rather than pretend — it must
+     * never wipe, and it must never treat this as "no such message".
+     */
+    internal suspend fun openForBackgroundWork(): LedgerFlowDatabase? {
+        // Checked outside the lock deliberately: the common case is an open
+        // vault and a burst of messages, and taking the mutex per SMS would
+        // serialise a receiver that has ten seconds to live (CLAUDE.md §7).
+        // Losing the race costs one no-op call into `openOnLaunch`.
+        database?.let { return it }
+        openOnLaunch()
+        return database
+    }
+
+    /**
      * The database as it comes and goes, for repositories exposing cold `Flow`s.
      *
      * Emits null while locked rather than throwing, so a screen observing

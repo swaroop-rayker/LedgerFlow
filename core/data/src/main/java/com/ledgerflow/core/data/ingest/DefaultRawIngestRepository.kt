@@ -64,22 +64,38 @@ public class DefaultRawIngestRepository @Inject constructor(
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * The vault, opened if the UI has not already done it (§5.1).
+     *
+     * Every entry point in this class can be reached with no Activity alive: a
+     * `BroadcastReceiver` for an SMS, a `NotificationListenerService`, or
+     * `ParseIngestWorker` waking on its own. Before this, each of them asked for
+     * a database that only the UI ever opened, and a message arriving with the
+     * app closed was logged and lost.
+     *
+     * Null is a real answer and never a reason to invent one: the vault cannot
+     * be opened, so there is nowhere to write, and the caller says so.
+     */
+    private suspend fun openVault(): LedgerFlowDatabase? = session.openForBackgroundWork()
+
     override suspend fun isPackageAllowed(packageName: String): Boolean = withContext(io) {
         // A locked vault cannot answer, and the honest answer is "no". Reading a
         // notification we could not then store would be the §5.2 rule broken for
         // nothing.
-        runCatching { session.requireDatabase().packageAllowlistDao().isAllowed(packageName) }
+        val database = openVault() ?: return@withContext false
+        runCatching { database.packageAllowlistDao().isAllowed(packageName) }
             .getOrDefault(false)
     }
 
     override suspend fun isSenderAllowed(sender: String): Boolean = withContext(io) {
+        val database = openVault() ?: return@withContext false
         runCatching {
-            session.requireDatabase().senderAllowlistDao().matches(sender.uppercase())
+            database.senderAllowlistDao().matches(sender.uppercase())
         }.getOrDefault(false)
     }
 
     override suspend fun record(event: RawIngestEvent): CaptureOutcome = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull()
+        val database = openVault()
             ?: return@withContext CaptureOutcome.Failed("vault is locked")
 
         val id = ids.generate()
@@ -133,7 +149,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     }
 
     override suspend fun capturedEvents(limit: Int): List<CapturedEvent> = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull()
+        val database = openVault()
             ?: return@withContext emptyList()
 
         runCatching {
@@ -169,7 +185,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     }
 
     override suspend fun triageCapturedSms(limit: Int): Int = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext 0
+        val database = openVault() ?: return@withContext 0
         val dao = database.smsRawDao()
 
         val captured = runCatching { dao.withStatus(RawParseStatus.CAPTURED, limit) }
@@ -193,7 +209,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     }
 
     override suspend fun retriageRejectedSms(limit: Int): Int = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext 0
+        val database = openVault() ?: return@withContext 0
 
         runCatching {
             val fingerprint = senderAllowlistFingerprint(database)
@@ -262,7 +278,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     }
 
     override suspend fun purgeExpiredBodies(): Int = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext 0
+        val database = openVault() ?: return@withContext 0
         val now = clock.nowMillis()
         runCatching {
             database.smsRawDao().purgeExpiredBodies(now) +
@@ -271,7 +287,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     }
 
     override suspend fun seedAllowlists(): Unit = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext
+        val database = openVault() ?: return@withContext
 
         runCatching {
             val packages = readAsset<PackageSeedFile>(PACKAGE_SEED)
@@ -300,7 +316,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     }
 
     override suspend fun seedParserRules(): Unit = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull() ?: return@withContext
+        val database = openVault() ?: return@withContext
         val dao = database.parserRuleDao()
 
         runCatching {
@@ -331,7 +347,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     }
 
     override suspend fun parserRules(): List<ParserRule> = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull()
+        val database = openVault()
             ?: return@withContext emptyList()
 
         runCatching {
@@ -344,7 +360,7 @@ public class DefaultRawIngestRepository @Inject constructor(
         ruleId: String?,
         candidate: PendingCandidate,
     ): PendingWriteOutcome = withContext(io) {
-        val database = runCatching { session.requireDatabase() }.getOrNull()
+        val database = openVault()
             ?: return@withContext PendingWriteOutcome.Failed("vault is locked")
         val status = if (ruleId != null) RawParseStatus.PARSED else RawParseStatus.UNMATCHED
         val pendingDao = database.pendingTransactionDao()
