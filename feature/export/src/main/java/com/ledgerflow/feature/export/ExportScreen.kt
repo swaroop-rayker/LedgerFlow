@@ -222,14 +222,22 @@ private fun ExportBar(state: ExportUiState, onEvent: (ExportEvent) -> Unit) {
  * It does not offer to encrypt instead, because that is a different artifact
  * with a different name (`.lfbk`) reached from a different screen, and a dialog
  * that offered would be promising something this button cannot do.
+ *
+ * **The sentence names bank messages explicitly**, and that is not padding. The
+ * export gained `sms_raw` and `notification_raw` when the ingest tables were
+ * added to it, so the zip now carries the bank's own texts verbatim -- account
+ * digits, reference numbers, and messages that never became an entry at all.
+ * "Every entry, note and amount" was an accurate description of the file before
+ * that and an understatement after it, and a warning the user can rely on has to
+ * name the most sensitive thing in the file rather than the most obvious.
  */
 @Composable
 private fun WarningDialog(onEvent: (ExportEvent) -> Unit) {
     LfDialog(
         title = "Export without encryption?",
-        body = "The file holds every entry, note and amount in plain text. " +
-            "Anyone who opens it can read all of it. Choose somewhere private, " +
-            "and delete it when you are finished.",
+        body = "The file holds every entry, note and amount in plain text, plus " +
+            "the bank messages LedgerFlow captured. Anyone who opens it can read " +
+            "all of it. Choose somewhere private, and delete it when you are finished.",
         confirmText = "Choose location",
         emphasis = LfDialogEmphasis.Warning,
         onConfirm = { onEvent(ExportEvent.WarningAccepted) },

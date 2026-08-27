@@ -23,12 +23,20 @@ import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
+import com.ledgerflow.core.database.entity.NotificationRawEntity
+import com.ledgerflow.core.database.entity.PackageAllowlistEntity
+import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
+import com.ledgerflow.core.database.entity.PendingTransactionEntity
+import com.ledgerflow.core.database.entity.SenderAllowlistEntity
+import com.ledgerflow.core.database.entity.SmsRawEntity
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.LineItemKind
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.model.PaymentMethodType
+import com.ledgerflow.core.model.PendingStatus
+import com.ledgerflow.core.model.RawParseStatus
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -194,6 +202,118 @@ class BackupRestoreRoundTripTest {
         database.categoryGroupDao().insertAllMembers(
             listOf(CategoryGroupMemberEntity("grp-1", "cat-groceries")),
         )
+
+        // ── v6/v7: the ingest tables ─────────────────────────────────────────
+        //
+        // Absent from the backup until P2-4's follow-up. `pending_transaction`
+        // is the one that made this urgent: it holds a queue the user has not
+        // reviewed, so a restore that dropped it lost transactions that had
+        // never reached the ledger and left nothing behind to say so.
+        database.smsRawDao().insertAll(
+            listOf(
+                // A parsed message, with the rule that matched it.
+                SmsRawEntity(
+                    id = "sms-1", sender = "VM-HDFCBK",
+                    body = "Sent Rs.788.00 From HDFC Bank A/C *1234 To COFFEE HOUSE",
+                    bodyHash = "hash-sms-1", receivedAt = 1_760_000_000_000L, simSlot = 1,
+                    parseStatus = RawParseStatus.PARSED, matchedRuleId = "upi-debit-vpa",
+                    retentionExpiresAt = 1_767_776_000_000L,
+                ),
+                // An unmatched one, and a purged body -- the two states D-09
+                // produces. A blank body must come back blank rather than as a
+                // restore quietly re-inventing text it never had.
+                SmsRawEntity(
+                    id = "sms-2", sender = "AD-ICICIB", body = "",
+                    bodyHash = "hash-sms-2", receivedAt = 1_750_000_000_000L, simSlot = null,
+                    parseStatus = RawParseStatus.UNMATCHED, matchedRuleId = null,
+                    retentionExpiresAt = 1_757_776_000_000L,
+                ),
+            ),
+        )
+        database.notificationRawDao().insertAll(
+            listOf(
+                NotificationRawEntity(
+                    id = "notif-1", packageName = "com.google.android.apps.nbu.paisa.user",
+                    title = "Paid Rs.788", body = "Paid Rs.788 to COFFEE HOUSE",
+                    bodyHash = "hash-notif-1", postedAt = 1_760_000_000_050L,
+                    parseStatus = RawParseStatus.PARSED, matchedRuleId = "upi-notification",
+                    retentionExpiresAt = 1_767_776_000_050L,
+                ),
+            ),
+        )
+        // Both allowlists carry a disabled row: user intent that a re-seed from
+        // the shipped asset would silently reverse, which is the whole reason
+        // these tables have to be in the backup rather than regenerated (D-10).
+        database.packageAllowlistDao().insertAll(
+            listOf(
+                PackageAllowlistEntity(
+                    "com.google.android.apps.nbu.paisa.user", "Google Pay", true,
+                ),
+                PackageAllowlistEntity("com.phonepe.app", "PhonePe", false),
+            ),
+        )
+        database.senderAllowlistDao().insertAll(
+            listOf(
+                SenderAllowlistEntity("*-HDFCBK", "HDFC Bank", true),
+                SenderAllowlistEntity("*-ICICIB", "ICICI Bank", false),
+            ),
+        )
+        // A shipped rule and a user-written one. The user's exists nowhere else
+        // -- the seeder is forbidden from touching it (§5.1), so if the backup
+        // drops it, it is gone.
+        database.parserRuleDao().insertAll(
+            listOf(
+                ParserRuleEntity(
+                    id = "upi-debit-vpa", rulesetVersion = 1, priority = 10,
+                    senderPattern = "HDFCBK", bodyPattern = "Sent Rs\\.(?<amount>[0-9.,]+)",
+                    fieldMapJson = """{"amount":"amount"}""", direction = "DEBIT",
+                    instrumentHint = "UPI", confidenceBase = 0.9, enabled = true,
+                    isUserDefined = false,
+                ),
+                ParserRuleEntity(
+                    id = "my-cooperative-bank", rulesetVersion = 1, priority = 500,
+                    senderPattern = "COOPBK", bodyPattern = "Dr Rs (?<amount>[0-9.,]+)",
+                    fieldMapJson = """{"amount":"amount"}""", direction = null,
+                    instrumentHint = null, confidenceBase = 0.6, enabled = true,
+                    isUserDefined = true,
+                ),
+            ),
+        )
+        // The queue itself: one awaiting review, one already approved (so
+        // `approved_entry_id` and `reviewed_at` are covered), and one suppressed
+        // as a cross-source duplicate -- §3.1 requires that row to stay visible,
+        // and a restore that lost it would lose the evidence dedupe ever chose.
+        database.pendingTransactionDao().insertAll(
+            listOf(
+                PendingTransactionEntity(
+                    id = "pending-1", source = EntrySource.SMS,
+                    dedupeKey = "78800|DEBIT|29333333|1234", suppressedById = null,
+                    rawRefId = "sms-1",
+                    extractedJson = """{"v":1,"amountMinor":78800,"direction":"DEBIT"}""",
+                    confidence = 0.9, status = PendingStatus.PENDING,
+                    needsManualFill = false, createdAt = 1_760_000_000_010L,
+                    reviewedAt = null, approvedEntryId = null,
+                ),
+                PendingTransactionEntity(
+                    id = "pending-2", source = EntrySource.NOTIFICATION,
+                    dedupeKey = "78800|DEBIT|29333333|1234", suppressedById = "pending-1",
+                    rawRefId = "notif-1",
+                    extractedJson = """{"v":1,"amountMinor":78800,"direction":"DEBIT"}""",
+                    confidence = 0.7, status = PendingStatus.PENDING,
+                    needsManualFill = false, createdAt = 1_760_000_000_060L,
+                    reviewedAt = null, approvedEntryId = null,
+                ),
+                // §5.1's never-drop row: confidence 0, nothing extracted.
+                PendingTransactionEntity(
+                    id = "pending-3", source = EntrySource.SMS,
+                    dedupeKey = "raw:sms-2", suppressedById = null, rawRefId = "sms-2",
+                    extractedJson = """{"v":1}""", confidence = 0.0,
+                    status = PendingStatus.APPROVED, needsManualFill = true,
+                    createdAt = 1_750_000_000_010L, reviewedAt = 1_750_000_000_900L,
+                    approvedEntryId = "entry-debit",
+                ),
+            ),
+        )
     }
 
     /** Includes foreign-currency fields so the FX columns are covered too. */
@@ -229,7 +349,29 @@ class BackupRestoreRoundTripTest {
         val merchantAliases: List<MerchantAliasEntity>,
         val categoryGroups: List<CategoryGroupEntity>,
         val categoryGroupMembers: List<CategoryGroupMemberEntity>,
-    )
+        val smsRaw: List<SmsRawEntity>,
+        val notificationsRaw: List<NotificationRawEntity>,
+        val packageAllowlist: List<PackageAllowlistEntity>,
+        val senderAllowlist: List<SenderAllowlistEntity>,
+        val parserRules: List<ParserRuleEntity>,
+        val pendingTransactions: List<PendingTransactionEntity>,
+    ) {
+        /**
+         * Every table, as lists, for the vacuity guard below.
+         *
+         * Reflection rather than a hand-written list: a hand-written one is the
+         * third enumeration that could rot, and the whole point of the guard is
+         * that a table nobody remembered to seed must not pass by comparing
+         * empty to empty.
+         */
+        fun tables(): List<List<Any>> = Snapshot::class.java.declaredFields
+            .filter { List::class.java.isAssignableFrom(it.type) }
+            .map { field ->
+                field.isAccessible = true
+                @Suppress("UNCHECKED_CAST")
+                field.get(this) as List<Any>
+            }
+    }
 
     private fun snapshot(db: LedgerFlowDatabase): Snapshot = runBlocking {
         Snapshot(
@@ -244,10 +386,35 @@ class BackupRestoreRoundTripTest {
             merchantAliases = db.merchantAliasDao().all(),
             categoryGroups = db.categoryGroupDao().all(),
             categoryGroupMembers = db.categoryGroupDao().allMembers(),
+            smsRaw = db.smsRawDao().all(),
+            notificationsRaw = db.notificationRawDao().all(),
+            packageAllowlist = db.packageAllowlistDao().all(),
+            senderAllowlist = db.senderAllowlistDao().all(),
+            parserRules = db.parserRuleDao().all(),
+            pendingTransactions = db.pendingTransactionDao().all(),
         )
     }
 
     // ── The gate ──────────────────────────────────────────────────────────
+
+    /**
+     * **`seedEveryTable` really does seed every table.**
+     *
+     * Without this the round-trip below degrades silently: a table nobody
+     * remembered to seed is compared empty-to-empty and passes, so the gate
+     * reports that a table is durable when it has never carried a row through
+     * a backup. That is the same shape as the bug this whole commit exists to
+     * fix -- a guard whose green means nothing -- and it is worth one extra
+     * assertion to make it impossible rather than merely unlikely.
+     */
+    @Test
+    fun seedEveryTable_leavesNoTableEmpty() = runBlocking {
+        seedEveryTable()
+
+        val tables = snapshot(database).tables()
+        assertThat(tables).isNotEmpty()
+        tables.forEach { assertThat(it).isNotEmpty() }
+    }
 
     @Test
     fun backup_wipe_restoreFromPhraseAlone_reproducesEveryRowExactly() = runBlocking {
@@ -294,6 +461,13 @@ class BackupRestoreRoundTripTest {
         assertThat(after.categoryGroups).containsExactlyElementsIn(before.categoryGroups)
         assertThat(after.categoryGroupMembers)
             .containsExactlyElementsIn(before.categoryGroupMembers)
+        assertThat(after.smsRaw).containsExactlyElementsIn(before.smsRaw)
+        assertThat(after.notificationsRaw).containsExactlyElementsIn(before.notificationsRaw)
+        assertThat(after.packageAllowlist).containsExactlyElementsIn(before.packageAllowlist)
+        assertThat(after.senderAllowlist).containsExactlyElementsIn(before.senderAllowlist)
+        assertThat(after.parserRules).containsExactlyElementsIn(before.parserRules)
+        assertThat(after.pendingTransactions)
+            .containsExactlyElementsIn(before.pendingTransactions)
 
         // The canary must survive, or the unlock flow would route a perfectly
         // good restore to the Recovery screen forever.

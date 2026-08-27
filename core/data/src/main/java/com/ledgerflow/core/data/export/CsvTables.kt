@@ -55,6 +55,12 @@ internal object CsvTables {
         merchantAliases(payload),
         categoryGroups(payload),
         categoryGroupMembers(payload),
+        smsRaw(payload),
+        notificationsRaw(payload),
+        packageAllowlist(payload),
+        senderAllowlist(payload),
+        parserRules(payload),
+        pendingTransactions(payload),
     )
 
     private fun appMeta(payload: BackupPayload) = CsvDocument(
@@ -267,6 +273,143 @@ internal object CsvTables {
         fileName = "category_group_member.csv",
         header = listOf("group_id", "category_id"),
         rows = payload.categoryGroupMembers.map { listOf(it.groupId, it.categoryId) },
+    )
+
+    /**
+     * The captured message, body included.
+     *
+     * A CSV is plaintext the moment it leaves the app, and this file carries
+     * bank SMS verbatim. That is not new exposure the export invents -- D-09's
+     * 90-day purge exists precisely because the body already travels in a
+     * `.lfbk` -- but it is the most sensitive file in the zip, and the export
+     * flow's warning is written on that basis.
+     */
+    private fun smsRaw(payload: BackupPayload) = CsvDocument(
+        fileName = "sms_raw.csv",
+        header = listOf(
+            "id", "sender", "body", "body_hash", "received_at", "received_at_iso",
+            "sim_slot", "parse_status", "matched_rule_id",
+            "retention_expires_at", "retention_expires_at_iso",
+        ),
+        rows = payload.smsRaw.map { row ->
+            listOf(
+                row.id,
+                row.sender,
+                row.body,
+                row.bodyHash,
+                row.receivedAt.toString(),
+                CsvWriter.timestamp(row.receivedAt),
+                row.simSlot?.toString(),
+                row.parseStatus,
+                row.matchedRuleId,
+                row.retentionExpiresAt.toString(),
+                CsvWriter.timestamp(row.retentionExpiresAt),
+            )
+        },
+    )
+
+    private fun notificationsRaw(payload: BackupPayload) = CsvDocument(
+        fileName = "notification_raw.csv",
+        header = listOf(
+            "id", "package_name", "title", "body", "body_hash",
+            "posted_at", "posted_at_iso", "parse_status", "matched_rule_id",
+            "retention_expires_at", "retention_expires_at_iso",
+        ),
+        rows = payload.notificationsRaw.map { row ->
+            listOf(
+                row.id,
+                row.packageName,
+                row.title,
+                row.body,
+                row.bodyHash,
+                row.postedAt.toString(),
+                CsvWriter.timestamp(row.postedAt),
+                row.parseStatus,
+                row.matchedRuleId,
+                row.retentionExpiresAt.toString(),
+                CsvWriter.timestamp(row.retentionExpiresAt),
+            )
+        },
+    )
+
+    private fun packageAllowlist(payload: BackupPayload) = CsvDocument(
+        fileName = "package_allowlist.csv",
+        header = listOf("package_name", "label", "enabled"),
+        rows = payload.packageAllowlist.map { row ->
+            listOf(row.packageName, row.label, row.enabled.toString())
+        },
+    )
+
+    private fun senderAllowlist(payload: BackupPayload) = CsvDocument(
+        fileName = "sender_allowlist.csv",
+        header = listOf("sender_pattern", "label", "enabled"),
+        rows = payload.senderAllowlist.map { row ->
+            listOf(row.senderPattern, row.label, row.enabled.toString())
+        },
+    )
+
+    private fun parserRules(payload: BackupPayload) = CsvDocument(
+        fileName = "parser_rule.csv",
+        header = listOf(
+            "id", "ruleset_version", "priority", "sender_pattern", "body_pattern",
+            "field_map_json", "direction", "instrument_hint", "confidence_base",
+            "enabled", "is_user_defined",
+        ),
+        rows = payload.parserRules.map { row ->
+            listOf(
+                row.id,
+                row.rulesetVersion.toString(),
+                row.priority.toString(),
+                row.senderPattern,
+                row.bodyPattern,
+                row.fieldMapJson,
+                row.direction,
+                row.instrumentHint,
+                // A parser confidence, not money -- Law 3 bans Double for
+                // amounts, not for scores, so this renders as the real it is
+                // rather than through CsvWriter.decimal.
+                row.confidenceBase.toString(),
+                row.enabled.toString(),
+                row.isUserDefined.toString(),
+            )
+        },
+    )
+
+    /**
+     * The approval queue.
+     *
+     * `confidence` is a score and renders as a real; there is no money column
+     * here at all -- a candidate's amount lives inside `extracted_json`, which
+     * travels as the opaque string it is. Rendering it out would mean this file
+     * owning a second copy of the payload schema, and the two would disagree the
+     * first time a field was added.
+     */
+    private fun pendingTransactions(payload: BackupPayload) = CsvDocument(
+        fileName = "pending_transaction.csv",
+        header = listOf(
+            "id", "source", "dedupe_key", "suppressed_by_id", "raw_ref_id",
+            "extracted_json", "confidence", "status", "needs_manual_fill",
+            "created_at", "created_at_iso", "reviewed_at", "reviewed_at_iso",
+            "approved_entry_id",
+        ),
+        rows = payload.pendingTransactions.map { row ->
+            listOf(
+                row.id,
+                row.source,
+                row.dedupeKey,
+                row.suppressedById,
+                row.rawRefId,
+                row.extractedJson,
+                row.confidence.toString(),
+                row.status,
+                row.needsManualFill.toString(),
+                row.createdAt.toString(),
+                CsvWriter.timestamp(row.createdAt),
+                row.reviewedAt?.toString(),
+                CsvWriter.timestamp(row.reviewedAt),
+                row.approvedEntryId,
+            )
+        },
     )
 
     /** Null for a live row, so the column reads as blank rather than as 1970. */

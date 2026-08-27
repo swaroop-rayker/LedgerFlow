@@ -53,6 +53,26 @@ public interface SmsRawDao {
     )
     public suspend fun purgeExpiredBodies(now: Long): Int
 
+
+    /**
+     * Every row, for the backup export (ADR-0017, SPEC.md §5.9).
+     *
+     * `ORDER BY` a stable key so two exports of an unchanged database produce
+     * byte-identical payloads — the round-trip test compares row sets, but a
+     * user comparing two `.lfbk` fingerprints should not see them differ
+     * because SQLite returned rows in a different order.
+     */
+    @Query("SELECT * FROM sms_raw ORDER BY id")
+    public suspend fun all(): List<SmsRawEntity>
+
+    /**
+     * The restore path. `ABORT`, like every other table's: a restore runs inside
+     * one transaction and a conflict must roll the whole thing back rather than
+     * leave a partly-populated database (see `DatabaseBackupManager.restore`).
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    public suspend fun insertAll(rows: List<SmsRawEntity>)
+
     @Query("SELECT COUNT(*) FROM sms_raw")
     public suspend fun count(): Int
 }
@@ -84,6 +104,26 @@ public interface NotificationRawDao {
             "WHERE body != '' AND retention_expires_at <= :now",
     )
     public suspend fun purgeExpiredBodies(now: Long): Int
+
+
+    /**
+     * Every row, for the backup export (ADR-0017, SPEC.md §5.9).
+     *
+     * `ORDER BY` a stable key so two exports of an unchanged database produce
+     * byte-identical payloads — the round-trip test compares row sets, but a
+     * user comparing two `.lfbk` fingerprints should not see them differ
+     * because SQLite returned rows in a different order.
+     */
+    @Query("SELECT * FROM notification_raw ORDER BY id")
+    public suspend fun all(): List<NotificationRawEntity>
+
+    /**
+     * The restore path. `ABORT`, like every other table's: a restore runs inside
+     * one transaction and a conflict must roll the whole thing back rather than
+     * leave a partly-populated database (see `DatabaseBackupManager.restore`).
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    public suspend fun insertAll(rows: List<NotificationRawEntity>)
 
     @Query("SELECT COUNT(*) FROM notification_raw")
     public suspend fun count(): Int
@@ -131,6 +171,26 @@ public interface PackageAllowlistDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     public suspend fun insertMissing(rows: List<PackageAllowlistEntity>)
 
+
+    /**
+     * Every row, for the backup export (ADR-0017, SPEC.md §5.9).
+     *
+     * `ORDER BY` a stable key so two exports of an unchanged database produce
+     * byte-identical payloads — the round-trip test compares row sets, but a
+     * user comparing two `.lfbk` fingerprints should not see them differ
+     * because SQLite returned rows in a different order.
+     */
+    @Query("SELECT * FROM package_allowlist ORDER BY package_name")
+    public suspend fun all(): List<PackageAllowlistEntity>
+
+    /**
+     * The restore path. `ABORT`, like every other table's: a restore runs inside
+     * one transaction and a conflict must roll the whole thing back rather than
+     * leave a partly-populated database (see `DatabaseBackupManager.restore`).
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    public suspend fun insertAll(rows: List<PackageAllowlistEntity>)
+
     @Query("SELECT COUNT(*) FROM package_allowlist")
     public suspend fun count(): Int
 }
@@ -160,6 +220,26 @@ public interface SenderAllowlistDao {
     /** Seeding. See [PackageAllowlistDao.insertMissing] on why this is `IGNORE`. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     public suspend fun insertMissing(rows: List<SenderAllowlistEntity>)
+
+
+    /**
+     * Every row, for the backup export (ADR-0017, SPEC.md §5.9).
+     *
+     * `ORDER BY` a stable key so two exports of an unchanged database produce
+     * byte-identical payloads — the round-trip test compares row sets, but a
+     * user comparing two `.lfbk` fingerprints should not see them differ
+     * because SQLite returned rows in a different order.
+     */
+    @Query("SELECT * FROM sender_allowlist ORDER BY sender_pattern")
+    public suspend fun all(): List<SenderAllowlistEntity>
+
+    /**
+     * The restore path. `ABORT`, like every other table's: a restore runs inside
+     * one transaction and a conflict must roll the whole thing back rather than
+     * leave a partly-populated database (see `DatabaseBackupManager.restore`).
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    public suspend fun insertAll(rows: List<SenderAllowlistEntity>)
 
     @Query("SELECT COUNT(*) FROM sender_allowlist")
     public suspend fun count(): Int
@@ -193,6 +273,18 @@ public interface ParserRuleDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     public suspend fun insertAll(rows: List<ParserRuleEntity>)
+
+
+    /**
+     * Every row, for the backup export (ADR-0017, SPEC.md §5.9).
+     *
+     * `ORDER BY` a stable key so two exports of an unchanged database produce
+     * byte-identical payloads — the round-trip test compares row sets, but a
+     * user comparing two `.lfbk` fingerprints should not see them differ
+     * because SQLite returned rows in a different order.
+     */
+    @Query("SELECT * FROM parser_rule ORDER BY id")
+    public suspend fun all(): List<ParserRuleEntity>
 
     @Query("SELECT COUNT(*) FROM parser_rule")
     public suspend fun count(): Int
@@ -244,6 +336,26 @@ public interface PendingTransactionDao {
             "ORDER BY created_at DESC LIMIT :limit",
     )
     public suspend fun withStatus(status: PendingStatus, limit: Int): List<PendingTransactionEntity>
+
+
+    /**
+     * Every row, for the backup export (ADR-0017, SPEC.md §5.9).
+     *
+     * `ORDER BY` a stable key so two exports of an unchanged database produce
+     * byte-identical payloads — the round-trip test compares row sets, but a
+     * user comparing two `.lfbk` fingerprints should not see them differ
+     * because SQLite returned rows in a different order.
+     */
+    @Query("SELECT * FROM pending_transaction ORDER BY id")
+    public suspend fun all(): List<PendingTransactionEntity>
+
+    /**
+     * The restore path. `ABORT`, like every other table's: a restore runs inside
+     * one transaction and a conflict must roll the whole thing back rather than
+     * leave a partly-populated database (see `DatabaseBackupManager.restore`).
+     */
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    public suspend fun insertAll(rows: List<PendingTransactionEntity>)
 
     @Query("SELECT COUNT(*) FROM pending_transaction")
     public suspend fun count(): Int

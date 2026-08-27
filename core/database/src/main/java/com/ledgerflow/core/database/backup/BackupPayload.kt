@@ -39,13 +39,35 @@ public data class BackupPayload(
     val merchantAliases: List<MerchantAliasRow> = emptyList(),
     val categoryGroups: List<CategoryGroupRow> = emptyList(),
     val categoryGroupMembers: List<CategoryGroupMemberRow> = emptyList(),
+    // ── Schema v6/v7 — the ingest tables ─────────────────────────────────────
+    //
+    // **These were missing for two schema versions and nothing said so.**
+    // `ExportCoversEveryTableTest` counted this class's own `List` properties
+    // and checked the CSV export matched — internally consistent, and blind to
+    // the schema, so v6 adding six tables kept it green. It was harmless while
+    // they were empty and stopped being harmless the moment P2-4 gave
+    // `pending_transaction` a writer: a restore would have silently dropped the
+    // user's unreviewed approval queue, their edited allowlists, and any parser
+    // rule they wrote by hand. The test now reads the committed schema JSON, so
+    // the next table cannot go missing the same way.
+    //
+    // Defaulted to empty for the reason the v2 block above is: a `.lfbk` a user
+    // already holds must still parse after they update.
+    val smsRaw: List<SmsRawRow> = emptyList(),
+    val notificationsRaw: List<NotificationRawRow> = emptyList(),
+    val packageAllowlist: List<PackageAllowlistRow> = emptyList(),
+    val senderAllowlist: List<SenderAllowlistRow> = emptyList(),
+    val parserRules: List<ParserRuleRow> = emptyList(),
+    val pendingTransactions: List<PendingTransactionRow> = emptyList(),
 ) {
     /** Total rows, for the post-restore equality assertion and diagnostics. */
     public val rowCount: Int
         get() = appMeta.size + categories.size + merchants.size +
             paymentMethods.size + ledgerEntries.size + lineItems.size +
             drafts.size + merchantAliases.size + categoryGroups.size +
-            categoryGroupMembers.size
+            categoryGroupMembers.size + smsRaw.size + notificationsRaw.size +
+            packageAllowlist.size + senderAllowlist.size + parserRules.size +
+            pendingTransactions.size
 }
 
 @Serializable
@@ -168,4 +190,120 @@ public data class CategoryGroupRow(
 public data class CategoryGroupMemberRow(
     val groupId: String,
     val categoryId: String,
+)
+
+/**
+ * A captured SMS, backed up verbatim (SPEC.md §5.1, §6.1).
+ *
+ * **The body is in the backup, and that is spec-literal rather than an
+ * oversight.** §16 Q1 (D-09) sets the 90-day purge precisely *because* the raw
+ * body is the most sensitive text this app holds and it "sits inside a file that
+ * can leave the device in a `.lfbk`" — the retention window is the answer to
+ * that exposure, not the backup's absence. Within the window the body is also
+ * the only thing that makes an unparseable message replayable against a later
+ * ruleset, and it is what a restored `pending_transaction` points at through
+ * `raw_ref_id`.
+ */
+@Serializable
+public data class SmsRawRow(
+    val id: String,
+    val sender: String,
+    val body: String,
+    val bodyHash: String,
+    val receivedAt: Long,
+    val simSlot: Int?,
+    val parseStatus: String,
+    val matchedRuleId: String?,
+    val retentionExpiresAt: Long,
+)
+
+/** A captured notification (SPEC.md §5.2, §6.1). See [SmsRawRow] on the body. */
+@Serializable
+public data class NotificationRawRow(
+    val id: String,
+    val packageName: String,
+    val title: String?,
+    val body: String,
+    val bodyHash: String,
+    val postedAt: Long,
+    val parseStatus: String,
+    val matchedRuleId: String?,
+    val retentionExpiresAt: Long,
+)
+
+/**
+ * Which packages LedgerFlow may read notifications from (D-10).
+ *
+ * User-editable, which is the whole reason it has to survive a restore: a
+ * package the user deliberately disabled must come back disabled, and a package
+ * they added must come back at all. Re-seeding from the shipped asset would
+ * silently re-enable everything they had turned off.
+ */
+@Serializable
+public data class PackageAllowlistRow(
+    val packageName: String,
+    val label: String?,
+    val enabled: Boolean,
+)
+
+/** Which SMS senders count as financial (§5.1). User-editable — see [PackageAllowlistRow]. */
+@Serializable
+public data class SenderAllowlistRow(
+    val senderPattern: String,
+    val label: String?,
+    val enabled: Boolean,
+)
+
+/**
+ * One extraction rule (§5.1).
+ *
+ * Shipped rules are re-seeded from the asset on every launch, so backing those
+ * up is redundant — but a rule with `isUserDefined = true` exists **nowhere
+ * else**, and the seeder is explicitly forbidden from touching it. Both are
+ * exported rather than filtering to user rules only: the filter would be a
+ * second place that has to agree with the seeder about what "shipped" means,
+ * and a restore that brings back a stale shipped rule is corrected by the next
+ * seed, which deletes and replaces every shipped rule for its version.
+ */
+@Serializable
+public data class ParserRuleRow(
+    val id: String,
+    val rulesetVersion: Int,
+    val priority: Int,
+    val senderPattern: String,
+    val bodyPattern: String,
+    val fieldMapJson: String,
+    val direction: String?,
+    val instrumentHint: String?,
+    val confidenceBase: Double,
+    val enabled: Boolean,
+    val isUserDefined: Boolean,
+)
+
+/**
+ * One candidate awaiting a human (§5.1, §6.1).
+ *
+ * **The table this whole fix is urgent for.** A pending row is work the user has
+ * not done yet — the same argument [DraftEntryRow] makes about unsaved form
+ * state, with more at stake, because a dropped candidate is a transaction that
+ * never reaches the ledger and leaves no trace that it was ever going to.
+ *
+ * Restoring it restores a queue, never a ledger row. Law 1 is unaffected:
+ * `status` comes back as whatever it was, and only `ApproveTransactionUseCase`
+ * can still move one to `APPROVED`.
+ */
+@Serializable
+public data class PendingTransactionRow(
+    val id: String,
+    val source: String,
+    val dedupeKey: String,
+    val suppressedById: String?,
+    val rawRefId: String?,
+    val extractedJson: String,
+    val confidence: Double,
+    val status: String,
+    val needsManualFill: Boolean,
+    val createdAt: Long,
+    val reviewedAt: Long?,
+    val approvedEntryId: String?,
 )

@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.PathSensitivity
+
 plugins {
     id("ledgerflow.android.library")
     id("ledgerflow.android.hilt")
@@ -37,4 +39,28 @@ dependencies {
     // way to read items out of one by hand, and hand-rolling it would test our
     // own reflection rather than the query (ADR-0014).
     androidTestImplementation(libs.androidx.paging.testing)
+}
+
+/**
+ * `ExportCoversEveryTableTest` reads the committed Room schema JSON as a plain
+ * file at run time, and Gradle cannot see that.
+ *
+ * Without this the task stays UP-TO-DATE when a schema version is added, and the
+ * guard that exists to notice a new table stops running exactly when a new table
+ * appears. That is not hypothetical here: three separate guards in this
+ * repository have reported success while not executing, and the ingest tables
+ * the test now checks for went missing from the backup for two schema versions
+ * because its predecessor could only see itself.
+ *
+ * Same shape as `:feature:ingest`'s golden-corpus declaration. Copy one of them
+ * for the next test that reads a repository file.
+ */
+tasks.withType<Test>().configureEach {
+    inputs.files(
+        rootProject.fileTree(rootProject.projectDir) {
+            include("core/database/schemas/**")
+        },
+    )
+        .withPropertyName("committedRoomSchemas")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }

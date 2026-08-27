@@ -6,20 +6,14 @@ import com.ledgerflow.core.crypto.lfbk.LfbkFailure
 import com.ledgerflow.core.crypto.lfbk.LfbkResult
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.entity.AppMetaEntity
-import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.database.entity.CategoryGroupEntity
 import com.ledgerflow.core.database.entity.CategoryGroupMemberEntity
 import com.ledgerflow.core.database.entity.DraftEntryEntity
-import com.ledgerflow.core.database.entity.LedgerEntryEntity
-import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
-import com.ledgerflow.core.database.entity.MerchantEntity
-import com.ledgerflow.core.database.entity.PaymentMethodEntity
-import com.ledgerflow.core.model.EntrySource
+import com.ledgerflow.core.database.entity.PackageAllowlistEntity
+import com.ledgerflow.core.database.entity.PendingTransactionEntity
+import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.model.LedgerType
-import com.ledgerflow.core.model.LineItemKind
-import com.ledgerflow.core.model.Money
-import com.ledgerflow.core.model.PaymentMethodType
 import java.io.File
 import kotlinx.serialization.json.Json
 
@@ -211,29 +205,22 @@ public class DatabaseBackupManager(
         categoryGroupMembers = database.categoryGroupDao().allMembers().map { row ->
             CategoryGroupMemberRow(row.groupId, row.categoryId)
         },
-    )
-
-    private fun toRow(entry: LedgerEntryEntity) = LedgerEntryRow(
-        id = entry.id,
-        ledger = entry.ledger.name,
-        amountMinor = entry.amountMinor.minor,
-        currency = entry.currency,
-        originalAmountMinor = entry.originalAmountMinor,
-        originalCurrency = entry.originalCurrency,
-        fxRateMicro = entry.fxRateMicro,
-        occurredAt = entry.occurredAt,
-        localDate = entry.localDate,
-        merchantId = entry.merchantId,
-        categoryId = entry.categoryId,
-        subcategoryId = entry.subcategoryId,
-        paymentMethodId = entry.paymentMethodId,
-        note = entry.note,
-        source = entry.source.name,
-        sourceRefId = entry.sourceRefId,
-        isRecurring = entry.isRecurring,
-        createdAt = entry.createdAt,
-        updatedAt = entry.updatedAt,
-        deletedAt = entry.deletedAt,
+        // Schema v6/v7 -- the ingest tables. Absent from this payload until
+        // P2-4's follow-up, which is why `ExportCoversEveryTableTest` now reads
+        // the committed schema JSON instead of counting this class's own fields.
+        smsRaw = database.smsRawDao().all().map(::toSmsRawRow),
+        notificationsRaw = database.notificationRawDao().all().map(::toNotificationRawRow),
+        packageAllowlist = database.packageAllowlistDao().all().map { row ->
+            PackageAllowlistRow(row.packageName, row.label, row.enabled)
+        },
+        senderAllowlist = database.senderAllowlistDao().all().map { row ->
+            SenderAllowlistRow(row.senderPattern, row.label, row.enabled)
+        },
+        parserRules = database.parserRuleDao().all().map(::toParserRuleRow),
+        // The user's unreviewed approval queue. Law 1 is untouched: these come
+        // back as candidates with whatever status they had, and only
+        // ApproveTransactionUseCase can still move one to APPROVED.
+        pendingTransactions = database.pendingTransactionDao().all().map(::toPendingRow),
     )
 
     /**
@@ -280,54 +267,36 @@ public class DatabaseBackupManager(
                 CategoryGroupMemberEntity(it.groupId, it.categoryId)
             },
         )
+
+        importIngestTables(payload)
     }
 
-    private fun toCategory(row: CategoryRow) = CategoryEntity(
-        id = row.id, parentId = row.parentId, parentKey = row.parentKey,
-        ledgerScope = LedgerType.valueOf(row.ledgerScope), name = row.name,
-        icon = row.icon, colorArgb = row.colorArgb, sortOrder = row.sortOrder,
-        isSystem = row.isSystem, deletedAt = row.deletedAt,
-    )
-
-    private fun toMerchant(row: MerchantRow) = MerchantEntity(
-        row.id, row.canonicalName, row.normalizedKey,
-        row.defaultCategoryId, row.logoRef, row.deletedAt,
-    )
-
-    private fun toPaymentMethod(row: PaymentMethodRow) = PaymentMethodEntity(
-        id = row.id, type = PaymentMethodType.valueOf(row.type), label = row.label,
-        issuer = row.issuer, last4 = row.last4, colorArgb = row.colorArgb,
-        isDefault = row.isDefault, deletedAt = row.deletedAt,
-    )
-
-    private fun toEntry(row: LedgerEntryRow) = LedgerEntryEntity(
-        id = row.id,
-        ledger = LedgerType.valueOf(row.ledger),
-        amountMinor = Money(row.amountMinor),
-        currency = row.currency,
-        originalAmountMinor = row.originalAmountMinor,
-        originalCurrency = row.originalCurrency,
-        fxRateMicro = row.fxRateMicro,
-        occurredAt = row.occurredAt,
-        localDate = row.localDate,
-        merchantId = row.merchantId,
-        categoryId = row.categoryId,
-        subcategoryId = row.subcategoryId,
-        paymentMethodId = row.paymentMethodId,
-        note = row.note,
-        source = EntrySource.valueOf(row.source),
-        sourceRefId = row.sourceRefId,
-        isRecurring = row.isRecurring,
-        createdAt = row.createdAt,
-        updatedAt = row.updatedAt,
-        deletedAt = row.deletedAt,
-    )
-
-    private fun toLineItem(row: LineItemRow) = LineItemEntity(
-        id = row.id, entryId = row.entryId, position = row.position,
-        name = row.name, normalizedName = row.normalizedName,
-        quantityMilli = row.quantityMilli, unitPriceMinor = row.unitPriceMinor,
-        totalMinor = Money(row.totalMinor), kind = LineItemKind.valueOf(row.kind),
-        categoryId = row.categoryId, subcategoryId = row.subcategoryId,
-    )
+    /**
+     * v6/v7. **None of these tables declares a foreign key** -- deliberately,
+     * see `PendingTransactionEntity`'s KDoc: a pending row must survive the raw
+     * row it came from being purged, and the evidence that a duplicate was
+     * suppressed must survive the winner being discarded. So there is no FK
+     * order to respect here. They are still inserted raw-tables-first, so that
+     * reading this tells the same story the pipeline does.
+     */
+    private suspend fun importIngestTables(payload: BackupPayload) {
+        database.smsRawDao().insertAll(payload.smsRaw.map(::toSmsRaw))
+        database.notificationRawDao().insertAll(
+            payload.notificationsRaw.map(::toNotificationRaw),
+        )
+        database.packageAllowlistDao().insertAll(
+            payload.packageAllowlist.map {
+                PackageAllowlistEntity(it.packageName, it.label, it.enabled)
+            },
+        )
+        database.senderAllowlistDao().insertAll(
+            payload.senderAllowlist.map {
+                SenderAllowlistEntity(it.senderPattern, it.label, it.enabled)
+            },
+        )
+        database.parserRuleDao().insertAll(payload.parserRules.map(::toParserRule))
+        database.pendingTransactionDao().insertAll(
+            payload.pendingTransactions.map(::toPendingTransaction),
+        )
+    }
 }
