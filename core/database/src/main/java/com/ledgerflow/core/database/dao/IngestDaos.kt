@@ -567,6 +567,64 @@ public interface PendingTransactionDao {
     )
     public suspend fun markApproved(id: String, entryId: String, now: Long): Int
 
+    /**
+     * **Destroys candidates. The only irreversible operation on this table.**
+     *
+     * Two predicates guard every statement below, and both are load-bearing:
+     *
+     * `approved_entry_id IS NULL` — an approved candidate is the audit trail
+     * from a `ledger_entry` back to the message that produced it, and it is also
+     * `findApprovedEntryId`'s half of the idempotency guard. Destroying one
+     * would leave a committed entry with no record of where it came from, and
+     * would let a re-arriving duplicate be approved a second time. A row can be
+     * both suppressed *and* approved, so this cannot be inferred from the filter
+     * the user is looking at.
+     *
+     * `status IN ('DISCARDED', 'FAILED') OR suppressed_by_id IS NOT NULL` — the
+     * three the owner asked for, and nothing else. A live `PENDING` candidate is
+     * never erasable by id, however the id reached this statement; the path to
+     * destroying one is to discard it first, which is reversible for 30 days.
+     *
+     * Same shape as the bin's per-row purge binding `deleted_at IS NOT NULL`
+     * (CLAUDE.md §7): with the predicate in place a mis-aimed delete affects no
+     * rows instead of quietly destroying something the UI would never have
+     * offered.
+     *
+     * **The raw message is deliberately NOT deleted** (owner decision). The
+     * candidate goes; `sms_raw` / `notification_raw` keep the body until D-09's
+     * 90-day retention clears it. §5.1 makes a rejected candidate *information*
+     * — the material the rule test bench and any precision measurement are made
+     * of — and P2-9 wants fifty real messages of each. Tidying the Inbox should
+     * not throw away corpus that cost a real payment to obtain.
+     */
+    @Query(
+        "DELETE FROM pending_transaction WHERE id IN (:ids) " +
+            "AND approved_entry_id IS NULL " +
+            "AND (status IN ('DISCARDED', 'FAILED') OR suppressed_by_id IS NOT NULL)",
+    )
+    public suspend fun purge(ids: List<String>): Int
+
+    /** Every discarded or failed row. Same two guards. */
+    @Query(
+        "DELETE FROM pending_transaction WHERE status = :status " +
+            "AND approved_entry_id IS NULL",
+    )
+    public suspend fun purgeWithStatus(status: PendingStatus): Int
+
+    /**
+     * Every suppressed row.
+     *
+     * Selects on `suppressed_by_id` rather than on a status, because
+     * "suppressed" is not one of §6.1's four — a row can be suppressed and
+     * discarded at once, and making it a status would lose which row it was a
+     * duplicate *of*.
+     */
+    @Query(
+        "DELETE FROM pending_transaction WHERE suppressed_by_id IS NOT NULL " +
+            "AND approved_entry_id IS NULL",
+    )
+    public suspend fun purgeSuppressed(): Int
+
     @Query("SELECT COUNT(*) FROM pending_transaction")
     public suspend fun count(): Int
 }

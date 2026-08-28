@@ -9,6 +9,7 @@ import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
 import com.ledgerflow.core.domain.usecase.InboxException
 import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
+import com.ledgerflow.core.domain.usecase.PurgePendingUseCase
 import com.ledgerflow.core.domain.usecase.RestorePendingUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -40,6 +41,7 @@ public class InboxViewModel @Inject constructor(
     private val approvePending: ApprovePendingUseCase,
     private val discardPending: DiscardPendingUseCase,
     private val restorePending: RestorePendingUseCase,
+    private val purgePending: PurgePendingUseCase,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(InboxFilter.PENDING)
@@ -59,6 +61,13 @@ public class InboxViewModel @Inject constructor(
             loading = false,
             undoableDiscard = extra.undoableDiscard,
             message = extra.message,
+            // Ticks for rows that are no longer listed are dropped rather than
+            // carried: a purge, a restore or a re-triage can remove a row under
+            // the user, and a stale id would make "Erase 3" name a count that
+            // does not match what is on screen.
+            selected = extra.selected intersect rows.map { it.id }.toSet(),
+            isWorking = extra.isWorking,
+            confirmation = extra.confirmation,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -71,7 +80,12 @@ public class InboxViewModel @Inject constructor(
 
     public fun onEvent(event: InboxEvent) {
         when (event) {
-            is InboxEvent.FilterSelected -> filter.value = event.filter
+            is InboxEvent.FilterSelected -> {
+                filter.value = event.filter
+                // A selection that survived a tab switch would let "Erase 3"
+                // mean three rows the user can no longer see.
+                transient.update { it.copy(selected = emptySet(), confirmation = null) }
+            }
 
             is InboxEvent.Approved -> viewModelScope.launch {
                 approvePending(event.pendingId).fold(
@@ -105,6 +119,93 @@ public class InboxViewModel @Inject constructor(
             InboxEvent.UndoExpired -> transient.update { it.copy(undoableDiscard = null) }
 
             InboxEvent.MessageShown -> transient.update { it.copy(message = null) }
+
+            // ── Erasing (CHANGE#1) ──────────────────────────────────────────
+
+            is InboxEvent.SelectionToggled -> transient.update { current ->
+                val next = if (event.pendingId in current.selected) {
+                    current.selected - event.pendingId
+                } else {
+                    current.selected + event.pendingId
+                }
+                current.copy(selected = next)
+            }
+
+            InboxEvent.SelectionCleared ->
+                transient.update { it.copy(selected = emptySet()) }
+
+            // Both of these only OPEN the dialog. Nothing here destroys a row --
+            // the delete is reachable from `EraseConfirmed` alone, so no tap on
+            // a list control can get to it without the warning in between.
+            InboxEvent.EraseSelectedRequested -> {
+                // From `transient`, not from `state`: the assembled state is a
+                // `WhileSubscribed` flow and reads as empty when nothing is
+                // collecting. The screen always is, so this is belt-and-braces
+                // rather than a live bug -- but a count that silently reads zero
+                // is exactly the kind of thing that makes a destructive control
+                // do nothing and look broken.
+                val count = transient.value.selected.size
+                if (count > 0) {
+                    transient.update {
+                        it.copy(confirmation = InboxConfirmation.EraseSelected(count))
+                    }
+                }
+            }
+
+            InboxEvent.EraseAllRequested -> {
+                val current = state.value
+                if (current.canErase && current.rows.isNotEmpty()) {
+                    transient.update {
+                        it.copy(
+                            confirmation = InboxConfirmation.EraseAll(
+                                count = current.rows.size,
+                                filter = current.filter,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            InboxEvent.EraseDismissed ->
+                transient.update { it.copy(confirmation = null) }
+
+            InboxEvent.EraseConfirmed -> erase()
+        }
+    }
+
+    /**
+     * The irreversible one.
+     *
+     * Reads the confirmation rather than the current selection, so what is
+     * destroyed is what the dialog named. Between the dialog opening and the
+     * user confirming, a row can arrive or leave; erasing "whatever is selected
+     * now" would destroy a set the user was never shown.
+     */
+    private fun erase() {
+        val confirmation = transient.value.confirmation ?: return
+        val ids = transient.value.selected.toList()
+        transient.update { it.copy(confirmation = null, isWorking = true) }
+
+        viewModelScope.launch {
+            val erased = when (confirmation) {
+                is InboxConfirmation.EraseSelected -> purgePending.selected(ids)
+                is InboxConfirmation.EraseAll -> purgePending.all(confirmation.filter)
+            }
+            transient.update {
+                it.copy(
+                    selected = emptySet(),
+                    isWorking = false,
+                    // The count is what was actually erased, not what was asked
+                    // for. The SQL refuses an approved candidate however it was
+                    // selected, and saying "3 erased" over 2 would be the app
+                    // reporting its own intention rather than the outcome.
+                    message = when (erased) {
+                        0 -> "Nothing was erased."
+                        1 -> "1 item erased for good."
+                        else -> "$erased items erased for good."
+                    },
+                )
+            }
         }
     }
 
@@ -131,6 +232,9 @@ public class InboxViewModel @Inject constructor(
     private data class TransientState(
         val undoableDiscard: UndoableDiscard? = null,
         val message: String? = null,
+        val selected: Set<String> = emptySet(),
+        val isWorking: Boolean = false,
+        val confirmation: InboxConfirmation? = null,
     )
 
     private companion object {

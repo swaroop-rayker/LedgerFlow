@@ -26,7 +26,57 @@ public data class InboxUiState(
      */
     val undoableDiscard: UndoableDiscard? = null,
     val message: String? = null,
-)
+
+    /**
+     * The rows ticked for erasing (CHANGE#1).
+     *
+     * Only ever populated on a filter that permits erasing — see [canErase].
+     * Cleared when the filter changes, because a selection that survived a tab
+     * switch would let "Erase 3" mean three rows the user can no longer see.
+     */
+    val selected: Set<String> = emptySet(),
+
+    /** Set while a purge runs, so the controls cannot be tapped twice. */
+    val isWorking: Boolean = false,
+
+    /** The `Warning` dialog. Never null while a purge is one tap away. */
+    val confirmation: InboxConfirmation? = null,
+) {
+
+    /**
+     * Whether this filter's rows may be destroyed.
+     *
+     * `PENDING` is excluded and that is the point: it is the queue Law 1 is
+     * about, and the way to destroy a live candidate is to discard it first —
+     * which is reversible for 30 days. The SQL enforces this too; this is only
+     * what decides whether the UI offers it.
+     */
+    val canErase: Boolean
+        get() = filter != InboxFilter.PENDING
+
+    val hasSelection: Boolean get() = selected.isNotEmpty()
+
+    val selectionCount: Int get() = selected.size
+}
+
+/**
+ * What the `Warning` dialog is about to do.
+ *
+ * Both name a **count**, because "Erase all?" without a number is a question
+ * the user cannot answer — the same rule the bin's purge dialog follows
+ * (CLAUDE.md §7).
+ */
+@Immutable
+public sealed interface InboxConfirmation {
+
+    /** Destroy the ticked rows. */
+    @Immutable
+    public data class EraseSelected(val count: Int) : InboxConfirmation
+
+    /** Destroy everything the current filter lists. */
+    @Immutable
+    public data class EraseAll(val count: Int, val filter: InboxFilter) : InboxConfirmation
+}
 
 /** What the undo snackbar needs: which row, and what to call it. */
 @Immutable
@@ -62,4 +112,28 @@ public sealed interface InboxEvent {
     public data object UndoExpired : InboxEvent
 
     public data object MessageShown : InboxEvent
+
+    // ── Erasing (CHANGE#1) ──────────────────────────────────────────────────
+
+    /** Tick or untick one row. */
+    public data class SelectionToggled(val pendingId: String) : InboxEvent
+
+    public data object SelectionCleared : InboxEvent
+
+    /** Ask about the ticked rows. Opens the dialog; never erases. */
+    public data object EraseSelectedRequested : InboxEvent
+
+    /** Ask about everything on this filter. Opens the dialog; never erases. */
+    public data object EraseAllRequested : InboxEvent
+
+    /**
+     * The dialog's confirm.
+     *
+     * **The only event that destroys anything**, and it exists separately from
+     * the two above precisely so that no tap on a list control can reach the
+     * delete without the dialog in between.
+     */
+    public data object EraseConfirmed : InboxEvent
+
+    public data object EraseDismissed : InboxEvent
 }

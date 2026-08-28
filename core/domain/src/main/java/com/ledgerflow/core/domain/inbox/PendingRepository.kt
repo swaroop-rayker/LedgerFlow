@@ -161,6 +161,36 @@ public interface PendingRepository {
     public suspend fun saveReviewDraft(id: String, json: String?): Boolean
 
     /**
+     * **Destroys candidates for good. The only irreversible operation here.**
+     *
+     * Erases the rows named, and returns how many actually went. Two guards are
+     * in the SQL rather than in a caller, so they hold however the ids arrived:
+     * a candidate that produced a `ledger_entry` is never erasable — it is that
+     * entry's only record of where it came from, and [findApprovedEntryId]'s
+     * half of the idempotency guard — and a live `PENDING` candidate is never
+     * erasable either. Discarding first is the path, and that is reversible for
+     * 30 days.
+     *
+     * **The raw message stays** (owner decision). Only the candidate goes; the
+     * captured body expires on D-09's 90-day retention as it always would. §5.1
+     * makes a rejected candidate information, and P2-9's corpus is made of
+     * exactly these.
+     *
+     * A returned count lower than `ids.size` is not an error: it means some rows
+     * did not satisfy the guards, which is the guards working.
+     */
+    public suspend fun purge(ids: List<String>): Int
+
+    /**
+     * Everything one filter selects, on the same terms as [purge].
+     *
+     * [InboxFilter.PENDING] is **refused** rather than emptied — it is the queue
+     * Law 1 is about, and "erase all" on the screen listing work the user has
+     * not looked at yet is not a thing this app offers.
+     */
+    public suspend fun purgeAll(filter: InboxFilter): Int
+
+    /**
      * Records that a candidate became a ledger entry.
      *
      * Called by [ApprovePendingUseCase] *after* the entry is committed. The two

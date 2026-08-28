@@ -116,6 +116,38 @@ public class DefaultPendingRepository @Inject constructor(
         }.getOrDefault(false)
     }
 
+    override suspend fun purge(ids: List<String>): Int = withContext(io) {
+        if (ids.isEmpty()) return@withContext 0
+        val database = openVault() ?: return@withContext 0
+        runCatching { database.pendingTransactionDao().purge(ids) }.getOrDefault(0)
+    }
+
+    /**
+     * **No `VACUUM` here, unlike the ledger bin.**
+     *
+     * `PurgeDeletedEntriesUseCase` compacts because it erases `ledger_entry`
+     * rows with their line items, which can be a large share of the file.
+     * Candidates are small and few — a body-less row plus a short JSON payload —
+     * and `VACUUM` rewrites the *whole* encrypted database outside a
+     * transaction. CLAUDE.md §7 is explicit that a mistake there does not fail
+     * loudly; it surfaces as an unreadable vault on the next launch. That is not
+     * a risk worth taking to reclaim a few kilobytes, and the raw bodies these
+     * rows came from are still on disk anyway until D-09 clears them.
+     */
+    override suspend fun purgeAll(filter: InboxFilter): Int = withContext(io) {
+        val database = openVault() ?: return@withContext 0
+        runCatching {
+            val dao = database.pendingTransactionDao()
+            when (filter) {
+                InboxFilter.DISCARDED -> dao.purgeWithStatus(PendingStatus.DISCARDED)
+                InboxFilter.FAILED -> dao.purgeWithStatus(PendingStatus.FAILED)
+                InboxFilter.SUPPRESSED -> dao.purgeSuppressed()
+                // The queue Law 1 is about. Not emptiable in bulk, by design.
+                InboxFilter.PENDING -> 0
+            }
+        }.getOrDefault(0)
+    }
+
     override suspend fun markApproved(id: String, entryId: String): Boolean = withContext(io) {
         val database = openVault() ?: return@withContext false
         runCatching {

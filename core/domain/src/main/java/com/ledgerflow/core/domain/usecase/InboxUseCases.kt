@@ -60,6 +60,42 @@ public class RestorePendingUseCase @Inject constructor(
 }
 
 /**
+ * **Erases candidates for good.** The Inbox's only irreversible operation.
+ *
+ * The counterpart to `PurgeDeletedEntriesUseCase` for the approval queue, and
+ * deliberately smaller: that one destroys committed money and compacts the file
+ * afterwards, while this destroys rows the user has already rejected, already
+ * seen suppressed, or that never produced a candidate worth keeping.
+ *
+ * **What it cannot touch is enforced in SQL, not here.** An approved candidate
+ * is a `ledger_entry`'s only record of where it came from, and a live `PENDING`
+ * one is the queue Law 1 exists to protect; both are excluded by the statement
+ * itself, so no future caller can bypass the rule by not knowing about it.
+ *
+ * **Never reachable without a `Warning` confirmation naming the count** — the
+ * same rule the bin's purge follows, for the same reason: it cannot be undone
+ * and it is one tap away in a list of small controls.
+ *
+ * The raw messages stay (owner decision, CHANGE#1). Only candidates go.
+ */
+public class PurgePendingUseCase @Inject constructor(
+    private val repository: PendingRepository,
+) {
+
+    /** Just the ones the user ticked. Returns how many were actually erased. */
+    public suspend fun selected(ids: List<String>): Int = repository.purge(ids)
+
+    /**
+     * Everything the given filter lists.
+     *
+     * [InboxFilter.PENDING] erases nothing — see the port. An "erase all" on the
+     * queue of things the user has not looked at yet is not an operation this
+     * app offers.
+     */
+    public suspend fun all(filter: InboxFilter): Int = repository.purgeAll(filter)
+}
+
+/**
  * What the user decided on the review screen, over what the parser extracted.
  *
  * [merchantId] and [merchantName] are the two halves of §5.1's merchant rule.

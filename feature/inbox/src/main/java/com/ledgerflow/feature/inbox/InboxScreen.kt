@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
@@ -27,6 +29,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -39,6 +43,8 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfDialog
+import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -109,6 +115,8 @@ public fun InboxScreen(
         }
     }
 
+    state.confirmation?.let { EraseConfirmationDialog(it, onEvent) }
+
     LfScaffold(modifier = modifier, snackbarHostState = snackbarHostState) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -121,6 +129,8 @@ public fun InboxScreen(
             )
 
             FilterBand(state.filter, onEvent)
+
+            if (state.canErase && state.rows.isNotEmpty()) EraseBand(state, onEvent)
 
             if (state.rows.isEmpty() && !state.loading) {
                 LfEmptyState(
@@ -140,7 +150,13 @@ public fun InboxScreen(
                         // One row type, so the compiler can reuse every slot.
                         contentType = { "pending" },
                     ) { row ->
-                        SwipeableRow(row, onEvent, onReview)
+                        SwipeableRow(
+                            row = row,
+                            selectable = state.canErase,
+                            selected = row.id in state.selected,
+                            onEvent = onEvent,
+                            onReview = onReview,
+                        )
                     }
                 }
             }
@@ -172,6 +188,93 @@ private fun FilterBand(selected: InboxFilter, onEvent: (InboxEvent) -> Unit) {
 }
 
 /**
+ * Erasing, on the three filters that permit it (CHANGE#1).
+ *
+ * A single inline row rather than a toolbar or an app-bar action mode: the
+ * owner's brief is that chrome is charged to the scrolling content once per
+ * band, and a selection mode that swaps the whole header would cost the list a
+ * band's height on every filter change.
+ *
+ * `Erase all` is present whenever the filter has rows; `Erase N` and `Clear`
+ * appear only with a selection, so the row is one control wide most of the
+ * time. In an [LfActionRow] so they wrap as whole controls at font scale 2.0
+ * (BUG9), and `Inline` because these are in-list actions rather than a screen's
+ * primary one.
+ *
+ * **Neither button erases.** Both open the confirmation; only its confirm
+ * destroys anything.
+ */
+@Composable
+private fun EraseBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
+    LfActionRow(
+        alignment = LfActionAlignment.Start,
+        modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+    ) {
+        LfButton(
+            text = "Erase all",
+            style = LfButtonStyle.Inline,
+            enabled = !state.isWorking,
+            onClick = { onEvent(InboxEvent.EraseAllRequested) },
+        )
+        if (state.hasSelection) {
+            LfButton(
+                text = "Erase ${state.selectionCount}",
+                style = LfButtonStyle.Inline,
+                enabled = !state.isWorking,
+                onClick = { onEvent(InboxEvent.EraseSelectedRequested) },
+            )
+            LfButton(
+                text = "Clear",
+                style = LfButtonStyle.Inline,
+                enabled = !state.isWorking,
+                onClick = { onEvent(InboxEvent.SelectionCleared) },
+            )
+        }
+    }
+}
+
+/**
+ * The last thing between a tap and an irreversible delete.
+ *
+ * `Warning`, the emphasis otherwise reserved for the Recovery Kit and the bin's
+ * purge, and it **names the count** — "Erase all?" without a number is a
+ * question the user cannot answer (CLAUDE.md §7).
+ *
+ * It says what survives, because that is the part people get wrong: the
+ * captured message stays and only the candidate goes, so the corpus a future
+ * parser rule is written against is not what this destroys.
+ */
+@Composable
+private fun EraseConfirmationDialog(
+    confirmation: InboxConfirmation,
+    onEvent: (InboxEvent) -> Unit,
+) {
+    val (title, body) = when (confirmation) {
+        is InboxConfirmation.EraseSelected -> {
+            val noun = if (confirmation.count == 1) "item" else "items"
+            "Erase ${confirmation.count} $noun?" to
+                "This cannot be undone. The captured messages themselves are kept."
+        }
+
+        is InboxConfirmation.EraseAll -> {
+            val noun = if (confirmation.count == 1) "item" else "items"
+            "Erase all ${confirmation.count} $noun?" to
+                "Everything under ${confirmation.filter.label()} is destroyed for good. " +
+                "This cannot be undone. The captured messages themselves are kept."
+        }
+    }
+
+    LfDialog(
+        title = title,
+        body = body,
+        confirmText = "Erase for good",
+        emphasis = LfDialogEmphasis.Warning,
+        onConfirm = { onEvent(InboxEvent.EraseConfirmed) },
+        onDismiss = { onEvent(InboxEvent.EraseDismissed) },
+    )
+}
+
+/**
  * §5.1's swipe-to-discard, wrapping the row.
  *
  * Discarding is the action a queue needs most and the one that costs the least
@@ -187,14 +290,18 @@ private fun FilterBand(selected: InboxFilter, onEvent: (InboxEvent) -> Unit) {
 @Composable
 private fun SwipeableRow(
     row: PendingTransaction,
+    selectable: Boolean,
+    selected: Boolean,
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
     if (row.status != PendingStatus.PENDING) {
-        PendingRow(row, onEvent, onReview)
+        PendingRow(row, selectable, selected, onEvent, onReview)
         return
     }
 
+    // A pending row on the Suppressed filter is selectable AND swipeable. The
+    // checkbox lives inside the row, so the swipe still wraps the whole thing.
     val state = rememberSwipeToDismissBoxState()
 
     // Reacting to the settled value rather than vetoing in `confirmValueChange`,
@@ -230,7 +337,7 @@ private fun SwipeableRow(
             }
         },
     ) {
-        PendingRow(row, onEvent, onReview)
+        PendingRow(row, selectable, selected, onEvent, onReview)
     }
 }
 
@@ -250,10 +357,12 @@ private fun SwipeableRow(
 @Composable
 private fun PendingRow(
     row: PendingTransaction,
+    selectable: Boolean,
+    selected: Boolean,
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(LfTheme.colors.surfaceBase, RoundedCornerShape(LfTheme.spacing.sm))
@@ -262,10 +371,40 @@ private fun PendingRow(
                 LfTheme.colors.outline,
                 RoundedCornerShape(LfTheme.spacing.sm),
             )
-            .clickable { onReview(row.id) }
-            .padding(horizontal = LfTheme.spacing.md, vertical = LfTheme.spacing.sm),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            .padding(
+                start = if (selectable) LfTheme.spacing.xs else LfTheme.spacing.md,
+                end = LfTheme.spacing.md,
+                top = LfTheme.spacing.sm,
+                bottom = LfTheme.spacing.sm,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        // The box is its own target and the body still opens review, which is
+        // the difference from the bin: there, a row has no other action, so the
+        // whole row toggles. Here it does, and stealing the tap would make the
+        // Discarded filter's rows unopenable. The box carries its own padding so
+        // the target is a full 48dp rather than the glyph's 20dp.
+        if (selectable) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { onEvent(InboxEvent.SelectionToggled(row.id)) },
+                colors = CheckboxDefaults.colors(checkedColor = LfTheme.colors.accent),
+                modifier = Modifier.semantics {
+                    contentDescription = if (selected) {
+                        "Selected, ${row.title()}"
+                    } else {
+                        "Not selected, ${row.title()}"
+                    }
+                },
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onReview(row.id) },
+            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -308,6 +447,7 @@ private fun PendingRow(
                 modifier = Modifier.weight(1f).padding(end = LfTheme.spacing.sm),
             )
             RowActions(row, onEvent, onReview, Modifier.weight(1f))
+        }
         }
     }
 }

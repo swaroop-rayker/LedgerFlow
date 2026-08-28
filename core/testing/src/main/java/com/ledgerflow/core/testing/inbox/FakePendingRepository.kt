@@ -36,6 +36,15 @@ public class FakePendingRepository(
 
     public fun get(id: String): PendingTransaction? = rows.value[id]
 
+    /**
+     * Every row the fake holds, keyed by id.
+     *
+     * For assertions about what a *destructive* call left behind. `observe`
+     * cannot answer that: it filters by the caller's filter, so a row erased
+     * from one and a row that was never on it look identical through it.
+     */
+    public fun snapshot(): Map<String, PendingTransaction> = rows.value
+
     override fun observe(filter: InboxFilter): Flow<List<PendingTransaction>> =
         rows.map { current ->
             current.values
@@ -75,6 +84,43 @@ public class FakePendingRepository(
         if (row.status != PendingStatus.PENDING) return false
         rows.value = rows.value + (id to row.copy(reviewDraftJson = json))
         return true
+    }
+
+    /**
+     * Both guards modelled, not just the obvious one.
+     *
+     * A fake that only checked the filter would let a test pass over an
+     * approved-and-suppressed row that the real statement refuses — and that row
+     * is a `ledger_entry`'s only record of where it came from.
+     */
+    private fun erasable(row: PendingTransaction): Boolean =
+        row.approvedEntryId == null &&
+            (
+                row.status == PendingStatus.DISCARDED ||
+                    row.status == PendingStatus.FAILED ||
+                    row.isSuppressed
+                )
+
+    override suspend fun purge(ids: List<String>): Int {
+        val doomed = ids.mapNotNull { rows.value[it] }.filter(::erasable).map { it.id }.toSet()
+        rows.value = rows.value - doomed
+        return doomed.size
+    }
+
+    override suspend fun purgeAll(filter: InboxFilter): Int {
+        val doomed = rows.value.values
+            .filter { row ->
+                erasable(row) && when (filter) {
+                    InboxFilter.DISCARDED -> row.status == PendingStatus.DISCARDED
+                    InboxFilter.FAILED -> row.status == PendingStatus.FAILED
+                    InboxFilter.SUPPRESSED -> row.isSuppressed
+                    InboxFilter.PENDING -> false
+                }
+            }
+            .map { it.id }
+            .toSet()
+        rows.value = rows.value - doomed
+        return doomed.size
     }
 
     override suspend fun markApproved(id: String, entryId: String): Boolean {
