@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The INSTRUMENTATION APK's manifest. Nothing here reaches a shipped build.
+
+  `InboxNotificationContentTest` posts real notifications and reads them back
+  off the platform, which at API 33+ needs POST_NOTIFICATIONS held by the
+  process doing the posting. `:feature:ingest` is self-instrumenting, so that
+  process is this test APK — and the library's own src/main manifest
+  deliberately declares no permission at all (see the note there, and D-04).
+
+  It is pinned in EXPECTED_PERMISSIONS like every other declaration.
+  `restrictedPermissionCheck` walks test manifests too, on purpose: the rule is
+  that no permission appears anywhere without someone deciding it should, and
+  "it is only a test APK" is exactly the reasoning that would let one drift into
+  src/main later.
+
+  The grant itself is taken at runtime via UiAutomation rather than with
+  androidx.test:rules' GrantPermissionRule — that artifact is not in the version
+  catalog, and a new dependency is not worth one annotation (CLAUDE.md §10).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+</manifest>

@@ -65,18 +65,18 @@ internal class AndroidInboxNotifier @Inject constructor(
         if (candidate.isSuppressed) return
 
         val notification = buildCandidate(candidate)
+        val id = InboxNotifications.notificationId(pendingId)
         runCatching {
-            NotificationManagerCompat.from(context)
-                .notify(InboxNotifications.notificationId(pendingId), notification)
-            updateGroupSummary()
+            NotificationManagerCompat.from(context).notify(id, notification)
+            updateGroupSummary(added = id)
         }.onFailure { Log.w(TAG, "Could not post the inbox notification.", it) }
     }
 
     override suspend fun cancelCandidate(pendingId: String) {
+        val id = InboxNotifications.notificationId(pendingId)
         runCatching {
-            NotificationManagerCompat.from(context)
-                .cancel(InboxNotifications.notificationId(pendingId))
-            updateGroupSummary()
+            NotificationManagerCompat.from(context).cancel(id)
+            updateGroupSummary(removed = id)
         }.onFailure { Log.w(TAG, "Could not cancel the inbox notification.", it) }
     }
 
@@ -156,10 +156,23 @@ internal class AndroidInboxNotifier @Inject constructor(
      * user who dismissed four notifications has four pending candidates and an
      * empty shade, and posting a summary over nothing would be a notification
      * about notifications that are not there.
+     *
+     * **[added] and [removed] are not an optimisation; without them the count is
+     * wrong.** `notify()` and `cancel()` are *oneway* binder calls that hand work
+     * to a handler inside NotificationManagerService, while `activeNotifications`
+     * is a synchronous read of that service's state. So the notification this
+     * method is being called about is routinely **not yet visible** when it
+     * looks — the count comes back one short, the summary appears a post late or
+     * not at all, and which happens depends on a race.
+     *
+     * Found on the device (P2-7); no unit test can see it, because off-device
+     * there is no NotificationManagerService to be racing. Folding the id we
+     * just posted or cancelled into the set makes the arithmetic depend on what
+     * we know rather than on what the system server has caught up with.
      */
-    private fun updateGroupSummary() {
+    private fun updateGroupSummary(added: Int? = null, removed: Int? = null) {
         val manager = NotificationManagerCompat.from(context)
-        val posted = activeCandidateCount()
+        val posted = (activeCandidateIds() + setOfNotNull(added) - setOfNotNull(removed)).size
 
         if (posted > InboxNotifications.GROUP_THRESHOLD) {
             val summary = NotificationCompat.Builder(context, InboxNotifications.CHANNEL_ID)
@@ -182,12 +195,17 @@ internal class AndroidInboxNotifier @Inject constructor(
         }
     }
 
-    private fun activeCandidateCount(): Int = runCatching {
+    /** The candidate notifications the system server currently admits to holding. */
+    private fun activeCandidateIds(): Set<Int> = runCatching {
         context.getSystemService(NotificationManager::class.java)
             .activeNotifications
-            .count { it.groupKey?.contains(InboxNotifications.GROUP_KEY) == true &&
-                it.id != InboxNotifications.SUMMARY_ID }
-    }.getOrDefault(0)
+            .filter {
+                it.groupKey?.contains(InboxNotifications.GROUP_KEY) == true &&
+                    it.id != InboxNotifications.SUMMARY_ID
+            }
+            .map { it.id }
+            .toSet()
+    }.getOrDefault(emptySet())
 
     /**
      * What a locked device is allowed to show.

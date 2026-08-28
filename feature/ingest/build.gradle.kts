@@ -40,6 +40,13 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.truth)
+
+    // InboxNotificationContentTest drives the real AndroidInboxNotifier against
+    // the platform's NotificationManager, and needs the same domain-port fakes
+    // the JVM tests use to stand in for the repositories behind it. No new
+    // external dependency -- this is the module :core:testing exists to be.
+    androidTestImplementation(project(":core:testing"))
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }
 
 /**

@@ -135,6 +135,17 @@ val EXPECTED_PERMISSIONS: Map<String, Set<String>> = mapOf(
     "feature/ingest/src/smsFull/AndroidManifest.xml" to setOf(
         "android.permission.RECEIVE_SMS",
     ),
+    // The INSTRUMENTATION APK, which ships to nobody. InboxNotificationContentTest
+    // posts real notifications and reads them back, and :feature:ingest is
+    // self-instrumenting, so the posting process is the test APK.
+    //
+    // Pinned rather than exempted, and test manifests are walked rather than
+    // skipped, because "it is only a test APK" is precisely the reasoning that
+    // lets a permission drift into src/main later. The pin costs one line and
+    // keeps the rule absolute.
+    "feature/ingest/src/androidTest/AndroidManifest.xml" to setOf(
+        "android.permission.POST_NOTIFICATIONS",
+    ),
 )
 
 tasks.register("restrictedPermissionCheck") {
