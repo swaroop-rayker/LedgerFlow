@@ -526,8 +526,8 @@ public interface PendingTransactionDao {
      * the entry with an audit trail that says the user rejected it.
      */
     @Query(
-        "UPDATE pending_transaction SET status = 'DISCARDED', reviewed_at = :now " +
-            "WHERE id = :id AND status = 'PENDING'",
+        "UPDATE pending_transaction SET status = 'DISCARDED', reviewed_at = :now, " +
+            "review_draft_json = NULL WHERE id = :id AND status = 'PENDING'",
     )
     public suspend fun discard(id: String, now: Long): Int
 
@@ -538,6 +538,23 @@ public interface PendingTransactionDao {
     public suspend fun restore(id: String): Int
 
     /**
+     * What the user has typed on the review screen but not approved (v8, BUG6).
+     *
+     * **Binds `status = 'PENDING'`.** A candidate that has been approved or
+     * discarded is resolved, and writing typing back onto it would resurrect
+     * state the two statements above deliberately cleared -- the review screen's
+     * debounce can still have a tick in flight when the user taps Approve, which
+     * is exactly the race that wrote a just-saved draft straight back on the
+     * entry form (see EntryViewModel's note on `collectDraftWrites`). With the
+     * predicate, that late tick affects no rows.
+     */
+    @Query(
+        "UPDATE pending_transaction SET review_draft_json = :json " +
+            "WHERE id = :id AND status = 'PENDING'",
+    )
+    public suspend fun saveReviewDraft(id: String, json: String?): Int
+
+    /**
      * Records that a candidate became an entry.
      *
      * `status = 'PENDING'` again, so a second approval cannot overwrite the
@@ -545,7 +562,8 @@ public interface PendingTransactionDao {
      */
     @Query(
         "UPDATE pending_transaction SET status = 'APPROVED', reviewed_at = :now, " +
-            "approved_entry_id = :entryId WHERE id = :id AND status = 'PENDING'",
+            "approved_entry_id = :entryId, review_draft_json = NULL " +
+            "WHERE id = :id AND status = 'PENDING'",
     )
     public suspend fun markApproved(id: String, entryId: String, now: Long): Int
 

@@ -29,6 +29,22 @@ public data class PendingTransaction(
     val createdAt: Long,
     val reviewedAt: Long?,
     val approvedEntryId: String?,
+    /**
+     * What the user typed on the review screen and has not approved (v8, BUG6).
+     *
+     * **Opaque here on purpose.** This is the review *form's* state -- an amount
+     * mid-keystroke, a category not chosen yet -- and it belongs to the one
+     * screen that produces it, exactly as `draft_entry.payload_json` belongs to
+     * the entry form. Contrast [extracted]: those are §5.1's extraction targets,
+     * they are spec-level, and so they are decoded in `:core:data` and arrive
+     * typed. Giving this layer an opinion about the review screen's field list
+     * would make every UI change a domain change.
+     *
+     * Null means nothing has been typed; the screen then opens from [extracted]
+     * as it always did. Cleared by the same statement that approves or discards,
+     * so a resolved candidate can never carry stale typing.
+     */
+    val reviewDraftJson: String? = null,
 ) {
     public val isSuppressed: Boolean get() = suppressedById != null
 
@@ -131,6 +147,18 @@ public interface PendingRepository {
 
     /** Undo, for the snackbar and for the Discarded filter. Back to `PENDING`. */
     public suspend fun restore(id: String): Boolean
+
+    /**
+     * Persists the review screen's in-progress state (v8, BUG6).
+     *
+     * Called on a 300 ms debounce while the user types, and with null to clear.
+     * The payload is the screen's own -- see [PendingTransaction.reviewDraftJson].
+     *
+     * **Only affects a `PENDING` row.** A late debounce tick arriving after the
+     * user has approved or discarded must not write typing back onto a resolved
+     * candidate; the statement binds the status so that it cannot.
+     */
+    public suspend fun saveReviewDraft(id: String, json: String?): Boolean
 
     /**
      * Records that a candidate became a ledger entry.

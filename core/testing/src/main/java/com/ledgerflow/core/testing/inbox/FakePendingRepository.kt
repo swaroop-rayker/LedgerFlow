@@ -62,6 +62,21 @@ public class FakePendingRepository(
     override suspend fun restore(id: String): Boolean =
         transition(id, from = PendingStatus.DISCARDED, to = PendingStatus.PENDING)
 
+    /**
+     * Persists the review screen's typing (v8, BUG6).
+     *
+     * **Binds `PENDING` like the real statement does**, and that is the point of
+     * modelling it here at all: a debounce tick can still be in flight when the
+     * user taps Approve, and a fake that accepted the write would let a test
+     * pass over a resolution that the database would have refused.
+     */
+    override suspend fun saveReviewDraft(id: String, json: String?): Boolean {
+        val row = rows.value[id] ?: return false
+        if (row.status != PendingStatus.PENDING) return false
+        rows.value = rows.value + (id to row.copy(reviewDraftJson = json))
+        return true
+    }
+
     override suspend fun markApproved(id: String, entryId: String): Boolean {
         val row = rows.value[id] ?: return false
         if (row.status != PendingStatus.PENDING) return false
@@ -70,6 +85,9 @@ public class FakePendingRepository(
                 status = PendingStatus.APPROVED,
                 reviewedAt = row.createdAt + 1,
                 approvedEntryId = entryId,
+                // The real statement clears it in the same UPDATE, so a
+                // resolved candidate can never carry stale typing (v8).
+                reviewDraftJson = null,
             )
             )
         return true
@@ -85,6 +103,11 @@ public class FakePendingRepository(
             id to row.copy(
                 status = to,
                 reviewedAt = if (to == PendingStatus.DISCARDED) row.createdAt + 1 else null,
+                // Discard clears the draft in the same statement (v8). Restore
+                // does not put it back -- the typing was thrown away with the
+                // candidate, and inventing it on the way back would be worse
+                // than an empty form.
+                reviewDraftJson = null,
             )
             )
         return true

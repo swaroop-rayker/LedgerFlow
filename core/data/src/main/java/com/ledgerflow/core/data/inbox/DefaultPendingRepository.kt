@@ -109,6 +109,13 @@ public class DefaultPendingRepository @Inject constructor(
         }.getOrDefault(false)
     }
 
+    override suspend fun saveReviewDraft(id: String, json: String?): Boolean = withContext(io) {
+        val database = openVault() ?: return@withContext false
+        runCatching {
+            database.pendingTransactionDao().saveReviewDraft(id, json) > 0
+        }.getOrDefault(false)
+    }
+
     override suspend fun markApproved(id: String, entryId: String): Boolean = withContext(io) {
         val database = openVault() ?: return@withContext false
         runCatching {
@@ -118,16 +125,14 @@ public class DefaultPendingRepository @Inject constructor(
     }
 
     /**
-     * Both books, because the caller may be recovering an approval whose chosen
-     * book it no longer knows — and because §3.1's key already guarantees a
-     * credit and a debit are never the same candidate, so at most one can match.
+     * Both books, and it **must** be able to answer, or it is worse than absent.
      *
-     * Two statements rather than one unfiltered query: ADR-0002 requires every
+     * Both, because the caller may be recovering an approval whose chosen book
+     * it no longer knows — and because §3.1's key already guarantees a credit
+     * and a debit are never the same candidate, so at most one can match. Two
+     * statements rather than one unfiltered query: ADR-0002 requires every
      * statement naming `ledger_entry` to bind `:ledger`, and asking each book
      * separately keeps that true here (Law 2). Nothing is summed across them.
-     */
-    /**
-     * ...and this one **must** be able to answer, or it is worse than absent.
      *
      * It is the idempotency guard across an approval's two writes, and null
      * means "no entry yet" — which is exactly what a second approval of an
@@ -168,5 +173,6 @@ public class DefaultPendingRepository @Inject constructor(
         createdAt = row.createdAt,
         reviewedAt = row.reviewedAt,
         approvedEntryId = row.approvedEntryId,
+        reviewDraftJson = row.reviewDraftJson,
     )
 }

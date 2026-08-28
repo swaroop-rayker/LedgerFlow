@@ -89,6 +89,7 @@ class ReviewBookDerivationTest {
             ApproveTransactionUseCase(ledger),
         ),
         discardPending = DiscardPendingUseCase(pending),
+        pendingRepository = pending,
         observeCategoryTree = ObserveCategoryTreeUseCase(categories),
         merchants = merchants,
         paymentMethods = paymentMethods,

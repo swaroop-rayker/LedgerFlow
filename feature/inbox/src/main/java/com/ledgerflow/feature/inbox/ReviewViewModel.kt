@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.QuantityFormat
+import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.NewLineItem
@@ -24,9 +25,13 @@ import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.model.Quantity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -54,6 +59,9 @@ public class ReviewViewModel @Inject constructor(
     private val getPending: GetPendingUseCase,
     private val approvePending: ApprovePendingUseCase,
     private val discardPending: DiscardPendingUseCase,
+    // Directly, for the reason stated below: a use case that only forwards
+    // `saveReviewDraft` would add a name and a file, not a guarantee.
+    private val pendingRepository: PendingRepository,
     private val observeCategoryTree: ObserveCategoryTreeUseCase,
     private val merchants: MerchantRepository,
     private val paymentMethods: PaymentMethodRepository,
@@ -83,6 +91,34 @@ public class ReviewViewModel @Inject constructor(
      */
     private var currency: String = DEFAULT_CURRENCY
 
+    /**
+     * The state as the candidate produced it, for telling edits from arrival.
+     *
+     * Without a baseline, merely *opening* a candidate would persist a draft on
+     * the first debounce tick and every row in the Inbox would look edited. The
+     * entry form has the same problem and solves it with a `dirty` flag it sets
+     * on each event; here the screen is loaded from the extraction, so
+     * "different from what was loaded" is both simpler and more honest -- typing
+     * a character and deleting it again leaves nothing behind.
+     */
+    private var loaded: ReviewDraftPayload? = null
+
+    /**
+     * Whether a draft is currently on the row.
+     *
+     * Needed because returning to the baseline has to **clear** the draft, not
+     * merely decline to write one. Skipping the write left the last edit on
+     * disk, so a user who typed 99.00, thought better of it, restored 69.00 and
+     * left would reopen to 99.00 — their correction lost and an intermediate
+     * value presented as theirs. Caught by making
+     * `typingAndThenRestoringTheOriginal` assert what a reopen actually shows.
+     *
+     * The flag keeps that clear from also firing on every open: without it, the
+     * first emission after load equals the baseline and would issue a redundant
+     * `UPDATE ... SET review_draft_json = NULL` on a row that already has none.
+     */
+    private var persisted: Boolean = false
+
     private val _state = MutableStateFlow(ReviewUiState(pendingId = pendingId))
     public val state: StateFlow<ReviewUiState> = _state.asStateFlow()
 
@@ -98,8 +134,22 @@ public class ReviewViewModel @Inject constructor(
             _state.update { it.copy(loading = false, missing = true) }
             return
         }
-        _state.update { candidate.toUiState(it) }
+        _state.update { previous ->
+            val fromExtraction = candidate.toUiState(previous)
+            // The saved typing goes ON TOP of the extraction, never instead of
+            // it: the source label, the reference hint and needsManualFill are
+            // facts about the message, and a draft has no business overriding
+            // them (v8, BUG6).
+            ReviewDraftPayload.decode(candidate.reviewDraftJson)
+                ?.let(fromExtraction::withDraft)
+                ?: fromExtraction
+        }
+        // Everything loaded is the baseline. Anything that differs from here on
+        // is the user's, and only that is worth a row.
+        loaded = _state.value.toDraftPayload()
+        persisted = candidate.reviewDraftJson != null
         _state.value.ledger?.let(::observeCategoriesFor)
+        viewModelScope.launch { collectDraftWrites() }
     }
 
     /**
@@ -436,6 +486,61 @@ public class ReviewViewModel @Inject constructor(
         )
     }
 
+    /**
+     * The 300 ms debounce that makes a back press non-destructive (v8, BUG6).
+     *
+     * The same shape `EntryViewModel.collectDraftWrites` uses, and for the same
+     * reason: a coalescing window rather than a delay before the state is real,
+     * so the screen updates on the keystroke and only the *write* waits. A
+     * process death costs at most the last fraction of a second of typing.
+     *
+     * **Why persistence rather than `SavedStateHandle`.** Back does not
+     * background this screen, it *pops* the destination — the ViewModel is
+     * cleared and its saved state goes with it. `SavedStateHandle` survives a
+     * configuration change, which is a different event. Disk is the only thing
+     * that survives the gesture the user actually makes.
+     *
+     * **`distinctUntilChanged` on the payload, not the state.** The state
+     * carries things a draft does not — an open picker, a snackbar message, the
+     * loaded taxonomy — and collecting on those would write a row every time a
+     * dialog opened. The payload is what a draft *is*.
+     *
+     * The write re-reads `_state.value` rather than using the debounced value,
+     * for the race `EntryViewModel` documents: the last tick before an approve
+     * must not write typing back onto a row the approval just resolved. Here it
+     * is closed twice over — this check, and `saveReviewDraft` binding
+     * `status = 'PENDING'` in SQL, which is the half that holds even if this one
+     * loses.
+     */
+    @OptIn(FlowPreview::class)
+    private suspend fun collectDraftWrites() {
+        _state
+            .map { it.toDraftPayload() }
+            .distinctUntilChanged()
+            .debounce(DRAFT_DEBOUNCE_MS)
+            .collect { payload ->
+                if (_state.value.finished || _state.value.submitting) return@collect
+
+                // Back at the arrival state is not a draft; it is a screen
+                // someone opened and closed. But it has to CLEAR rather than
+                // skip -- see [persisted]. An edit undone must leave nothing
+                // behind, or the undone value is what comes back.
+                if (payload == loaded) {
+                    if (persisted) {
+                        pendingRepository.saveReviewDraft(pendingId, null)
+                        persisted = false
+                    }
+                    return@collect
+                }
+
+                pendingRepository.saveReviewDraft(
+                    pendingId,
+                    ReviewDraftPayload.encode(payload),
+                )
+                persisted = true
+            }
+    }
+
     /** Lines worth saving, as the approval wants them. */
     private fun ReviewUiState.newLineItems(): List<NewLineItem> =
         if (!itemised) {
@@ -459,6 +564,15 @@ public class ReviewViewModel @Inject constructor(
 
         /** Until `app_meta` answers. Onboarding guarantees a real one exists. */
         private const val DEFAULT_CURRENCY = "INR"
+
+        /**
+         * The coalescing window, matching the entry form's exactly (BUG6).
+         *
+         * The two screens are the same form to the user, so they get the same
+         * durability. A different number here would mean typing survives a kill
+         * on one screen and not the other, for no reason anyone could state.
+         */
+        private const val DRAFT_DEBOUNCE_MS = 300L
     }
 }
 

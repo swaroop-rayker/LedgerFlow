@@ -129,8 +129,16 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * v7 adds `parser_rule.instrument_hint` — one column, for a rule that
          * knows the instrument its messages describe even when they do not say
          * so. Additive; nothing existing is touched.
+         *
+         * v8 adds `pending_transaction.review_draft_json` — BUG6 applied to the
+         * Inbox. A back press pops the review destination and destroys its
+         * ViewModel, so typing that never reached disk was gone; this is where
+         * it lands. Deliberately NOT a `draft_entry` row: §5.4 keeps the two
+         * queues apart, and a half-reviewed message in the drafts stack could
+         * be discarded in one place and stay alive in the other. Additive —
+         * see `MIGRATION_7_8`.
          */
-        public const val VERSION: Int = 7
+        public const val VERSION: Int = 8
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

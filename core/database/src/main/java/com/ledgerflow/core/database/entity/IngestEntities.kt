@@ -383,4 +383,33 @@ public data class PendingTransactionEntity(
      */
     @ColumnInfo(name = "approved_entry_id")
     val approvedEntryId: String?,
+
+    /**
+     * What the user has typed on the review screen but not yet approved. v8.
+     *
+     * **BUG6, applied to the Inbox.** The entry form persists to `draft_entry`
+     * on every keystroke; review held its typing in a ViewModel, so a back
+     * press — which pops the destination and destroys the ViewModel — threw it
+     * away, and so did a process death. `SavedStateHandle` cannot help: it
+     * survives a configuration change, not a destination leaving the back
+     * stack.
+     *
+     * **A column here rather than a row in `draft_entry`**, which is the
+     * shortcut §5.4 exists to refuse: routing a candidate through the drafts
+     * stack would put a half-reviewed message where discarding it in one place
+     * leaves it alive in the other. The candidate is already the row; this is
+     * one more thing known about it.
+     *
+     * JSON for `draft_entry.payload_json`'s reasons: the state is partial and
+     * invalid by definition — an amount mid-keystroke, no category chosen yet —
+     * so typed columns would all be nullable, and it is never queried by any
+     * dimension. It is written on a 300 ms debounce, so a single-row upsert is
+     * also what keeps the screen off StrictMode's tripwire (§11).
+     *
+     * Null means "nothing typed yet"; the row then opens from the parser's
+     * extraction exactly as before. **Cleared on approve and on discard**, so a
+     * resolved candidate never carries stale typing.
+     */
+    @ColumnInfo(name = "review_draft_json")
+    val reviewDraftJson: String? = null,
 )
