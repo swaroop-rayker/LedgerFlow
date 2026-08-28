@@ -140,6 +140,29 @@ has not been tested.
 | F7 | **P2** *(runnable now)* | **A non-financial SMS is marked, not dropped** | Send an ordinary personal SMS to the device. It lands in `sms_raw` and the worker marks it `SENDER_NOT_ALLOWLISTED` — kept, per §5.1, and cleared by D-09's retention at 90 days rather than deleted. Confirm it produces no pending row and nothing user-visible. |
 | F6 | P2 | **Every failure becomes a fixture** | Any real message that fails to parse is added to `testdata/` as a golden fixture before the fix. The corpus only grows. |
 
+### The Inbox notification (P2-7, SPEC §5.1)
+
+The output half. Every row here needs the app **closed** — not backgrounded,
+and not force-stopped from Settings, which stops broadcasts entirely and is
+Android's rule rather than a bug. Swipe it away from Recents and leave it.
+
+That state is the whole point: it is where BUG12 hid for three steps and where
+BUG13 hid until P2-7 gave it a caller. A shade action on a shut vault used to
+return a clean `false` and do nothing, which looks identical to success from
+the outside.
+
+| # | Phase | Test | Expected |
+|---|---|---|---|
+| F8 | **P2-7** | **A real payment notifies with the app closed** | Make a real payment with LedgerFlow swiped away. A notification appears without you opening anything, on channel **Inbox**, showing the amount and merchant. This is the one row that exercises the capture fix, the channel and the vault's background unlock at once. |
+| F9 | **P2-7** | **Tap opens that candidate** | Tapping the body opens the review screen for **that** payment, not the Inbox list and not the Dashboard. Repeat with the app already open in another tab: it must still land on the review screen rather than stacking a second copy of the app (`singleTop` + `onNewIntent`). |
+| F10 | **P2-7** | **`[Discard]` from the shade, app closed (BUG13)** | Tap `[Discard]` without opening the app. Then open it: the candidate is under the **Discarded** filter, not still `PENDING`. A silent no-op here is the exact regression `Bug13_ShadeActionOnClosedVaultTest` exists for, and it is invisible from the shade — you must open the app and look. |
+| F11 | **P2-7** | **`[Approve]` from the shade writes exactly one entry** | Tap `[Approve]` on a candidate that offers it, app closed. Open the app: one new `ledger_entry` in the right book, candidate marked `APPROVED`. **Then check there is only one** — the idempotency guard across the approval's two writes is what stops a second, and its failure mode is a duplicate that looks like a real transaction. |
+| F12 | **P2-7** | **`[Approve]` is absent on an unfillable row** | A `confidence = 0` never-drop row (F2) notifies, but offers `[Review]` and `[Discard]` only. An `[Approve]` there could not succeed — there is no amount or book to approve *from*. |
+| F13 | **P2-7** | **A suppressed duplicate never buzzes** | One real payment firing both a bank SMS and an app notification (F4) produces **one** notification, not two. The suppressed row is visible under "Suppressed" and was never announced. If the sparse message arrived first and was announced, its notification must **disappear** when the richer one supersedes it. |
+| F14 | **P2-7** | **Lock screen shows nothing private** | Lock the device and trigger a candidate. The lock screen shows a generic "A payment is waiting" — **no amount, no merchant, no bank**. Unlock: the full text appears. §5.2's privacy rule governs what is read; this is the same care applied to what is displayed. |
+| F15 | **P2-7** | **Grouping past three** | Accumulate four or more un-dismissed candidates. They bundle under a single summary naming the count. At three or fewer they stand alone. |
+| F16 | **P2-7** | **Silent by default, and the user's to change** | On a **fresh install**, the Inbox channel makes no sound and does not vibrate. Turn sound on in system settings, then reinstall over the top: your choice survives, and the app does not reset it. Importance and sound cannot be changed after channel creation, so this is only observable on a first install. |
+
 ---
 
 ## 8. Permissions (D-04, Law 6)
@@ -150,6 +173,8 @@ has not been tested.
 | G2 | P2 | **`RECEIVE_SMS` in `smsFull` only** | App info → Permissions on the `smsFull` build lists SMS. `restrictedPermissionCheck` guards the manifests; this confirms what the OS actually granted. |
 | G3 | P2 | **Revoke and regrant** | Revoke SMS (and notification access) from Settings while the app runs, then regrant. No crash, no lost data, and ingest resumes without a reinstall. |
 | G4 | P2 | **Notification listener survives a reboot** | Grant notification access, reboot, send a test notification. Still captured. |
+| G5 | **P2-7** | **`POST_NOTIFICATIONS` is asked for once, and denial costs nothing** | On a fresh install the system dialog appears at the first usable screen, not during onboarding. **Deny it**, then make a real payment: the candidate still lands in the Inbox and the pipeline reports no failure. Only the announcement is lost, because that is the only thing the grant controls. |
+| G6 | **P2-7** | **The permission list is exactly what is pinned** | App info → Permissions. `smsFull` lists SMS and Notifications; `playSafe` lists Notifications and **not** SMS. `restrictedPermissionCheck` pins the manifests per source set; this confirms what the OS actually granted, which is the half no Gradle task can see. |
 
 ---
 
