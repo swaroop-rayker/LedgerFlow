@@ -87,67 +87,142 @@ tasks.register("bannedApiCheck") {
 }
 
 /**
- * D-04, enforced instead of remembered (SPEC.md §3.1, CLAUDE.md §9).
+ * **The app's entire permission set, pinned per source set** (SPEC.md §3.1
+ * D-04, Law 6, CLAUDE.md §9).
  *
- * `RECEIVE_SMS` is Play-restricted. The entire reason the `smsFull`/`playSafe`
+ * `RECEIVE_SMS` is Play-restricted. The whole reason the `smsFull`/`playSafe`
  * split exists is that it appears in exactly one flavour's manifest, and the
  * failure mode is a single misplaced line: merged into `src/main`, it reaches
  * `playSafe` too and the Play-eligible build stops being submittable. Nothing
  * about that shows up as a broken build, a failing test, or a visible symptom on
  * a device — it surfaces months later as a rejected release.
  *
- * Law 6 is checked here for the same reason and with wider scope than CI's
- * `app/src/release` grep: no `INTERNET` permission in ANY source set of ANY
- * module. All parsing, OCR and analytics are on-device, and a library module
- * declaring it would merge into the release manifest just as effectively.
+ * Law 6 rides along for the same reason and with wider scope than CI's
+ * `app/src/release` grep: no `INTERNET` in ANY source set of ANY module. All
+ * parsing, OCR and analytics are on-device, and a library module declaring it
+ * would merge into the release manifest just as effectively.
+ *
+ * ## Why this pins the whole set rather than blocklisting two names
+ *
+ * Until P2-7 this task knew about exactly `RECEIVE_SMS`, `READ_SMS` and
+ * `INTERNET`, which meant it had **nothing to say about a permission nobody had
+ * thought of yet**. Any other line — `READ_CONTACTS`, `ACCESS_FINE_LOCATION`, a
+ * transitive `<uses-permission>` merged in from a future dependency's manifest —
+ * would have shipped silently in both flavours. For an app whose pitch is that
+ * it is offline and reads nothing it was not given, the interesting failure was
+ * always going to be the permission that arrives without anyone deciding to add
+ * it.
+ *
+ * So [EXPECTED_PERMISSIONS] is an allowlist, and anything not on it fails. A new
+ * permission is then a deliberate two-part act: declare it, and say here that it
+ * was meant. That is the point — the second half is where someone has to think
+ * about which flavour it lands in.
+ *
+ * `POST_NOTIFICATIONS` (P2-7) is the first entry added under this rule, and
+ * closes the deferred item that this task did not pin the full set.
  *
  * Mirrored by a step in .github/workflows/ci.yml so local and CI failures match.
  */
+val EXPECTED_PERMISSIONS: Map<String, Set<String>> = mapOf(
+    // §5.1's inbox notification. Not restricted, and wanted by BOTH flavours:
+    // playSafe produces pending_transaction rows from notification ingest
+    // exactly as smsFull does from SMS.
+    "app/src/main/AndroidManifest.xml" to setOf(
+        "android.permission.POST_NOTIFICATIONS",
+    ),
+    // D-04. The one restricted permission LedgerFlow ever asks for, in the one
+    // source set that may hold it.
+    "feature/ingest/src/smsFull/AndroidManifest.xml" to setOf(
+        "android.permission.RECEIVE_SMS",
+    ),
+)
+
 tasks.register("restrictedPermissionCheck") {
     group = "verification"
-    description = "RECEIVE_SMS only in smsFull; INTERNET nowhere (SPEC.md §3.1 D-04, Law 6)."
+    description = "Pins the exact permission set per source set (SPEC.md §3.1 D-04, Law 6)."
 
+    val rootDir = project.rootDir
     val sourceRoots = subprojects
         .filter { it.buildFile.exists() }
         .map { it.projectDir }
+    val expected = EXPECTED_PERMISSIONS
     outputs.upToDateWhen { false }
 
     doLast {
-        // Anchored on the element, not on the bare permission name: these files
-        // are heavily commented and several of them have to NAME the permission
-        // in order to explain where it may not go. A prose mention is not a
-        // declaration, and a guard that cannot tell the difference gets muted.
-        // Same expression as the CI step, deliberately.
-        val restrictedSms = Regex("""<uses-permission[^>]*android\.permission\.(RECEIVE|READ)_SMS""")
-        val internet = Regex("""<uses-permission[^>]*android\.permission\.INTERNET""")
+        /**
+         * The reason a particular stray permission is a problem, where we know one.
+         *
+         * A local function rather than a script-level one: a top-level `fun` in
+         * a build script is a method on the script object, and capturing it in a
+         * task action makes the task unserialisable for the configuration cache
+         * ("cannot serialize Gradle script object references"). The guard still
+         * ran and still passed — it was the *build* that then failed, which is
+         * the kind of green-then-red that teaches people to distrust a check.
+         */
+        fun why(permission: String, path: String): String = when {
+            permission.endsWith("RECEIVE_SMS") || permission.endsWith("READ_SMS") ->
+                "RECEIVE_SMS/READ_SMS are Play-restricted and belong in " +
+                    "feature/ingest/src/smsFull/ only -- D-04 / SPEC.md §3.1. Found in $path."
+
+            permission.endsWith("INTERNET") ->
+                "INTERNET is banned in every flavour; all parsing, OCR and analytics are " +
+                    "on-device -- Law 6. If you think you need the network, raise an ADR."
+
+            else ->
+                "add it to EXPECTED_PERMISSIONS if it is intended, and decide there whether " +
+                    "it belongs in src/main (both flavours) or in one flavour's source set."
+        }
+
+        // Anchored on the element AND the attribute, never on a bare permission
+        // name: these manifests are heavily commented and several of them have
+        // to NAME a permission in order to explain where it may not go. A prose
+        // mention is not a declaration, and a guard that cannot tell the
+        // difference is one people mute.
+        val declaration = Regex("""<uses-permission[^>]*android:name\s*=\s*"([^"]+)"""")
         val violations = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
 
         sourceRoots.forEach { root ->
             root.walkTopDown()
                 .filter { it.isFile && it.name == "AndroidManifest.xml" }
                 .filterNot { "/build/" in it.invariantSeparatorsPath }
                 .forEach { manifest ->
-                    val path = manifest.invariantSeparatorsPath
-                    val inSmsFullSourceSet = "/src/smsFull/" in path
-                    manifest.readLines().forEachIndexed { index, line ->
-                        if (restrictedSms.containsMatchIn(line) && !inSmsFullSourceSet) {
-                            violations += "$path:${index + 1}: RECEIVE_SMS/READ_SMS are " +
-                                "Play-restricted and belong in src/smsFull/ only -- " +
-                                "D-04 / SPEC.md §3.1"
-                        }
-                        if (internet.containsMatchIn(line)) {
-                            violations += "$path:${index + 1}: INTERNET is banned in every flavour; " +
-                                "all parsing and analytics are on-device -- Law 6"
-                        }
+                    val relative = manifest.relativeTo(rootDir).invariantSeparatorsPath
+                    seen += relative
+                    val allowed = expected[relative].orEmpty()
+                    val text = manifest.readText()
+
+                    declaration.findAll(text).forEach { match ->
+                        val permission = match.groupValues[1]
+                        if (permission in allowed) return@forEach
+
+                        val line = text.take(match.range.first).count { it == '\n' } + 1
+                        violations += "$relative:$line: $permission is declared here and is " +
+                            "not in EXPECTED_PERMISSIONS -- " + why(permission, relative)
                     }
+
+                    (allowed - declaration.findAll(text).map { it.groupValues[1] }.toSet())
+                        .forEach { missing ->
+                            violations += "$relative: $missing is pinned in " +
+                                "EXPECTED_PERMISSIONS but is NOT declared here. If it moved, " +
+                                "move the pin with it; a stale pin guards nothing."
+                        }
                 }
+        }
+
+        // A pin naming a manifest that no longer exists is a guard pointing at
+        // thin air -- the fourth instance in this repository of a check that
+        // could not see the thing it checked (see ExportCoversEveryTableTest).
+        (expected.keys - seen).forEach { orphan ->
+            violations += "$orphan is pinned in EXPECTED_PERMISSIONS but no such manifest " +
+                "exists. Delete the pin or restore the file."
         }
 
         if (violations.isNotEmpty()) {
             violations.forEach { logger.error("::error::$it") }
             throw GradleException("restrictedPermissionCheck found ${violations.size} violation(s).")
         }
-        logger.lifecycle("restrictedPermissionCheck: clean.")
+        logger.lifecycle("restrictedPermissionCheck: clean (${expected.values.sumOf { it.size }} pinned).")
     }
 }
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,10 +66,25 @@ import com.ledgerflow.feature.settings.MoreViewModel
 @Composable
 internal fun LedgerFlowShell(
     modifier: Modifier = Modifier,
+    deepLink: String? = null,
+    onDeepLinkHandled: () -> Unit = {},
     navController: NavHostController = rememberNavController(),
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val current = backStackEntry?.destination
+
+    // §5.1's `ledgerflow://inbox/{pendingId}`, honoured at the first moment
+    // there is a graph to honour it with. `MainActivity` holds the link across
+    // the vault gate -- on a cold start the tap lands while the vault is still
+    // opening, and this composable does not exist yet.
+    //
+    // Handled *after* navigating rather than before, so a link that names no
+    // destination we recognise is cleared exactly once and never retried.
+    LaunchedEffect(deepLink) {
+        if (deepLink == null) return@LaunchedEffect
+        InboxDeepLink.parse(deepLink)?.let(navController::navigate)
+        onDeepLinkHandled()
+    }
 
     val shellViewModel: ShellViewModel = hiltViewModel()
     val pendingCount by shellViewModel.pendingCount.collectAsStateWithLifecycle()

@@ -7,6 +7,7 @@ import android.os.StrictMode
 import android.os.strictmode.Violation
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.ledgerflow.feature.ingest.notify.InboxNotifications
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -38,6 +39,14 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         if (isDebuggable()) enableStrictMode()
+        // SPEC.md §5.1's `inbox_high`, created before the first message rather
+        // than before the first post: a channel that does not exist yet cannot
+        // be found and configured in system settings, and the user should be
+        // able to mute or unmute it without first receiving a bank SMS to
+        // conjure it. `onCreate` runs for every process entry -- a
+        // receiver-only wake included -- so the background path is covered by
+        // this same call, and `ensureChannel` collapses the repeats.
+        InboxNotifications.ensureChannel(this)
     }
 
     /**
