@@ -1,5 +1,10 @@
 # KICKOFF P2-4 — `pending_transaction`, the approval queue Law 1 is about
 
+> **Superseded.** P2-4 through P2-6 and §16 Q14 all shipped; see
+> `docs/KICKOFF-P2-7.md` for the current session log, the plan table, and the
+> four bugs real bank messages found along the way. This file is kept for the
+> S12/P2-1…P2-3 history in §1–§4, which is not repeated there.
+
 **Read `CLAUDE.md` in full before your first edit.** `SPEC.md` is what to build;
 `CLAUDE.md` is how. This file is the session log for what just shipped, plus the
 scope for P2-4 only.
