@@ -68,6 +68,22 @@ public class FakeRawIngestRepository(
     public val liveCandidates: Map<String, PendingCandidate>
         get() = pending.filterKeys { it !in suppressedBy }
 
+    /**
+     * The candidate id this fake hands back for a given **raw** id.
+     *
+     * [pending], [liveCandidates] and [suppressedBy] are all keyed by raw id,
+     * because that is what the pipeline passes in. Everything the fake *returns*
+     * — every [PendingWriteOutcome] — carries a candidate id instead, and the
+     * two are different strings.
+     *
+     * Exposed rather than left to each test to spell out, because getting it
+     * wrong does not fail loudly. A test comparing a set of raw ids against a
+     * list of candidate ids finds no overlap, so an assertion like
+     * `containsNoneIn(suppressedRawIds)` passes whatever the code did — which is
+     * a green test whose red can never be seen.
+     */
+    public fun candidateIdFor(rawId: String): String = "pending-$rawId"
+
     /** Set to make the next [recordParseOutcome] fail, as a locked vault would. */
     public var failPendingWrites: Boolean = false
 
@@ -148,7 +164,7 @@ public class FakeRawIngestRepository(
     ): PendingWriteOutcome {
         if (failPendingWrites) return PendingWriteOutcome.Failed("fake refused")
 
-        pending[rawId]?.let { return PendingWriteOutcome.AlreadyPending("pending-$rawId") }
+        pending[rawId]?.let { return PendingWriteOutcome.AlreadyPending(candidateIdFor(rawId)) }
 
         parseOutcomes += Triple(rawId, ruleId, ruleId != null)
 
@@ -173,18 +189,18 @@ public class FakeRawIngestRepository(
         pending[rawId] = candidate
 
         return when {
-            winner == null -> PendingWriteOutcome.Created("pending-$rawId")
+            winner == null -> PendingWriteOutcome.Created(candidateIdFor(rawId))
 
             winner.value.confidence >= candidate.confidence -> {
-                suppressedBy[rawId] = "pending-${winner.key}"
-                PendingWriteOutcome.Suppressed("pending-$rawId", "pending-${winner.key}")
+                suppressedBy[rawId] = candidateIdFor(winner.key)
+                PendingWriteOutcome.Suppressed(candidateIdFor(rawId), candidateIdFor(winner.key))
             }
 
             else -> {
-                suppressedBy[winner.key] = "pending-$rawId"
+                suppressedBy[winner.key] = candidateIdFor(rawId)
                 PendingWriteOutcome.Created(
-                    pendingId = "pending-$rawId",
-                    supersededPendingId = "pending-${winner.key}",
+                    pendingId = candidateIdFor(rawId),
+                    supersededPendingId = candidateIdFor(winner.key),
                 )
             }
         }

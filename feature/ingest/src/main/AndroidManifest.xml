@@ -12,6 +12,13 @@
   restricted permission LedgerFlow ever asks for is RECEIVE_SMS, and it lives in
   src/smsFull/AndroidManifest.xml alone — putting it here would merge it into
   playSafe and break D-04 in a single line.
+
+  POST_NOTIFICATIONS, which §5.1's inbox notification needs at API 33+, is
+  declared in app/src/main/AndroidManifest.xml rather than here. It is not
+  restricted and both flavours want it, so either file would merge identically;
+  it lives there so that this file's rule stays absolute and needs no reader to
+  weigh which permissions are the safe kind. `restrictedPermissionCheck` pins
+  the whole set either way.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -36,6 +43,26 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!--
+          §5.1's [Approve] and [Discard] notification actions (P2-7).
+
+          exported="false" and NO intent-filter, which is the whole security
+          story: every PendingIntent aimed at this receiver names the class
+          explicitly, so it needs no filter to be reachable from our own
+          notification and nothing outside the app can reach it at all. The
+          contrast with the two capture components above is deliberate — those
+          are exported because the SYSTEM delivers to them, and each is guarded
+          by a signature-level permission. Nothing delivers to this one but us.
+
+          It runs with no Activity alive and writes to the ledger through
+          ApprovePendingUseCase (Law 1's only path). That is reachable because
+          DefaultPendingRepository opens the vault for background work — BUG13,
+          and the reason it needed fixing before this class could exist.
+        -->
+        <receiver
+            android:name="com.ledgerflow.feature.ingest.notify.InboxActionReceiver"
+            android:exported="false" />
 
     </application>
 

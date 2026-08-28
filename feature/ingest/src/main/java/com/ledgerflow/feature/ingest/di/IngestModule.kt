@@ -2,10 +2,12 @@ package com.ledgerflow.feature.ingest.di
 
 import android.content.Context
 import androidx.work.WorkManager
+import com.ledgerflow.core.domain.inbox.InboxNotifier
 import com.ledgerflow.core.domain.ingest.IngestWorkTrigger
 import com.ledgerflow.core.domain.ingest.TransactionIngestSource
 import com.ledgerflow.feature.ingest.adapters.NotificationAdapter
 import com.ledgerflow.feature.ingest.adapters.SmsAdapter
+import com.ledgerflow.feature.ingest.notify.AndroidInboxNotifier
 import com.ledgerflow.feature.ingest.pipeline.IngestEventSink
 import com.ledgerflow.feature.ingest.pipeline.PersistingIngestEventSink
 import com.ledgerflow.feature.ingest.work.WorkManagerIngestWorkTrigger
@@ -70,6 +72,17 @@ internal abstract class IngestModule {
     internal abstract fun ingestWorkTrigger(
         trigger: WorkManagerIngestWorkTrigger,
     ): IngestWorkTrigger
+
+    /**
+     * §5.1's last pipeline step (P2-7).
+     *
+     * A domain port for the same reason [IngestWorkTrigger] is one: the caller
+     * is `ParseCapturedMessages`, which is unit-tested on the JVM, and no JVM
+     * unit test has a `NotificationManager`. `SuppressedCandidateDoesNotNotifyTest`
+     * drives it with a recording fake.
+     */
+    @Binds
+    internal abstract fun inboxNotifier(notifier: AndroidInboxNotifier): InboxNotifier
 }
 
 /**

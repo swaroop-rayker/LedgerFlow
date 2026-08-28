@@ -1,5 +1,6 @@
 package com.ledgerflow.feature.ingest.pipeline
 
+import com.ledgerflow.core.domain.inbox.InboxNotifier
 import com.ledgerflow.core.domain.ingest.CapturedEvent
 import com.ledgerflow.core.domain.ingest.DedupeKey
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
@@ -70,6 +71,7 @@ public data class ParseReport(
  */
 public class ParseCapturedMessages @Inject constructor(
     private val repository: RawIngestRepository,
+    private val notifier: InboxNotifier,
 ) {
 
     public suspend operator fun invoke(limit: Int = DEFAULT_LIMIT): ParseReport {
@@ -122,14 +124,45 @@ public class ParseCapturedMessages @Inject constructor(
                     // so the incumbent became the suppressed row (§3.1). Counted
                     // here so the two numbers still add up to rows written.
                     if (outcome.supersededPendingId != null) suppressed++
+                    notifyCreated(outcome)
                 }
 
+                // §3.1, and P2-7's sharpest rule: a suppressed duplicate is
+                // retained and visible under the Inbox's "Suppressed" filter,
+                // and is NEVER announced. One UPI payment routinely fires a bank
+                // SMS and a GPay notification; buzzing twice for it is the
+                // failure the dedupe layer exists to prevent, arriving through
+                // a different surface. `SuppressedCandidateDoesNotNotifyTest`.
                 is PendingWriteOutcome.Suppressed -> suppressed++
+
+                // The worker re-running over work it already finished. The user
+                // was told about this candidate on the pass that created it, and
+                // telling them again on every WorkManager retry would turn one
+                // payment into a stream of notifications.
                 is PendingWriteOutcome.AlreadyPending -> alreadyPending++
+
                 is PendingWriteOutcome.Failed -> failed++
             }
         }
         return ParseReport(parsed, unmatched, created, suppressed, alreadyPending, failed)
+    }
+
+    /**
+     * §5.1's last step, and §3.1's other half.
+     *
+     * The new candidate is announced. The **superseded** one is taken back: it
+     * was legitimately notified when it was the winner, and a later arrival with
+     * a higher-confidence extraction has since made it a suppressed row. Leaving
+     * it in the shade would send the user to review a duplicate — the same
+     * double-announcement the [PendingWriteOutcome.Suppressed] branch refuses,
+     * arriving in the order where the sparse message lands first.
+     *
+     * Order matters: cancel before posting, so that if the two notifications
+     * collide on a slot the surviving one is the winner's.
+     */
+    private suspend fun notifyCreated(outcome: PendingWriteOutcome.Created) {
+        outcome.supersededPendingId?.let { notifier.cancelCandidate(it) }
+        notifier.notifyCandidate(outcome.pendingId)
     }
 
     /**

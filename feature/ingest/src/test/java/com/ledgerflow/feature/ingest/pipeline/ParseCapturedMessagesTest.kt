@@ -8,6 +8,7 @@ import com.ledgerflow.core.domain.ingest.ParserRule
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.testing.inbox.RecordingInboxNotifier
 import com.ledgerflow.core.testing.ingest.FakeRawIngestRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -29,7 +30,8 @@ class ParseCapturedMessagesTest {
     }
 
     private val repository = FakeRawIngestRepository()
-    private val parse = ParseCapturedMessages(repository)
+    private val notifier = RecordingInboxNotifier()
+    private val parse = ParseCapturedMessages(repository, notifier)
 
     /** Matches the shape both of the owner's real HDFC messages actually have. */
     private val debitRule = ParserRule(
