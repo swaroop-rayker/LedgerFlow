@@ -314,8 +314,15 @@ candidate and is *not* specified — do not add it without asking.
    "previously used category" ranking (`EntryCombo` exists).
 5. **`verifyRoborazziDebug` does not exist as a Gradle task**, though CLAUDE.md
    §4 lists it and §12 requires "screenshot diffs reviewed". Never wired up.
-6. **`restrictedPermissionCheck` does not pin the full permission set** — see
-   §7b, which makes it urgent.
+6. ~~**`restrictedPermissionCheck` does not pin the full permission set**~~
+   **CLOSED — P2-7**, in the same commit that added `POST_NOTIFICATIONS`, as §7b
+   asked. `EXPECTED_PERMISSIONS` is now an allowlist keyed by manifest path:
+   anything declared and not pinned fails, anything pinned and not declared
+   fails, and a pin naming a manifest that does not exist fails. The gap it
+   closes is the permission nobody thought of — the old task knew three names
+   and would have passed a `READ_CONTACTS`, or a `<uses-permission>` merged in
+   from a future dependency's manifest, in both flavours silently. Proved by
+   breaking it six ways before believing it.
 7. **A payee-name-vs-VPA mismatch will not dedupe.** `RAMESH KUMAR` and
    `ramesh@okhdfcbank` normalise differently and read as a contradiction. Errs
    toward showing two rows, which is the safe direction. For P2-9 to revisit

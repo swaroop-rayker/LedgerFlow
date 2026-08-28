@@ -98,7 +98,7 @@ LedgerFlow/
 .\gradlew recordRoborazziDebug            # re-record golden screenshots (review diffs!)
 .\gradlew detekt lintSmsFullDebug         # static analysis
 .\gradlew bannedApiCheck                  # `!!` / cacheDir bans (Laws 5 & 7)
-.\gradlew restrictedPermissionCheck       # RECEIVE_SMS only in smsFull (D-04); no INTERNET anywhere (Law 6)
+.\gradlew restrictedPermissionCheck       # pins the EXACT permission set per source set (D-04, Law 6)
 .\gradlew :benchmark:connectedBenchmarkAndroidTest  # macrobenchmark
 .\gradlew generateBaselineProfile         # regenerate shipped baseline profile
 .\gradlew assemblePlaySafeDebug           # Play-eligible flavour (no RECEIVE_SMS)
@@ -220,6 +220,8 @@ The DEK is multi-wrapped by two factors: Android Keystore (KEK-A) and the 24-wor
 - The notification package allowlist filter runs **before** any notification body is read. Never log or persist content from a non-allowlisted package — this is a stated privacy guarantee, not an implementation detail.
 - Cross-source dedupe is mandatory. A single UPI payment commonly fires both a bank SMS and a GPay notification; producing two pending rows is a bug with a named test (`Dedupe_SameTxnAcrossSources_ProducesOnePending`).
 - Suppressed duplicates are **retained and visible** under the Inbox "Suppressed" filter. Never silently discarded.
+- **A suppressed duplicate never notifies** (§5.1, P2-7). "Retained and visible" and "announced" are different promises: one payment fires a bank SMS *and* a payment-app notification, and buzzing twice is the dedupe layer defeated through a different surface. `ParseCapturedMessages` posts on a `Created` outcome only — and *cancels* `supersededPendingId`, because the sparse message usually lands first, is correctly announced as the only candidate there is, and then loses. `SuppressedCandidateDoesNotNotifyTest` guards both halves.
+- **Anything reachable with no Activity alive must open the vault itself.** Capture adapters, `ParseIngestWorker` and the `[Approve]`/`[Discard]` notification actions all run in a process with no UI, and `VaultSession.requireDatabase()` *throws* there. Both ingest and pending repositories route through `openForBackgroundWork()` — no new wrap, no new key material, the same `openOnLaunch()` the UI calls, which §7 permits by forbidding `setUserAuthenticationRequired(true)` on the DEK-wrapping key. The failure mode is the reason this is written down: the throw lands in a `runCatching` and comes back as a clean `false`, so the action reports success and does nothing (BUG13, and BUG12's `d88ca85` before it). **If you add a repository method a background caller can reach, it opens the vault or it lies.**
 
 ### Destroying ledger data
 `PurgeDeletedEntriesUseCase` is the only thing in the app that removes a

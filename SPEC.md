@@ -253,6 +253,48 @@ Two consequences worth recording:
   until they launch it again; that is Android's rule and no code here can change
   it. The case this fixes is the common one: a process the OEM reaped, which the
   system restarts for the broadcast.
+- **P2-7 gave the pipeline its last step, and found the same bug one layer up.**
+  §5.1's `inbox_high` notification ships: created once at
+  `LedgerFlowApplication.onCreate` (importance HIGH, silent by default), posted
+  on a `Created` outcome and on no other, carrying `[Approve]` `[Review]`
+  `[Discard]` and a `ledgerflow://inbox/{pendingId}` deep link, grouped past
+  three. **A suppressed candidate is never announced** (§3.1) — and the
+  *superseded* one is actively taken back, because the sparse notification
+  usually arrives first, is legitimately announced as the only candidate there
+  is, and then loses to the bank SMS. `SuppressedCandidateDoesNotNotifyTest`
+  covers both, and was verified to fail with the rules inverted.
+  **No schema change: still v7.**
+
+  **The bug it found first.** `d88ca85` gave `DefaultRawIngestRepository` a
+  background unlock; `DefaultPendingRepository` — the repository every shade
+  action goes through — was never touched, and its one-shots called
+  `requireDatabase()` inside `runCatching { }.getOrDefault(false)`. With the app
+  closed, a `[Discard]` the user tapped returned a clean `false` and left the row
+  `PENDING`; `find` returned null, so an `[Approve]` refused with `NotFound` for a
+  candidate sitting in the table. §2.4's silent drop, arriving through the Inbox
+  instead of through capture. **`findApprovedEntryId` was the dangerous one**: it
+  is the idempotency guard across an approval's two writes, and its swallowed
+  null is indistinguishable from "no entry yet" — so fixing `find` alone would
+  have turned an action that did nothing into one that wrote a *second*
+  `ledger_entry` for one payment. All five doors open the vault now
+  (`Bug13_ShadeActionOnClosedVaultTest`, five cases, each seen red first).
+- **`restrictedPermissionCheck` pins the whole permission set now, not two
+  names** (P2-7, closing a deferred item). It knew about `RECEIVE_SMS`,
+  `READ_SMS` and `INTERNET`, which meant it had nothing to say about a
+  permission nobody had thought of — a `READ_CONTACTS`, or a `<uses-permission>`
+  merged in from a future dependency's manifest, would have shipped in both
+  flavours silently. `EXPECTED_PERMISSIONS` is now an allowlist keyed by manifest
+  path: anything undeclared fails, a pin with no declaration fails, and a pin
+  naming a manifest that does not exist fails. Adding a permission is a
+  deliberate two-part act, and the second part is where someone has to decide
+  which flavour it lands in. Proved by breaking it six ways.
+- **`POST_NOTIFICATIONS` is the first entry added under that rule**, in
+  `app/src/main` so it reaches both flavours — `playSafe` produces
+  `pending_transaction` rows from notification ingest exactly as `smsFull` does
+  from SMS, so both need to be able to announce one. It is requested at the first
+  `AppRoute.Ready`; that request is **the minimum that makes P2-7 demonstrable
+  and is not the permission UX**, which is P2-8's along with the listener grant
+  and the §5.2 health banner.
 - **P2-2 also introduced WorkManager**, configured through `LedgerFlowApplication` as a `Configuration.Provider` with the Hilt worker factory; its manifest initialiser is removed, because the default one runs before Hilt has a graph and would leave an `@HiltWorker` unconstructable at runtime with nothing at compile time to say so. It brings `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` and `FOREGROUND_SERVICE` into the merged manifest. **None of them is `INTERNET`** and Law 6 is intact (`restrictedPermissionCheck` covers it), but the app's permission list is now four longer than it was, which for an offline-first product is worth stating rather than discovering.
 - `RECEIVE_SMS` appears in `src/smsFull/AndroidManifest.xml` and nowhere else, enforced by `restrictedPermissionCheck` (Gradle) and a mirrored CI step rather than by memory. The same check bans `INTERNET` in every source set of every module (Law 6).
 
@@ -358,11 +400,16 @@ SMS arrives
 - **A merchant that does not exist yet is created, never a refusal.** An extracted `merchantRaw` resolves through `MerchantRepository.createOrGet`, **not** `findByName`: the first time a shop appears in an SMS there is by definition no row for it, and treating that as a failure would make the pipeline reject exactly the transactions it exists to capture. `createOrGet` returns the existing merchant when the name normalises onto one, un-hides a hidden row that holds the key (BUG11), and creates otherwise — so **no ingest path may fail for a missing merchant**. The same rule and the same call the manual form uses (§5.4); one door, so the two cannot disagree about what "the same shop" means. Fuzzy matching (§5.5's Jaro-Winkler ≥ 0.88) sits *in front* of this as a suggestion at review time, and never as a gate on committing the entry.
 - **When the resolution happens: at approval, not at parse time** (owner decision, P2-4). A `pending_transaction` row carries only `merchantRaw`, exactly as the message wrote it; `createOrGet` runs inside `ApproveTransactionUseCase`. Resolving at parse time would create a permanent taxonomy row for every candidate the user later discards and for every garbled merchant string a rule ever mis-extracted, and it would leave the Jaro-Winkler suggestion above with nothing to suggest, because the row would already exist. The guarantee is unchanged — ingest may never *fail* for a merchant that does not exist yet, and a candidate carrying a raw name cannot fail for one.
 
-**Notification behaviour:**
-- Channel `inbox_high` — importance HIGH, no sound by default (configurable).
-- Tap → deep link `ledgerflow://inbox/{pendingId}` → Review screen with fields prefilled and focus on Category picker.
-- Action "Discard" → sets status `DISCARDED`, keeps the row (auditable, restorable for 30 days).
-- Grouped notification when >3 pending.
+**Notification behaviour:** (shipped P2-7)
+- Channel `inbox_high` — importance HIGH, no sound by default (configurable). Created once at `LedgerFlowApplication.onCreate`, not before the first post: a channel that does not exist yet cannot be found and muted in system settings, and the user should not have to receive a bank SMS to conjure one. **Importance and sound are a one-way door** — Android hands both to the user at creation and ignores every later opinion of ours — so those values apply to a fresh install and never to an upgrade.
+- Tap → deep link `ledgerflow://inbox/{pendingId}` → Review screen with fields prefilled and focus on Category picker. The bare `ledgerflow://inbox` opens the queue, which is what the group summary points at. **The filter is not `BROWSABLE`**: this section specifies the URI the notification opens, not a link any web page on the phone may fire into the user's ledger.
+- Actions **`[Approve]` `[Review]` `[Discard]`**.
+  - "Discard" → sets status `DISCARDED`, keeps the row (auditable, restorable for 30 days). The shade has no snackbar, so **the reversibility is stated in the notification body** rather than offered as an undo (owner decision, P2-7).
+  - "Approve" → **amended P2-7, owner decision.** This section originally listed `[Review]` and `[Discard]` only. A one-tap approve is the fastest path for a confident candidate, and it goes through `ApprovePendingUseCase` exactly as the review screen does — **Law 1 is untouched; a notification is a surface, not a second writer.** It appears only when `PendingTransaction.isOneTapApprovable`: an amount and a book are the two things the ledger cannot be given without, so a candidate needing a manual fill would be offering a button that can only fail.
+  - Both write with **no Activity alive**, which is only reachable because `DefaultPendingRepository` opens the vault for background work (BUG13).
+- Grouped notification when >3 pending. Counted from what is actually **in the shade** rather than from `observePendingCount()`: the shade is the thing being grouped, and a user who dismissed four notifications has four pending candidates and nothing to bundle.
+- **Posted on a `Created` outcome and on no other.** A suppressed duplicate is retained and visible under the Inbox's "Suppressed" filter (§3.1) and is never announced; a worker re-run over a row it already resolved announces nothing; a failed write announces nothing. §5.1's never-drop row **is** announced — nothing was extracted, so nothing else will remind the user it happened.
+- **What a locked screen shows is part of the privacy guarantee.** §5.2 governs what LedgerFlow may *read*; the same care applies to what it puts on a lock screen in a room full of people. The notification is `VISIBILITY_PRIVATE` with a public version naming a count and nothing else — no merchant, no amount, no bank.
 
 **Inbox screen:** list of all pending items, filter by `PENDING` / `DISCARDED` / `SUPPRESSED` (cross-source duplicates) / `FAILED`, bulk approve with a previously used category, swipe-to-discard with undo snackbar.
 
