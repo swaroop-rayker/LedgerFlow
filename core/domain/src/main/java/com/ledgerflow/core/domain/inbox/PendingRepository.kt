@@ -1,6 +1,7 @@
 package com.ledgerflow.core.domain.inbox
 
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
+import com.ledgerflow.core.domain.ingest.toExtractedDirection
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.PendingStatus
 import kotlinx.coroutines.flow.Flow
@@ -32,21 +33,52 @@ public data class PendingTransaction(
     /**
      * What the user typed on the review screen and has not approved (v8, BUG6).
      *
-     * **Opaque here on purpose.** This is the review *form's* state -- an amount
-     * mid-keystroke, a category not chosen yet -- and it belongs to the one
-     * screen that produces it, exactly as `draft_entry.payload_json` belongs to
-     * the entry form. Contrast [extracted]: those are §5.1's extraction targets,
-     * they are spec-level, and so they are decoded in `:core:data` and arrive
-     * typed. Giving this layer an opinion about the review screen's field list
-     * would make every UI change a domain change.
+     * Null means nothing has been typed; every surface then shows [extracted]
+     * as it always did. Cleared by the same statement that approves or
+     * discards, so a resolved candidate can never carry stale typing.
      *
-     * Null means nothing has been typed; the screen then opens from [extracted]
-     * as it always did. Cleared by the same statement that approves or discards,
-     * so a resolved candidate can never carry stale typing.
+     * **Decoded here rather than left as a string**, because more than one
+     * screen draws it — see [ReviewEdits] and [effective].
      */
-    val reviewDraftJson: String? = null,
+    val edits: ReviewEdits? = null,
+
+    /**
+     * The edited merchant's name, resolved.
+     *
+     * [ReviewEdits.merchantId] is an id and every list shows a *name*, so the
+     * repository resolves it on the way out rather than each screen looking it
+     * up — which for a list would be a lookup per row.
+     */
+    val editedMerchantName: String? = null,
 ) {
     public val isSuppressed: Boolean get() = suppressedById != null
+
+    /**
+     * What this candidate now says, parser plus corrections.
+     *
+     * **This is what a list should render.** [extracted] keeps meaning "what
+     * the parser read" — the review screen needs that, and §5.1's targets are
+     * spec-level — so the user's corrections are laid over it here instead of
+     * overwriting it. Before this existed, editing an amount changed the review
+     * screen and nothing else, and the Inbox row kept showing the figure from
+     * the message.
+     *
+     * The merchant is a special case: [ReviewEdits] holds an id and
+     * [ExtractedTransaction.merchantRaw] is a name, so the resolved
+     * [editedMerchantName] is what wins when the user picked one.
+     */
+    val effective: ExtractedTransaction
+        get() = edits?.let { e ->
+            extracted.copy(
+                amount = e.amount ?: extracted.amount,
+                direction = e.ledger?.toExtractedDirection() ?: extracted.direction,
+                occurredAt = e.occurredAt ?: extracted.occurredAt,
+                merchantRaw = editedMerchantName ?: extracted.merchantRaw,
+            )
+        } ?: extracted
+
+    /** Whether the user has changed anything on this candidate. */
+    val isEdited: Boolean get() = edits != null
 
     /**
      * Approvable without opening the review screen first.
@@ -168,13 +200,12 @@ public interface PendingRepository {
      * Persists the review screen's in-progress state (v8, BUG6).
      *
      * Called on a 300 ms debounce while the user types, and with null to clear.
-     * The payload is the screen's own -- see [PendingTransaction.reviewDraftJson].
      *
      * **Only affects a `PENDING` row.** A late debounce tick arriving after the
      * user has approved or discarded must not write typing back onto a resolved
      * candidate; the statement binds the status so that it cannot.
      */
-    public suspend fun saveReviewDraft(id: String, json: String?): Boolean
+    public suspend fun saveReviewDraft(id: String, edits: ReviewEdits?): Boolean
 
     /**
      * **Destroys candidates for good. The only irreversible operation here.**

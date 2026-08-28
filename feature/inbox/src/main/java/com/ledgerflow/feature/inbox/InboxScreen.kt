@@ -584,17 +584,17 @@ private fun InboxUiState.emptyBody(): String = when (filter) {
 
 /** The merchant if the parser found one, and an honest placeholder if it did not. */
 private fun PendingTransaction.title(): String =
-    extracted.merchantRaw?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown payee"
+    effective.merchantRaw?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown payee"
 
 private fun PendingTransaction.amountLabel(): String {
-    val amount = extracted.amount ?: return "—"
-    val ledger = extracted.direction.toLedgerOrNull()
-        ?: return MoneyFormat.plain(amount.minor, extracted.currency ?: "INR")
-    return MoneyFormat.directional(amount.minor, extracted.currency ?: "INR", ledger)
+    val amount = effective.amount ?: return "—"
+    val ledger = effective.direction.toLedgerOrNull()
+        ?: return MoneyFormat.plain(amount.minor, effective.currency ?: "INR")
+    return MoneyFormat.directional(amount.minor, effective.currency ?: "INR", ledger)
 }
 
 @Composable
-private fun PendingTransaction.amountColor() = when (extracted.direction) {
+private fun PendingTransaction.amountColor() = when (effective.direction) {
     ExtractedDirection.DEBIT -> LfTheme.colors.debit
     ExtractedDirection.CREDIT -> LfTheme.colors.credit
     // An unread direction is not a book, and colouring it as one would assert
@@ -611,6 +611,11 @@ private fun PendingTransaction.amountColor() = when (extracted.direction) {
 /**
  * When it happened, then where it came from.
  *
+ * The stamp comes from [PendingTransaction.effective], so correcting a date on
+ * the review screen moves the row's timestamp too. The provenance below does
+ * **not**: `A/C 6402` and "from an SMS" are facts about the message that
+ * arrived, and no edit changes them.
+ *
  * Shown on **every** filter -- pending, suppressed, discarded and failed --
  * because "which of these is the one from this morning" is the question a
  * queue of near-identical bank messages actually raises, and it is the same
@@ -622,7 +627,7 @@ private fun PendingTransaction.amountColor() = when (extracted.direction) {
  */
 @Composable
 private fun PendingTransaction.detailLine(): String {
-    val stamp = extracted.occurredAt
+    val stamp = effective.occurredAt
         // The message named a day, so keep it and take the clock from capture.
         ?.let { TimeStamp.ofCapture(it, capturedAt = createdAt, withDate = true) }
         // It named nothing at all; capture is the only time there is.

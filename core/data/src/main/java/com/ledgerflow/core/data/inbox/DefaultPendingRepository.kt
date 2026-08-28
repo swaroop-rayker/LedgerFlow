@@ -8,6 +8,7 @@ import com.ledgerflow.core.database.entity.PendingTransactionEntity
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.inbox.PendingTransaction
+import com.ledgerflow.core.domain.inbox.ReviewEdits
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.PendingStatus
@@ -60,7 +61,16 @@ public class DefaultPendingRepository @Inject constructor(
                 InboxFilter.DISCARDED -> dao.observeWithStatus(PendingStatus.DISCARDED)
                 InboxFilter.FAILED -> dao.observeWithStatus(PendingStatus.FAILED)
             }
-            rows.map { list -> list.map(::toDomain) }
+            // Merchant names come from ONE query for the whole list, not a
+            // lookup per row. A candidate the user edited holds a merchant *id*
+            // and every list shows a *name*, so somebody has to resolve it;
+            // §6.1 rejects doing that per row, and the taxonomy is small enough
+            // to hold. Combined rather than joined so a merchant renamed while
+            // the Inbox is open re-renders the rows that use it.
+            combine(rows, database.merchantDao().observeLive()) { list, merchants ->
+                val names = merchants.associate { it.id to it.canonicalName }
+                list.map { row -> row.toDomain(names) }
+            }
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -112,7 +122,12 @@ public class DefaultPendingRepository @Inject constructor(
     override suspend fun find(id: String): PendingTransaction? = withContext(io) {
         val database = openVault() ?: return@withContext null
         runCatching {
-            database.pendingTransactionDao().byId(id)?.let(::toDomain)
+            val row = database.pendingTransactionDao().byId(id) ?: return@runCatching null
+            val edits = ReviewEditsJson.decode(row.reviewDraftJson)
+            // One row, so one lookup rather than loading the whole taxonomy.
+            val editedMerchant = edits?.merchantId
+                ?.let { database.merchantDao().byId(it)?.canonicalName }
+            row.toDomain(edits, editedMerchant)
         }.getOrNull()
     }
 
@@ -130,12 +145,14 @@ public class DefaultPendingRepository @Inject constructor(
         }.getOrDefault(false)
     }
 
-    override suspend fun saveReviewDraft(id: String, json: String?): Boolean = withContext(io) {
-        val database = openVault() ?: return@withContext false
-        runCatching {
-            database.pendingTransactionDao().saveReviewDraft(id, json) > 0
-        }.getOrDefault(false)
-    }
+    override suspend fun saveReviewDraft(id: String, edits: ReviewEdits?): Boolean =
+        withContext(io) {
+            val database = openVault() ?: return@withContext false
+            runCatching {
+                val json = edits?.let(ReviewEditsJson::encode)
+                database.pendingTransactionDao().saveReviewDraft(id, json) > 0
+            }.getOrDefault(false)
+        }
 
     override suspend fun erase(ids: List<String>): Int = withContext(io) {
         if (ids.isEmpty()) return@withContext 0
@@ -215,17 +232,32 @@ public class DefaultPendingRepository @Inject constructor(
      * render is a message the user cannot act on, and one they can see as
      * "needs filling in" is strictly better.
      */
-    private fun toDomain(row: PendingTransactionEntity) = PendingTransaction(
-        id = row.id,
-        source = row.source,
-        extracted = ExtractedTransactionJson.decode(row.extractedJson) ?: ExtractedTransaction(),
-        confidence = row.confidence,
-        status = row.status,
-        needsManualFill = row.needsManualFill,
-        suppressedById = row.suppressedById,
-        createdAt = row.createdAt,
-        reviewedAt = row.reviewedAt,
-        approvedEntryId = row.approvedEntryId,
-        reviewDraftJson = row.reviewDraftJson,
+    /**
+     * A list row, with the merchant name taken from the batch already loaded.
+     */
+    private fun PendingTransactionEntity.toDomain(
+        merchantNames: Map<String, String>,
+    ): PendingTransaction {
+        val edits = ReviewEditsJson.decode(reviewDraftJson)
+        return toDomain(edits, edits?.merchantId?.let(merchantNames::get))
+    }
+
+    /** A single row, where one lookup is cheaper than loading the taxonomy. */
+    private fun PendingTransactionEntity.toDomain(
+        edits: ReviewEdits?,
+        editedMerchantName: String?,
+    ) = PendingTransaction(
+        id = id,
+        source = source,
+        extracted = ExtractedTransactionJson.decode(extractedJson) ?: ExtractedTransaction(),
+        confidence = confidence,
+        status = status,
+        needsManualFill = needsManualFill,
+        suppressedById = suppressedById,
+        createdAt = createdAt,
+        reviewedAt = reviewedAt,
+        approvedEntryId = approvedEntryId,
+        edits = edits,
+        editedMerchantName = editedMerchantName,
     )
 }

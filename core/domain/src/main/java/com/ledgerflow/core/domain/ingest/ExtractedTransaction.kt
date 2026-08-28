@@ -25,6 +25,19 @@ public enum class ExtractedDirection {
     }
 }
 
+/**
+ * The book the user chose, back as a direction.
+ *
+ * The inverse of [ExtractedDirection.toLedgerOrNull], and needed for the same
+ * reason in the other direction: a list renders an [ExtractedTransaction], so a
+ * candidate whose book the *user* supplied has to be able to say so in the same
+ * vocabulary. Total, unlike its inverse — a chosen book is never unknown.
+ */
+public fun LedgerType.toExtractedDirection(): ExtractedDirection = when (this) {
+    LedgerType.DEBIT -> ExtractedDirection.DEBIT
+    LedgerType.CREDIT -> ExtractedDirection.CREDIT
+}
+
 /** How the payment was made, where the message says (SPEC.md §5.1). */
 public enum class InstrumentHint {
     UPI,

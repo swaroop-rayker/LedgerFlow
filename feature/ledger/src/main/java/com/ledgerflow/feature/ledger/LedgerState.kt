@@ -207,7 +207,9 @@ public sealed interface UnsavedRow {
         override val key: String get() = "candidate-${candidate.id}"
         override val happenedAt: Long
             get() = OccurredAt.effectiveOrCapture(
-                occurredAt = candidate.extracted.occurredAt,
+                // `effective`, so correcting a date on the review screen moves
+                // the row within the section too.
+                occurredAt = candidate.effective.occurredAt,
                 capturedAt = candidate.createdAt,
             )
     }

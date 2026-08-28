@@ -3,6 +3,7 @@ package com.ledgerflow.core.testing.inbox
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.inbox.PendingTransaction
+import com.ledgerflow.core.domain.inbox.ReviewEdits
 import com.ledgerflow.core.model.PendingStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -101,10 +102,10 @@ public class FakePendingRepository(
      * user taps Approve, and a fake that accepted the write would let a test
      * pass over a resolution that the database would have refused.
      */
-    override suspend fun saveReviewDraft(id: String, json: String?): Boolean {
+    override suspend fun saveReviewDraft(id: String, edits: ReviewEdits?): Boolean {
         val row = rows.value[id] ?: return false
         if (row.status != PendingStatus.PENDING) return false
-        rows.value = rows.value + (id to row.copy(reviewDraftJson = json))
+        rows.value = rows.value + (id to row.copy(edits = edits))
         return true
     }
 
@@ -155,7 +156,7 @@ public class FakePendingRepository(
                 approvedEntryId = entryId,
                 // The real statement clears it in the same UPDATE, so a
                 // resolved candidate can never carry stale typing (v8).
-                reviewDraftJson = null,
+                edits = null,
             )
             )
         return true
@@ -175,7 +176,7 @@ public class FakePendingRepository(
                 // does not put it back -- the typing was thrown away with the
                 // candidate, and inventing it on the way back would be worse
                 // than an empty form.
-                reviewDraftJson = null,
+                edits = null,
             )
             )
         return true

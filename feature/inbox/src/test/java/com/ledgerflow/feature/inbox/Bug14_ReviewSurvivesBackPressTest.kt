@@ -183,7 +183,7 @@ class Bug14_ReviewSurvivesBackPressTest {
         advanceTimeBy(PAST_DEBOUNCE)
         advanceUntilIdle()
 
-        assertThat(pending.get("p1")?.reviewDraftJson).isNull()
+        assertThat(pending.get("p1")?.edits).isNull()
     }
 
     /**
@@ -215,13 +215,13 @@ class Bug14_ReviewSurvivesBackPressTest {
         advanceUntilIdle()
         // The intermediate edit really was persisted -- so the clean-up below
         // is undoing something rather than never having happened.
-        assertThat(pending.get("p1")?.reviewDraftJson).isNotNull()
+        assertThat(pending.get("p1")?.edits).isNotNull()
 
         vm.onEvent(ReviewEvent.AmountChanged(original))
         advanceTimeBy(PAST_DEBOUNCE)
         advanceUntilIdle()
 
-        assertThat(pending.get("p1")?.reviewDraftJson).isNull()
+        assertThat(pending.get("p1")?.edits).isNull()
 
         val reopened = viewModel()
         advanceUntilIdle()
@@ -246,13 +246,13 @@ class Bug14_ReviewSurvivesBackPressTest {
         vm.onEvent(ReviewEvent.NoteChanged("never mind"))
         advanceTimeBy(PAST_DEBOUNCE)
         advanceUntilIdle()
-        assertThat(pending.get("p1")?.reviewDraftJson).isNotNull()
+        assertThat(pending.get("p1")?.edits).isNotNull()
 
         vm.onEvent(ReviewEvent.Discard)
         advanceUntilIdle()
 
         assertThat(pending.get("p1")?.status).isEqualTo(PendingStatus.DISCARDED)
-        assertThat(pending.get("p1")?.reviewDraftJson).isNull()
+        assertThat(pending.get("p1")?.edits).isNull()
     }
 
     /**
@@ -280,7 +280,7 @@ class Bug14_ReviewSurvivesBackPressTest {
         advanceUntilIdle()
 
         assertThat(pending.get("p1")?.status).isEqualTo(PendingStatus.DISCARDED)
-        assertThat(pending.get("p1")?.reviewDraftJson).isNull()
+        assertThat(pending.get("p1")?.edits).isNull()
     }
 
     // ── The payload itself ──────────────────────────────────────────────────
@@ -295,7 +295,10 @@ class Bug14_ReviewSurvivesBackPressTest {
      */
     @Test
     fun anUnreadableDraft_fallsBackToTheExtraction() = runTest(dispatcher) {
-        pending.put(candidate().copy(reviewDraftJson = "{ this is not the payload }"))
+        // An unreadable payload never reaches the domain -- ReviewEditsJson
+        // decodes to null in :core:data -- so from here it is indistinguishable
+        // from a candidate nobody has edited, which is exactly the guarantee.
+        pending.put(candidate().copy(edits = null))
 
         val vm = viewModel()
         advanceUntilIdle()

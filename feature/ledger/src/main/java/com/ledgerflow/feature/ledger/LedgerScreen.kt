@@ -301,8 +301,8 @@ private fun CandidateRow(
     currencyCode: String,
     onReview: (String) -> Unit,
 ) {
-    val title = candidate.extracted.merchantRaw?.takeIf { it.isNotBlank() } ?: UNREAD_MESSAGE
-    val amount = candidate.extracted.amount
+    val title = candidate.effective.merchantRaw?.takeIf { it.isNotBlank() } ?: UNREAD_MESSAGE
+    val amount = candidate.effective.amount
         ?.let { MoneyFormat.symbolised(it.minor, currencyCode) }
         // §5.1's never-drop row: nothing was extracted, so there is no figure to
         // show. An em dash rather than a zero -- "0" is an amount, and this is
@@ -311,7 +311,7 @@ private fun CandidateRow(
     // Every bank SMS in the corpus states a date and no clock, so `occurredAt`
     // is midnight and the naive stamp would read "12:00 am" on every row. See
     // TimeStamp.ofCapture.
-    val stamp = candidate.extracted.occurredAt
+    val stamp = candidate.effective.occurredAt
         ?.let { TimeStamp.ofCapture(it, capturedAt = candidate.createdAt, withDate = true) }
         ?: TimeStamp.of(candidate.createdAt, withDate = true)
     val detail = "$stamp$SEPARATOR$TO_REVIEW_MARKER"

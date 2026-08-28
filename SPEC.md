@@ -253,6 +253,33 @@ Two consequences worth recording:
   until they launch it again; that is Android's rule and no code here can change
   it. The case this fixes is the common one: a process the OEM reaped, which the
   system restarts for the broadcast.
+- **BUG15 — a correction reached the review screen and nowhere else.** Reported
+  as "the autosave seems to be not working". It was working: an edited amount
+  came back on reopening the review screen. What did not work is that **every
+  other surface still showed the parser's figure** — the Inbox row, the Ledger's
+  "Unsaved" row, and the order that section sorts in — so from outside, an
+  edited candidate looked untouched, which is indistinguishable from typing that
+  never saved.
+
+  The cause was a scoping mistake made when v8 landed: the payload was written
+  as `:feature:inbox`'s own, borrowing §6.1.2's split for
+  `draft_entry.payload_json`. **That split holds for a draft and not for a
+  candidate**, because a candidate is a row other surfaces list — and the very
+  next change put candidates on the Ledger. `ReviewEdits` is now a
+  `:core:domain` type, its JSON lives in `:core:data` beside
+  `ExtractedTransactionJson`, and lists render `PendingTransaction.effective`.
+
+  **`extracted` still means "what the parser read"** — §5.1's targets are
+  spec-level, the review screen shows them, and the golden corpus is written
+  against them — so corrections are laid *over* it rather than into it. The
+  message's own facts (account, reference, confidence) are never overlaid: the
+  Inbox's provenance line reads those, and `SMS · A/C 6402` must not change
+  because someone fixed an amount. **No schema change**: the column and its wire
+  format are v8's, unchanged, so payloads already on a device still decode.
+
+  The edited merchant is resolved to a **name** by one batched query per list
+  rather than a lookup per row (§6.1's rule), combined with the merchant flow so
+  a rename re-renders the rows that use it.
 - **The Inbox offers the filters that hold something** (owner — "there is some
   clutter"). §5.1 names four; two are routinely empty and `FAILED` is empty **by
   construction**, since no path in the app writes that status. The chip row is

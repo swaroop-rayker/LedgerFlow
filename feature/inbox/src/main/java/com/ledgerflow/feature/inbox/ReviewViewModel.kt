@@ -7,6 +7,7 @@ import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.QuantityFormat
 import com.ledgerflow.core.domain.inbox.PendingRepository
+import com.ledgerflow.core.domain.inbox.ReviewEdits
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.NewLineItem
@@ -101,7 +102,7 @@ public class ReviewViewModel @Inject constructor(
      * "different from what was loaded" is both simpler and more honest -- typing
      * a character and deleting it again leaves nothing behind.
      */
-    private var loaded: ReviewDraftPayload? = null
+    private var loaded: ReviewEdits? = null
 
     /**
      * Whether a draft is currently on the row.
@@ -140,14 +141,12 @@ public class ReviewViewModel @Inject constructor(
             // it: the source label, the reference hint and needsManualFill are
             // facts about the message, and a draft has no business overriding
             // them (v8, BUG6).
-            ReviewDraftPayload.decode(candidate.reviewDraftJson)
-                ?.let(fromExtraction::withDraft)
-                ?: fromExtraction
+            candidate.edits?.let(fromExtraction::withEdits) ?: fromExtraction
         }
         // Everything loaded is the baseline. Anything that differs from here on
         // is the user's, and only that is worth a row.
-        loaded = _state.value.toDraftPayload()
-        persisted = candidate.reviewDraftJson != null
+        loaded = _state.value.toEdits(currency)
+        persisted = candidate.edits != null
         _state.value.ledger?.let(::observeCategoriesFor)
         viewModelScope.launch { collectDraftWrites() }
     }
@@ -515,7 +514,7 @@ public class ReviewViewModel @Inject constructor(
     @OptIn(FlowPreview::class)
     private suspend fun collectDraftWrites() {
         _state
-            .map { it.toDraftPayload() }
+            .map { it.toEdits(currency) }
             .distinctUntilChanged()
             .debounce(DRAFT_DEBOUNCE_MS)
             .collect { payload ->
@@ -533,10 +532,7 @@ public class ReviewViewModel @Inject constructor(
                     return@collect
                 }
 
-                pendingRepository.saveReviewDraft(
-                    pendingId,
-                    ReviewDraftPayload.encode(payload),
-                )
+                pendingRepository.saveReviewDraft(pendingId, payload)
                 persisted = true
             }
     }
