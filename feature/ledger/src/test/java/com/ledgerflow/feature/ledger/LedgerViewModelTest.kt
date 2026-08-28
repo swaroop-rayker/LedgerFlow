@@ -11,6 +11,8 @@ import com.ledgerflow.core.domain.usecase.DeleteEntryUseCase
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
+import com.ledgerflow.core.testing.inbox.FakePendingRepository
 import com.ledgerflow.core.testing.ledger.FakeDraftRepository
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
 import kotlinx.coroutines.CoroutineScope
@@ -43,12 +45,14 @@ class LedgerViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private lateinit var ledger: FakeLedgerRepository
     private lateinit var drafts: FakeDraftRepository
+    private lateinit var pending: FakePendingRepository
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         ledger = FakeLedgerRepository()
         drafts = FakeDraftRepository()
+        pending = FakePendingRepository()
     }
 
     @After
@@ -331,6 +335,7 @@ class LedgerViewModelTest {
             ledger = ledger,
             drafts = drafts,
             deleteEntry = DeleteEntryUseCase(ledger),
+            observePending = ObservePendingUseCase(pending),
             clock = Clock { FIXED_NOW },
         )
         CoroutineScope(dispatcher).launch { viewModel.state.collect {} }

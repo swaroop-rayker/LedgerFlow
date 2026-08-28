@@ -101,13 +101,13 @@ public class FakePendingRepository(
                     row.isSuppressed
                 )
 
-    override suspend fun purge(ids: List<String>): Int {
+    override suspend fun erase(ids: List<String>): Int {
         val doomed = ids.mapNotNull { rows.value[it] }.filter(::erasable).map { it.id }.toSet()
         rows.value = rows.value - doomed
         return doomed.size
     }
 
-    override suspend fun purgeAll(filter: InboxFilter): Int {
+    override suspend fun eraseAll(filter: InboxFilter): Int {
         val doomed = rows.value.values
             .filter { row ->
                 erasable(row) && when (filter) {

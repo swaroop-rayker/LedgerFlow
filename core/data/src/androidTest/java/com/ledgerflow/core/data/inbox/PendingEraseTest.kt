@@ -48,9 +48,9 @@ import org.junit.runner.RunWith
  * throw away a message that cost a real payment to obtain (owner decision).
  */
 @RunWith(AndroidJUnit4::class)
-class PendingPurgeTest {
+class PendingEraseTest {
 
-    private val vault = LedgerTestVault("lf_purge_pending_test")
+    private val vault = LedgerTestVault("lf_erase_pending_test")
     private lateinit var repository: DefaultPendingRepository
 
     @Before
@@ -103,7 +103,7 @@ class PendingPurgeTest {
     fun purge_erasesADiscardedCandidate() = runBlocking<Unit> {
         seed("discarded", status = PendingStatus.DISCARDED)
 
-        assertThat(repository.purge(listOf("discarded"))).isEqualTo(1)
+        assertThat(repository.erase(listOf("discarded"))).isEqualTo(1)
         assertThat(ids()).doesNotContain("discarded")
     }
 
@@ -114,7 +114,7 @@ class PendingPurgeTest {
         seed("winner")
         seed("loser", suppressedById = "winner")
 
-        assertThat(repository.purge(listOf("loser"))).isEqualTo(1)
+        assertThat(repository.erase(listOf("loser"))).isEqualTo(1)
         assertThat(ids()).containsExactly("winner")
     }
 
@@ -125,7 +125,7 @@ class PendingPurgeTest {
         seed("gone-2", status = PendingStatus.DISCARDED)
         seed("failed", status = PendingStatus.FAILED)
 
-        assertThat(repository.purgeAll(InboxFilter.DISCARDED)).isEqualTo(2)
+        assertThat(repository.eraseAll(InboxFilter.DISCARDED)).isEqualTo(2)
         assertThat(ids()).containsExactly("live", "failed")
     }
 
@@ -143,7 +143,7 @@ class PendingPurgeTest {
     fun purge_refusesAnApprovedCandidate() = runBlocking<Unit> {
         seed("approved", status = PendingStatus.APPROVED, approvedEntryId = "entry-1")
 
-        assertThat(repository.purge(listOf("approved"))).isEqualTo(0)
+        assertThat(repository.erase(listOf("approved"))).isEqualTo(0)
         assertThat(ids()).contains("approved")
     }
 
@@ -167,7 +167,7 @@ class PendingPurgeTest {
         )
         seed("plain-loser", suppressedById = "winner")
 
-        assertThat(repository.purgeAll(InboxFilter.SUPPRESSED)).isEqualTo(1)
+        assertThat(repository.eraseAll(InboxFilter.SUPPRESSED)).isEqualTo(1)
         assertThat(ids()).containsExactly("winner", "approved-loser")
     }
 
@@ -176,7 +176,7 @@ class PendingPurgeTest {
     fun purge_refusesALivePendingCandidate() = runBlocking<Unit> {
         seed("live")
 
-        assertThat(repository.purge(listOf("live"))).isEqualTo(0)
+        assertThat(repository.erase(listOf("live"))).isEqualTo(0)
         assertThat(ids()).contains("live")
     }
 
@@ -192,7 +192,7 @@ class PendingPurgeTest {
         seed("live-1")
         seed("live-2")
 
-        assertThat(repository.purgeAll(InboxFilter.PENDING)).isEqualTo(0)
+        assertThat(repository.eraseAll(InboxFilter.PENDING)).isEqualTo(0)
         assertThat(ids()).containsExactly("live-1", "live-2")
     }
 
@@ -224,7 +224,7 @@ class PendingPurgeTest {
         )
         seed("discarded", status = PendingStatus.DISCARDED, rawRefId = "raw-1")
 
-        assertThat(repository.purge(listOf("discarded"))).isEqualTo(1)
+        assertThat(repository.erase(listOf("discarded"))).isEqualTo(1)
 
         val raw = database.smsRawDao().byId("raw-1")
         assertThat(raw).isNotNull()
@@ -257,7 +257,7 @@ class PendingPurgeTest {
         )
         seed("discarded", status = PendingStatus.DISCARDED, rawRefId = "raw-1")
 
-        repository.purge(listOf("discarded"))
+        repository.erase(listOf("discarded"))
 
         val queued = database.smsRawDao().withStatus(RawParseStatus.CAPTURED, limit = 100)
         assertThat(queued).isEmpty()
@@ -275,7 +275,7 @@ class PendingPurgeTest {
         seed("winner", status = PendingStatus.DISCARDED)
         seed("loser", suppressedById = "winner")
 
-        assertThat(repository.purge(listOf("winner"))).isEqualTo(1)
+        assertThat(repository.erase(listOf("winner"))).isEqualTo(1)
 
         val loser = vault.session.requireDatabase().pendingTransactionDao().byId("loser")
         assertThat(loser).isNotNull()

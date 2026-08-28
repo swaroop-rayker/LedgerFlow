@@ -78,12 +78,12 @@ public class RestorePendingUseCase @Inject constructor(
  *
  * The raw messages stay (owner decision, CHANGE#1). Only candidates go.
  */
-public class PurgePendingUseCase @Inject constructor(
+public class ErasePendingUseCase @Inject constructor(
     private val repository: PendingRepository,
 ) {
 
     /** Just the ones the user ticked. Returns how many were actually erased. */
-    public suspend fun selected(ids: List<String>): Int = repository.purge(ids)
+    public suspend fun selected(ids: List<String>): Int = repository.erase(ids)
 
     /**
      * Everything the given filter lists.
@@ -92,7 +92,7 @@ public class PurgePendingUseCase @Inject constructor(
      * queue of things the user has not looked at yet is not an operation this
      * app offers.
      */
-    public suspend fun all(filter: InboxFilter): Int = repository.purgeAll(filter)
+    public suspend fun all(filter: InboxFilter): Int = repository.eraseAll(filter)
 }
 
 /**

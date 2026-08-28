@@ -9,7 +9,6 @@ import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
-import com.ledgerflow.core.domain.usecase.GetPendingUseCase
 import com.ledgerflow.core.domain.usecase.ObserveCategoryTreeUseCase
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Money
@@ -93,7 +92,6 @@ class Bug14_ReviewSurvivesBackPressTest {
     /** A fresh ViewModel over the same repository — i.e. reopening the screen. */
     private fun viewModel() = ReviewViewModel(
         savedStateHandle = SavedStateHandle(mapOf(ReviewViewModel.PENDING_ID_ARG to "p1")),
-        getPending = GetPendingUseCase(pending),
         approvePending = ApprovePendingUseCase(
             pending,
             merchants,

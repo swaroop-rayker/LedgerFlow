@@ -9,7 +9,7 @@ import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
 import com.ledgerflow.core.domain.usecase.InboxException
 import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
-import com.ledgerflow.core.domain.usecase.PurgePendingUseCase
+import com.ledgerflow.core.domain.usecase.ErasePendingUseCase
 import com.ledgerflow.core.domain.usecase.RestorePendingUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -41,7 +41,7 @@ public class InboxViewModel @Inject constructor(
     private val approvePending: ApprovePendingUseCase,
     private val discardPending: DiscardPendingUseCase,
     private val restorePending: RestorePendingUseCase,
-    private val purgePending: PurgePendingUseCase,
+    private val erasePending: ErasePendingUseCase,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(InboxFilter.PENDING)
@@ -120,8 +120,34 @@ public class InboxViewModel @Inject constructor(
 
             InboxEvent.MessageShown -> transient.update { it.copy(message = null) }
 
-            // ── Erasing (CHANGE#1) ──────────────────────────────────────────
+            // Routed by concern rather than handled in one block, the same
+            // shape `ReviewViewModel.onEvent` uses: the outer `when` stays
+            // exhaustive over the sealed type -- no `else` -- so a new event
+            // fails to compile until it is placed, while the destructive half
+            // sits in one function that can be read on its own.
+            is InboxEvent.SelectionToggled,
+            InboxEvent.SelectionCleared,
+            InboxEvent.EraseSelectedRequested,
+            InboxEvent.EraseAllRequested,
+            InboxEvent.EraseConfirmed,
+            InboxEvent.EraseDismissed,
+            -> onEraseEvent(event)
+        }
+    }
 
+    /**
+     * Everything that can lead to a row being destroyed (CHANGE#1).
+     *
+     * Only [InboxEvent.EraseConfirmed] actually destroys anything; the rest
+     * select rows or open and close the warning. Keeping them in one function
+     * is what makes that reviewable at a glance -- the alternative is a delete
+     * buried in a forty-case `when`.
+     *
+     * `else -> Unit` is unreachable by construction: this is only ever entered
+     * through the group above that lists its cases.
+     */
+    private fun onEraseEvent(event: InboxEvent) {
+        when (event) {
             is InboxEvent.SelectionToggled -> transient.update { current ->
                 val next = if (event.pendingId in current.selected) {
                     current.selected - event.pendingId
@@ -170,6 +196,8 @@ public class InboxViewModel @Inject constructor(
                 transient.update { it.copy(confirmation = null) }
 
             InboxEvent.EraseConfirmed -> erase()
+
+            else -> Unit
         }
     }
 
@@ -188,8 +216,8 @@ public class InboxViewModel @Inject constructor(
 
         viewModelScope.launch {
             val erased = when (confirmation) {
-                is InboxConfirmation.EraseSelected -> purgePending.selected(ids)
-                is InboxConfirmation.EraseAll -> purgePending.all(confirmation.filter)
+                is InboxConfirmation.EraseSelected -> erasePending.selected(ids)
+                is InboxConfirmation.EraseAll -> erasePending.all(confirmation.filter)
             }
             transient.update {
                 it.copy(

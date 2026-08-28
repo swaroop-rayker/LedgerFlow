@@ -253,6 +253,31 @@ Two consequences worth recording:
   until they launch it again; that is Android's rule and no code here can change
   it. The case this fixes is the common one: a process the OEM reaped, which the
   system restarts for the broadcast.
+- **Three UI changes the owner asked for after P2-7**, none of which moved Law 1
+  or Law 2. **CHANGE#1**: discarded, failed and suppressed candidates can be
+  erased for good, ticked or all at once, behind an `LfDialogEmphasis.Warning`
+  dialog naming the count. Two predicates guard the statement rather than the
+  caller — `approved_entry_id IS NULL`, because a row can be suppressed *and*
+  approved and that row is a `ledger_entry`'s only provenance; and a status
+  clause, because a live `PENDING` candidate is the queue Law 1 protects. **The
+  captured message is kept** (owner decision): only the candidate goes, and the
+  body still expires on D-09's retention, so the corpus P2-9 needs survives a
+  tidy-up. No `VACUUM` — candidates are small and §7 is explicit that a mistake
+  there surfaces as an unreadable vault rather than a loud failure.
+  **CHANGE#2**: the Ledger gained a read-only "To review" band — see §5.4, which
+  is amended, and the Law 2 note there. **CHANGE#3**: BUG14, schema v8, below.
+- **Schema v8 — `pending_transaction.review_draft_json`.** BUG6's rule applied
+  to the review screen, which held its typing in a ViewModel: back *pops* the
+  destination rather than backgrounding it, so `SavedStateHandle` could not
+  help and only disk survives the gesture. The format belongs to
+  `:feature:inbox`, the same split §6.1.2 draws for `draft_entry.payload_json`,
+  and raw text is stored as typed so a restored form has not silently rewritten
+  "12." as "12.00". Cleared by the same `UPDATE` that approves or discards, and
+  `saveReviewDraft` binds `status = 'PENDING'` so a late debounce tick cannot
+  write typing back onto a resolved row. Two defects were found by making the
+  tests fail on purpose rather than by reading the code: returning to the
+  arrival state *skipped* the write instead of clearing it, so an undone edit
+  came back on reopen; and the test that caught it was itself tautological.
 - **P2-7 gave the pipeline its last step, and found the same bug one layer up.**
   §5.1's `inbox_high` notification ships: created once at
   `LedgerFlowApplication.onCreate` (importance HIGH, silent by default), posted
@@ -877,7 +902,9 @@ What survives from the original reasoning: the **30-day sweep**, which matters m
 
 A draft's identity is its **id**, not its slot: the form holds the id it was given and passes it back on every debounced write. Without that, the dropped index would let a form deposit a fresh draft every 300 ms. The form no longer auto-resumes — it opens empty and the shelf offers what is unsaved, because with several half-finished entries "resume the most recent" is the app guessing which one the user meant. **Cancel parks rather than exits** when the form holds unsaved input: leaving the screen would be the silent destruction D-06 exists to prevent, so Cancel writes the draft to the shelf and clears the form, and only leaves the screen when there is nothing to park.
 
-This covers **manual drafts only**. The SMS/notification queue is `pending_transaction` and the Inbox (§5.1, §5.2) at P2, kept separate per §5.4: one gates a commit and is what Law 1 is about, the other recovers typing and gates nothing.
+This covers **manual drafts only**. The SMS/notification queue is `pending_transaction` and the Inbox (§5.1, §5.2) at P2. The two remain **separate tables** — a candidate is never given a `draft_entry` row, because discarding it in one place would leave it alive in the other.
+
+**The reason they were also kept separate on screen no longer holds** (amended, CHANGE#2). The original argument was that "one gates a commit and is what Law 1 is about, the other recovers typing and gates nothing". Schema v8 gave `pending_transaction` a `review_draft_json` column (BUG14), so a candidate now recovers typing too: both are unsaved work, and the distinction that justified hiding one from the Ledger is gone. The Ledger therefore lists §5.1's queue in a **"To review" band above "Unsaved"**, read-only — tapping opens the review screen, and nothing on the Ledger writes to `pending_transaction`. A candidate is placed in the book its extracted direction names; one whose direction the parser **could not read** appears in **both**, because it is §5.1's never-drop row and hiding it until the user guesses a tab is the silent drop the pipeline exists to prevent. **Law 2 is untouched by that**: Law 2 forbids combining debits and credits into one *figure*, and this is a list in which nothing is summed — the row carries no book precisely because nobody has chosen one, and the moment someone does it is filed once, through `ApproveTransactionUseCase`, into exactly one ledger.
 
 `editing_entry_key` follows the `category.parent_key` pattern from §6.1.1 for the same reason: SQLite treats `NULL`s as distinct in a unique index, so a nullable `editing_entry_id` in the constraint would let unlimited new-entry drafts collide-free and make the index decorative. `editing_entry_id` remains the real nullable FK, carrying `ON DELETE CASCADE`.
 

@@ -9,7 +9,6 @@ import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
-import com.ledgerflow.core.domain.usecase.GetPendingUseCase
 import com.ledgerflow.core.domain.usecase.ObserveCategoryTreeUseCase
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
@@ -82,7 +81,6 @@ class ReviewBookDerivationTest {
 
     private fun viewModel() = ReviewViewModel(
         savedStateHandle = SavedStateHandle(mapOf(ReviewViewModel.PENDING_ID_ARG to "p1")),
-        getPending = GetPendingUseCase(pending),
         approvePending = ApprovePendingUseCase(
             pending,
             merchants,

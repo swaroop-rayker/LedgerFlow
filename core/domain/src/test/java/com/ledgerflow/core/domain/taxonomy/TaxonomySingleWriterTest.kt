@@ -94,6 +94,16 @@ class TaxonomySingleWriterTest {
      *
      * Matched with a leading receiver so `override suspend fun purge(` in the
      * repositories themselves does not count as a call.
+     *
+     * **The Inbox's own destroy is called `erase`, not `purge`, because of this
+     * test.** `PendingRepository.erase` has nothing to do with the taxonomy —
+     * it destroys `pending_transaction` rows and carries its own two guards —
+     * but the regex here matches any `.purge(` receiver, so naming it `purge`
+     * made `InboxUseCases.kt` an offender the moment it was written. Widening
+     * the permitted set would have been the wrong fix: it would then also
+     * permit a *taxonomy* purge from that file. Renaming is the same move this
+     * codebase already made for `hardDelete`, and it is why the UI says "Erase
+     * for good" rather than "Purge".
      */
     @Test
     fun onlyThePurgeUseCasesCallPurge() {

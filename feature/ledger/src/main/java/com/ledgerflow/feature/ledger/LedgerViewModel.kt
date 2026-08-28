@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.ledgerflow.core.common.time.Clock
+import com.ledgerflow.core.domain.inbox.InboxFilter
+import com.ledgerflow.core.domain.inbox.PendingTransaction
+import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
 import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.DraftSummary
@@ -54,6 +57,7 @@ public class LedgerViewModel @Inject constructor(
     private val ledger: LedgerRepository,
     private val drafts: DraftRepository,
     private val deleteEntry: DeleteEntryUseCase,
+    private val observePending: ObservePendingUseCase,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -87,9 +91,30 @@ public class LedgerViewModel @Inject constructor(
     private val pending: Flow<List<DraftSummary>> =
         book.flatMapLatest { drafts.observeSummaries(it) }
 
+    /**
+     * §5.1's approval queue, shown in the book it would be filed into
+     * (CHANGE#2).
+     *
+     * **Read-only here.** The Inbox is still where a candidate is approved or
+     * discarded; this is the Ledger admitting that unreviewed money exists, so
+     * that "what have I not dealt with" is answerable from the screen the user
+     * is already on. Tapping opens the review screen — nothing on the Ledger
+     * writes to `pending_transaction`.
+     *
+     * SPEC.md §6.1.2 said the two queues were kept apart because "one gates a
+     * commit and is what Law 1 is about, the other recovers typing and gates
+     * nothing". BUG14 dissolved that distinction: a candidate now holds typing
+     * too, so it genuinely *is* unsaved work. §5.4 is amended accordingly.
+     *
+     * Not filtered by book here — see [candidatesFor]. The book is applied at
+     * assembly so the flow does not restart on a tab switch.
+     */
+    private val candidates: Flow<List<PendingTransaction>> =
+        observePending(InboxFilter.PENDING)
+
     public val state: StateFlow<LedgerUiState> =
-        combine(local, hasEntries, pending) { local, hasAny, drafts ->
-            uiState(local, hasAny, drafts)
+        combine(local, hasEntries, pending, candidates) { local, hasAny, drafts, queue ->
+            uiState(local, hasAny, drafts, candidatesFor(local.ledger, queue))
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -198,10 +223,37 @@ public class LedgerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The candidates that belong on this book's tab.
+     *
+     * A candidate whose direction the parser read files into that book. One it
+     * **could not** read appears in **both**, and that is deliberate: it is
+     * §5.1's never-drop row, the one the user most needs to act on, and hiding
+     * it until they guess which tab to look under would be the silent drop this
+     * app exists to avoid.
+     *
+     * **Law 2 is not bent by that.** Law 2 forbids combining debits and credits
+     * into one *figure* — a sum, a net, a single total. This is a list, nothing
+     * here is added up, and the row carries no book yet precisely because
+     * nobody has decided one. The moment someone does, it is filed once,
+     * through `ApproveTransactionUseCase`, into exactly one ledger.
+     */
+    private fun candidatesFor(
+        book: LedgerType,
+        queue: List<PendingTransaction>,
+    ): List<PendingTransaction> = queue.filter { candidate ->
+        when (candidate.extracted.direction.toLedgerOrNull()) {
+            book -> true
+            null -> true
+            else -> false
+        }
+    }
+
     private fun uiState(
         local: LocalState,
         hasAnyEntries: Boolean,
         pending: List<DraftSummary>,
+        candidates: List<PendingTransaction>,
     ) = LedgerUiState(
         ledger = local.ledger,
         today = LocalDates.of(clock.nowMillis()),
@@ -209,6 +261,7 @@ public class LedgerViewModel @Inject constructor(
         windowDays = LedgerRepository.LIST_WINDOW_DAYS,
         currencyCode = local.currencyCode,
         pending = pending,
+        candidates = candidates,
         // Every caller of this builds state from a real emission; the seed
         // below is the only state that is not loaded.
         isLoaded = true,

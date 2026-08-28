@@ -17,7 +17,6 @@ import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
 import com.ledgerflow.core.domain.usecase.ApprovalEdits
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
-import com.ledgerflow.core.domain.usecase.GetPendingUseCase
 import com.ledgerflow.core.domain.usecase.ObserveCategoryTreeUseCase
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
@@ -56,11 +55,12 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 public class ReviewViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val getPending: GetPendingUseCase,
     private val approvePending: ApprovePendingUseCase,
     private val discardPending: DiscardPendingUseCase,
-    // Directly, for the reason stated below: a use case that only forwards
-    // `saveReviewDraft` would add a name and a file, not a guarantee.
+    // Directly, for the reason stated below: a use case that only forwards a
+    // call adds a name and a file, not a guarantee. This replaced a separate
+    // `GetPendingUseCase` parameter, which did nothing but call `find` -- two
+    // injections for one repository, and the tenth constructor argument.
     private val pendingRepository: PendingRepository,
     private val observeCategoryTree: ObserveCategoryTreeUseCase,
     private val merchants: MerchantRepository,
@@ -129,7 +129,7 @@ public class ReviewViewModel @Inject constructor(
 
     private suspend fun load() {
         currency = ledgerRepository.baseCurrency() ?: DEFAULT_CURRENCY
-        val candidate = getPending(pendingId)
+        val candidate = pendingRepository.find(pendingId)
         if (candidate == null) {
             _state.update { it.copy(loading = false, missing = true) }
             return

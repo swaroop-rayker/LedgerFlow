@@ -179,7 +179,7 @@ public interface PendingRepository {
      * A returned count lower than `ids.size` is not an error: it means some rows
      * did not satisfy the guards, which is the guards working.
      */
-    public suspend fun purge(ids: List<String>): Int
+    public suspend fun erase(ids: List<String>): Int
 
     /**
      * Everything one filter selects, on the same terms as [purge].
@@ -188,7 +188,7 @@ public interface PendingRepository {
      * Law 1 is about, and "erase all" on the screen listing work the user has
      * not looked at yet is not a thing this app offers.
      */
-    public suspend fun purgeAll(filter: InboxFilter): Int
+    public suspend fun eraseAll(filter: InboxFilter): Int
 
     /**
      * Records that a candidate became a ledger entry.

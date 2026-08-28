@@ -103,6 +103,20 @@ coroutines:
     active: true
 
 naming:
+  # CLAUDE.md §5 names regression tests after the bug they defend:
+  # `Bug6_DraftSurvivesProcessDeathTest`. The underscore is the convention, and
+  # the number is what makes the test findable from a commit message years
+  # later. Every such test lived in `androidTest` -- which detekt does not scan
+  # -- until BUG14's landed in `src/test`, at which point the rule fired on a
+  # name the project mandates. Excluded in tests only; production classes keep
+  # the default pattern.
+  ClassNaming:
+    active: true
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      - '**/*Test.kt'
+
   FunctionNaming:
     active: true
     # @Composable functions are PascalCase by convention.

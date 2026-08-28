@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.ledger
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.DraftSummary
 import com.ledgerflow.core.model.LedgerType
 
@@ -66,6 +67,23 @@ public data class LedgerUiState(
      * to `:feature:entry`, and this screen must never parse it.
      */
     val pending: List<DraftSummary> = emptyList(),
+
+    /**
+     * §5.1's approval queue, in the book it would be filed into (CHANGE#2).
+     *
+     * **Separate from [pending], not merged into it.** They are two different
+     * things that happen to both be unfinished: a draft is typing the user
+     * started and can resume in the entry form, a candidate is a captured
+     * message waiting for the tap Law 1 requires. They open different screens
+     * and their discards mean different things — a draft's is final, a
+     * candidate's is reversible for 30 days — so one band each rather than one
+     * band with two row types.
+     *
+     * A candidate whose direction the parser could not read appears in **both**
+     * books. Nothing here is summed, so Law 2 is untouched; see
+     * `LedgerViewModel.candidatesFor`.
+     */
+    val candidates: List<PendingTransaction> = emptyList(),
 
     /**
      * Whether the database has actually answered yet.

@@ -602,14 +602,14 @@ public interface PendingTransactionDao {
             "AND approved_entry_id IS NULL " +
             "AND (status IN ('DISCARDED', 'FAILED') OR suppressed_by_id IS NOT NULL)",
     )
-    public suspend fun purge(ids: List<String>): Int
+    public suspend fun erase(ids: List<String>): Int
 
     /** Every discarded or failed row. Same two guards. */
     @Query(
         "DELETE FROM pending_transaction WHERE status = :status " +
             "AND approved_entry_id IS NULL",
     )
-    public suspend fun purgeWithStatus(status: PendingStatus): Int
+    public suspend fun eraseWithStatus(status: PendingStatus): Int
 
     /**
      * Every suppressed row.
@@ -623,7 +623,7 @@ public interface PendingTransactionDao {
         "DELETE FROM pending_transaction WHERE suppressed_by_id IS NOT NULL " +
             "AND approved_entry_id IS NULL",
     )
-    public suspend fun purgeSuppressed(): Int
+    public suspend fun eraseSuppressed(): Int
 
     @Query("SELECT COUNT(*) FROM pending_transaction")
     public suspend fun count(): Int

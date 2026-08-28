@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -29,6 +30,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -50,6 +52,7 @@ import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.DraftSummary
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
@@ -82,6 +85,7 @@ public fun LedgerScreen(
     entries: Flow<PagingData<LedgerListItem>>,
     onEvent: (LedgerEvent) -> Unit,
     onOpenDraft: (String) -> Unit,
+    onReviewCandidate: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val items = entries.collectAsLazyPagingItems()
@@ -111,6 +115,7 @@ public fun LedgerScreen(
             state = state,
             onEvent = onEvent,
             onOpenDraft = onOpenDraft,
+            onReviewCandidate = onReviewCandidate,
         )
     }
 }
@@ -193,6 +198,7 @@ private fun EntryList(
     state: LedgerUiState,
     onEvent: (LedgerEvent) -> Unit,
     onOpenDraft: (String) -> Unit,
+    onReviewCandidate: (String) -> Unit,
 ) {
     // Nothing is drawn until the drafts query has answered. Composing the list
     // first and prepending the unsaved section afterwards put that section
@@ -206,7 +212,7 @@ private fun EntryList(
     // The empty state is about the *book*, so unsaved entries do not count
     // towards it — but it must not hide them either. With drafts on screen the
     // list still renders; without them it is genuinely empty.
-    if (settled && items.itemCount == 0 && state.pending.isEmpty()) {
+    if (settled && state.showsNothing(items.itemCount)) {
         EmptyBook(state)
         return
     }
@@ -228,26 +234,8 @@ private fun EntryList(
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
         contentPadding = PaddingValues(bottom = LfTheme.spacing.xxl),
     ) {
-        // Above the bands, because an unsaved entry is not *in* the ledger
-        // yet -- it has no date to file under and no amount that counts. It is
-        // a to-do list sitting on top of a record.
-        if (state.pending.isNotEmpty()) {
-            stickyHeader(key = "band-unsaved", contentType = BAND_HEADER_TYPE) {
-                BandLabel("Unsaved · ${state.pending.size}")
-            }
-            items(
-                count = state.pending.size,
-                key = { "draft-${state.pending[it].id}" },
-                contentType = { PENDING_TYPE },
-            ) { index ->
-                PendingRow(
-                    draft = state.pending[index],
-                    currencyCode = state.currencyCode,
-                    onOpen = onOpenDraft,
-                    onEvent = onEvent,
-                )
-            }
-        }
+        toReviewBand(state, onReviewCandidate)
+        unsavedBand(state, onOpenDraft, onEvent)
 
         for (index in 0 until items.itemCount) {
             val item = snapshot.getOrNull(index) ?: continue
@@ -292,6 +280,147 @@ private fun EntryList(
 private fun BandHeader(bucket: RecencyBucket) {
     BandLabel(bucket.label)
 }
+
+/**
+ * One captured payment waiting for the tap Law 1 requires (CHANGE#2).
+ *
+ * **Read-only, and one line shorter than the draft row.** A draft offers
+ * Discard here because the entry form is where it is finished; a candidate
+ * offers nothing, because approving it is a decision that belongs on the review
+ * screen where the parsed fields are visible. The Ledger's job is to say *that*
+ * it exists.
+ *
+ * No book chip and no colour split: the row may be a debit, a credit, or one
+ * the parser could not read — and the last kind shows on both tabs. Colouring
+ * it as spend on the Expenses tab would be the guess Law 2 exists to prevent,
+ * made in pixels.
+ */
+@Composable
+private fun CandidateRow(
+    candidate: PendingTransaction,
+    currencyCode: String,
+    onReview: (String) -> Unit,
+) {
+    val title = candidate.extracted.merchantRaw?.takeIf { it.isNotBlank() } ?: UNREAD_MESSAGE
+    val amount = candidate.extracted.amount
+        ?.let { MoneyFormat.symbolised(it.minor, currencyCode) }
+        // §5.1's never-drop row: nothing was extracted, so there is no figure to
+        // show. An em dash rather than a zero -- "0" is an amount, and this is
+        // the absence of one.
+        ?: NO_AMOUNT
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(LfTheme.colors.surfaceBase, RoundedCornerShape(LfTheme.spacing.sm))
+            .border(
+                HAIRLINE.dp,
+                LfTheme.colors.outline,
+                RoundedCornerShape(LfTheme.spacing.sm),
+            )
+            .clickable { onReview(candidate.id) }
+            .semantics {
+                contentDescription =
+                    "To review, $amount, $title. Opens the review screen."
+            }
+            .padding(horizontal = LfTheme.spacing.md, vertical = LfTheme.spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(end = LfTheme.spacing.sm),
+        )
+        Text(
+            text = amount,
+            style = LfTheme.typography.amountM,
+            color = LfTheme.colors.textSecondary,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * §5.1's queue, above everything (CHANGE#2).
+ *
+ * A candidate is money that has **already moved** and has not been recorded; a
+ * draft is typing the user started. The one with a real transaction behind it
+ * is the more urgent, so it sits above Unsaved, and both sit above the ledger
+ * itself — neither is *in* the book yet.
+ *
+ * A `LazyListScope` extension rather than inline, because adding it pushed
+ * [EntryList] past detekt's length and complexity limits. Two bands with the
+ * same shape read better as two named functions than as forty lines of
+ * conditional list building.
+ */
+private fun LazyListScope.toReviewBand(
+    state: LedgerUiState,
+    onReviewCandidate: (String) -> Unit,
+) {
+    if (state.candidates.isEmpty()) return
+
+    stickyHeader(key = "band-to-review", contentType = BAND_HEADER_TYPE) {
+        BandLabel("To review · ${state.candidates.size}")
+    }
+    items(
+        count = state.candidates.size,
+        key = { "candidate-${state.candidates[it].id}" },
+        // Its own contentType: a candidate row and a draft row have different
+        // shapes, and telling the compiler they are the same slot would make it
+        // reuse one for the other.
+        contentType = { CANDIDATE_TYPE },
+    ) { index ->
+        CandidateRow(
+            candidate = state.candidates[index],
+            currencyCode = state.currencyCode,
+            onReview = onReviewCandidate,
+        )
+    }
+}
+
+/**
+ * Unsaved manual entries.
+ *
+ * Above the recency bands, because an unsaved entry has no date to file under
+ * and no amount that counts. It is a to-do list sitting on top of a record.
+ */
+private fun LazyListScope.unsavedBand(
+    state: LedgerUiState,
+    onOpenDraft: (String) -> Unit,
+    onEvent: (LedgerEvent) -> Unit,
+) {
+    if (state.pending.isEmpty()) return
+
+    stickyHeader(key = "band-unsaved", contentType = BAND_HEADER_TYPE) {
+        BandLabel("Unsaved · ${state.pending.size}")
+    }
+    items(
+        count = state.pending.size,
+        key = { "draft-${state.pending[it].id}" },
+        contentType = { PENDING_TYPE },
+    ) { index ->
+        PendingRow(
+            draft = state.pending[index],
+            currencyCode = state.currencyCode,
+            onOpen = onOpenDraft,
+            onEvent = onEvent,
+        )
+    }
+}
+
+/**
+ * Whether this book has nothing at all to show.
+ *
+ * Named rather than left as a four-clause condition: the empty state is about
+ * the *book*, so neither unsaved entries nor candidates count towards it — but
+ * it must not hide them either, and "&& isEmpty() && isEmpty()" reads as
+ * boilerplate rather than as that rule.
+ */
+private fun LedgerUiState.showsNothing(entryCount: Int): Boolean =
+    entryCount == 0 && pending.isEmpty() && candidates.isEmpty()
 
 /** The header's look, shared by the recency bands and the unsaved section. */
 @Composable
@@ -814,6 +943,7 @@ internal const val HAIRLINE = 1
 private const val BAND_HEADER_TYPE = "band"
 private const val ENTRY_TYPE = "entry"
 private const val PENDING_TYPE = "pending"
+private const val CANDIDATE_TYPE = "candidate"
 private const val SEPARATOR = " · "
 private const val NOTE_MAX_LINES = 1
 
@@ -832,6 +962,8 @@ internal const val UNFILED = "Unfiled"
 
 /** A draft with nothing chosen yet, which is most of a draft's life. */
 private const val UNTITLED_DRAFT = "Unsaved entry"
+private const val UNREAD_MESSAGE = "Unread message"
+private const val NO_AMOUNT = "—"
 
 // ── Previews (CLAUDE.md §5) ───────────────────────────────────────────────
 
@@ -891,6 +1023,7 @@ private fun LedgerPreview() {
             entries = flowOf(PagingData.from(previewExpenses)),
             onEvent = {},
             onOpenDraft = {},
+            onReviewCandidate = {},
         )
     }
 }
@@ -912,6 +1045,7 @@ private fun LedgerIncomePreview() {
             entries = flowOf(PagingData.from(previewIncome)),
             onEvent = {},
             onOpenDraft = {},
+            onReviewCandidate = {},
         )
     }
 }
@@ -934,6 +1068,7 @@ private fun LedgerEmptyPreview() {
             entries = flowOf(PagingData.empty()),
             onEvent = {},
             onOpenDraft = {},
+            onReviewCandidate = {},
         )
     }
 }
@@ -956,6 +1091,7 @@ private fun LedgerOutsideWindowPreview() {
             entries = flowOf(PagingData.empty()),
             onEvent = {},
             onOpenDraft = {},
+            onReviewCandidate = {},
         )
     }
 }

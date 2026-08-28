@@ -139,27 +139,44 @@ public fun InboxScreen(
                     modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
                 )
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.md),
-                    verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-                    contentPadding = PaddingValues(bottom = LfTheme.spacing.md),
-                ) {
-                    items(
-                        items = state.rows,
-                        key = { it.id },
-                        // One row type, so the compiler can reuse every slot.
-                        contentType = { "pending" },
-                    ) { row ->
-                        SwipeableRow(
-                            row = row,
-                            selectable = state.canErase,
-                            selected = row.id in state.selected,
-                            onEvent = onEvent,
-                            onReview = onReview,
-                        )
-                    }
-                }
+                CandidateList(state, onEvent, onReview)
             }
+        }
+    }
+}
+
+/**
+ * The queue itself.
+ *
+ * Split out of [InboxScreen] when the erase band pushed that function past
+ * detekt's length limit. The division is the one `LedgerFlowShell` already
+ * makes: the outer function decides what chrome is on screen, this decides what
+ * is under it.
+ */
+@Composable
+private fun CandidateList(
+    state: InboxUiState,
+    onEvent: (InboxEvent) -> Unit,
+    onReview: (String) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        contentPadding = PaddingValues(bottom = LfTheme.spacing.md),
+    ) {
+        items(
+            items = state.rows,
+            key = { it.id },
+            // One row type, so the compiler can reuse every slot.
+            contentType = { "pending" },
+        ) { row ->
+            SwipeableRow(
+                row = row,
+                selectable = state.canErase,
+                selected = row.id in state.selected,
+                onEvent = onEvent,
+                onReview = onReview,
+            )
         }
     }
 }
@@ -405,50 +422,67 @@ private fun PendingRow(
                 .clickable { onReview(row.id) },
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
         ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = row.title(),
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false).padding(end = LfTheme.spacing.sm),
-            )
-            Text(
-                text = row.amountLabel(),
-                style = LfTheme.typography.amountM,
-                color = row.amountColor(),
-                maxLines = 1,
-            )
+            RowBody(row, onEvent, onReview)
         }
+    }
+}
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Both weighted, and that is not arbitrary: `LfActionRow` is a
-            // FlowRow that calls `fillMaxWidth()` on itself, so an unweighted
-            // one beside a Text claims the whole line and squeezes the text to
-            // nothing -- which is exactly what the first device screenshot
-            // showed, provenance silently gone. Weighting both makes them share
-            // the line, and the FlowRow still wraps its controls whole inside
-            // its half at font scale 2.0 (BUG9).
-            Text(
-                text = row.provenance(),
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(end = LfTheme.spacing.sm),
-            )
-            RowActions(row, onEvent, onReview, Modifier.weight(1f))
-        }
-        }
+/**
+ * The two lines a candidate shows.
+ *
+ * Split out of [PendingRow] when the selection checkbox pushed that function
+ * past detekt's length limit -- which was the right signal rather than a
+ * threshold to raise: the row now does two jobs, it is a selection target *and*
+ * a summary, and they read better apart.
+ */
+@Composable
+private fun RowBody(
+    row: PendingTransaction,
+    onEvent: (InboxEvent) -> Unit,
+    onReview: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = row.title(),
+            style = LfTheme.typography.bodyL,
+            color = LfTheme.colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false).padding(end = LfTheme.spacing.sm),
+        )
+        Text(
+            text = row.amountLabel(),
+            style = LfTheme.typography.amountM,
+            color = row.amountColor(),
+            maxLines = 1,
+        )
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Both weighted, and that is not arbitrary: `LfActionRow` is a FlowRow
+        // that calls `fillMaxWidth()` on itself, so an unweighted one beside a
+        // Text claims the whole line and squeezes the text to nothing -- which
+        // is exactly what the first device screenshot showed, provenance
+        // silently gone. Weighting both makes them share the line, and the
+        // FlowRow still wraps its controls whole inside its half at font scale
+        // 2.0 (BUG9).
+        Text(
+            text = row.provenance(),
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textTertiary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(end = LfTheme.spacing.sm),
+        )
+        RowActions(row, onEvent, onReview, Modifier.weight(1f))
     }
 }
 

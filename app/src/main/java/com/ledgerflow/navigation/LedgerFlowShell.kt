@@ -181,6 +181,13 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             onOpenDraft = { draftId ->
                 navController.navigate(Destination.Entry(draftId = draftId))
             },
+            // The Ledger lists §5.1's queue but never reviews it -- the same
+            // rule the drafts row follows. It hands up an id; the graph decides
+            // where it goes, which is the same InboxReview destination the
+            // notification's deep link lands on (CLAUDE.md §3).
+            onReviewCandidate = { pendingId ->
+                navController.navigate(Destination.InboxReview(pendingId))
+            },
         )
     }
     composable<Destination.Analytics> { AnalyticsScreen() }
