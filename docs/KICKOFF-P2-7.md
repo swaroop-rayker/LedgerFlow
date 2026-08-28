@@ -158,12 +158,15 @@ than letting a green run imply otherwise.
 - `preMergeCheck` **green on both flavours**; both guard scripts pass.
 - **Unit: 450, zero failures.** `:core:domain` 53, `:core:data` 56,
   `:feature:ingest` 41, `:feature:inbox` 15, `:app` 15, others unchanged.
-- **Instrumented — partially re-verified.** `:core:crypto` 5 and
-  `:core:database` 73 green after the final commit. `:core:data` reached 138
-  with zero failures before **the device dropped off USB**, which also failed
-  the four modules queued behind it; that is an environment fault, not a
-  regression, and `RawIngestRepositoryInstrumentedTest` (29) ran green against
-  the final code minutes earlier. **Re-run the full sweep first thing.**
+- **Instrumented: 309, zero failures**, swept across all seven modules against
+  the final commit — crypto 5, database 73, data 208, designsystem 10, ingest 5,
+  onboarding 6, app 2. Counted from the result XMLs rather than the summary
+  lines. Baseline at the start of the session was 282.
+
+  The first attempt at this sweep died partway through `:core:data` and failed
+  the four modules queued behind it; `adb devices` was empty. **A run of
+  consecutive module failures is a disconnected cable until proven otherwise** —
+  check before believing it.
 - Schema is **v7**. No migration was needed all session.
 - Corpus: **20 SMS fixtures (17 matched), 7 notification (5 matched)**. Four SMS
   fixtures are now real messages from the owner's phone; **every notification
@@ -277,6 +280,11 @@ candidate and is *not* specified — do not add it without asking.
 - Run instrumented suites **per module** with `--max-workers=1`. The device
   dropped off USB mid-sweep this session and failed every module queued behind
   it — check `adb devices` before believing a failure.
+- The phone locks itself while a long sweep runs, which leaves the app's
+  Activity paused behind the lock screen. `uiautomator dump` then returns the
+  *lock screen*, not the app, and it looks like the app failed to launch. Check
+  `dumpsys window | grep showing=` before concluding anything about the UI, and
+  do not try to get past the lock — hand that to the owner.
 - **`adb` cannot deliver an SMS.** `BROADCAST_SMS` is signature-level. Only the
   owner can produce a real capture, by making a payment.
 - Reading the owner's SMS for diagnosis: `content query --uri content://sms/inbox
