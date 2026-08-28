@@ -253,6 +253,31 @@ Two consequences worth recording:
   until they launch it again; that is Android's rule and no code here can change
   it. The case this fixes is the common one: a process the OEM reaped, which the
   system restarts for the broadcast.
+- **BUG16 — the second reopen came back blank.** Reported as "after pressing
+  back for the 2nd time it resets again". Reopening a candidate that already
+  held a draft set the *baseline* to the state **including** those edits, so the
+  first debounce tick read "nothing has changed since I opened" as "the user
+  undid everything" and cleared the row. The screen still showed the typing from
+  memory, so the first reopen looked correct and only the second was empty.
+
+  The baseline is now the **extraction** — a draft exists iff the state differs
+  from the candidate with no edits at all, which is the only definition under
+  which reopening is not itself an edit. A second guard stops the reverse: a
+  payload equal to what the row already holds is not written, so opening and
+  looking costs no `UPDATE`.
+
+  **Every existing test asserted the in-memory state after reopening, which is
+  exactly what stayed right.** The regression opens a *third* time and checks
+  the stored draft between opens.
+- **An edited candidate shows its category in the Ledger's "Unsaved" section**
+  (owner). A draft row has shown `merchant · category` since v4; a candidate row
+  showed only the merchant, so filing one from the Inbox changed nothing
+  visible. The name is resolved the same way the merchant's is — one batched
+  query per list, combined so a rename re-renders. `CategoryDao` gained an
+  **unscoped** live query for it: a candidate's chosen category can belong to
+  either book, so a lookup that needed the book first could not answer. Nothing
+  is summed, filed or offered for selection through it, and the pickers still
+  bind their ledger.
 - **BUG15 — a correction reached the review screen and nowhere else.** Reported
   as "the autosave seems to be not working". It was working: an edited amount
   came back on reopening the review screen. What did not work is that **every

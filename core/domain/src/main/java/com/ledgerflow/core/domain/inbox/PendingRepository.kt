@@ -50,6 +50,16 @@ public data class PendingTransaction(
      * up — which for a list would be a lookup per row.
      */
     val editedMerchantName: String? = null,
+
+    /**
+     * The chosen category's name, resolved.
+     *
+     * Same reason as [editedMerchantName]: [ReviewEdits.categoryId] is an id
+     * and the Ledger's "Unsaved" row shows a name beside the merchant, exactly
+     * as a draft row does. A candidate has no *extracted* category — the parser
+     * never assigns one — so this is only ever the user's choice.
+     */
+    val editedCategoryName: String? = null,
 ) {
     public val isSuppressed: Boolean get() = suppressedById != null
 

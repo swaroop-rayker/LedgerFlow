@@ -165,6 +165,70 @@ class Bug14_ReviewSurvivesBackPressTest {
         assertThat(reopened.state.value.amountText).isEqualTo("12.")
     }
 
+    /**
+     * **BUG16 — the second reopen came back blank.**
+     *
+     * Reported by the owner: "after pressing back for the 2nd time it resets
+     * again". Reopening a candidate that already had a draft set the baseline
+     * to the state *including* those edits, so the first debounce tick read
+     * "nothing has changed since I opened" as "the user undid everything" and
+     * cleared the row. The screen still showed the typing from memory, so the
+     * first reopen looked correct and only the second was empty.
+     *
+     * **Every other test here asserted the in-memory state after reopening,
+     * which is exactly what stayed right.** This one opens a third time, and
+     * checks the stored draft between opens — the two things that were wrong.
+     */
+    @Test
+    fun reopeningTwice_stillKeepsTheTyping() = runTest(dispatcher) {
+        pending.put(candidate())
+
+        val first = viewModel()
+        advanceUntilIdle()
+        first.onEvent(ReviewEvent.NoteChanged("split with Anita"))
+        advanceTimeBy(PAST_DEBOUNCE)
+        advanceUntilIdle()
+
+        // Open, sit past the debounce, leave -- the sequence that wiped it.
+        val second = viewModel()
+        advanceUntilIdle()
+        advanceTimeBy(PAST_DEBOUNCE)
+        advanceUntilIdle()
+        assertThat(second.state.value.noteText).isEqualTo("split with Anita")
+        // The row itself, not the screen: this is the half that was cleared.
+        assertThat(pending.get("p1")?.edits).isNotNull()
+
+        val third = viewModel()
+        advanceUntilIdle()
+        assertThat(third.state.value.noteText).isEqualTo("split with Anita")
+    }
+
+    /**
+     * Merely opening an edited candidate writes nothing.
+     *
+     * The payload the first tick produces equals what is already stored, so a
+     * write would be an `UPDATE` per open for no change — and the version of
+     * this that got it wrong did not write, it *cleared*.
+     */
+    @Test
+    fun reopeningAnEditedCandidate_writesNothingNew() = runTest(dispatcher) {
+        pending.put(candidate())
+
+        val first = viewModel()
+        advanceUntilIdle()
+        first.onEvent(ReviewEvent.NoteChanged("split with Anita"))
+        advanceTimeBy(PAST_DEBOUNCE)
+        advanceUntilIdle()
+        val stored = pending.get("p1")?.edits
+
+        viewModel()
+        advanceUntilIdle()
+        advanceTimeBy(PAST_DEBOUNCE)
+        advanceUntilIdle()
+
+        assertThat(pending.get("p1")?.edits).isEqualTo(stored)
+    }
+
     // ── What must NOT be persisted ──────────────────────────────────────────
 
     /**

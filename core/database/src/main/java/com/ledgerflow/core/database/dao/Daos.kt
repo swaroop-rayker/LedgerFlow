@@ -47,6 +47,22 @@ public interface CategoryDao {
     )
     public fun observeLive(ledger: LedgerType): Flow<List<CategoryEntity>>
 
+    /**
+     * Every live category, **both books**, for resolving a name to display.
+     *
+     * Unscoped unlike [observeLive], and deliberately: an Inbox candidate's
+     * chosen category can belong to either book — the user picks the book on
+     * the review screen — so a row that needs to *name* it cannot scope the
+     * lookup without already knowing the answer.
+     *
+     * **This is not a Law 2 hole.** Law 2 forbids combining the two books into
+     * one figure; nothing here is summed, filed or offered for selection. It is
+     * a name lookup, and the pickers that let a user *choose* a category still
+     * go through [observeLive] with its ledger bound.
+     */
+    @Query("SELECT * FROM category WHERE deleted_at = 0 ORDER BY sort_order")
+    public fun observeLiveInBothBooks(): Flow<List<CategoryEntity>>
+
     @Query("SELECT * FROM category ORDER BY id")
     public suspend fun all(): List<CategoryEntity>
 

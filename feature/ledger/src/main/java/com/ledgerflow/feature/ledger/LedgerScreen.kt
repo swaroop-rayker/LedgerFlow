@@ -301,7 +301,13 @@ private fun CandidateRow(
     currencyCode: String,
     onReview: (String) -> Unit,
 ) {
-    val title = candidate.effective.merchantRaw?.takeIf { it.isNotBlank() } ?: UNREAD_MESSAGE
+    // Merchant and category on one line, exactly as the draft row above does
+    // it -- a candidate the user has filed should read the same as a draft they
+    // filed, since the section no longer tells them apart by position (owner).
+    val title = listOfNotNull(
+        candidate.effective.merchantRaw?.takeIf { it.isNotBlank() },
+        candidate.editedCategoryName,
+    ).joinToString(SEPARATOR).takeIf { it.isNotEmpty() } ?: UNREAD_MESSAGE
     val amount = candidate.effective.amount
         ?.let { MoneyFormat.symbolised(it.minor, currencyCode) }
         // §5.1's never-drop row: nothing was extracted, so there is no figure to

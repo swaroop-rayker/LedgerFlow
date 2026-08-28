@@ -67,9 +67,14 @@ public class DefaultPendingRepository @Inject constructor(
             // §6.1 rejects doing that per row, and the taxonomy is small enough
             // to hold. Combined rather than joined so a merchant renamed while
             // the Inbox is open re-renders the rows that use it.
-            combine(rows, database.merchantDao().observeLive()) { list, merchants ->
-                val names = merchants.associate { it.id to it.canonicalName }
-                list.map { row -> row.toDomain(names) }
+            combine(
+                rows,
+                database.merchantDao().observeLive(),
+                database.categoryDao().observeLiveInBothBooks(),
+            ) { list, merchants, categories ->
+                val merchantNames = merchants.associate { it.id to it.canonicalName }
+                val categoryNames = categories.associate { it.id to it.name }
+                list.map { row -> row.toDomain(merchantNames, categoryNames) }
             }
         }
 
@@ -127,7 +132,9 @@ public class DefaultPendingRepository @Inject constructor(
             // One row, so one lookup rather than loading the whole taxonomy.
             val editedMerchant = edits?.merchantId
                 ?.let { database.merchantDao().byId(it)?.canonicalName }
-            row.toDomain(edits, editedMerchant)
+            val editedCategory = edits?.categoryId
+                ?.let { database.categoryDao().byId(it)?.name }
+            row.toDomain(edits, editedMerchant, editedCategory)
         }.getOrNull()
     }
 
@@ -237,15 +244,21 @@ public class DefaultPendingRepository @Inject constructor(
      */
     private fun PendingTransactionEntity.toDomain(
         merchantNames: Map<String, String>,
+        categoryNames: Map<String, String>,
     ): PendingTransaction {
         val edits = ReviewEditsJson.decode(reviewDraftJson)
-        return toDomain(edits, edits?.merchantId?.let(merchantNames::get))
+        return toDomain(
+            edits = edits,
+            editedMerchantName = edits?.merchantId?.let(merchantNames::get),
+            editedCategoryName = edits?.categoryId?.let(categoryNames::get),
+        )
     }
 
     /** A single row, where one lookup is cheaper than loading the taxonomy. */
     private fun PendingTransactionEntity.toDomain(
         edits: ReviewEdits?,
         editedMerchantName: String?,
+        editedCategoryName: String? = null,
     ) = PendingTransaction(
         id = id,
         source = source,
@@ -259,5 +272,6 @@ public class DefaultPendingRepository @Inject constructor(
         approvedEntryId = approvedEntryId,
         edits = edits,
         editedMerchantName = editedMerchantName,
+        editedCategoryName = editedCategoryName,
     )
 }

@@ -93,32 +93,38 @@ public class ReviewViewModel @Inject constructor(
     private var currency: String = DEFAULT_CURRENCY
 
     /**
-     * The state as the candidate produced it, for telling edits from arrival.
+     * **The candidate with no edits at all** — what "unedited" means.
      *
-     * Without a baseline, merely *opening* a candidate would persist a draft on
-     * the first debounce tick and every row in the Inbox would look edited. The
-     * entry form has the same problem and solves it with a `dirty` flag it sets
-     * on each event; here the screen is loaded from the extraction, so
-     * "different from what was loaded" is both simpler and more honest -- typing
-     * a character and deleting it again leaves nothing behind.
+     * A draft exists iff the state differs from this. Without a baseline of
+     * some kind, merely *opening* a candidate would persist a draft on the
+     * first debounce tick and every row would look edited; the entry form has
+     * the same problem and solves it with a `dirty` flag set on each event.
+     *
+     * **It is the extraction, deliberately, and not the state as loaded**
+     * (BUG16). Using the loaded state made reopening a candidate that already
+     * had a draft look like "the user just undid everything" — the first tick
+     * cleared the row while the screen still showed the typing from memory, so
+     * the first reopen looked right and the second came back blank.
+     *
+     * Comparing against the extraction also gives the honest answer for free:
+     * typing a character and deleting it again leaves nothing behind.
      */
-    private var loaded: ReviewEdits? = null
+    private var baseline: ReviewEdits? = null
 
     /**
-     * Whether a draft is currently on the row.
+     * What the row's draft already holds, as far as this screen knows.
      *
-     * Needed because returning to the baseline has to **clear** the draft, not
-     * merely decline to write one. Skipping the write left the last edit on
-     * disk, so a user who typed 99.00, thought better of it, restored 69.00 and
-     * left would reopen to 99.00 — their correction lost and an intermediate
-     * value presented as theirs. Caught by making
-     * `typingAndThenRestoringTheOriginal` assert what a reopen actually shows.
+     * Two jobs. Returning to [baseline] has to **clear** the draft rather than
+     * merely decline to write one — skipping left the last edit on disk, so a
+     * user who typed 99.00, thought better of it, restored 69.00 and left would
+     * reopen to 99.00, their correction lost and an intermediate value handed
+     * back as theirs. This says whether there is anything to clear.
      *
-     * The flag keeps that clear from also firing on every open: without it, the
-     * first emission after load equals the baseline and would issue a redundant
-     * `UPDATE ... SET review_draft_json = NULL` on a row that already has none.
+     * And it stops the reverse: opening a candidate that already has a draft
+     * emits a payload equal to what is stored, and writing that back would be a
+     * `UPDATE` per open for no change.
      */
-    private var persisted: Boolean = false
+    private var lastWritten: ReviewEdits? = null
 
     private val _state = MutableStateFlow(ReviewUiState(pendingId = pendingId))
     public val state: StateFlow<ReviewUiState> = _state.asStateFlow()
@@ -135,18 +141,29 @@ public class ReviewViewModel @Inject constructor(
             _state.update { it.copy(loading = false, missing = true) }
             return
         }
-        _state.update { previous ->
-            val fromExtraction = candidate.toUiState(previous)
-            // The saved typing goes ON TOP of the extraction, never instead of
-            // it: the source label, the reference hint and needsManualFill are
-            // facts about the message, and a draft has no business overriding
-            // them (v8, BUG6).
-            candidate.edits?.let(fromExtraction::withEdits) ?: fromExtraction
-        }
-        // Everything loaded is the baseline. Anything that differs from here on
-        // is the user's, and only that is worth a row.
-        loaded = _state.value.toEdits(currency)
-        persisted = candidate.edits != null
+        val fromExtraction = candidate.toUiState(_state.value)
+        // The saved typing goes ON TOP of the extraction, never instead of it:
+        // the source label, the reference hint and needsManualFill are facts
+        // about the message, and a draft has no business overriding them
+        // (v8, BUG6).
+        val shown = candidate.edits?.let(fromExtraction::withEdits) ?: fromExtraction
+        _state.value = shown
+
+        // **The baseline is the EXTRACTION, not what was loaded** (BUG16).
+        //
+        // It used to be the loaded state, edits included -- so reopening a
+        // candidate that already had a draft produced a first tick where
+        // "nothing has changed since I opened", which the collector reads as
+        // "the user undid their edits" and CLEARS the row. The screen still
+        // showed the typing from memory, so the first reopen looked right and
+        // the second came back blank. That is exactly what the owner reported.
+        //
+        // A draft exists iff the state differs from the candidate with no edits
+        // at all, which is the only definition under which reopening is not
+        // itself an edit.
+        baseline = fromExtraction.toEdits(currency)
+        // What the row already holds, so opening writes nothing.
+        lastWritten = shown.toEdits(currency).takeIf { candidate.edits != null }
         _state.value.ledger?.let(::observeCategoriesFor)
         viewModelScope.launch { collectDraftWrites() }
     }
@@ -520,20 +537,24 @@ public class ReviewViewModel @Inject constructor(
             .collect { payload ->
                 if (_state.value.finished || _state.value.submitting) return@collect
 
-                // Back at the arrival state is not a draft; it is a screen
-                // someone opened and closed. But it has to CLEAR rather than
-                // skip -- see [persisted]. An edit undone must leave nothing
-                // behind, or the undone value is what comes back.
-                if (payload == loaded) {
-                    if (persisted) {
+                // Back at the extraction is not a draft; it is a screen
+                // someone opened and closed. It CLEARS rather than skips -- an
+                // edit undone must leave nothing behind, or the undone value is
+                // what comes back.
+                if (payload == baseline) {
+                    if (lastWritten != null) {
                         pendingRepository.saveReviewDraft(pendingId, null)
-                        persisted = false
+                        lastWritten = null
                     }
                     return@collect
                 }
 
+                // Unchanged from what the row already holds: opening a candidate
+                // and looking at it is not a write.
+                if (payload == lastWritten) return@collect
+
                 pendingRepository.saveReviewDraft(pendingId, payload)
-                persisted = true
+                lastWritten = payload
             }
     }
 
