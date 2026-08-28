@@ -24,8 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -50,6 +48,7 @@ import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.PendingTransaction
@@ -57,10 +56,6 @@ import com.ledgerflow.core.domain.ledger.DraftSummary
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -234,8 +229,7 @@ private fun EntryList(
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
         contentPadding = PaddingValues(bottom = LfTheme.spacing.xxl),
     ) {
-        toReviewBand(state, onReviewCandidate)
-        unsavedBand(state, onOpenDraft, onEvent)
+        unsavedBand(state, onOpenDraft, onReviewCandidate, onEvent)
 
         for (index in 0 until items.itemCount) {
             val item = snapshot.getOrNull(index) ?: continue
@@ -308,32 +302,56 @@ private fun CandidateRow(
         // show. An em dash rather than a zero -- "0" is an amount, and this is
         // the absence of one.
         ?: NO_AMOUNT
+    // Every bank SMS in the corpus states a date and no clock, so `occurredAt`
+    // is midnight and the naive stamp would read "12:00 am" on every row. See
+    // TimeStamp.ofCapture.
+    val stamp = candidate.extracted.occurredAt
+        ?.let { TimeStamp.ofCapture(it, capturedAt = candidate.createdAt, withDate = true) }
+        ?: TimeStamp.of(candidate.createdAt, withDate = true)
+    val detail = "$stamp$SEPARATOR$TO_REVIEW_MARKER"
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceBase, RoundedCornerShape(LfTheme.spacing.sm))
+            .background(LfTheme.colors.surfaceRaised, RoundedCornerShape(LfTheme.spacing.sm))
             .border(
                 HAIRLINE.dp,
                 LfTheme.colors.outline,
                 RoundedCornerShape(LfTheme.spacing.sm),
             )
             .clickable { onReview(candidate.id) }
-            .semantics {
-                contentDescription =
-                    "To review, $amount, $title. Opens the review screen."
+            .clearAndSetSemantics {
+                contentDescription = "$TO_REVIEW_MARKER, $amount, $title, $stamp. " +
+                    "Opens the review screen."
             }
-            .padding(horizontal = LfTheme.spacing.md, vertical = LfTheme.spacing.sm),
+            .padding(
+                start = LfTheme.spacing.md,
+                end = LfTheme.spacing.md,
+                top = LfTheme.spacing.sm,
+                bottom = LfTheme.spacing.sm,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = title,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(end = LfTheme.spacing.sm),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = LfTheme.typography.bodyL,
+                color = LfTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                // The marker is what stops two rows that look alike opening
+                // different screens with no warning. It rides the line the
+                // stamp is already on, so it costs no height.
+                text = detail,
+                style = LfTheme.typography.label,
+                color = LfTheme.colors.textTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Text(
             text = amount,
             style = LfTheme.typography.amountM,
@@ -343,84 +361,56 @@ private fun CandidateRow(
     }
 }
 
-/**
- * §5.1's queue, above everything (CHANGE#2).
- *
- * A candidate is money that has **already moved** and has not been recorded; a
- * draft is typing the user started. The one with a real transaction behind it
- * is the more urgent, so it sits above Unsaved, and both sit above the ledger
- * itself — neither is *in* the book yet.
- *
- * A `LazyListScope` extension rather than inline, because adding it pushed
- * [EntryList] past detekt's length and complexity limits. Two bands with the
- * same shape read better as two named functions than as forty lines of
- * conditional list building.
- */
-private fun LazyListScope.toReviewBand(
-    state: LedgerUiState,
-    onReviewCandidate: (String) -> Unit,
-) {
-    if (state.candidates.isEmpty()) return
-
-    stickyHeader(key = "band-to-review", contentType = BAND_HEADER_TYPE) {
-        BandLabel("To review · ${state.candidates.size}")
-    }
-    items(
-        count = state.candidates.size,
-        key = { "candidate-${state.candidates[it].id}" },
-        // Its own contentType: a candidate row and a draft row have different
-        // shapes, and telling the compiler they are the same slot would make it
-        // reuse one for the other.
-        contentType = { CANDIDATE_TYPE },
-    ) { index ->
-        CandidateRow(
-            candidate = state.candidates[index],
-            currencyCode = state.currencyCode,
-            onReview = onReviewCandidate,
-        )
-    }
-}
-
-/**
- * Unsaved manual entries.
- *
- * Above the recency bands, because an unsaved entry has no date to file under
- * and no amount that counts. It is a to-do list sitting on top of a record.
- */
 private fun LazyListScope.unsavedBand(
     state: LedgerUiState,
     onOpenDraft: (String) -> Unit,
+    onReviewCandidate: (String) -> Unit,
     onEvent: (LedgerEvent) -> Unit,
 ) {
-    if (state.pending.isEmpty()) return
+    if (state.unsaved.isEmpty()) return
 
     stickyHeader(key = "band-unsaved", contentType = BAND_HEADER_TYPE) {
-        BandLabel("Unsaved · ${state.pending.size}")
+        BandLabel("Unsaved · ${state.unsaved.size}")
     }
     items(
-        count = state.pending.size,
-        key = { "draft-${state.pending[it].id}" },
-        contentType = { PENDING_TYPE },
+        count = state.unsaved.size,
+        key = { state.unsaved[it].key },
+        // Distinct content types per kind: the two rows have different shapes,
+        // and telling the compiler they are one slot would make it reuse a
+        // draft's layout for a candidate.
+        contentType = {
+            when (state.unsaved[it]) {
+                is UnsavedRow.Draft -> PENDING_TYPE
+                is UnsavedRow.Candidate -> CANDIDATE_TYPE
+            }
+        },
     ) { index ->
-        PendingRow(
-            draft = state.pending[index],
-            currencyCode = state.currencyCode,
-            onOpen = onOpenDraft,
-            onEvent = onEvent,
-        )
+        when (val row = state.unsaved[index]) {
+            is UnsavedRow.Draft -> PendingRow(
+                draft = row.summary,
+                currencyCode = state.currencyCode,
+                onOpen = onOpenDraft,
+                onEvent = onEvent,
+            )
+
+            is UnsavedRow.Candidate -> CandidateRow(
+                candidate = row.candidate,
+                currencyCode = state.currencyCode,
+                onReview = onReviewCandidate,
+            )
+        }
     }
 }
 
 /**
  * Whether this book has nothing at all to show.
  *
- * Named rather than left as a four-clause condition: the empty state is about
- * the *book*, so neither unsaved entries nor candidates count towards it — but
- * it must not hide them either, and "&& isEmpty() && isEmpty()" reads as
- * boilerplate rather than as that rule.
+ * Named rather than left inline: the empty state is about the *book*, so the
+ * unsaved section does not count towards it — but it must not hide it either,
+ * and `&& isEmpty()` reads as boilerplate rather than as that rule.
  */
 private fun LedgerUiState.showsNothing(entryCount: Int): Boolean =
-    entryCount == 0 && pending.isEmpty() && candidates.isEmpty()
+    entryCount == 0 && unsaved.isEmpty()
 
 /** The header's look, shared by the recency bands and the unsaved section. */
 @Composable
@@ -468,7 +458,10 @@ private fun PendingRow(
     // "Unsaved", which says nothing about *when* -- so there is no header above
     // it carrying the date for it, and dropping it would leave the row unable
     // to answer the question at all.
-    val stamp = occurredStamp(draft.datedAt, withDate = true)
+    // The marker rides the stamp's line, which the row already had, so telling
+    // a draft from a candidate in the merged section costs no height
+    // (owner, CHANGE#1).
+    val stamp = occurredStamp(draft.datedAt, withDate = true) + SEPARATOR + DRAFT_MARKER
 
     Row(
         modifier = Modifier
@@ -485,7 +478,7 @@ private fun PendingRow(
                 .clickable { onOpen(draft.id) }
                 .clearAndSetSemantics {
                     contentDescription =
-                        "Unsaved, $amount, $title, $stamp. Opens to finish it."
+                        "$DRAFT_MARKER, $amount, $title, $stamp. Opens to finish it."
                 },
             horizontalArrangement = Arrangement.spacedBy(spacing.sm),
             verticalAlignment = Alignment.Top,
@@ -912,17 +905,8 @@ private fun EmptyBook(state: LedgerUiState) {
  * `DateTimeFormatter` cannot see it.
  */
 @Composable
-internal fun occurredStamp(occurredAt: Long, withDate: Boolean): String {
-    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
-    val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
-    return remember(occurredAt, locale, is24Hour, withDate) {
-        val time = if (is24Hour) TIME_24_HOUR else TIME_12_HOUR
-        val pattern = if (withDate) DATE_PREFIX + time else time
-        DateTimeFormatter.ofPattern(pattern, locale)
-            .withZone(ZoneId.systemDefault())
-            .format(Instant.ofEpochMilli(occurredAt))
-    }
-}
+internal fun occurredStamp(occurredAt: Long, withDate: Boolean): String =
+    TimeStamp.of(occurredAt, withDate)
 
 /**
  * What TalkBack says for a row.
@@ -947,9 +931,6 @@ private const val CANDIDATE_TYPE = "candidate"
 private const val SEPARATOR = " · "
 private const val NOTE_MAX_LINES = 1
 
-private const val TIME_12_HOUR = "h:mm a"
-private const val TIME_24_HOUR = "HH:mm"
-private const val DATE_PREFIX = "d MMM, "
 
 /**
  * An entry filed under nothing. §5.1 writes these when a parse fails.
@@ -963,6 +944,12 @@ internal const val UNFILED = "Unfiled"
 /** A draft with nothing chosen yet, which is most of a draft's life. */
 private const val UNTITLED_DRAFT = "Unsaved entry"
 private const val UNREAD_MESSAGE = "Unread message"
+
+/** Tells a candidate row apart from a draft row in the merged section. */
+private const val TO_REVIEW_MARKER = "To review"
+
+/** ...and its opposite, on the draft row. */
+private const val DRAFT_MARKER = "Draft"
 private const val NO_AMOUNT = "—"
 
 // ── Previews (CLAUDE.md §5) ───────────────────────────────────────────────

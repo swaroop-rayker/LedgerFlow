@@ -253,6 +253,24 @@ Two consequences worth recording:
   until they launch it again; that is Android's rule and no code here can change
   it. The case this fixes is the common one: a process the OEM reaped, which the
   system restarts for the broadcast.
+- **Every row that is not yet in the ledger shows its date and time** (owner).
+  The Inbox on all four filters, and the Ledger's "Unsaved" section. The stamp
+  leads the detail line so that the account number is what ellipsises on a long
+  one — it is the least useful of the three and is still on the review screen.
+- **What that exposed, and how it is answered.** Every bank SMS in the corpus —
+  all twenty fixtures, including the four real ones — states a **date and no
+  clock**, so `DateText` resolves them through `LocalDate.atStartOfDay` and
+  `occurred_at` is **midnight**. Rendered literally, essentially every
+  SMS-derived row in the app would read `12:00 am`. So when `occurred_at` falls
+  exactly on midnight the **date comes from the message and the time from
+  capture** (`TimeStamp.ofCapture`) — the same fallback `ApprovePendingUseCase`
+  already applies when a message gives no date at all. The date is never taken
+  from capture: a re-triaged message (§16 Q14) can be captured days after it was
+  sent, and showing the wrong *day* is worse than an approximate time, because
+  the day is what a user reconciles against a bank statement. **Display only —
+  `occurred_at` still holds midnight**, and making the column itself mean
+  something different is a separate decision about ledger data that has not been
+  taken.
 - **Three UI changes the owner asked for after P2-7**, none of which moved Law 1
   or Law 2. **CHANGE#1**: discarded, failed and suppressed candidates can be
   erased for good, ticked or all at once, behind an `LfDialogEmphasis.Warning`
@@ -904,7 +922,7 @@ A draft's identity is its **id**, not its slot: the form holds the id it was giv
 
 This covers **manual drafts only**. The SMS/notification queue is `pending_transaction` and the Inbox (§5.1, §5.2) at P2. The two remain **separate tables** — a candidate is never given a `draft_entry` row, because discarding it in one place would leave it alive in the other.
 
-**The reason they were also kept separate on screen no longer holds** (amended, CHANGE#2). The original argument was that "one gates a commit and is what Law 1 is about, the other recovers typing and gates nothing". Schema v8 gave `pending_transaction` a `review_draft_json` column (BUG14), so a candidate now recovers typing too: both are unsaved work, and the distinction that justified hiding one from the Ledger is gone. The Ledger therefore lists §5.1's queue in a **"To review" band above "Unsaved"**, read-only — tapping opens the review screen, and nothing on the Ledger writes to `pending_transaction`. A candidate is placed in the book its extracted direction names; one whose direction the parser **could not read** appears in **both**, because it is §5.1's never-drop row and hiding it until the user guesses a tab is the silent drop the pipeline exists to prevent. **Law 2 is untouched by that**: Law 2 forbids combining debits and credits into one *figure*, and this is a list in which nothing is summed — the row carries no book precisely because nobody has chosen one, and the moment someone does it is filed once, through `ApproveTransactionUseCase`, into exactly one ledger.
+**The reason they were also kept separate on screen no longer holds** (amended, CHANGE#2). The original argument was that "one gates a commit and is what Law 1 is about, the other recovers typing and gates nothing". Schema v8 gave `pending_transaction` a `review_draft_json` column (BUG14), so a candidate now recovers typing too: both are unsaved work, and the distinction that justified hiding one from the Ledger is gone. The Ledger therefore lists §5.1's queue **inside its "Unsaved" section**, read-only — tapping opens the review screen, and nothing on the Ledger writes to `pending_transaction`. It shipped as a separate "To review" band and was **merged into "Unsaved" at the owner's request**; drafts and candidates interleave newest-first by when each thing *happened*, not by kind. What did not merge is the row: a draft opens the entry form and its discard is final, a candidate opens the review screen and its discard is reversible for 30 days, so each row carries a quiet **`Draft` / `To review` marker** on the line its timestamp already occupies. Two rows that look identical must not behave differently. A candidate is placed in the book its extracted direction names; one whose direction the parser **could not read** appears in **both**, because it is §5.1's never-drop row and hiding it until the user guesses a tab is the silent drop the pipeline exists to prevent. **Law 2 is untouched by that**: Law 2 forbids combining debits and credits into one *figure*, and this is a list in which nothing is summed — the row carries no book precisely because nobody has chosen one, and the moment someone does it is filed once, through `ApproveTransactionUseCase`, into exactly one ledger.
 
 `editing_entry_key` follows the `category.parent_key` pattern from §6.1.1 for the same reason: SQLite treats `NULL`s as distinct in a unique index, so a nullable `editing_entry_id` in the constraint would let unlimited new-entry drafts collide-free and make the index decorative. `editing_entry_id` remains the real nullable FK, carrying `ON DELETE CASCADE`.
 

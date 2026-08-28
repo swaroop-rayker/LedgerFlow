@@ -114,7 +114,7 @@ public class LedgerViewModel @Inject constructor(
 
     public val state: StateFlow<LedgerUiState> =
         combine(local, hasEntries, pending, candidates) { local, hasAny, drafts, queue ->
-            uiState(local, hasAny, drafts, candidatesFor(local.ledger, queue))
+            uiState(local, hasAny, unsavedFor(local.ledger, drafts, queue))
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -249,19 +249,38 @@ public class LedgerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The one "Unsaved" list, newest first (owner, CHANGE#1).
+     *
+     * Merged here rather than in the screen so the sort runs once per emission
+     * instead of once per recomposition -- this feeds a `LazyColumn`, and a
+     * computed property on an `@Immutable` state class would re-sort on every
+     * frame that touched it.
+     *
+     * Sorted by when each thing *happened*, not by when it was written: a
+     * candidate captured this morning for a payment made yesterday belongs
+     * where yesterday is, which is the same rule the ledger's own recency bands
+     * follow.
+     */
+    private fun unsavedFor(
+        book: LedgerType,
+        drafts: List<DraftSummary>,
+        queue: List<PendingTransaction>,
+    ): List<UnsavedRow> =
+        (drafts.map(UnsavedRow::Draft) + candidatesFor(book, queue).map(UnsavedRow::Candidate))
+            .sortedByDescending { it.happenedAt }
+
     private fun uiState(
         local: LocalState,
         hasAnyEntries: Boolean,
-        pending: List<DraftSummary>,
-        candidates: List<PendingTransaction>,
+        unsaved: List<UnsavedRow>,
     ) = LedgerUiState(
         ledger = local.ledger,
         today = LocalDates.of(clock.nowMillis()),
         hasAnyEntries = hasAnyEntries,
         windowDays = LedgerRepository.LIST_WINDOW_DAYS,
         currencyCode = local.currencyCode,
-        pending = pending,
-        candidates = candidates,
+        unsaved = unsaved,
         // Every caller of this builds state from a real emission; the seed
         // below is the only state that is not loaded.
         isLoaded = true,

@@ -66,24 +66,24 @@ public data class LedgerUiState(
      * A [DraftSummary] rather than an `EntryDraft`: the payload's shape belongs
      * to `:feature:entry`, and this screen must never parse it.
      */
-    val pending: List<DraftSummary> = emptyList(),
-
     /**
-     * §5.1's approval queue, in the book it would be filed into (CHANGE#2).
+     * Everything in this book that is not in the ledger yet, newest first.
      *
-     * **Separate from [pending], not merged into it.** They are two different
-     * things that happen to both be unfinished: a draft is typing the user
-     * started and can resume in the entry form, a candidate is a captured
-     * message waiting for the tap Law 1 requires. They open different screens
-     * and their discards mean different things — a draft's is final, a
-     * candidate's is reversible for 30 days — so one band each rather than one
-     * band with two row types.
+     * **Drafts and captured candidates in one list** (owner, CHANGE#1). They
+     * were two bands until the owner asked for one: a draft is typing the user
+     * started, a candidate is a message waiting for the tap Law 1 requires, and
+     * both are answers to "what have I not dealt with". They stay two *types*
+     * — see [UnsavedRow] — because they open different screens and their
+     * discards mean different things, and the row shows which is which.
      *
-     * A candidate whose direction the parser could not read appears in **both**
-     * books. Nothing here is summed, so Law 2 is untouched; see
-     * `LedgerViewModel.candidatesFor`.
+     * Sorted together by when each thing happened rather than grouped by kind,
+     * so the section reads chronologically like the rest of the Ledger.
+     *
+     * Bounded without paging: drafts by §6.1.2's 30-day sweep, candidates by
+     * how many messages a person leaves unreviewed. Paging this would be
+     * machinery with nothing to do.
      */
-    val candidates: List<PendingTransaction> = emptyList(),
+    val unsaved: List<UnsavedRow> = emptyList(),
 
     /**
      * Whether the database has actually answered yet.
@@ -162,6 +162,47 @@ public sealed interface LedgerConfirmation {
         override val id: String,
         override val label: String,
     ) : LedgerConfirmation
+}
+
+/**
+ * One row in the "Unsaved" section (CHANGE#1).
+ *
+ * A sealed type rather than one flattened row model, because the difference
+ * survives the merge and matters at the moment of the tap: a [Draft] opens the
+ * entry form and its discard is final, a [Candidate] opens the review screen
+ * and its discard is reversible for 30 days (§5.1). Flattening them would make
+ * two rows that look identical do different things, which is the one outcome
+ * the marker on the row exists to prevent.
+ */
+@Immutable
+public sealed interface UnsavedRow {
+
+    /** Stable across recomposition, and unique across both kinds. */
+    public val key: String
+
+    /** When the thing happened, for the shared newest-first sort. */
+    public val happenedAt: Long
+
+    /** Typing the user started. Opens the entry form. */
+    @Immutable
+    public data class Draft(val summary: DraftSummary) : UnsavedRow {
+        override val key: String get() = "draft-${summary.id}"
+        override val happenedAt: Long get() = summary.datedAt
+    }
+
+    /**
+     * A captured message waiting for approval. Opens the review screen.
+     *
+     * [happenedAt] falls back to `createdAt` for the same reason the review
+     * screen does: a message that stated no date still happened, and capture
+     * time is a fact about something real rather than a guess.
+     */
+    @Immutable
+    public data class Candidate(val candidate: PendingTransaction) : UnsavedRow {
+        override val key: String get() = "candidate-${candidate.id}"
+        override val happenedAt: Long
+            get() = candidate.extracted.occurredAt ?: candidate.createdAt
+    }
 }
 
 public sealed interface LedgerEvent {

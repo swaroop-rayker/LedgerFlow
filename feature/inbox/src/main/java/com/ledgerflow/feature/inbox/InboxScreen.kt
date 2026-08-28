@@ -48,6 +48,7 @@ import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingTransaction
@@ -475,7 +476,13 @@ private fun RowBody(
         // FlowRow still wraps its controls whole inside its half at font scale
         // 2.0 (BUG9).
         Text(
-            text = row.provenance(),
+            // The stamp leads, and that ordering is the whole decision: this
+            // line is `maxLines = 1` and shares the row with the actions, so
+            // something gets ellipsised on a long one. Putting when-it-happened
+            // first means the account number is what goes, which is the least
+            // useful of the three and the one still visible on the review
+            // screen.
+            text = row.detailLine(),
             style = LfTheme.typography.label,
             color = LfTheme.colors.textTertiary,
             maxLines = 1,
@@ -584,6 +591,28 @@ private fun PendingTransaction.amountColor() = when (extracted.direction) {
  * `needs_manual_fill` is said in words rather than shown as a badge: it is the
  * one thing on the row that changes what the user has to do next.
  */
+/**
+ * When it happened, then where it came from.
+ *
+ * Shown on **every** filter -- pending, suppressed, discarded and failed --
+ * because "which of these is the one from this morning" is the question a
+ * queue of near-identical bank messages actually raises, and it is the same
+ * question on a discarded row as on a live one.
+ *
+ * [TimeStamp.ofCapture] rather than [TimeStamp.of]: every bank SMS in the
+ * corpus states a date and no clock, so `occurredAt` is midnight and the naive
+ * stamp would read `12:00 am` on essentially every row. See its KDoc.
+ */
+@Composable
+private fun PendingTransaction.detailLine(): String {
+    val stamp = extracted.occurredAt
+        // The message named a day, so keep it and take the clock from capture.
+        ?.let { TimeStamp.ofCapture(it, capturedAt = createdAt, withDate = true) }
+        // It named nothing at all; capture is the only time there is.
+        ?: TimeStamp.of(createdAt, withDate = true)
+    return "$stamp · ${provenance()}"
+}
+
 private fun PendingTransaction.provenance(): String {
     val origin = when (source) {
         EntrySource.SMS -> "SMS"

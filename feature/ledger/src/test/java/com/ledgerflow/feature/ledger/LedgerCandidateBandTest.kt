@@ -27,7 +27,14 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * **The Ledger's "To review" band.** CHANGE#2.
+ * **Captured candidates in the Ledger's "Unsaved" section.**
+ *
+ * Shipped as its own "To review" band, then merged into "Unsaved" at the
+ * owner's request (CHANGE#1). What the merge did **not** change is anything
+ * these tests assert: which candidates reach which book, and which never
+ * appear at all. That they now share a list with drafts is the screen's
+ * business, and the helpers below read them back out by type so these stay
+ * about the filter.
  *
  * SPEC.md §6.1.2 kept `pending_transaction` and `draft_entry` apart on the
  * grounds that "one gates a commit and is what Law 1 is about, the other
@@ -88,6 +95,20 @@ class LedgerCandidateBandTest {
         approvedEntryId = null,
     )
 
+    /**
+     * The candidate ids in the merged "Unsaved" section.
+     *
+     * The two lists became one when the owner asked for a single section
+     * (CHANGE#1), but what these tests are about did not change: which
+     * candidates reach which book. Reading them back out by type keeps the
+     * assertions about that rather than about the merge.
+     */
+    private fun LedgerViewModel.candidateIds(): List<String> =
+        state.value.unsaved.filterIsInstance<UnsavedRow.Candidate>().map { it.candidate.id }
+
+    private fun LedgerViewModel.draftIds(): List<String> =
+        state.value.unsaved.filterIsInstance<UnsavedRow.Draft>().map { it.summary.id }
+
     private fun viewModel(): LedgerViewModel {
         val viewModel = LedgerViewModel(
             ledger = ledger,
@@ -110,13 +131,13 @@ class LedgerCandidateBandTest {
 
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
         dispatcher.scheduler.advanceUntilIdle()
-        assertThat(viewModel.state.value.candidates.map { it.id }).containsExactly("debit")
+        assertThat(viewModel.candidateIds()).containsExactly("debit")
 
         // The second half is the one that matters: "it appears in its own book"
         // passes even for a filter that has stopped filtering.
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.CREDIT))
         dispatcher.scheduler.advanceUntilIdle()
-        assertThat(viewModel.state.value.candidates).isEmpty()
+        assertThat(viewModel.candidateIds()).isEmpty()
     }
 
     @Test
@@ -126,11 +147,11 @@ class LedgerCandidateBandTest {
 
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.CREDIT))
         dispatcher.scheduler.advanceUntilIdle()
-        assertThat(viewModel.state.value.candidates.map { it.id }).containsExactly("credit")
+        assertThat(viewModel.candidateIds()).containsExactly("credit")
 
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
         dispatcher.scheduler.advanceUntilIdle()
-        assertThat(viewModel.state.value.candidates).isEmpty()
+        assertThat(viewModel.candidateIds()).isEmpty()
     }
 
     // ── The one with no book ────────────────────────────────────────────────
@@ -151,11 +172,11 @@ class LedgerCandidateBandTest {
 
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
         dispatcher.scheduler.advanceUntilIdle()
-        assertThat(viewModel.state.value.candidates.map { it.id }).containsExactly("unread")
+        assertThat(viewModel.candidateIds()).containsExactly("unread")
 
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.CREDIT))
         dispatcher.scheduler.advanceUntilIdle()
-        assertThat(viewModel.state.value.candidates.map { it.id }).containsExactly("unread")
+        assertThat(viewModel.candidateIds()).containsExactly("unread")
     }
 
     /**
@@ -174,12 +195,12 @@ class LedgerCandidateBandTest {
 
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
         dispatcher.scheduler.advanceUntilIdle()
-        assertThat(viewModel.state.value.candidates.map { it.id })
+        assertThat(viewModel.candidateIds())
             .containsExactly("debit", "unread")
 
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.CREDIT))
         dispatcher.scheduler.advanceUntilIdle()
-        assertThat(viewModel.state.value.candidates.map { it.id })
+        assertThat(viewModel.candidateIds())
             .containsExactly("credit", "unread")
     }
 
@@ -211,7 +232,7 @@ class LedgerCandidateBandTest {
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertThat(viewModel.state.value.candidates.map { it.id }).containsExactly("live")
+        assertThat(viewModel.candidateIds()).containsExactly("live")
     }
 
     /** An empty queue leaves the band absent rather than empty. */
@@ -221,7 +242,7 @@ class LedgerCandidateBandTest {
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertThat(viewModel.state.value.candidates).isEmpty()
+        assertThat(viewModel.candidateIds()).isEmpty()
     }
 
     /**
@@ -239,7 +260,7 @@ class LedgerCandidateBandTest {
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertThat(viewModel.state.value.candidates).hasSize(1)
-        assertThat(viewModel.state.value.pending).isEmpty()
+        assertThat(viewModel.candidateIds()).hasSize(1)
+        assertThat(viewModel.draftIds()).isEmpty()
     }
 }

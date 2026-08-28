@@ -3,6 +3,7 @@ package com.ledgerflow.feature.ledger
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.time.LocalDates
+import com.ledgerflow.core.domain.ledger.DraftSummary
 import com.ledgerflow.core.domain.ledger.DraftSummaryFields
 import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerRepository
@@ -223,12 +224,12 @@ class LedgerViewModelTest {
         drafts.seed("draft-2", LedgerType.CREDIT, "{}", summary = DraftSummaryFields(69_00L))
         val viewModel = viewModel()
 
-        assertThat(viewModel.state.value.pending.map { it.id }).containsExactly("draft-1")
+        assertThat(viewModel.draftIds()).containsExactly("draft-1")
 
         viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.CREDIT))
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertThat(viewModel.state.value.pending.map { it.id }).containsExactly("draft-2")
+        assertThat(viewModel.draftIds()).containsExactly("draft-2")
     }
 
     /**
@@ -243,7 +244,7 @@ class LedgerViewModelTest {
         drafts.seed("draft-1", LedgerType.DEBIT, "{}", summary = DraftSummaryFields(24_050L))
         val viewModel = viewModel()
 
-        assertThat(viewModel.state.value.pending.single().amount).isEqualTo(Money(24_050L))
+        assertThat(viewModel.drafts().single().amount).isEqualTo(Money(24_050L))
     }
 
     /** Discarding unsaved work asks first, exactly as deleting a saved entry does. */
@@ -270,7 +271,7 @@ class LedgerViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         assertThat(drafts.discarded).containsExactly("draft-1")
-        assertThat(viewModel.state.value.pending).isEmpty()
+        assertThat(viewModel.draftIds()).isEmpty()
         assertThat(viewModel.state.value.confirmation).isNull()
     }
 
@@ -284,7 +285,7 @@ class LedgerViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         assertThat(drafts.discarded).isEmpty()
-        assertThat(viewModel.state.value.pending).hasSize(1)
+        assertThat(viewModel.draftIds()).hasSize(1)
     }
 
     /**
@@ -330,6 +331,18 @@ class LedgerViewModelTest {
      * forever, and a test that did so would pass whatever the event handler did.
      * On the device the subscriber is `collectAsStateWithLifecycle`.
      */
+    /**
+     * The drafts in the merged "Unsaved" section (CHANGE#1).
+     *
+     * `state.pending` became `state.unsaved`, a list of both kinds. These tests
+     * are about drafts, so they read the drafts back out rather than being
+     * rewritten around a merge they are not testing.
+     */
+    private fun LedgerViewModel.drafts(): List<DraftSummary> =
+        state.value.unsaved.filterIsInstance<UnsavedRow.Draft>().map { it.summary }
+
+    private fun LedgerViewModel.draftIds(): List<String> = drafts().map { it.id }
+
     private fun viewModel(): LedgerViewModel {
         val viewModel = LedgerViewModel(
             ledger = ledger,
