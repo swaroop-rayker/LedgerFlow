@@ -460,8 +460,12 @@ private fun PendingRow(
     // to answer the question at all.
     // The marker rides the stamp's line, which the row already had, so telling
     // a draft from a candidate in the merged section costs no height
-    // (owner, CHANGE#1).
-    val stamp = occurredStamp(draft.datedAt, withDate = true) + SEPARATOR + DRAFT_MARKER
+    // (owner, CHANGE#1). Kept separate from `stamp` because the spoken string
+    // below already opens with the marker, and one built from `detail` said
+    // "Draft, ... 2:49 pm, Draft" -- heard on the device, where a duplicated
+    // word is more obviously wrong than it looks in source.
+    val stamp = occurredStamp(draft.datedAt, withDate = true)
+    val detail = stamp + SEPARATOR + DRAFT_MARKER
 
     Row(
         modifier = Modifier
@@ -490,7 +494,7 @@ private fun PendingRow(
                     color = colors.textPrimary,
                 )
                 EntryRowBody(
-                    leading = { PendingStatus(stamp) },
+                    leading = { PendingStatus(detail) },
                     trailing = { PendingAmount(amount) },
                 )
             }
