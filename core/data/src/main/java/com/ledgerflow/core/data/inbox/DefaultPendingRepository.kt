@@ -34,6 +34,13 @@ import kotlinx.coroutines.withContext
  * Reads follow `whenUnlocked()` rather than `requireDatabase()`: the Inbox is a
  * screen, it can be on-screen when the vault closes, and a `Flow` that threw at
  * that moment would crash the app rather than empty the list.
+ *
+ * **The one-shot calls open the vault themselves** (BUG13). They used to take
+ * `requireDatabase()`, which is right for a screen and wrong for everything
+ * else that reaches this class: §5.1's `[Review] [Discard]` notification
+ * actions run from a `BroadcastReceiver` with no Activity alive, and every one
+ * of them threw into a `runCatching` and came back as a clean `false`. See
+ * [openVault], and `Bug13_ShadeActionOnClosedVaultTest`.
  */
 @Singleton
 public class DefaultPendingRepository @Inject constructor(
@@ -61,27 +68,51 @@ public class DefaultPendingRepository @Inject constructor(
             database?.pendingTransactionDao()?.observePendingCount() ?: flowOf(0)
         }
 
+    /**
+     * The vault, opened if the UI has not already done it (BUG13).
+     *
+     * **Every one-shot below can be reached with no Activity alive.** §5.1's
+     * notification actions run from a `BroadcastReceiver`, and before this they
+     * asked for a database that only `AppViewModel` ever opened. `requireDatabase()`
+     * threw, the surrounding `runCatching` swallowed it, and a `[Discard]` the
+     * user tapped returned `false` while the row stayed `PENDING` — §2.4's
+     * silent drop, arriving through the Inbox instead of through capture.
+     *
+     * The same call `DefaultRawIngestRepository` makes and the same one the UI
+     * makes: **no new wrap and no new key material.** §7 forbids
+     * `setUserAuthenticationRequired(true)` on the DEK-wrapping key precisely so
+     * a Keystore unwrap needs no user present.
+     *
+     * Null is a real answer and never a reason to invent one: the vault cannot
+     * be opened, so the caller is told no rather than told nothing.
+     */
+    private suspend fun openVault() = session.openForBackgroundWork()
+
     override suspend fun find(id: String): PendingTransaction? = withContext(io) {
+        val database = openVault() ?: return@withContext null
         runCatching {
-            session.requireDatabase().pendingTransactionDao().byId(id)?.let(::toDomain)
+            database.pendingTransactionDao().byId(id)?.let(::toDomain)
         }.getOrNull()
     }
 
     override suspend fun discard(id: String): Boolean = withContext(io) {
+        val database = openVault() ?: return@withContext false
         runCatching {
-            session.requireDatabase().pendingTransactionDao().discard(id, clock.nowMillis()) > 0
+            database.pendingTransactionDao().discard(id, clock.nowMillis()) > 0
         }.getOrDefault(false)
     }
 
     override suspend fun restore(id: String): Boolean = withContext(io) {
+        val database = openVault() ?: return@withContext false
         runCatching {
-            session.requireDatabase().pendingTransactionDao().restore(id) > 0
+            database.pendingTransactionDao().restore(id) > 0
         }.getOrDefault(false)
     }
 
     override suspend fun markApproved(id: String, entryId: String): Boolean = withContext(io) {
+        val database = openVault() ?: return@withContext false
         runCatching {
-            session.requireDatabase().pendingTransactionDao()
+            database.pendingTransactionDao()
                 .markApproved(id, entryId, clock.nowMillis()) > 0
         }.getOrDefault(false)
     }
@@ -95,9 +126,22 @@ public class DefaultPendingRepository @Inject constructor(
      * statement naming `ledger_entry` to bind `:ledger`, and asking each book
      * separately keeps that true here (Law 2). Nothing is summed across them.
      */
+    /**
+     * ...and this one **must** be able to answer, or it is worse than absent.
+     *
+     * It is the idempotency guard across an approval's two writes, and null
+     * means "no entry yet" — which is exactly what a second approval of an
+     * already-approved candidate needs to hear in order to write a **second
+     * `ledger_entry` for one payment**. On a locked vault it threw and was
+     * swallowed into that same null, so giving [find] a background unlock
+     * without giving one to this would have turned BUG13 from an action that
+     * did nothing into an action that doubled a ledger row — the precise
+     * duplicate the whole ingest pipeline exists to prevent.
+     */
     override suspend fun findApprovedEntryId(pendingId: String): String? = withContext(io) {
+        val database = openVault() ?: return@withContext null
         runCatching {
-            val dao = session.requireDatabase().ledgerEntryDao()
+            val dao = database.ledgerEntryDao()
             LedgerType.entries.firstNotNullOfOrNull { book ->
                 dao.entryIdForSourceRef(book, pendingId)
             }
