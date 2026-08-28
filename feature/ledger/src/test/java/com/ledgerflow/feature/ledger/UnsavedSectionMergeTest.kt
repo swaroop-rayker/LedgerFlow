@@ -15,6 +15,8 @@ import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.testing.inbox.FakePendingRepository
 import com.ledgerflow.core.testing.ledger.FakeDraftRepository
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,6 +51,7 @@ class UnsavedSectionMergeTest {
     private companion object {
         const val FIXED_NOW = 1_787_000_000_000L
         const val DAY = 86_400_000L
+        const val HOUR = 3_600_000L
     }
 
     private val dispatcher = StandardTestDispatcher()
@@ -101,6 +104,22 @@ class UnsavedSectionMergeTest {
     }
 
     private fun LedgerViewModel.unsaved() = state.value.unsaved
+
+    /**
+     * Local midnight on [FIXED_NOW]'s day — what `DateText` produces for a
+     * message that states a date and no clock.
+     *
+     * Computed the way the parser does rather than by rounding the epoch, so
+     * this is midnight in the *device's* zone and the test does not quietly
+     * pass or fail on the machine's offset.
+     */
+    private fun midnight(): Long =
+        Instant.ofEpochMilli(FIXED_NOW)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
 
     // ── One section ─────────────────────────────────────────────────────────
 
@@ -254,6 +273,59 @@ class UnsavedSectionMergeTest {
         assertThat(viewModel.unsaved().map { it.key })
             .containsExactly("candidate-dateless", "draft-old-draft")
             .inOrder()
+    }
+
+    /**
+     * **The sort key is the value the row displays.** Found on the device.
+     *
+     * Every bank SMS states a date and no clock, so `occurredAt` is midnight
+     * and the row *displays* the capture time instead
+     * (`TimeStamp.ofCapture`). Sorting on the raw `occurredAt` therefore put
+     * both real candidates at 12:00 am, and a draft from 2:49 pm sorted above
+     * a candidate whose own row read 4:24 pm — a list that simply looked
+     * unsorted.
+     *
+     * Neither half was wrong alone, which is why no existing test saw it: the
+     * display was right, the sort was right about the value it was given, and
+     * only the two together were wrong. This asserts they agree.
+     */
+    @Test
+    fun aMidnightCandidate_sortsByItsCaptureTime_notByMidnight() = runTest(dispatcher) {
+        val midnight = midnight()
+        // A draft in the early afternoon...
+        drafts.seed(
+            "afternoon-draft",
+            LedgerType.DEBIT,
+            "{}",
+            summary = DraftSummaryFields(1_000L, occurredAt = midnight + 14 * HOUR),
+        )
+        // ...and an SMS candidate for the same day, captured later. Its stored
+        // occurredAt is midnight, so a raw sort would drop it to the bottom.
+        pending.put(
+            candidate("evening-sms", occurredAt = midnight, createdAt = midnight + 16 * HOUR),
+        )
+
+        val viewModel = viewModel()
+        viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(viewModel.unsaved().map { it.key })
+            .containsExactly("candidate-evening-sms", "draft-afternoon-draft")
+            .inOrder()
+    }
+
+    /** And the key really is the blended value, not a coincidence of ordering. */
+    @Test
+    fun aMidnightCandidatesSortKey_isItsCaptureTime() = runTest(dispatcher) {
+        val midnight = midnight()
+        val captured = midnight + 16 * HOUR
+        pending.put(candidate("sms", occurredAt = midnight, createdAt = captured))
+
+        val viewModel = viewModel()
+        viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.DEBIT))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(viewModel.unsaved().single().happenedAt).isEqualTo(captured)
     }
 
     @Test

@@ -4,8 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import com.ledgerflow.core.common.time.OccurredAt
 import java.time.Instant
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -46,42 +46,23 @@ public object TimeStamp {
      * Rendered literally, every SMS-derived row in the app would read
      * `12:00 am` (§16, the `occurred_at` note).
      *
-     * So when [occurredAt] falls exactly on midnight, the **date comes from the
-     * message and the time comes from [capturedAt]** — when LedgerFlow actually
-     * received it, which for a live capture is within seconds of the payment.
-     * That is the same fallback `ApprovePendingUseCase` already applies when a
-     * message gives no date at all.
-     *
-     * **The date is never taken from [capturedAt].** A re-triaged or backlogged
-     * message can be captured days after it was sent (§16 Q14 re-admits
-     * previously-rejected SMS), and showing the wrong *day* is worse than
-     * showing an approximate time — the day is what the user reconciles against
-     * a bank statement.
-     *
-     * **Nothing is written.** `occurred_at` still holds midnight; this decides
-     * only what is drawn, so no stored figure and no committed entry changes.
-     * Making the column itself mean something different is a separate decision
-     * about ledger data, and is deliberately not taken here.
-     *
-     * Exact midnight is treated as "no clock" because that is what it means in
-     * practice: a bank does not state `00:00`, and a payment landing on the
-     * millisecond of midnight is not a case worth preferring over every real
-     * SMS in the corpus.
+     * The rule itself is [OccurredAt.effective], which lives in `:core:common`
+     * rather than here because the Ledger's "Unsaved" section **sorts** by it
+     * as well as drawing it — and a display that blended while the sort used
+     * the raw value produced a list whose visible times ran 2:49 pm, 4:24 pm,
+     * 2:47 pm. One definition, both callers.
      */
     @Composable
     public fun ofCapture(occurredAt: Long, capturedAt: Long, withDate: Boolean): String {
         val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
         val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
         return remember(occurredAt, capturedAt, locale, is24Hour, withDate) {
-            val zone = ZoneId.systemDefault()
-            val stated = Instant.ofEpochMilli(occurredAt).atZone(zone)
-            if (stated.toLocalTime() != LocalTime.MIDNIGHT) {
-                return@remember format(occurredAt, locale, is24Hour, withDate)
-            }
-            // The message's day, our clock.
-            val captureTime = Instant.ofEpochMilli(capturedAt).atZone(zone).toLocalTime()
-            val blended = stated.with(captureTime).toInstant().toEpochMilli()
-            format(blended, locale, is24Hour, withDate)
+            format(
+                OccurredAt.effective(occurredAt, capturedAt),
+                locale,
+                is24Hour,
+                withDate,
+            )
         }
     }
 

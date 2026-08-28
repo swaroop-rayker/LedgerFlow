@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.ledger
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.common.time.OccurredAt
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.DraftSummary
 import com.ledgerflow.core.model.LedgerType
@@ -193,15 +194,22 @@ public sealed interface UnsavedRow {
     /**
      * A captured message waiting for approval. Opens the review screen.
      *
-     * [happenedAt] falls back to `createdAt` for the same reason the review
-     * screen does: a message that stated no date still happened, and capture
-     * time is a fact about something real rather than a guess.
+     * **[happenedAt] is the same value the row displays**, via
+     * [OccurredAt.effectiveOrCapture]. Sorting on the raw `occurredAt` instead
+     * put both of the owner's real candidates at midnight — every bank SMS
+     * states a date and no clock — so a draft from 2:49 pm sorted *above* a
+     * candidate the row itself showed as 4:24 pm. The list looked simply
+     * unsorted, and neither the display nor the sort was wrong on its own,
+     * which is why it took a device to see.
      */
     @Immutable
     public data class Candidate(val candidate: PendingTransaction) : UnsavedRow {
         override val key: String get() = "candidate-${candidate.id}"
         override val happenedAt: Long
-            get() = candidate.extracted.occurredAt ?: candidate.createdAt
+            get() = OccurredAt.effectiveOrCapture(
+                occurredAt = candidate.extracted.occurredAt,
+                capturedAt = candidate.createdAt,
+            )
     }
 }
 

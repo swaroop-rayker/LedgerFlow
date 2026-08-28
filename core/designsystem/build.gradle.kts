@@ -17,6 +17,12 @@ dependencies {
     // type); the WCAG assertions over it live here, next to the contrast maths.
     implementation(project(":core:model"))
 
+    // OccurredAt -- the "a date-only message's time is its capture time" rule
+    // (SPEC.md §16). It lives in :core:common rather than in TimeStamp because
+    // the "Unsaved" section SORTS by it as well as displaying it, and the two
+    // reading different values is what produced an out-of-order list on device.
+    implementation(project(":core:common"))
+
     testImplementation(libs.junit4)
     testImplementation(libs.truth)
 
