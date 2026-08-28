@@ -46,22 +46,44 @@ public class FakePendingRepository(
     public fun snapshot(): Map<String, PendingTransaction> = rows.value
 
     override fun observe(filter: InboxFilter): Flow<List<PendingTransaction>> =
-        rows.map { current ->
-            current.values
-                .filter { row ->
-                    when (filter) {
-                        InboxFilter.PENDING ->
-                            row.status == PendingStatus.PENDING && !row.isSuppressed
-                        InboxFilter.SUPPRESSED -> row.isSuppressed
-                        InboxFilter.DISCARDED -> row.status == PendingStatus.DISCARDED
-                        InboxFilter.FAILED -> row.status == PendingStatus.FAILED
-                    }
-                }
-                .sortedByDescending { it.createdAt }
-        }
+        rows.map { current -> current.values.select(filter) }
+
+    /**
+     * One filter's rows, newest first.
+     *
+     * Shared by [observe] and [observeCounts] so the fake's list and its count
+     * cannot disagree -- which is the property the real implementation has to
+     * hold across two separate SQL statements, and what
+     * `InboxFilterCountsMatchTest` checks there.
+     */
+    private fun Collection<PendingTransaction>.select(
+        filter: InboxFilter,
+    ): List<PendingTransaction> =
+        filter { row ->
+            when (filter) {
+                InboxFilter.PENDING -> row.status == PendingStatus.PENDING && !row.isSuppressed
+                InboxFilter.SUPPRESSED -> row.isSuppressed
+                InboxFilter.DISCARDED -> row.status == PendingStatus.DISCARDED
+                InboxFilter.FAILED -> row.status == PendingStatus.FAILED
+            }
+        }.sortedByDescending { it.createdAt }
 
     override fun observePendingCount(): Flow<Int> =
         observe(InboxFilter.PENDING).map { it.size }
+
+    /**
+     * Derived from [observe] rather than counted separately.
+     *
+     * The real implementation runs a `COUNT` per filter that must mirror its
+     * list query; a fake that counted its own way could agree with a test while
+     * the two SQL statements disagreed on the device. Deriving means the fake
+     * cannot drift from its own lists, and
+     * `InboxFilterCountsMatchTest` checks the real pair against a database.
+     */
+    override fun observeCounts(): Flow<Map<InboxFilter, Int>> =
+        rows.map { current ->
+            InboxFilter.entries.associateWith { filter -> current.values.select(filter).size }
+        }
 
     override suspend fun find(id: String): PendingTransaction? = rows.value[id]
 

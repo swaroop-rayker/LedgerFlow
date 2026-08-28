@@ -32,6 +32,20 @@ public class ObservePendingCountUseCase @Inject constructor(
     public operator fun invoke(): Flow<Int> = repository.observePendingCount()
 }
 
+/**
+ * How many rows each Inbox filter holds, for the chip row.
+ *
+ * Separate from [ObservePendingCountUseCase], which feeds §9.3's speed-dial
+ * badge and counts only the queue proper — a badge that included suppressed
+ * duplicates would send the user to a screen with nothing needing their
+ * attention.
+ */
+public class ObserveInboxCountsUseCase @Inject constructor(
+    private val repository: PendingRepository,
+) {
+    public operator fun invoke(): Flow<Map<InboxFilter, Int>> = repository.observeCounts()
+}
+
 /** One candidate, for the review screen and for a deep link (§5.1). */
 public class GetPendingUseCase @Inject constructor(
     private val repository: PendingRepository,

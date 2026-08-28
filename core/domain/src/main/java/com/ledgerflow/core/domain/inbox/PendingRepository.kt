@@ -134,6 +134,22 @@ public interface PendingRepository {
      */
     public fun observePendingCount(): Flow<Int>
 
+    /**
+     * How many rows each filter holds.
+     *
+     * Drives the chip row: a filter with nothing in it is not offered
+     * (owner — the Inbox showed four chips, one of which nothing in the app
+     * writes). **Emptiness is measured, never assumed.** `FAILED` is unwritten
+     * *today* and the value stays reachable for a cause that is genuinely
+     * terminal, so hard-coding its chip away would hide those rows on the day
+     * something finally writes one — §5.1's silent drop, arriving through the
+     * filter bar. A count decides instead, so the chip returns by itself.
+     *
+     * Every entry mirrors its [observe] query exactly, or a chip and its list
+     * disagree.
+     */
+    public fun observeCounts(): Flow<Map<InboxFilter, Int>>
+
     public suspend fun find(id: String): PendingTransaction?
 
     /**

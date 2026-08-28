@@ -8,6 +8,7 @@ import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
+import com.ledgerflow.core.domain.usecase.ObserveInboxCountsUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
 import com.ledgerflow.core.domain.usecase.ErasePendingUseCase
@@ -92,6 +93,7 @@ class InboxEraseConfirmationTest {
     private fun newViewModel() = InboxViewModel(
         observePending = ObservePendingUseCase(pending),
         observePendingCount = ObservePendingCountUseCase(pending),
+        observeCounts = ObserveInboxCountsUseCase(pending),
         approvePending = ApprovePendingUseCase(
             pending,
             merchants,

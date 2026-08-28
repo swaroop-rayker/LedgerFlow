@@ -16,6 +16,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -66,6 +67,26 @@ public class DefaultPendingRepository @Inject constructor(
     override fun observePendingCount(): Flow<Int> =
         session.whenUnlocked().flatMapLatest { database ->
             database?.pendingTransactionDao()?.observePendingCount() ?: flowOf(0)
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeCounts(): Flow<Map<InboxFilter, Int>> =
+        session.whenUnlocked().flatMapLatest { database ->
+            val dao = database?.pendingTransactionDao()
+                ?: return@flatMapLatest flowOf(InboxFilter.entries.associateWith { 0 })
+            combine(
+                dao.observePendingCount(),
+                dao.observeSuppressedCount(),
+                dao.observeCountWithStatus(PendingStatus.DISCARDED),
+                dao.observeCountWithStatus(PendingStatus.FAILED),
+            ) { pending, suppressed, discarded, failed ->
+                mapOf(
+                    InboxFilter.PENDING to pending,
+                    InboxFilter.SUPPRESSED to suppressed,
+                    InboxFilter.DISCARDED to discarded,
+                    InboxFilter.FAILED to failed,
+                )
+            }
         }
 
     /**

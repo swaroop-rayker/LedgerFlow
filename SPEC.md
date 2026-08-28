@@ -253,6 +253,33 @@ Two consequences worth recording:
   until they launch it again; that is Android's rule and no code here can change
   it. The case this fixes is the common one: a process the OEM reaped, which the
   system restarts for the broadcast.
+- **The Inbox offers the filters that hold something** (owner — "there is some
+  clutter"). §5.1 names four; two are routinely empty and `FAILED` is empty **by
+  construction**, since no path in the app writes that status. The chip row is
+  now driven by a per-filter count: `PENDING` always, the current selection
+  always, and the rest when they have rows. Counts ride the labels
+  (`Discarded · 4`), the same shape the Ledger's bands use.
+
+  **Hidden by count, never by rule.** `FAILED` stays reachable for a genuinely
+  terminal cause, so a chip deleted by hand would leave those rows invisible on
+  the day something finally writes one — §5.1's silent drop, arriving through
+  the filter bar. Each count mirrors its `observe` query exactly and
+  `InboxFilterCountsMatchTest` checks the pair against a seeded database, since
+  a count reading low hides a filter that has rows.
+- **Discarding a manual draft says it cannot be undone.** The two kinds of
+  unsaved row share one section, so a user reaching that dialog has likely just
+  discarded a *candidate* — which lands in the Inbox's Discarded filter and is
+  restorable for 30 days. A draft's discard is `draftEntryDao().delete`:
+  immediate and permanent, and it does **not** reach the bin, which holds
+  committed `ledger_entry` soft-deletes only (ADR-0015). Nothing in the old
+  wording said so.
+- **The two stores stay separate, and that is not the clutter.** A candidate
+  carries `raw_ref_id`, `dedupe_key`, `confidence`, `suppressed_by_id` and
+  `approved_entry_id`; a draft carries none of them and never will. One table
+  would be mostly nulls and would dissolve what Law 1 is defined on. A discarded
+  candidate is also *evidence* — the corpus P2-9 needs, and what §5.1's rule
+  test bench is made of — where a discarded draft is abandoned typing. The
+  duplication the owner noticed is in the **surfaces**, not the data.
 - **Every row that is not yet in the ledger shows its date and time** (owner).
   The Inbox on all four filters, and the Ledger's "Unsaved" section. The stamp
   leads the detail line so that the account number is what ellipsises on a long

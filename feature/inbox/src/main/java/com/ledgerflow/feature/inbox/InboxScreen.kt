@@ -129,7 +129,7 @@ public fun InboxScreen(
                 modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
             )
 
-            FilterBand(state.filter, onEvent)
+            FilterBand(state, onEvent)
 
             if (state.canErase && state.rows.isNotEmpty()) EraseBand(state, onEvent)
 
@@ -183,22 +183,39 @@ private fun CandidateList(
 }
 
 /**
- * §5.1's four filters.
+ * §5.1's filters — the ones that currently hold something.
  *
- * Chips rather than a segmented control: four options do not fit a segmented
+ * Chips rather than a segmented control: the options do not fit a segmented
  * control's fixed track at font scale 2.0 without truncating, and truncating a
  * label is BUG9. In an [LfActionRow] so they wrap as whole chips instead.
+ *
+ * **Adaptive, because four chips were two too many** (owner). `Suppressed` is
+ * empty unless a payment arrived twice, and `Failed` is empty by construction —
+ * no path in the app writes that status today. Both were permanent furniture
+ * advertising screens with nothing on them.
+ *
+ * They are hidden by *count*, never by a hard-coded rule: `FAILED` stays
+ * reachable for a cause that is genuinely terminal, so a chip removed outright
+ * would hide those rows on the day something finally writes one. See
+ * [InboxUiState.visibleFilters].
+ *
+ * The count rides the label — `Discarded · 4` — the same shape the Ledger's
+ * bands use, so "is there anything in there" is answered without a tap.
  */
 @Composable
-private fun FilterBand(selected: InboxFilter, onEvent: (InboxEvent) -> Unit) {
+private fun FilterBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
     LfActionRow(
         alignment = LfActionAlignment.Start,
         modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
     ) {
-        InboxFilter.entries.forEach { filter ->
+        state.visibleFilters.forEach { filter ->
+            val count = state.counts[filter] ?: 0
             LfChip(
-                label = filter.label(),
-                style = if (filter == selected) LfChipStyle.Selected else LfChipStyle.Assist,
+                // No count on an empty chip: "Discarded · 0" is a label for a
+                // thing that is not there, and the only empty chips drawn are
+                // the two this row keeps on purpose.
+                label = if (count > 0) "${filter.label()} · $count" else filter.label(),
+                style = if (filter == state.filter) LfChipStyle.Selected else LfChipStyle.Assist,
                 onClick = { onEvent(InboxEvent.FilterSelected(filter)) },
             )
         }

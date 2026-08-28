@@ -132,10 +132,16 @@ private fun Confirmation(confirmation: LedgerConfirmation, onEvent: (LedgerEvent
             "${confirmation.label} will no longer appear in your ledger or totals.",
             "Delete",
         )
+        // "This cannot be undone" is the sentence that matters, and it is the
+        // same sentence the Inbox's erase dialog uses. Since the two kinds of
+        // unsaved row share one section, a user reaching this dialog has very
+        // likely just discarded a *candidate* -- which lands in the Inbox's
+        // Discarded filter and is restorable for 30 days. Nothing in
+        // "throws away what you had typed" told them this one is different.
         is LedgerConfirmation.DiscardDraft -> Triple(
             "Discard this unsaved entry?",
             "${confirmation.label} was never saved. Discarding it throws away " +
-                "what you had typed.",
+                "what you had typed, and this cannot be undone.",
             "Discard",
         )
     }

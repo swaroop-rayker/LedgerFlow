@@ -517,6 +517,23 @@ public interface PendingTransactionDao {
     )
     public fun observePendingCount(): Flow<Int>
 
+    // ── Counts per filter, so the chip row can show only what exists ─────────
+    //
+    // Each mirrors its `observe` above **exactly**. That is the whole contract:
+    // a chip is drawn when its count is non-zero, so a count that disagreed
+    // with its list would either hide a filter holding rows -- §5.1's silent
+    // drop, arriving through the chip row -- or offer a chip onto an empty
+    // screen. `InboxFilterCountsMatchTest` compares each pair against a seeded
+    // database rather than trusting that the two strings look alike.
+
+    /** Matches [observeSuppressed]. */
+    @Query("SELECT COUNT(*) FROM pending_transaction WHERE suppressed_by_id IS NOT NULL")
+    public fun observeSuppressedCount(): Flow<Int>
+
+    /** Matches [observeWithStatus]. */
+    @Query("SELECT COUNT(*) FROM pending_transaction WHERE status = :status")
+    public fun observeCountWithStatus(status: PendingStatus): Flow<Int>
+
     /**
      * §5.1's Discard, and its undo.
      *

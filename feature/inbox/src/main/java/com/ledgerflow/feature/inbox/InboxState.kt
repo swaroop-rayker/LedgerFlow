@@ -15,6 +15,20 @@ public data class InboxUiState(
     val filter: InboxFilter = InboxFilter.PENDING,
     val rows: List<PendingTransaction> = emptyList(),
     val pendingCount: Int = 0,
+
+    /**
+     * How many rows each filter holds, for the chip row.
+     *
+     * A filter with nothing in it is not offered — the Inbox showed four chips
+     * where two were routinely empty and one (`FAILED`) is unwritten by any
+     * path in the app today.
+     *
+     * **Measured, not hard-coded.** `FAILED` stays reachable for a cause that
+     * is genuinely terminal, so removing its chip outright would hide those
+     * rows on the day something finally writes one. A count decides, and the
+     * chip comes back on its own.
+     */
+    val counts: Map<InboxFilter, Int> = emptyMap(),
     val loading: Boolean = true,
     /**
      * The candidate a swipe just discarded, held for the undo snackbar (§5.1).
@@ -53,6 +67,25 @@ public data class InboxUiState(
      */
     val canErase: Boolean
         get() = filter != InboxFilter.PENDING
+
+    /**
+     * The chips worth drawing.
+     *
+     * `PENDING` always — it is the queue and the screen's home, and a chip row
+     * that vanished on an empty Inbox would leave the user nothing to press.
+     * The rest appear when they hold something.
+     *
+     * **The selected filter is always kept**, even once it empties. Erasing
+     * every discarded row while standing on Discarded would otherwise pull the
+     * chip out from under the user mid-tap and drop them somewhere they did not
+     * choose.
+     */
+    val visibleFilters: List<InboxFilter>
+        get() = InboxFilter.entries.filter { candidate ->
+            candidate == InboxFilter.PENDING ||
+                candidate == filter ||
+                (counts[candidate] ?: 0) > 0
+        }
 
     val hasSelection: Boolean get() = selected.isNotEmpty()
 

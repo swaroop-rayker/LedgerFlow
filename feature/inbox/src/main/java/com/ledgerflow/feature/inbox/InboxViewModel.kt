@@ -7,6 +7,7 @@ import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
 import com.ledgerflow.core.domain.usecase.InboxException
+import com.ledgerflow.core.domain.usecase.ObserveInboxCountsUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
 import com.ledgerflow.core.domain.usecase.ErasePendingUseCase
@@ -38,6 +39,7 @@ import kotlinx.coroutines.launch
 public class InboxViewModel @Inject constructor(
     observePending: ObservePendingUseCase,
     observePendingCount: ObservePendingCountUseCase,
+    observeCounts: ObserveInboxCountsUseCase,
     private val approvePending: ApprovePendingUseCase,
     private val discardPending: DiscardPendingUseCase,
     private val restorePending: RestorePendingUseCase,
@@ -52,12 +54,14 @@ public class InboxViewModel @Inject constructor(
         filter,
         filter.flatMapLatest(observePending::invoke),
         observePendingCount(),
+        observeCounts(),
         transient,
-    ) { selected, rows, count, extra ->
+    ) { selected, rows, count, counts, extra ->
         InboxUiState(
             filter = selected,
             rows = rows,
             pendingCount = count,
+            counts = counts,
             loading = false,
             undoableDiscard = extra.undoableDiscard,
             message = extra.message,
