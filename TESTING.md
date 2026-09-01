@@ -153,7 +153,7 @@ the outside.
 
 | # | Phase | Test | Expected |
 |---|---|---|---|
-| F8 | **P2-7** | **A real payment notifies with the app closed** | Make a real payment with LedgerFlow swiped away. A notification appears without you opening anything, on channel **Inbox**, showing the amount and merchant. This is the one row that exercises the capture fix, the channel and the vault's background unlock at once. |
+| F8 | **P2-7** — ✅ **observed 2026-08-31** | **A real payment notifies with the app closed** | Make a real payment with LedgerFlow swiped away. A notification appears without you opening anything, on channel **Inbox**, showing the amount and merchant. This is the one row that exercises the capture fix, the channel and the vault's background unlock at once. **Owner confirmed at the P2-8 kickoff:** a payment landed with the app fully closed and the notification appeared. That is the first live evidence for this row; F9–F11 remain unrun, because seeing the notification says nothing about what its three actions do. |
 | F9 | **P2-7** | **Tap opens that candidate** | Tapping the body opens the review screen for **that** payment, not the Inbox list and not the Dashboard. Repeat with the app already open in another tab: it must still land on the review screen rather than stacking a second copy of the app (`singleTop` + `onNewIntent`). |
 | F10 | **P2-7** | **`[Discard]` from the shade, app closed (BUG13)** | Tap `[Discard]` without opening the app. Then open it: the candidate is under the **Discarded** filter, not still `PENDING`. A silent no-op here is the exact regression `Bug13_ShadeActionOnClosedVaultTest` exists for, and it is invisible from the shade — you must open the app and look. |
 | F11 | **P2-7** | **`[Approve]` from the shade writes exactly one entry** | Tap `[Approve]` on a candidate that offers it, app closed. Open the app: one new `ledger_entry` in the right book, candidate marked `APPROVED`. **Then check there is only one** — the idempotency guard across the approval's two writes is what stops a second, and its failure mode is a duplicate that looks like a real transaction. |
@@ -162,6 +162,50 @@ the outside.
 | F14 | **P2-7** | **Lock screen shows nothing private** | Lock the device and trigger a candidate. The lock screen shows a generic "A payment is waiting" — **no amount, no merchant, no bank**. Unlock: the full text appears. §5.2's privacy rule governs what is read; this is the same care applied to what is displayed. |
 | F15 | **P2-7** | **Grouping past three** | Accumulate four or more un-dismissed candidates. They bundle under a single summary naming the count. At three or fewer they stand alone. |
 | F16 | **P2-7** | **Silent by default, and the user's to change** | On a **fresh install**, the Inbox channel makes no sound and does not vibrate. Turn sound on in system settings, then reinstall over the top: your choice survives, and the app does not reset it. Importance and sound cannot be changed after channel creation, so this is only observable on a first install. |
+
+### Notification access and the health banner (P2-8, SPEC §5.2)
+
+The **input** half. Notification access **is granted** on the owner's device as
+of 2026-09-01 and the listener is bound — but nothing has been captured through
+it yet, so all seven notification fixtures are still synthetic and the pipeline
+below has still never seen a real one. The gap is now a payment, not a
+permission: F23 is runnable for the first time in the project's life.
+
+Two of these rows cannot be hurried. F19 asks for a listener that has been dead
+for **more than six hours**, and F20 for a *disconnection*, which on a healthy
+phone is exactly what does not happen — so the way to run them is to provoke the
+OEM battery manager rather than to wait politely. (F20 turned out not to need
+provoking: `installSmsFullDebug` unbinds the listener, so every install-over-install
+is a free run of it.)
+
+**F17 and F18 are one-shot per install state.** The explainer shows once, and
+the grant flips once; after that the flag is set and the permission is held, and
+neither row can be re-run without putting the device back. F17 needs
+`run-as com.ledgerflow.debug rm files/datastore/listener_health.preferences_pb`
+(safe — ADR-0020's store holds no user data, does not travel in a `.lfbk`, and
+rebuilds itself); F18 needs notification access revoked and re-granted by hand.
+Do both deliberately rather than assuming a green from a previous session.
+
+**After F17's delete, check which keys come back.** A healthy rebuild holds
+`listener_last_connected_at` (the service, on reconnect) and
+`notification_setup_seen` (the dismissal) — and **not**
+`listener_grant_observed_at`. That third key is the reference of last resort and
+is only stamped when there is no other evidence of life; finding it alongside a
+connect timestamp means the read path is writing when it has nothing to write,
+on every poll of every screen that reads health.
+
+| # | Phase | Test | Expected |
+|---|---|---|---|
+| F17 | **P2-8** — ✅ **verified 2026-09-01** | **The explainer appears once, and only once** | On the first launch after installing P2-8, the explainer is the first screen after the vault opens — *not* during onboarding, and not over the word challenge. Leave it by any route. Force-stop and relaunch: it does **not** come back. The standing routes are the Home banner and More → Notification capture. **Check the button label, not just the screen**: the first-run presentation says **"Not now"** and the Settings route says **"Done"**. They are the same composable and differ only in that word, so the label is the only thing that proves which host you are looking at — a screen reached the wrong way would otherwise look identical. |
+| F18 | **P2-8** — ✅ **verified 2026-09-01** | **The grant is confirmed on return, without a relaunch** | From the explainer, tap **Open settings**, grant LedgerFlow notification access, and press back. The row's chip flips to **On** on the resume, with no relaunch and no pull-to-refresh. Then revoke it in system settings and come back: it flips to **Off** just as promptly. A grant confirmed only by restarting the app is the failure this row exists to catch. **Run it in both directions** — revoking is the half that is easy to skip and it is the half a user actually hits, because the grant is revoked by system settings and battery managers rather than by them. |
+| F25 | **P2-8** — ✅ **verified 2026-09-01** | **`requestRebind()` does not fight a revoked grant** | Revoke notification access with `adb logcat -s NotificationIngest` running. You get `Listener disconnected; requesting rebind.` and then **nothing** — no reconnect, no retry storm. The rebind request is issued unconditionally on every disconnect, so this is the check that it fails quietly when the user has said no, rather than looping against a permission it will never get back. Re-granting produces the `Listener connected.` that was missing. |
+| F26 | **P2-8** — ✅ **verified 2026-09-01** | **The banner names the right cause** | With access revoked, Home reads **"Notification capture is off"** — *not* "has stopped". The two sentences are the two unhealthy states and they send the user to different fixes; a banner that says "stopped" to someone who never granted access is telling them to go hunting for a battery setting that is not the problem. Tapping **"Set up"** opens the explainer, and the banner clears on the resume after re-granting. |
+| F19 | **P2-8** | **The banner appears after six hours dead, and clears on reconnect** | With access granted, kill the listener and leave it killed — the reliable way is the OEM battery optimiser (Settings → Battery → restrict LedgerFlow), not force-stop, which Android treats differently. After six hours, Home shows **"Notification capture has stopped"**, *not* "is off": the two sentences are for different causes and swapping them sends the user to the wrong fix. Lift the restriction; the banner clears on the next resume. |
+| F20 | **P2-8** — ✅ **verified 2026-09-01** |  **`requestRebind()` actually rebinds** | While `adb logcat -s NotificationIngest` is running, toggle LedgerFlow's notification access off and on in system settings. You should see `Listener disconnected; requesting rebind.` followed by `Listener connected.` **This is the row to actually run**, because OEM battery-killers are why the callback exists and no CI runner has one. **Observed on the owner's device without provoking it**: an install-over-install unbinds the listener, and the log reads `Listener connected.` (19:32:16) → `Listener disconnected; requesting rebind.` (19:32:25.672) → `Listener connected.` (19:32:25.677) — a five-millisecond recovery on a real Samsung ROM. |
+| F21 | **P2-8** | **A dead listener does not look like an empty Inbox** | With capture dead (F19), open the Inbox. It is empty — and Home is simultaneously saying capture has stopped. The two together are the point: an empty Inbox with no banner means "nothing has happened", and an empty Inbox *with* the banner means "we are not being told". `CLAUDE.md` §7 states this as a rule; this is the only way to check the user can actually tell them apart. |
+| F22 | **P2-8** — ✅ **verified 2026-09-01** | **The privacy rule on screen matches the spec** | Open the explainer and read the "What LedgerFlow reads" card against `SPEC.md` §5.2's privacy hard rule. They are word-for-word identical. `PrivacyRuleIsVerbatimTest` compares them at build time; this confirms the sentence a user actually sees is the one that was compared. **Read off a `uiautomator` dump of the real screen** and matched character-for-character, em-dash included. |
+| F24 | **P2-8** — ✅ **verified 2026-09-01** | **The health chain reports a working listener** | With access granted, More → Notification capture reads **"On. Payment notifications reach your Inbox."** and Home shows **no banner**. That sentence is the end of a chain that has to be right at every link: the adapter reads the grant, the service writes `listener_last_connected_at` to the DataStore file, `ListenerHealth.evaluate` combines it with the in-process flag, and the row renders it. **Confirm the timestamp is actually on disk** — `run-as com.ledgerflow.debug cat files/datastore/listener_health.preferences_pb` contains `listener_last_connected_at`. A green chain with an empty file means the flag is carrying it alone, and the banner will never fire. |
+| F23 | **P2-8** | **First real notification capture** | With access granted, make a real UPI payment. A `PENDING` row appears from the **notification**, not only from the SMS. This is F3, and it has been unrunnable until now — nothing in this project has ever exercised notification ingest on hardware. **Whatever it produces becomes a golden fixture**, especially if it parses badly. |
 
 ---
 
@@ -173,7 +217,7 @@ the outside.
 | G2 | P2 | **`RECEIVE_SMS` in `smsFull` only** | App info → Permissions on the `smsFull` build lists SMS. `restrictedPermissionCheck` guards the manifests; this confirms what the OS actually granted. |
 | G3 | P2 | **Revoke and regrant** | Revoke SMS (and notification access) from Settings while the app runs, then regrant. No crash, no lost data, and ingest resumes without a reinstall. |
 | G4 | P2 | **Notification listener survives a reboot** | Grant notification access, reboot, send a test notification. Still captured. |
-| G5 | **P2-7** | **`POST_NOTIFICATIONS` is asked for once, and denial costs nothing** | On a fresh install the system dialog appears at the first usable screen, not during onboarding. **Deny it**, then make a real payment: the candidate still lands in the Inbox and the pipeline reports no failure. Only the announcement is lost, because that is the only thing the grant controls. |
+| G5 | **P2-7**, amended **P2-8** | **`POST_NOTIFICATIONS` is asked for once, and denial costs nothing** | **The bare dialog is gone.** P2-8 replaced it: the prompt is now a row on the explainer that says what declining costs before you decline it. **Deny it**, then make a real payment: the candidate still lands in the Inbox and the pipeline reports no failure. Only the announcement is lost, because that is the only thing the grant controls — and the row has to say so, since a user who reads it as "capture will stop" grants it for the wrong reason. |
 | G6 | **P2-7** | **The permission list is exactly what is pinned** | App info → Permissions. `smsFull` lists SMS and Notifications; `playSafe` lists Notifications and **not** SMS. `restrictedPermissionCheck` pins the manifests per source set; this confirms what the OS actually granted, which is the half no Gradle task can see. |
 
 ---
