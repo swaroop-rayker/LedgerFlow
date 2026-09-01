@@ -2,7 +2,6 @@ package com.ledgerflow.feature.onboarding.notifications
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -53,6 +51,31 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
  * It sits *above* the action that opens system settings rather than below it,
  * because it is the answer to the question the button provokes.
  *
+ * ## The header is two lines, not one (BUG17)
+ *
+ * Every other screen in the app puts its title and its exit action on one line —
+ * `Row(LfScreenTitle(weight = 1f), LfButton)`. That works because every other
+ * title is one short word: "Home", "Export", "Categories". This one is twenty
+ * characters, and the pattern broke it *mid-word* on the owner's device:
+ * "Notificatio" above a lone "n".
+ *
+ * **The button was not at fault, which is the interesting part.** BUG9 requires
+ * control labels to render `maxLines = 1, softWrap = false`, so "Not now" held
+ * its natural width and refused to shrink — exactly as §8 says it must. The
+ * cost landed entirely on the `weight(1f)` column beside it, on a `Text` that no
+ * countermeasure covered. A working rule pushed the failure one element
+ * sideways.
+ *
+ * So the action takes its own line and the heading takes the full width, which
+ * is what `CLAUDE.md`'s design brief already prescribes: *"The heading gets its
+ * own line rather than competing with the buttons for it."* The action stays at
+ * the **top**, not the bottom, because at first run it is the only way off this
+ * screen and the screen scrolls — an exit below the fold is an exit the user has
+ * to go looking for.
+ *
+ * `Bug17_ScreenTitleNeverBreaksMidWordTest` asserts the real `TextLayoutResult`
+ * and fails on any line break that does not land on whitespace.
+ *
  * Stateless (CLAUDE.md §5): everything comes in as [state], everything leaves
  * through [onEvent]. The two `Intent`-shaped events are handled by
  * [NotificationAccessRoute], not here and not in the ViewModel.
@@ -72,23 +95,28 @@ public fun NotificationAccessScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+            // BUG17: the action gets its own line, and the heading gets the
+            // full width. See the header note above for why the shared
+            // `Row(title.weight(1f), action)` pattern cannot carry this title.
+            LfActionRow(
+                alignment = LfActionAlignment.End,
+                modifier = Modifier.padding(
+                    start = LfTheme.spacing.lg,
+                    end = LfTheme.spacing.md,
+                    top = LfTheme.spacing.xs,
+                ),
             ) {
-                LfScreenTitle(
-                    title = "Notification capture",
-                    subtitle = "Most UPI payments never send an SMS. Reading the " +
-                        "notification is how they reach your Inbox.",
-                    modifier = Modifier.weight(1f),
-                )
                 LfButton(
                     text = doneLabel,
                     style = LfButtonStyle.Text,
                     onClick = { onEvent(NotificationAccessEvent.Done) },
-                    modifier = Modifier.padding(end = LfTheme.spacing.md),
                 )
             }
+            LfScreenTitle(
+                title = "Notification capture",
+                subtitle = "Most UPI payments never send an SMS. Reading the " +
+                    "notification is how they reach your Inbox.",
+            )
 
             Column(
                 modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
