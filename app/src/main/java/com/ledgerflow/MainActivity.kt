@@ -1,13 +1,8 @@
 package com.ledgerflow
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
@@ -18,17 +13,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.feature.onboarding.OnboardingScreen
+import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.onboarding.OnboardingViewModel
 import com.ledgerflow.feature.onboarding.recovery.RecoveryScreen
 import com.ledgerflow.feature.onboarding.upgrade.UpgradeBlockedScreen
@@ -146,54 +137,45 @@ private fun LedgerFlowApp(
         is AppRoute.UpgradeBlocked -> UpgradeBlockedScreen(reason = current.reason)
 
         AppRoute.Ready -> {
-            // Asked here rather than at launch: the permission exists to
-            // announce a pending_transaction row, and a user still in
-            // onboarding has no ledger for one to belong to. Asking at the
-            // first moment the app is actually usable is also the moment the
-            // request makes sense to read.
-            RequestNotificationPermissionOnce()
-            LedgerFlowShell(
-                deepLink = deepLink,
-                onDeepLinkHandled = onDeepLinkHandled,
-            )
+            val prompt by appViewModel.notificationSetupPrompt.collectAsStateWithLifecycle()
+            when {
+                // A tap on an Inbox notification names a specific candidate, and
+                // it outranks the explainer unconditionally. Swallowing a deep
+                // link to show a setup screen would answer a user who asked for
+                // one thing with an unrelated one, and the explainer has two
+                // standing routes back while the tap has none.
+                deepLink != null -> Shell(deepLink, onDeepLinkHandled)
+
+                // §5.2's explainer, at the first moment there is a vault behind
+                // it. See AppViewModel.notificationSetupPrompt for why this is
+                // here and not inside §7.4's gate.
+                prompt == NotificationSetupPrompt.Show -> NotificationAccessRoute(
+                    onDone = appViewModel::dismissNotificationSetup,
+                    // Not "Done": nothing has necessarily been done. This is the
+                    // one presentation the user did not ask for, so the label
+                    // has to make declining an obvious, unembarrassed option --
+                    // a "Done" on an ungranted screen reads as the app pretending
+                    // the user complied.
+                    doneLabel = "Not now",
+                )
+
+                // Undecided renders the shell rather than a spinner: the flag
+                // read is a single small file and the alternative is a blank
+                // frame on every launch of an install that has already seen it,
+                // which is all of them after the first.
+                else -> Shell(deepLink, onDeepLinkHandled)
+            }
         }
     }
 }
 
 /**
- * `POST_NOTIFICATIONS`, once per install (SPEC.md §5.1, API 33+). P2-7.
- *
- * **This is the minimum that makes P2-7 work, and it is not the permission UX.**
- * P2-8 owns the explainer, the notification-listener grant, the rebind and the
- * §5.2 health banner; this is a bare system dialog so that the notification half
- * is demonstrable before that lands. It should be *replaced* by P2-8's flow, not
- * decorated.
- *
- * `rememberSaveable` keeps it to one ask per process even across a rotation. It
- * deliberately does not re-ask on a later launch after a denial: Android stops
- * showing the dialog after two refusals anyway, and a request that silently
- * cannot appear is worse than none — the user's route back is system settings,
- * which is exactly what P2-8's banner is for.
+ * The shell, named so the branch above reads as three alternatives rather than
+ * as one alternative and two copies of an argument list.
  */
 @Composable
-private fun RequestNotificationPermissionOnce() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-
-    val context = LocalContext.current
-    var asked by rememberSaveable { mutableStateOf(false) }
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { /* Denied is a legitimate answer; the Inbox never depended on it. */ }
-
-    LaunchedEffect(Unit) {
-        if (asked) return@LaunchedEffect
-        asked = true
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.POST_NOTIFICATIONS,
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-    }
+private fun Shell(deepLink: String?, onDeepLinkHandled: () -> Unit) {
+    LedgerFlowShell(deepLink = deepLink, onDeepLinkHandled = onDeepLinkHandled)
 }
 
 @Composable

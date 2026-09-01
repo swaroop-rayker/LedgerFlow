@@ -18,6 +18,7 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 
 /**
  * The "More" tab (SPEC.md §9.3): everything that is not one of the three main
@@ -32,6 +33,7 @@ public fun MoreScreen(
     onCategories: () -> Unit,
     onExport: () -> Unit,
     onDeletedEntries: () -> Unit,
+    onNotificationAccess: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -45,6 +47,16 @@ public fun MoreScreen(
             modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         ) {
+            // §5.2. First, because it is the only row that can be *wrong* --
+            // the others open something that always works. It is also the
+            // standing route back to the explainer once the first-run
+            // presentation has been dismissed, so it is always present and
+            // always enabled, for the reason the bin row below records.
+            MoreRow(
+                title = "Notification capture",
+                subtitle = captureSubtitle(state),
+                onClick = onNotificationAccess,
+            )
             MoreRow(
                 title = "Categories & merchants",
                 subtitle = "Organise how spending is grouped",
@@ -92,6 +104,36 @@ internal fun deletedSubtitle(state: MoreUiState): String = when {
     else -> "${state.deletedCount} entries kept here. Restore them or erase them for good."
 }
 
+/**
+ * What the notification row says about itself (SPEC.md §5.2).
+ *
+ * Each state names the *consequence* rather than the mechanism, because the
+ * mechanism is what the screen behind the row is for. "Off" alone would not tell
+ * the user that payments are being missed, which is the only fact that makes the
+ * row worth tapping.
+ *
+ * [NotificationCaptureHealth.RECONNECTING] is the pre-poll value as well as a
+ * real transient state, so its sentence has to be true of both: it says what the
+ * row is for and claims nothing about the current grant.
+ */
+internal fun captureSubtitle(state: MoreUiState): String = when (state.captureHealth) {
+    NotificationCaptureHealth.CONNECTED -> "On. Payment notifications reach your Inbox."
+    NotificationCaptureHealth.NOT_GRANTED ->
+        "Off. Payments that only send a notification are being missed."
+
+    NotificationCaptureHealth.DEAD ->
+        "Stopped. Android has not reconnected the listener — tap to check."
+
+    NotificationCaptureHealth.RECONNECTING ->
+        "Read payment notifications, and what LedgerFlow does with them."
+
+    // Unreachable for notifications -- both flavours ship the listener and every
+    // supported device can host one -- but an enum `when` may not have an `else`
+    // (CLAUDE.md §5), and a sentence is cheaper than a lie.
+    NotificationCaptureHealth.UNAVAILABLE ->
+        "Not available on this device."
+}
+
 @Composable
 private fun MoreRow(title: String, subtitle: String, onClick: () -> Unit) {
     LfCard(
@@ -126,6 +168,7 @@ private fun MorePreview() {
             onCategories = {},
             onExport = {},
             onDeletedEntries = {},
+            onNotificationAccess = {},
         )
     }
 }
@@ -142,6 +185,7 @@ private fun MoreEmptyBinPreview() {
             onCategories = {},
             onExport = {},
             onDeletedEntries = {},
+            onNotificationAccess = {},
         )
     }
 }

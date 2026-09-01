@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.PathSensitivity
+
 plugins {
     id("ledgerflow.android.feature")
 }
@@ -23,4 +25,24 @@ dependencies {
     // convention plugin.
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    // Bug17_ScreenTitleNeverBreaksMidWordTest asserts on a real TextLayoutResult
+    // and needs to say *where* a line broke when it fails -- a bare assertion
+    // here would report `false != true` about a layout nobody can see.
+    androidTestImplementation(libs.truth)
+}
+
+/**
+ * `PrivacyRuleIsVerbatimTest` reads `SPEC.md` as a plain file at run time, and
+ * Gradle cannot see that.
+ *
+ * Without this, editing §5.2's privacy rule leaves the task UP-TO-DATE and the
+ * guard silently does not run -- so the screen would go on quoting the old
+ * sentence with a green build over it. That failure shape has now bitten this
+ * repository four times (§16 Q13), which is why it is declared rather than
+ * assumed.
+ */
+tasks.withType<Test>().configureEach {
+    inputs.files(rootProject.file("SPEC.md"))
+        .withPropertyName("specForVerbatimPrivacyRule")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }

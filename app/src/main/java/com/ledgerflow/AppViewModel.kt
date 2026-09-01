@@ -6,6 +6,7 @@ import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
 import com.ledgerflow.core.domain.ingest.IngestWorkTrigger
+import com.ledgerflow.core.domain.ingest.NotificationSetupStore
 import com.ledgerflow.core.domain.usecase.SeedIngestAllowlistsUseCase
 import com.ledgerflow.core.domain.usecase.SeedParserRulesUseCase
 import com.ledgerflow.core.domain.vault.RecoveryReason
@@ -13,8 +14,10 @@ import com.ledgerflow.core.domain.vault.UpgradeBlockReason
 import com.ledgerflow.core.domain.vault.VaultState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
@@ -42,6 +45,27 @@ public sealed interface AppRoute {
 }
 
 /**
+ * Whether §5.2's explainer is owed a showing before the shell (SPEC.md §5.2).
+ *
+ * **Three values, because "not yet known" is a real state and rendering it
+ * wrongly is visible.** The answer comes from a file read that completes a few
+ * milliseconds after the vault opens, and both of the other two values would be
+ * a guess during that window — one flashes Home at a first-run user, the other
+ * flashes a blank screen at everyone else.
+ */
+public enum class NotificationSetupPrompt {
+
+    /** The flag has not been read yet. Renders whatever was already on screen. */
+    Undecided,
+
+    /** First run, or an install that predates the explainer. Show it. */
+    Show,
+
+    /** Already seen, however it was left. The shell owns the screen. */
+    Dismissed,
+}
+
+/**
  * The app shell's router, driven by the vault (SPEC.md §7.3).
  *
  * It observes the vault rather than holding it: [ObserveVaultStateUseCase] is
@@ -56,7 +80,43 @@ public class AppViewModel @Inject constructor(
     private val seedIngestAllowlists: SeedIngestAllowlistsUseCase,
     private val seedParserRules: SeedParserRulesUseCase,
     private val ingestWork: IngestWorkTrigger,
+    private val notificationSetup: NotificationSetupStore,
 ) : ViewModel() {
+
+    private val _notificationSetupPrompt =
+        MutableStateFlow(NotificationSetupPrompt.Undecided)
+
+    /**
+     * Whether the explainer should be shown before the shell (§5.2).
+     *
+     * **This is where §5.2's "onboarding deep-links to an explainer" actually
+     * lands, and it is one step later than the sentence suggests.** §7.4's gate
+     * cannot host it: `completeBackupLocation` is where the vault is *created*,
+     * so the route switches away from onboarding at the same instant the last
+     * gate step completes, and a step after it would be rendering while the app
+     * had already moved on. Putting a *declinable* step inside a gate whose
+     * whole design is that nothing in it can be skipped is also the wrong shape
+     * — notification access can always be refused, and the gate's steps cannot.
+     *
+     * So the explainer is the first thing shown once the vault exists, which is
+     * first run by any reading a user would recognise, and the §7.4 gate is
+     * untouched.
+     */
+    public val notificationSetupPrompt: StateFlow<NotificationSetupPrompt> =
+        _notificationSetupPrompt.asStateFlow()
+
+    /**
+     * The user left the explainer.
+     *
+     * Only the in-memory value: the durable flag is written by the explainer's
+     * own ViewModel when it handles `Done`, which is the screen that knows the
+     * user actually saw it. Doing it in both places would be two writers for one
+     * fact, and this one would fire on a path where the screen was never
+     * composed.
+     */
+    public fun dismissNotificationSetup() {
+        _notificationSetupPrompt.value = NotificationSetupPrompt.Dismissed
+    }
 
     /**
      * [VaultState.Working] deliberately does not map to a route.
@@ -118,6 +178,17 @@ public class AppViewModel @Inject constructor(
             // pass is idempotent and collapses under KEEP, so asking on every
             // launch costs a query that finds nothing.
             ingestWork.requestParsePass()
+
+            // §5.2's explainer, decided once the vault is open -- the same
+            // Ready gate everything else in this block waits for, though for a
+            // different reason: the flag lives outside the vault (ADR-0020) and
+            // could have been read earlier. It is read here so that the value
+            // cannot arrive before there is a screen it could change.
+            _notificationSetupPrompt.value = if (notificationSetup.hasSeenSetup()) {
+                NotificationSetupPrompt.Dismissed
+            } else {
+                NotificationSetupPrompt.Show
+            }
         }
     }
 

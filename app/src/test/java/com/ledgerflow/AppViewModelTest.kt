@@ -1,6 +1,7 @@
 package com.ledgerflow
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.domain.ingest.NotificationSetupStore
 import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
@@ -41,6 +42,23 @@ class AppViewModelTest {
     private val drafts = FakeDraftRepository()
     private val ingest = FakeRawIngestRepository()
 
+    /**
+     * §5.2's explainer flag, in memory.
+     *
+     * A fake rather than a lambda because both directions matter here: the
+     * prompt has to resolve to `Show` when nothing has been seen and to
+     * `Dismissed` when it has, and a stub that only answered one of them would
+     * make half the routing untestable.
+     */
+    private class FakeNotificationSetupStore(private var seen: Boolean) : NotificationSetupStore {
+        override suspend fun hasSeenSetup(): Boolean = seen
+        override suspend fun markSetupSeen() {
+            seen = true
+        }
+    }
+
+    private var notificationSetup: NotificationSetupStore = FakeNotificationSetupStore(seen = false)
+
     private fun viewModel(vault: FakeVaultRepository) = AppViewModel(
         observeVaultState = ObserveVaultStateUseCase(vault),
         openVaultOnLaunch = OpenVaultOnLaunchUseCase(vault),
@@ -53,6 +71,7 @@ class AppViewModelTest {
         // cares -- §16 Q14's re-triage has to be *asked for* at launch, or the
         // allowlist change that enables it sits unrun until the next SMS.
         ingestWork = { parsePassesRequested++ },
+        notificationSetup = notificationSetup,
     )
 
     private var parsePassesRequested = 0
@@ -205,6 +224,79 @@ class AppViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         assertThat(drafts.purgeCalls).isEqualTo(1)
+        job.cancel()
+    }
+
+    /**
+     * §5.2's explainer is owed a showing on an install that has never seen it.
+     *
+     * Resolved only after the vault opens, which is the whole point of the third
+     * enum value: the read is asynchronous, and both of the other two answers
+     * would be a visible guess during the window before it lands.
+     */
+    @Test
+    fun notificationSetupPrompt_onAnInstallThatHasNotSeenIt_resolvesToShow() =
+        runTest(dispatcher) {
+            notificationSetup = FakeNotificationSetupStore(seen = false)
+            val subject = viewModel(FakeVaultRepository(VaultState.Unlocked))
+            val job = launch { subject.route.collect {} }
+
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertThat(subject.notificationSetupPrompt.value)
+                .isEqualTo(NotificationSetupPrompt.Show)
+            job.cancel()
+        }
+
+    @Test
+    fun notificationSetupPrompt_onAnInstallThatHasSeenIt_resolvesToDismissed() =
+        runTest(dispatcher) {
+            notificationSetup = FakeNotificationSetupStore(seen = true)
+            val subject = viewModel(FakeVaultRepository(VaultState.Unlocked))
+            val job = launch { subject.route.collect {} }
+
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertThat(subject.notificationSetupPrompt.value)
+                .isEqualTo(NotificationSetupPrompt.Dismissed)
+            job.cancel()
+        }
+
+    /**
+     * A user still in onboarding is not asked about notifications.
+     *
+     * The prompt stays [NotificationSetupPrompt.Undecided] until the vault
+     * opens, and `Undecided` renders the shell-or-whatever-was-there rather than
+     * the explainer — so this is the assertion that keeps §5.2's screen from
+     * appearing over §7.4's gate, which is the one place it must never be.
+     */
+    @Test
+    fun notificationSetupPrompt_beforeTheVaultOpens_staysUndecided() = runTest(dispatcher) {
+        notificationSetup = FakeNotificationSetupStore(seen = false)
+        val subject = viewModel(FakeVaultRepository(VaultState.NeedsOnboarding))
+        val job = launch { subject.route.collect {} }
+
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(subject.notificationSetupPrompt.value)
+            .isEqualTo(NotificationSetupPrompt.Undecided)
+        job.cancel()
+    }
+
+    /** Leaving the screen puts the shell on screen, whatever the user chose. */
+    @Test
+    fun dismissNotificationSetup_movesThePromptToDismissed() = runTest(dispatcher) {
+        notificationSetup = FakeNotificationSetupStore(seen = false)
+        val subject = viewModel(FakeVaultRepository(VaultState.Unlocked))
+        val job = launch { subject.route.collect {} }
+        dispatcher.scheduler.advanceUntilIdle()
+        assertThat(subject.notificationSetupPrompt.value)
+            .isEqualTo(NotificationSetupPrompt.Show)
+
+        subject.dismissNotificationSetup()
+
+        assertThat(subject.notificationSetupPrompt.value)
+            .isEqualTo(NotificationSetupPrompt.Dismissed)
         job.cancel()
     }
 }

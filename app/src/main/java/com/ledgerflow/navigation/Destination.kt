@@ -63,6 +63,21 @@ public sealed interface Destination {
     public data object Inbox : Destination
 
     /**
+     * §5.2's permission explainer, reached from More and from the Dashboard
+     * health banner.
+     *
+     * **Two entry points to one screen, and both are needed.** The banner is
+     * where a user *notices* capture is not working; More is where they go
+     * looking when nothing has told them. The same destination serves the
+     * first-run presentation too, which is rendered outside this graph — the
+     * vault has just been created and the shell does not exist yet — so the
+     * screen is a route here and a direct call there, over one
+     * `NotificationAccessRoute`.
+     */
+    @Serializable
+    public data object NotificationAccess : Destination
+
+    /**
      * Reviewing one candidate, reached from the Inbox — and at P2-7 from the
      * `ledgerflow://inbox/{pendingId}` deep link §5.1 specifies.
      *

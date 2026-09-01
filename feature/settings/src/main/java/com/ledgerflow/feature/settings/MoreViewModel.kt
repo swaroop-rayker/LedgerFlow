@@ -3,14 +3,18 @@ package com.ledgerflow.feature.settings
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.domain.ledger.LedgerRepository
+import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
 import com.ledgerflow.core.model.LedgerType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /**
  * The More tab's state (SPEC.md §9.3).
@@ -41,12 +45,38 @@ public data class MoreUiState(
      * them is a lie for the fraction of a second before the query returns.
      */
     val isLoaded: Boolean = false,
+
+    /**
+     * Whether notification capture is working (SPEC.md §5.2).
+     *
+     * The row it drives is the standing route to the permission explainer, and
+     * the reason it carries a status rather than a static label is the same
+     * lesson [deletedSubtitle] records one row up: a Settings row that says
+     * nothing about its own state is one people open to find out, and a user who
+     * suspects capture is broken looks here first.
+     *
+     * Polled on resume like every other reader of this value — the grant lives
+     * in system Settings and changes without telling anyone.
+     */
+    val captureHealth: NotificationCaptureHealth = NotificationCaptureHealth.RECONNECTING,
 )
 
 @HiltViewModel
 public class MoreViewModel @Inject constructor(
     ledger: LedgerRepository,
+    private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
 ) : ViewModel() {
+
+    /**
+     * The polled half.
+     *
+     * A `MutableStateFlow` folded into the combine below rather than a second
+     * `StateFlow` the screen also collects: one screen gets one state object
+     * (CLAUDE.md §5), and two flows would let the row's label and its subtitle
+     * recompose out of step.
+     */
+    private val captureHealth =
+        MutableStateFlow(NotificationCaptureHealth.RECONNECTING)
 
     /**
      * One flow per book, combined here rather than in a query.
@@ -58,9 +88,23 @@ public class MoreViewModel @Inject constructor(
     public val state: StateFlow<MoreUiState> = combine(
         ledger.observeDeletedCount(LedgerType.DEBIT),
         ledger.observeDeletedCount(LedgerType.CREDIT),
-    ) { debits, credits ->
-        MoreUiState(deletedCount = debits + credits, isLoaded = true)
+        captureHealth,
+    ) { debits, credits, health ->
+        MoreUiState(
+            deletedCount = debits + credits,
+            isLoaded = true,
+            captureHealth = health,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), MoreUiState())
+
+    init {
+        refresh()
+    }
+
+    /** §5.2's resume poll. Called from the screen, for the reason its route explains. */
+    public fun refresh() {
+        viewModelScope.launch { captureHealth.value = getCaptureHealth() }
+    }
 
     private companion object {
         private const val STOP_TIMEOUT_MS = 5_000L

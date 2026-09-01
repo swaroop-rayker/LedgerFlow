@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -37,7 +38,8 @@ import com.ledgerflow.feature.analytics.AnalyticsScreen
 import com.ledgerflow.feature.export.ExportRoute
 import com.ledgerflow.feature.categories.CategoriesScreen
 import com.ledgerflow.feature.categories.CategoriesViewModel
-import com.ledgerflow.feature.dashboard.DashboardScreen
+import com.ledgerflow.feature.dashboard.DashboardRoute
+import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.entry.EntryScreen
 import com.ledgerflow.feature.entry.EntryViewModel
 import com.ledgerflow.feature.ledger.BinScreen
@@ -166,7 +168,11 @@ private fun LedgerFlowNavHost(
 
 /** The four that keep the bottom bar (§9.3). */
 private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
-    composable<Destination.Dashboard> { DashboardScreen() }
+    composable<Destination.Dashboard> {
+        DashboardRoute(
+            onSetUpNotifications = { navController.navigate(Destination.NotificationAccess) },
+        )
+    }
     composable<Destination.Ledger> {
         val viewModel: LedgerViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -194,11 +200,19 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
     composable<Destination.More> {
         val viewModel: MoreViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
+        // §5.2's resume poll, for the row that reports whether capture works.
+        // The user's route to fixing it leaves the app entirely, so the resume
+        // afterwards is the only moment the row can stop being wrong.
+        LifecycleResumeEffect(Unit) {
+            viewModel.refresh()
+            onPauseOrDispose { }
+        }
         MoreScreen(
             state = state,
             onCategories = { navController.navigate(Destination.Categories) },
             onExport = { navController.navigate(Destination.Export) },
             onDeletedEntries = { navController.navigate(Destination.DeletedEntries) },
+            onNotificationAccess = { navController.navigate(Destination.NotificationAccess) },
         )
     }
 }
@@ -239,6 +253,16 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         )
     }
     composable<Destination.Export> { ExportRoute(onBack = navController::popBackStack) }
+    // §5.2. Full-screen rather than a tab destination: it sends the user to a
+    // system Settings page in another task, and a bottom bar under that is an
+    // invitation to navigate away mid-grant and never come back to the
+    // confirmation.
+    composable<Destination.NotificationAccess> {
+        NotificationAccessRoute(
+            onDone = navController::popBackStack,
+            doneLabel = "Done",
+        )
+    }
     composable<Destination.Inbox> {
         val viewModel: InboxViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -337,6 +361,7 @@ private val Destination.label: String
         Destination.DeletedEntries -> "Deleted"
         Destination.Inbox -> "Inbox"
         is Destination.InboxReview -> "Review"
+        Destination.NotificationAccess -> "Notifications"
     }
 
 private val Destination.icon
