@@ -22,6 +22,10 @@ dependencies {
     // :app is the only module allowed to see :core:data -- it is where the
     // domain ports get bound to their implementations (CLAUDE.md §3).
     implementation(project(":core:data"))
+    // The second store, and the only one that is not the vault (ADR-0020).
+    // Here for the same reason :core:data is: this is where a port meets its
+    // implementation. Nothing above :app knows either exists.
+    implementation(project(":core:datastore"))
     implementation(project(":feature:onboarding"))
     implementation(project(":feature:dashboard"))
     implementation(project(":feature:entry"))

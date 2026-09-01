@@ -9,6 +9,7 @@ import android.util.Log
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.domain.ingest.IngestSourceType
+import com.ledgerflow.core.domain.ingest.ListenerHealthStore
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.usecase.IsPackageAllowedForIngestUseCase
 import com.ledgerflow.feature.ingest.pipeline.IngestEventSink
@@ -64,6 +65,9 @@ public class NotificationIngestService : NotificationListenerService() {
     @Inject internal lateinit var sink: IngestEventSink
 
     @Inject internal lateinit var clock: Clock
+
+    /** §5.2's liveness record, outside the vault (ADR-0020). */
+    @Inject internal lateinit var listenerHealth: ListenerHealthStore
 
     @Inject @IoDispatcher internal lateinit var ioDispatcher: CoroutineDispatcher
 
@@ -152,16 +156,52 @@ public class NotificationIngestService : NotificationListenerService() {
      * OEM battery managers kill this service aggressively, and the system does
      * not re-bind on its own (§5.2).
      *
-     * §5.2's "> 6h dead" dashboard health banner is the other half of this and
-     * lands with the Dashboard work.
+     * `requestRebind` first, and the bookkeeping second: asking for the rebind
+     * is the part that fixes anything, and this callback can be immediately
+     * followed by the process ending. [ListenerHealthStore] is explicit that the
+     * disk half here is best-effort for that reason — nothing in
+     * `ListenerHealth.evaluate` requires a disconnect to have been recorded,
+     * because the disconnect that matters most is the one that never gets to
+     * write.
+     *
+     * The in-process flag inside the store is *not* best-effort: it is set by
+     * [ListenerHealthStore.recordDisconnected] before the suspending write, and
+     * a process that dies loses it in the only direction that is safe — a fresh
+     * process starts disconnected.
+     *
+     * **The one thing assumed here is the platform's callback order**: an unbind
+     * delivers this callback before `onDestroy`. That is what the framework
+     * documents, and it is why [onDestroy] does not clear the flag itself — it
+     * cannot, because it cancels [scope] and the clear is a suspending call.
+     * If a future platform destroys the service without this callback while the
+     * *process survives*, the store would keep reporting connected and the
+     * banner would stay quiet — a false negative on the one signal it exists to
+     * give. Not defended against because the defence (an
+     * application-scoped coroutine, or a non-suspending flag on the port) costs
+     * more than the undocumented path is worth; written down because a silent
+     * assumption is how a health signal decays.
      */
     override fun onListenerDisconnected() {
         Log.d(TAG, "Listener disconnected; requesting rebind.")
         requestRebind(ComponentName(this, javaClass))
+        val at = clock.nowMillis()
+        scope.launch { listenerHealth.recordDisconnected(at) }
     }
 
+    /**
+     * The listener bound, and the only routine writer of §5.2's liveness record.
+     *
+     * **The timestamp is taken here, not inside the coroutine.** This runs at
+     * bind time; the coroutine runs whenever the IO dispatcher gets to it, which
+     * at boot can be meaningfully later on a loaded device. Recording when the
+     * write happened rather than when the connection did would inflate every
+     * interval the banner measures — and this is the value the six-hour
+     * threshold is measured *from*.
+     */
     override fun onListenerConnected() {
         Log.d(TAG, "Listener connected.")
+        val at = clock.nowMillis()
+        scope.launch { listenerHealth.recordConnected(at) }
     }
 
     override fun onDestroy() {

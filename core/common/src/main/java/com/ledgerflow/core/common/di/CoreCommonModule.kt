@@ -2,6 +2,7 @@ package com.ledgerflow.core.common.di
 
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
+import com.ledgerflow.core.common.time.ProcessUptime
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -29,4 +30,9 @@ public object CoreCommonModule {
     @Provides
     @Singleton
     public fun clock(): Clock = Clock.System
+
+    /** §5.2's health evaluation. Monotonic, and meaningless across a process boundary. */
+    @Provides
+    @Singleton
+    public fun processUptime(): ProcessUptime = ProcessUptime.System
 }
