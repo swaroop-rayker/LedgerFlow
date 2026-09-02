@@ -1,4 +1,9 @@
-# KICKOFF P2-9 — the input half is open; the corpus is what closes P2
+# KICKOFF P2-9 — P2 is done bar one real payment
+
+> **Status after the P2-9 session:** the corpus, the dedupe test and Roborazzi
+> are all closed. **The single open item is `TESTING.md` F23** — one real UPI
+> payment, to prove notification ingest captures anything at all. Read §5 and
+> §9 first; the rest is the record of how it got here.
 
 **Read `CLAUDE.md` in full before your first edit.** `SPEC.md` is what to build;
 `CLAUDE.md` is how. This file is the session log for what just shipped, plus the
@@ -115,8 +120,15 @@ Proved worth keeping by changing nothing but `ExportScreen`'s exit label from
 | # | Step | Status |
 |---|---|---|
 | S0–S12, P2-1 … P2-7 | | ✅ |
-| **P2-8** | Permission UX, rebind, health banner | ✅ **verified on device**, one row outstanding (F19) |
-| **P2-9** | Exit criteria — 50+50 corpus, named dedupe test | ⬅ **next, and the last P2 step** |
+| **P2-8** | Permission UX, rebind, health banner | ✅ **done** — F19 moved to the pre-release matrix (owner's call) |
+| **P2-9** | Exit criteria — 50+50 corpus, named dedupe test | ✅ **met**, with one honest gap: no real notification has ever been captured |
+
+**So P2 is complete except for one thing that cannot be engineered.** The corpus
+is large enough and marked; the dedupe test has existed since P2-5; the
+permission UX, rebind and banner are verified on hardware. What is missing is
+evidence: notification ingest has captured **zero** real messages, and one UPI
+payment is what changes that. Everything else in P2 has been exercised against
+reality at least once.
 
 ### Verified state as of `6e2a28a` plus this session's additions
 
@@ -135,16 +147,33 @@ Proved worth keeping by changing nothing but `ExportScreen`'s exit label from
 > both sources → exactly one pending row.
 
 1. Grow the corpus to **50 SMS + 50 notification** fixtures.
-2. A named cross-source dedupe test proving one payment through both sources
-   produces exactly one pending row.
+2. ~~A named cross-source dedupe test.~~ **ALREADY DONE** — corrected after this
+   file was first written. `Dedupe_SameTxnAcrossSources_ProducesOnePending`
+   exists in `RawIngestRepositoryInstrumentedTest`, shipped at P2-5, and was
+   verified to fail with the mechanism disabled. It asserts one *live* candidate,
+   the loser retained and linked by `suppressedById`, and both raw rows' parse
+   statuses. Its sibling covers the common ordering, where the richer SMS arrives
+   second and the incumbent notification is suppressed in its favour. **Do not
+   rebuild it.**
 
-**The hard part is not the test, it is the corpus.** There are 7 notification
-fixtures and all of them are synthetic — written against a parser that had never
-seen a real notification. §16 Q15 is the precedent and it is worth re-reading
-before writing a single fixture: every SMS fixture supplied a sender the
-allowlist had been written against, so the allowlist matched nothing real for
-three whole steps while every test stayed green. **Synthetic fixtures test the
-parser against itself.**
+**So the corpus is the whole of what remains**, and it was always the hard half.
+§16 Q15 is the precedent, worth re-reading before writing a single fixture:
+every SMS fixture supplied a sender the allowlist had been written against, so
+the allowlist matched nothing real for three whole steps while every test stayed
+green. **Synthetic fixtures test the parser against itself.**
+
+### What the corpus actually holds today
+
+| | Fixtures | Real | Distinct sources | Allowlist admits |
+|---|---|---|---|---|
+| SMS | 20 | **4** | ~6 bank entities | **26 entities** |
+| Notification | 7 | **0** | 4 packages | **20 packages** |
+
+**All four real SMS are HDFC.** So even the real half of the corpus is one bank,
+and the notification half has never seen a real message at all. The gap to the
+exit criterion is **+30 SMS and +43 notifications** — but the more useful number
+is the second column, because that is the one Q15 says decides whether the
+corpus proves anything.
 
 ---
 
@@ -196,10 +225,21 @@ its own piece of work.
 
 `CLAUDE.md` §12 in full, plus:
 
-- [ ] 50 SMS + 50 notification fixtures, whatever §7a settles them to be
-- [ ] The named cross-source dedupe test, green
-- [ ] At least one **real** notification captured end to end on the device
-- [ ] `SPEC.md` §13's P2 exit criteria marked met, or amended with reasons
+- [x] 50 SMS + 50 notification fixtures — **52 and 53**, mixed, every one marked
+- [x] ~~The named cross-source dedupe test~~ — already existed, see §6
+- [ ] **At least one real notification captured end to end on the device** —
+      the one item still open, and the only one no amount of work here can
+      close. `TESTING.md` F23; the owner deferred the payment to later.
+- [x] `SPEC.md` §13's P2 exit criteria marked met, with the composition stated
+
+### Decided at P2-9, so nobody relitigates them
+
+| Question | Answer |
+|---|---|
+| What may "50 + 50" mean? | **Mixed, with the real ones marked** and a floor that only goes up |
+| Does F19 block P2-8? | **No** — moved to the pre-release matrix, beside BUG2 |
+| Roborazzi? | **Wired properly.** Eight goldens, reviewed; `preMergeCheck` runs CI's exact task |
+| F23, the real payment? | **Deferred by the owner to later.** Still the one open item |
 
 ### What P2-8 already closed, so P2-9 does not re-litigate it
 
@@ -238,6 +278,20 @@ its own piece of work.
   layout can be fine in a preview and broken in the owner's hand.
 - PowerShell: a function's `Write-Output` is captured by `$x = f`. Use
   `Write-Host` for progress lines.
+- **Robolectric's own downloader does not use Gradle's network config.** On this
+  box TLS is intercepted (Norton) and `~/.gradle/gradle.properties` points Gradle
+  at a custom truststore; the forked test JVM does not inherit it, so Robolectric
+  fails with `SunCertPathBuilderException` while Gradle resolves from the same
+  host fine. `:core:designsystem`'s build now forwards those two system
+  properties into the fork. If a new module gains Robolectric, it needs the same
+  four lines.
+- **`git grep` for CRLF checks the working tree, not the index.** CI checks out
+  fresh, so what matters is the index — `git show :<path> | grep $'
+$'`. The
+  working tree here is full of CRLF and the index is clean, so the obvious check
+  reports a repository-wide failure that does not exist. Cost a false alarm.
+- **`preMergeCheck` now takes ~16 minutes**, up from ~2, because Robolectric
+  renders eight screenshots twice over. That is the price of the §12 gate.
 
 ---
 
@@ -250,7 +304,15 @@ its own piece of work.
 2. **`occurred_at` still *stores* midnight.** Only display and sort are blended.
 3. **The two full lists remain** — Inbox and the Ledger's Unsaved section.
 4. **Bulk approve** (§5.1) — deferred at P2-6.
-5. **Roborazzi does not exist** and is now blocking a PR. See §7d.
+5. ~~**Roborazzi does not exist.**~~ **CLOSED at P2-9.** `verifyRoborazziSmsFullDebug`
+   exists, eight goldens are recorded and reviewed, and `preMergeCheck` runs the
+   same task CI's `screenshot` job does. Three things cost time and are worth
+   knowing: Roborazzi **1.32 does not work on AGP 9** (it wants the removed
+   `TestedExtension`; 1.73.0 does), Robolectric **cannot emulate SDK 36 on a
+   Java 17 toolchain**, and it downloads its platform jar with its *own* HTTP
+   client — which fails on this box's intercepted TLS while Gradle resolves from
+   the same host fine. The build now forwards the daemon's truststore system
+   properties into the forked test JVM, which is a no-op on a normal runner.
 6. **A payee-name-vs-VPA mismatch will not dedupe.** For P2-9, against real data.
 7. **No PR, and `main` is 46 commits behind.** The branch is pushed.
 8. **Four `lf-test-bug6-*.db` files** accumulate in `databases/` on the device
