@@ -59,6 +59,21 @@ public data class BackupPayload(
     val senderAllowlist: List<SenderAllowlistRow> = emptyList(),
     val parserRules: List<ParserRuleRow> = emptyList(),
     val pendingTransactions: List<PendingTransactionRow> = emptyList(),
+    // -- Schema v9 -- budgets (SPEC.md 5.7) -----------------------------------
+    //
+    // `budget` is here and `daily_rollup` deliberately is not. The two tables
+    // arrived in the same migration and they are not the same kind of thing:
+    // a budget is user intent that nothing in the app can reconstruct, while
+    // every `daily_rollup` row is reproducible from `ledger_entry` joined to
+    // `line_item` (ADR-0006). Carrying the rollups would put what is likely
+    // the largest table in the database into an uncompressed JSON file the
+    // user moves between devices, to restore rows the first reconciliation
+    // pass rebuilds anyway. `ExportCoversEveryTableTest` names that exclusion
+    // and its reason, so it is a decision rather than the omission Q13 was.
+    //
+    // Defaulted to empty for the reason the v2 and v6 blocks above are: a
+    // `.lfbk` a user already holds must still parse after they update.
+    val budgets: List<BudgetRow> = emptyList(),
 ) {
     /** Total rows, for the post-restore equality assertion and diagnostics. */
     public val rowCount: Int
@@ -67,7 +82,7 @@ public data class BackupPayload(
             drafts.size + merchantAliases.size + categoryGroups.size +
             categoryGroupMembers.size + smsRaw.size + notificationsRaw.size +
             packageAllowlist.size + senderAllowlist.size + parserRules.size +
-            pendingTransactions.size
+            pendingTransactions.size + budgets.size
 }
 
 @Serializable
@@ -306,4 +321,24 @@ public data class PendingTransactionRow(
     val createdAt: Long,
     val reviewedAt: Long?,
     val approvedEntryId: String?,
+)
+
+/**
+ * A budget row (SPEC.md §5.7, §6.1).
+ *
+ * `period` is the enum `name`, matching how the column stores it; a restore
+ * that met an unknown name would rather drop the row than resurrect a budget
+ * whose period it has to guess.
+ */
+@Serializable
+public data class BudgetRow(
+    val id: String,
+    val categoryId: String,
+    val subcategoryId: String?,
+    val period: String,
+    val amountMinor: Long,
+    val startDate: Int,
+    val rolloverEnabled: Boolean,
+    val alertThresholds: String,
+    val deletedAt: Long?,
 )

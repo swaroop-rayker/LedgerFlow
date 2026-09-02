@@ -1,5 +1,6 @@
 package com.ledgerflow.core.database.backup
 
+import com.ledgerflow.core.database.entity.BudgetEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
@@ -11,6 +12,7 @@ import com.ledgerflow.core.database.entity.PaymentMethodEntity
 import com.ledgerflow.core.database.entity.PendingTransactionEntity
 import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.database.entity.SmsRawEntity
+import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.LineItemKind
@@ -217,4 +219,38 @@ internal fun toLineItem(row: LineItemRow) = LineItemEntity(
     quantityMilli = row.quantityMilli, unitPriceMinor = row.unitPriceMinor,
     totalMinor = Money(row.totalMinor), kind = LineItemKind.valueOf(row.kind),
     categoryId = row.categoryId, subcategoryId = row.subcategoryId,
+)
+
+/**
+ * Schema v9. Returns `null` for a `period` this build does not recognise —
+ * a `.lfbk` written by a newer version, most plausibly. Dropping the row is
+ * the deliberate choice: a budget restored as the wrong period is a wrong
+ * figure on the Dashboard with nothing to trace it to, and the converters
+ * take the same position on unknown enum names for the same reason.
+ */
+internal fun toBudget(row: BudgetRow): BudgetEntity? {
+    val period = BudgetPeriod.entries.firstOrNull { it.name == row.period } ?: return null
+    return BudgetEntity(
+        id = row.id,
+        categoryId = row.categoryId,
+        subcategoryId = row.subcategoryId,
+        period = period,
+        amountMinor = Money(row.amountMinor),
+        startDate = row.startDate,
+        rolloverEnabled = row.rolloverEnabled,
+        alertThresholds = row.alertThresholds,
+        deletedAt = row.deletedAt,
+    )
+}
+
+internal fun toBudgetRow(row: BudgetEntity) = BudgetRow(
+    id = row.id,
+    categoryId = row.categoryId,
+    subcategoryId = row.subcategoryId,
+    period = row.period.name,
+    amountMinor = row.amountMinor.minor,
+    startDate = row.startDate,
+    rolloverEnabled = row.rolloverEnabled,
+    alertThresholds = row.alertThresholds,
+    deletedAt = row.deletedAt,
 )

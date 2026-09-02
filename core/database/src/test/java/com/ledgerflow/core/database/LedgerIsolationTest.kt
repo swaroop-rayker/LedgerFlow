@@ -175,6 +175,41 @@ class LedgerIsolationTest {
         assertThat(offenders.map { "${it.file}: ${it.sql}" }).isEmpty()
     }
 
+    /**
+     * **`daily_rollup` is the second partitioned table, and it has no views.**
+     *
+     * Added at v9 with the table itself, before the queries exist, because the
+     * hole it closes is one this codebase has already fallen into once at a
+     * different address: `ledger_entry` is safe from an unfiltered read because
+     * the predicate lives inside `debit_entries` / `credit_entries` and a DAO
+     * physically cannot select from the base table without tripping the rule
+     * above. `daily_rollup` has no such object. `SELECT SUM(sum_minor) FROM
+     * daily_rollup WHERE local_date BETWEEN :from AND :to` is a legal, natural,
+     * plausible-looking statement that nets a month of income against a month
+     * of spending, and every chart in §5.6 is one keystroke away from it.
+     *
+     * Budgets make it sharper still. §5.7 scopes them to the debit ledger and
+     * §6.1 gives `budget` no `ledger` column, so "debit only" is *entirely* a
+     * property of the read — there is no schema object left to enforce it. This
+     * is that enforcement.
+     *
+     * The rule is the same as the base table's: name the table, bind a ledger.
+     * Either a `:ledger` parameter or a literal `'DEBIT'`/`'CREDIT'` counts —
+     * the budget queries genuinely are debit-only and should say so in the SQL
+     * rather than take a parameter that has exactly one legal value.
+     */
+    @Test
+    fun noQueryTouchesDailyRollupWithoutBindingALedger() {
+        val rollupTable = Regex("""\bdaily_rollup\b""", RegexOption.IGNORE_CASE)
+        val boundLedger = Regex(""":ledger|'DEBIT'|'CREDIT'""", RegexOption.IGNORE_CASE)
+
+        val offenders = sqlLiterals().filter { literal ->
+            rollupTable.containsMatchIn(literal.sql) && !boundLedger.containsMatchIn(literal.sql)
+        }
+
+        assertThat(offenders.map { "${it.file}: ${it.sql}" }).isEmpty()
+    }
+
     @Test
     fun ledgerViewsAreDefinedWithADisjointPredicate() {
         val entities = File(daoSourceDir.parentFile, "entity/LedgerEntities.kt")

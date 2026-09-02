@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.ledgerflow.core.database.dao.AppMetaDao
+import com.ledgerflow.core.database.dao.BudgetDao
 import com.ledgerflow.core.database.dao.CategoryDao
 import com.ledgerflow.core.database.dao.CategoryGroupDao
 import com.ledgerflow.core.database.dao.DraftEntryDao
@@ -19,10 +20,12 @@ import com.ledgerflow.core.database.dao.PendingTransactionDao
 import com.ledgerflow.core.database.dao.SenderAllowlistDao
 import com.ledgerflow.core.database.dao.SmsRawDao
 import com.ledgerflow.core.database.entity.AppMetaEntity
+import com.ledgerflow.core.database.entity.BudgetEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.database.entity.CategoryGroupEntity
 import com.ledgerflow.core.database.entity.CategoryGroupMemberEntity
 import com.ledgerflow.core.database.entity.CreditEntryView
+import com.ledgerflow.core.database.entity.DailyRollupEntity
 import com.ledgerflow.core.database.entity.DebitEntryView
 import com.ledgerflow.core.database.entity.DraftEntryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
@@ -69,6 +72,9 @@ import com.ledgerflow.core.database.entity.SmsRawEntity
         SenderAllowlistEntity::class,
         ParserRuleEntity::class,
         PendingTransactionEntity::class,
+        // v9 (SPEC.md §5.6, §5.7, §6.1) — analytics and budgets.
+        BudgetEntity::class,
+        DailyRollupEntity::class,
     ],
     views = [
         DebitEntryView::class,
@@ -106,6 +112,8 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
      */
     public abstract fun pendingTransactionDao(): PendingTransactionDao
 
+    public abstract fun budgetDao(): BudgetDao
+
     public companion object {
         /**
          * v2 adds `draft_entry` (BUG6), `merchant_alias`, and the two
@@ -137,8 +145,17 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * queues apart, and a half-reviewed message in the drafts stack could
          * be discarded in one place and stay alive in the other. Additive —
          * see `MIGRATION_7_8`.
+         *
+         * v9 adds `budget` and `daily_rollup` — P3's two tables, both named in
+         * §6.1 from the start and both held back until something wrote to them.
+         * Purely additive; no existing table is touched. They are not the same
+         * kind of thing and the difference matters: `daily_rollup` is derived
+         * and a wrong one is rebuilt from `ledger_entry` (ADR-0006), while
+         * `budget` is user intent that nothing in the app can reconstruct —
+         * which is why it joins the `.lfbk` payload at v9 and `daily_rollup`
+         * deliberately does not. See `MIGRATION_8_9`.
          */
-        public const val VERSION: Int = 8
+        public const val VERSION: Int = 9
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

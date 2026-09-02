@@ -77,7 +77,22 @@ class ExportCoversEveryTableTest {
             .map { it.removeSuffix("_debit").removeSuffix("_credit") }
             .toSet()
 
-        assertThat(exported).containsExactlyElementsIn(schemaTableNames())
+        assertThat(exported).containsExactlyElementsIn(schemaTableNames() - DERIVED_TABLES)
+    }
+
+    /**
+     * The exclusion is a decision, so it is asserted rather than merely applied.
+     *
+     * Q13's defect was a guard that could not see a missing table. Subtracting
+     * a name from the expected set is the shape that defect had, so the name
+     * being subtracted is pinned here: if `daily_rollup` ever stops existing,
+     * or a second table is quietly added to [DERIVED_TABLES], this fails and
+     * whoever did it has to justify it where the reason is written down.
+     */
+    @Test
+    fun theOnlyExcludedTableIsTheDerivedOne() {
+        assertThat(DERIVED_TABLES).containsExactly("daily_rollup")
+        assertThat(schemaTableNames()).containsAtLeastElementsIn(DERIVED_TABLES)
     }
 
     /**
@@ -89,7 +104,7 @@ class ExportCoversEveryTableTest {
      */
     @Test
     fun payloadHasOneListPerSchemaTable() {
-        assertThat(tableCount).isEqualTo(schemaTableNames().size)
+        assertThat(tableCount).isEqualTo((schemaTableNames() - DERIVED_TABLES).size)
     }
 
     @Test
@@ -187,5 +202,32 @@ class ExportCoversEveryTableTest {
 
         /** Well below the real count; this only has to catch reflection finding nothing. */
         private const val MINIMUM_EXPECTED_TABLES = 8
+
+        /**
+         * Schema tables the backup and the CSV export deliberately do not carry.
+         *
+         * **One entry, and it needs the whole reason written down** — because
+         * Q13's defect was exactly a guard that could not see a table go
+         * missing, and an exclusion set is how that defect gets reintroduced
+         * as a feature.
+         *
+         * `daily_rollup` is derived: every row is reproducible from
+         * `ledger_entry` joined to `line_item` (ADR-0006), which is the same
+         * property that lets reconciliation overwrite it without asking. It is
+         * likely to be the largest table in the database by row count, the
+         * payload is uncompressed JSON, and a restore rebuilds it from the base
+         * tables anyway — so carrying it would inflate a file the user moves
+         * between devices in order to restore rows the first reconciliation
+         * pass discards and recomputes.
+         *
+         * `budget` is **not** here and must never be: it is user intent, and
+         * nothing in the app can reconstruct it (§5.7, ADR-0006).
+         *
+         * The bar for a second entry is the one `daily_rollup` clears: the
+         * table's every row must be derivable from tables that *are* in the
+         * payload, and a restore must rebuild it. "It is big" is not the
+         * reason; "it is derived" is.
+         */
+        private val DERIVED_TABLES = setOf("daily_rollup")
     }
 }

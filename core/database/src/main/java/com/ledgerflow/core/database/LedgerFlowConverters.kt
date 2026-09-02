@@ -1,6 +1,7 @@
 package com.ledgerflow.core.database
 
 import androidx.room.TypeConverter
+import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.LineItemKind
@@ -71,4 +72,13 @@ public class LedgerFlowConverters {
     @TypeConverter
     public fun stringToPendingStatus(value: String?): PendingStatus? =
         value?.let { name -> PendingStatus.entries.firstOrNull { it.name == name } }
+
+    // -- v9: budgets (SPEC.md 5.7) --------------------------------------
+
+    @TypeConverter
+    public fun budgetPeriodToString(value: BudgetPeriod?): String? = value?.name
+
+    @TypeConverter
+    public fun stringToBudgetPeriod(value: String?): BudgetPeriod? =
+        value?.let { name -> BudgetPeriod.entries.firstOrNull { it.name == name } }
 }

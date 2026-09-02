@@ -1020,6 +1020,25 @@ The result is a plain `@Index(unique = true)` that Room can declare, export, and
 
 **`daily_rollup` sentinels.** See the inline comment above: `''` means "this dimension does not apply", never `NULL`.
 
+**Two indices exist that the DDL above does not show, both added at v9.**
+`index_budget_category_id`, because progress is looked up per category for the
+categories on screen; and `index_daily_rollup_ledger_local_date`, because the
+dominant analytics query is "one book, a date range". The primary key leads with
+`local_date`, so on its own it serves that query as a scan filtered by ledger;
+the secondary index leads with `ledger` and makes the partition physical in the
+B-tree, which is what ADR-0002 asks of every index over a partitioned read and
+what §11's 5Y < 300 ms budget is going to need. `MigrationV8ToV9Test` names the
+rollup index explicitly, so a later migration that rebuilds the table and forgets
+to recreate it fails with the reason attached rather than as a schema mismatch at
+launch.
+
+**`budget` carries no `ledger` column, and that is the whole of "debit only".**
+§5.7 scopes budgets to the debit ledger, so there is no such thing as a credit
+budget to express. The Law 2 obligation therefore lands entirely on the reads:
+every budget-progress query against `daily_rollup` binds `ledger = 'DEBIT'`, and
+`LedgerIsolationTest` is extended to `daily_rollup` so that a query which forgets
+fails the build rather than quietly summing income into a spending budget.
+
 **Ledger isolation is enforced at four levels (ADR-0002).** Law 2 is not left to reviewer attention:
 
 | Level | Mechanism | Catches |

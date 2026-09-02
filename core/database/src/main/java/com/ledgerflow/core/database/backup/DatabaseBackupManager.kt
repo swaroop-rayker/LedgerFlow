@@ -221,6 +221,11 @@ public class DatabaseBackupManager(
         // back as candidates with whatever status they had, and only
         // ApproveTransactionUseCase can still move one to APPROVED.
         pendingTransactions = database.pendingTransactionDao().all().map(::toPendingRow),
+        // Schema v9. `budget` is user intent and nothing can rebuild it, so it
+        // is in the payload from the day the table exists rather than the day
+        // the feature ships. `daily_rollup` is absent on purpose -- derived,
+        // and rebuilt on restore (ADR-0006).
+        budgets = database.budgetDao().all().map(::toBudgetRow),
     )
 
     /**
@@ -298,5 +303,10 @@ public class DatabaseBackupManager(
         database.pendingTransactionDao().insertAll(
             payload.pendingTransactions.map(::toPendingTransaction),
         )
+        // A row whose `period` this build does not recognise is dropped rather
+        // than defaulted: a budget silently restored as MONTHLY when it was
+        // QUARTERLY is a wrong number on the Dashboard with nothing to trace
+        // it to, which is worse than a budget the user notices is missing.
+        database.budgetDao().insertAll(payload.budgets.mapNotNull(::toBudget))
     }
 }

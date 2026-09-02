@@ -61,6 +61,7 @@ internal object CsvTables {
         senderAllowlist(payload),
         parserRules(payload),
         pendingTransactions(payload),
+        budgets(payload),
     )
 
     private fun appMeta(payload: BackupPayload) = CsvDocument(
@@ -408,6 +409,45 @@ internal object CsvTables {
                 row.reviewedAt?.toString(),
                 CsvWriter.timestamp(row.reviewedAt),
                 row.approvedEntryId,
+            )
+        },
+    )
+
+    /**
+     * Budgets (SPEC.md §5.7). Schema v9.
+     *
+     * `amount_minor` is written twice like every other money column — the
+     * integer verbatim and a decimal beside it, assembled by integer division
+     * so no `Double` touches it (Law 3, ADR-0017).
+     *
+     * `start_date` is days since epoch, the same encoding `ledger_entry` uses,
+     * and gets no ISO twin: it is a calendar day with no time and no zone, so
+     * rendering it as a timestamp would invent both.
+     *
+     * There is no `daily_rollup.csv` beside this one and there deliberately
+     * never will be — the rollups are derived (ADR-0006) and excluded from the
+     * payload, which `ExportCoversEveryTableTest` records by name.
+     */
+    private fun budgets(payload: BackupPayload) = CsvDocument(
+        fileName = "budget.csv",
+        header = listOf(
+            "id", "category_id", "subcategory_id", "period",
+            "amount_minor", "amount", "start_date", "rollover_enabled",
+            "alert_thresholds", "deleted_at", "deleted_at_iso",
+        ),
+        rows = payload.budgets.map { row ->
+            listOf(
+                row.id,
+                row.categoryId,
+                row.subcategoryId,
+                row.period,
+                row.amountMinor.toString(),
+                CsvWriter.decimal(row.amountMinor),
+                row.startDate.toString(),
+                row.rolloverEnabled.toString(),
+                row.alertThresholds,
+                row.deletedAt?.toString(),
+                CsvWriter.timestamp(row.deletedAt),
             )
         },
     )

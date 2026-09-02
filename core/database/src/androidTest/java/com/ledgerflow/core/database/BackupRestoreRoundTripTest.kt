@@ -15,6 +15,7 @@ import com.ledgerflow.core.database.backup.BackupResult
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
 import com.ledgerflow.core.database.backup.RestoreResult
 import com.ledgerflow.core.database.entity.AppMetaEntity
+import com.ledgerflow.core.database.entity.BudgetEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.database.entity.CategoryGroupEntity
 import com.ledgerflow.core.database.entity.CategoryGroupMemberEntity
@@ -30,6 +31,7 @@ import com.ledgerflow.core.database.entity.PaymentMethodEntity
 import com.ledgerflow.core.database.entity.PendingTransactionEntity
 import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.database.entity.SmsRawEntity
+import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.LineItemKind
@@ -314,6 +316,35 @@ class BackupRestoreRoundTripTest {
                 ),
             ),
         )
+        // Schema v9. Budgets are the one P3 table a backup must carry: they are
+        // user intent, and unlike `daily_rollup` nothing in the app can rebuild
+        // one (ADR-0006). Three rows, because they fail differently -- a plain
+        // category budget; one scoped to a subcategory with rollover on and
+        // non-default thresholds, which is every optional column at a
+        // non-default value; and a soft-deleted one, since ADR-0017 puts the
+        // bin in the backup and a restore that dropped it would quietly erase
+        // what the user could still have restored.
+        database.budgetDao().insertAll(
+            listOf(
+                BudgetEntity(
+                    id = "budget-groceries", categoryId = "cat-food",
+                    subcategoryId = null, period = BudgetPeriod.MONTHLY,
+                    amountMinor = Money(1_500_000), startDate = 20_000,
+                ),
+                BudgetEntity(
+                    id = "budget-coffee", categoryId = "cat-food",
+                    subcategoryId = "cat-coffee", period = BudgetPeriod.WEEKLY,
+                    amountMinor = Money(50_000), startDate = 20_010,
+                    rolloverEnabled = true, alertThresholds = "50,90,100",
+                ),
+                BudgetEntity(
+                    id = "budget-binned", categoryId = "cat-food",
+                    subcategoryId = null, period = BudgetPeriod.YEARLY,
+                    amountMinor = Money(9_000_000), startDate = 19_000,
+                    deletedAt = 1_760_000_000_500L,
+                ),
+            ),
+        )
     }
 
     /** Includes foreign-currency fields so the FX columns are covered too. */
@@ -355,6 +386,7 @@ class BackupRestoreRoundTripTest {
         val senderAllowlist: List<SenderAllowlistEntity>,
         val parserRules: List<ParserRuleEntity>,
         val pendingTransactions: List<PendingTransactionEntity>,
+        val budgets: List<BudgetEntity>,
     ) {
         /**
          * Every table, as lists, for the vacuity guard below.
@@ -392,6 +424,7 @@ class BackupRestoreRoundTripTest {
             senderAllowlist = db.senderAllowlistDao().all(),
             parserRules = db.parserRuleDao().all(),
             pendingTransactions = db.pendingTransactionDao().all(),
+            budgets = db.budgetDao().all(),
         )
     }
 
@@ -468,6 +501,7 @@ class BackupRestoreRoundTripTest {
         assertThat(after.parserRules).containsExactlyElementsIn(before.parserRules)
         assertThat(after.pendingTransactions)
             .containsExactlyElementsIn(before.pendingTransactions)
+        assertThat(after.budgets).containsExactlyElementsIn(before.budgets)
 
         // The canary must survive, or the unlock flow would route a perfectly
         // good restore to the Recovery screen forever.
