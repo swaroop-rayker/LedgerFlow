@@ -8,6 +8,7 @@ import com.ledgerflow.core.crypto.DekManager
 import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
+import com.ledgerflow.core.data.analytics.DefaultRollupRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
 import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
@@ -65,6 +66,10 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
     lateinit var drafts: DefaultDraftRepository
         private set
 
+    /** Reconciliation only — ADR-0006's incremental half is not callable. */
+    lateinit var rollups: DefaultRollupRepository
+        private set
+
     /**
      * The real compaction, shared by every repository in this vault.
      *
@@ -93,6 +98,7 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
         paymentMethods = DefaultPaymentMethodRepository(session, ids, clock, storage, Dispatchers.IO)
         ledger = DefaultLedgerRepository(session, ids, clock, Dispatchers.IO)
         drafts = DefaultDraftRepository(session, ids, clock, Dispatchers.IO)
+        rollups = DefaultRollupRepository(session, clock, Dispatchers.IO)
     }
 
     fun close() {

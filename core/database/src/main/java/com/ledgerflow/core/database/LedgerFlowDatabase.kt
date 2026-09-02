@@ -7,6 +7,7 @@ import com.ledgerflow.core.database.dao.AppMetaDao
 import com.ledgerflow.core.database.dao.BudgetDao
 import com.ledgerflow.core.database.dao.CategoryDao
 import com.ledgerflow.core.database.dao.CategoryGroupDao
+import com.ledgerflow.core.database.dao.DailyRollupDao
 import com.ledgerflow.core.database.dao.DraftEntryDao
 import com.ledgerflow.core.database.dao.LedgerEntryDao
 import com.ledgerflow.core.database.dao.LedgerTaxonomyDao
@@ -113,6 +114,8 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun pendingTransactionDao(): PendingTransactionDao
 
     public abstract fun budgetDao(): BudgetDao
+
+    public abstract fun dailyRollupDao(): DailyRollupDao
 
     public companion object {
         /**

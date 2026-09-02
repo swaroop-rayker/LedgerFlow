@@ -110,18 +110,34 @@ public class DefaultLedgerRepository @Inject constructor(
             ).flow.map { page -> page.map { row -> row.toDomain(ledger) } }
         }
 
+    /**
+     * Binning an entry removes it from the rollups, because those are built
+     * from `deleted_at IS NULL` rows only (ADR-0006).
+     *
+     * **Transactional now, where it used to be a bare `UPDATE`.** A rollup that
+     * updated in a second transaction could be interrupted between the two, and
+     * the ledger and its cache would disagree with nothing to say so. The date
+     * is read *before* the update, because afterwards the row is no longer
+     * visible to the read path that would have told us.
+     */
     override suspend fun softDeleteEntry(
         ledger: LedgerType,
         id: String,
     ): LedgerResult<Unit> = withContext(io) {
-        val affected = session.requireDatabase().ledgerEntryDao()
-            .softDeleteEntry(ledger, id, clock.nowMillis())
-        // Zero rows is the honest answer to both "already deleted" and "wrong
-        // book", and the statement cannot tell them apart -- which is the point.
-        if (affected == 0) {
-            LedgerResult.Failure(LedgerError.EntryNotFound(id))
-        } else {
-            LedgerResult.Success(Unit)
+        val database = session.requireDatabase()
+        database.withTransaction {
+            val localDate = database.dailyRollupDao().localDateOfEntry(ledger, id)
+            val affected = database.ledgerEntryDao()
+                .softDeleteEntry(ledger, id, clock.nowMillis())
+            // Zero rows is the honest answer to both "already deleted" and
+            // "wrong book", and the statement cannot tell them apart -- which
+            // is the point.
+            if (affected == 0 || localDate == null) {
+                LedgerResult.Failure(LedgerError.EntryNotFound(id))
+            } else {
+                database.dailyRollupDao().recompute(ledger, localDate, localDate)
+                LedgerResult.Success(Unit)
+            }
         }
     }
 
@@ -132,19 +148,44 @@ public class DefaultLedgerRepository @Inject constructor(
             dao.observeDeleted(ledger).map { rows -> rows.map { it.toDomain() } }
         }
 
+    /**
+     * **The door that silently changes a figure the user has already read.**
+     *
+     * Restoring destroys nothing, which is why it is easy to treat as harmless;
+     * but it puts an entry back into a past day's totals, so a chart the user
+     * looked at yesterday is a different chart today. That is exactly why it
+     * recomputes, and why `CLAUDE.md` §7 guards it as one of the four doors
+     * even though only one of them destroys anything.
+     */
     override suspend fun restoreEntry(
         ledger: LedgerType,
         id: String,
     ): LedgerResult<Unit> = withContext(io) {
-        val affected = session.requireDatabase().ledgerEntryDao()
-            .restoreEntry(ledger, id, clock.nowMillis())
-        if (affected == 0) {
-            LedgerResult.Failure(LedgerError.EntryNotFound(id))
-        } else {
-            LedgerResult.Success(Unit)
+        val database = session.requireDatabase()
+        database.withTransaction {
+            val localDate = database.dailyRollupDao().localDateOfEntry(ledger, id)
+            val affected = database.ledgerEntryDao()
+                .restoreEntry(ledger, id, clock.nowMillis())
+            if (affected == 0 || localDate == null) {
+                LedgerResult.Failure(LedgerError.EntryNotFound(id))
+            } else {
+                database.dailyRollupDao().recompute(ledger, localDate, localDate)
+                LedgerResult.Success(Unit)
+            }
         }
     }
 
+    /**
+     * **Purge does no rollup work, and that is a finding rather than an
+     * omission** (ADR-0006).
+     *
+     * Rollups are built from `deleted_at IS NULL` rows; the purge statements
+     * bind `deleted_at IS NOT NULL`. So every row purge destroys was already
+     * absent from every bucket, and recomputing here would rewrite rows to the
+     * values they already hold — extra work on the one path that also runs
+     * `VACUUM`. The reflex is to assume the irreversible operation is the
+     * dangerous one for analytics. It is not; [restoreEntry] is.
+     */
     override suspend fun purgeDeletedEntry(ledger: LedgerType, id: String): Int = withContext(io) {
         session.requireDatabase().ledgerEntryDao().purgeDeletedEntry(ledger, id)
     }
@@ -199,6 +240,11 @@ public class DefaultLedgerRepository @Inject constructor(
         val entity = entityOf(request, baseCurrency)
         val lineItems = lineItemsOf(entity.id, request)
         database.ledgerEntryDao().insertEntryWithLineItems(entity, lineItems)
+        // ADR-0006: the rollup is rebuilt for the day this entry lands on, in
+        // the approval's own transaction. Not a delta -- a recompute, so a
+        // second approval on the same day repairs whatever the first got wrong
+        // instead of adding to it.
+        database.dailyRollupDao().recompute(entity.ledger, entity.localDate, entity.localDate)
         return LedgerResult.Success(entity.toDomain(lineItems))
     }
 

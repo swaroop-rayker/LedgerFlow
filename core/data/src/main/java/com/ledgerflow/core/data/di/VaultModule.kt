@@ -6,6 +6,7 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.WrappedDekStore
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.keystore.KeystoreKek
+import com.ledgerflow.core.data.analytics.DefaultRollupRepository
 import com.ledgerflow.core.data.export.DefaultExportRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
 import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
@@ -16,6 +17,7 @@ import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.RecoveryKitWriter
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.domain.analytics.RollupRepository
 import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
@@ -118,6 +120,24 @@ public interface LedgerModule {
      */
     @Binds
     public fun storageMaintenance(impl: DefaultStorageMaintenance): StorageMaintenance
+}
+
+/**
+ * Rollup reconciliation (ADR-0006).
+ *
+ * Its own module, beside the ledger rather than on it, for the reason the
+ * interface itself gives: the *incremental* half of ADR-0006 is not bindable
+ * because it is not callable — it happens inside the approval, soft-delete and
+ * restore transactions. What is exposed here is only the nightly pass, which is
+ * a maintenance operation over a derived table and reads the ledger without
+ * ever writing it.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+public interface RollupModule {
+
+    @Binds
+    public fun rollupRepository(impl: DefaultRollupRepository): RollupRepository
 }
 
 /**

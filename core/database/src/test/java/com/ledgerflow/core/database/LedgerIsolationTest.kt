@@ -210,6 +210,50 @@ class LedgerIsolationTest {
         assertThat(offenders.map { "${it.file}: ${it.sql}" }).isEmpty()
     }
 
+    /**
+     * **A raw-string query would be invisible to every assertion above.**
+     *
+     * The scanner finds SQL by matching double-quoted literals. A Kotlin raw
+     * string opens with three quotes, which that regex reads as an empty
+     * literal followed by loose text — so a DAO written with `"""SELECT ...`
+     * contributes *nothing* to [sqlLiterals], and every Law 2 rule here passes
+     * it without ever having seen it.
+     *
+     * That is the same failure shape as BUG18: a guard that runs, reports
+     * green, and cannot fail. It is worth its own assertion rather than a
+     * comment, because raw strings are exactly what someone reaching for a long
+     * multi-line query will try first — the rollup recompute in
+     * `DailyRollupDao` is precisely that shape, and it is written as
+     * concatenation for this reason.
+     *
+     * The fix, if this ever fails, is concatenation — not widening the scanner.
+     * A scanner that understood raw strings would still have to join them, and
+     * the codebase already has one working convention.
+     */
+    @Test
+    fun noDaoUsesARawStringLiteral() {
+        val offenders = daoSourceDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { withoutComments(it.readText()).contains(TRIPLE_QUOTE) }
+            .map { it.name }
+            .toList()
+
+        assertThat(offenders).isEmpty()
+    }
+
+    /**
+     * Comments are stripped before that check, and finding out cost a red build.
+     *
+     * `DailyRollupDao`'s KDoc *explains* why raw strings are banned, so it
+     * necessarily contains the sequence it is warning about — and the first
+     * version of this guard failed on the one file that documents the rule. A
+     * guard that cannot tell prose from code teaches people to reword comments,
+     * which is the opposite of what it is for.
+     */
+    private fun withoutComments(source: String): String = source
+        .replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "")
+        .replace(Regex("//.*"), "")
+
     @Test
     fun ledgerViewsAreDefinedWithADisjointPredicate() {
         val entities = File(daoSourceDir.parentFile, "entity/LedgerEntities.kt")
@@ -217,5 +261,9 @@ class LedgerIsolationTest {
 
         assertThat(text).contains("WHERE ledger = 'DEBIT'")
         assertThat(text).contains("WHERE ledger = 'CREDIT'")
+    }
+
+    private companion object {
+        val TRIPLE_QUOTE = "\"".repeat(3)
     }
 }

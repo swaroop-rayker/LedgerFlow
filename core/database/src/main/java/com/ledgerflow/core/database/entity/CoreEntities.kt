@@ -50,6 +50,24 @@ public data class AppMetaEntity(
          * the upgrade path onto the v2 seed that fixed the DLT-suffix defect.
          */
         public const val KEY_SENDER_ALLOWLIST_FINGERPRINT: String = "senderAllowlistFingerprint"
+
+        /**
+         * When the nightly rollup reconciliation last completed, epoch millis.
+         */
+        public const val KEY_ROLLUP_RECONCILED_AT: String = "rollupLastReconciledAt"
+
+        /**
+         * Buckets the last reconciliation had to repair (ADR-0006).
+         *
+         * Recorded rather than shown. A self-healing condition that has already
+         * healed must not produce a banner -- the user has nothing to do about
+         * it, which is the opposite of the listener-health case (ADR-0020),
+         * where only the user *can* act. But repairing silently would mask a
+         * systematic bug in the incremental path with the very mechanism meant
+         * to catch it, so the count lands here for the P5 diagnostics screen. A
+         * non-zero value on a healthy install is a bug report waiting.
+         */
+        public const val KEY_ROLLUP_BUCKETS_REPAIRED: String = "rollupBucketsRepaired"
     }
 }
 

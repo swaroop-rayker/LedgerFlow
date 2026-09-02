@@ -7,6 +7,7 @@ import android.os.StrictMode
 import android.os.strictmode.Violation
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.ledgerflow.feature.analytics.work.RollupWorker
 import com.ledgerflow.feature.ingest.notify.InboxNotifications
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -47,6 +48,13 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
         // receiver-only wake included -- so the background path is covered by
         // this same call, and `ensureChannel` collapses the repeats.
         InboxNotifications.ensureChannel(this)
+        // ADR-0006's reconciliation, once a day, idle and charging. Scheduling
+        // is idempotent and cheap -- `enqueueUniquePeriodicWork` with `KEEP`
+        // does nothing when a schedule already exists, which is the whole
+        // reason it is `KEEP` and not `UPDATE`: re-registering with `UPDATE` on
+        // every cold start resets the period, so on a phone the user opens
+        // daily the pass would be perpetually deferred and never once run.
+        RollupWorker.schedule(this)
     }
 
     /**

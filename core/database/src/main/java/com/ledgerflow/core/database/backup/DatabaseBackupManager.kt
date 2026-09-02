@@ -308,5 +308,13 @@ public class DatabaseBackupManager(
         // QUARTERLY is a wrong number on the Dashboard with nothing to trace
         // it to, which is worse than a budget the user notices is missing.
         database.budgetDao().insertAll(payload.budgets.mapNotNull(::toBudget))
+        // `daily_rollup` is derived and deliberately absent from the payload
+        // (ADR-0006), so it is rebuilt here rather than restored. A restored
+        // install must open onto correct analytics, not onto empty charts
+        // waiting for a nightly worker -- and rebuilding is strictly better
+        // than carrying what would be the largest table in the database as
+        // uncompressed JSON in a file the user moves between devices.
+        database.dailyRollupDao().recomputeAll(LedgerType.DEBIT)
+        database.dailyRollupDao().recomputeAll(LedgerType.CREDIT)
     }
 }
