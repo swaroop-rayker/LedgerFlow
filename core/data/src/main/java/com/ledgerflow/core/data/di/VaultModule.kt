@@ -6,6 +6,7 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.WrappedDekStore
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.keystore.KeystoreKek
+import com.ledgerflow.core.data.analytics.DefaultAnalyticsRepository
 import com.ledgerflow.core.data.analytics.DefaultRollupRepository
 import com.ledgerflow.core.data.export.DefaultExportRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
@@ -17,6 +18,7 @@ import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.RecoveryKitWriter
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.RollupRepository
 import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
@@ -138,6 +140,9 @@ public interface RollupModule {
 
     @Binds
     public fun rollupRepository(impl: DefaultRollupRepository): RollupRepository
+
+    @Binds
+    public fun analyticsRepository(impl: DefaultAnalyticsRepository): AnalyticsRepository
 }
 
 /**

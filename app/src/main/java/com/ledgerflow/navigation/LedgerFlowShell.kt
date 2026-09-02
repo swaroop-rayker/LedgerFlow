@@ -35,6 +35,7 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.feature.analytics.AnalyticsScreen
+import com.ledgerflow.feature.analytics.AnalyticsViewModel
 import com.ledgerflow.feature.export.ExportRoute
 import com.ledgerflow.feature.categories.CategoriesScreen
 import com.ledgerflow.feature.categories.CategoriesViewModel
@@ -196,7 +197,11 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             },
         )
     }
-    composable<Destination.Analytics> { AnalyticsScreen() }
+    composable<Destination.Analytics> {
+        val viewModel: AnalyticsViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        AnalyticsScreen(state = state, onEvent = viewModel::onEvent)
+    }
     composable<Destination.More> {
         val viewModel: MoreViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()

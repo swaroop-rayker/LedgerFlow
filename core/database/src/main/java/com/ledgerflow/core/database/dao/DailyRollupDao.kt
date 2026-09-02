@@ -115,6 +115,147 @@ public interface DailyRollupDao {
     )
     public suspend fun insertRange(ledger: LedgerType, from: Int, to: Int)
 
+    // ── Analytics reads (SPEC.md §5.6). ────────────────────────────────────
+    //
+    // Every one binds `:ledger` (Law 2) and reads only `daily_rollup`, never
+    // `ledger_entry` (CLAUDE.md §8). They are aggregates rather than row dumps
+    // on purpose: a 5Y window covers 1,825 days and returning a row per day per
+    // dimension would move tens of thousands of rows across the JNI boundary to
+    // draw a chart with a few hundred pixels of width, which is the shape §11's
+    // 300 ms budget is most easily lost to.
+
+    /**
+     * The time series for A1, pre-binned in SQL (§11).
+     *
+     * `(local_date - :from) / :bucketDays` is integer division, so buckets are
+     * exact and need no calendar arithmetic. The caller chooses `bucketDays`
+     * from the selected window so the chart never receives more columns than it
+     * has horizontal pixels — a zoom is a re-query with a different divisor,
+     * which is precisely the arrangement ADR-0005 says a chart library cannot
+     * accommodate.
+     */
+    @Query(
+        "SELECT ((local_date - :from) / :bucketDays) AS bucket, " +
+            "SUM(sum_minor) AS sum_minor, SUM(txn_count) AS txn_count " +
+            "FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "GROUP BY bucket ORDER BY bucket",
+    )
+    public suspend fun timeSeries(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        bucketDays: Int,
+    ): List<TimeBucketRow>
+
+    /**
+     * The time series **split by category**, for A1's stacked bars.
+     *
+     * §5.6 asks for "stacked bar (by category)", which a per-bucket total
+     * cannot produce — the stacking is the point, since it is what shows *what*
+     * changed when a month moves rather than only that it did. Same bucketing
+     * as [timeSeries], one more `GROUP BY` term.
+     *
+     * `txn_count` is deliberately absent: it is additive over dates within one
+     * category, but this projection exists to be drawn, and a count per bucket
+     * per category is not a figure any of A1-A5 shows.
+     */
+    @Query(
+        "SELECT ((local_date - :from) / :bucketDays) AS bucket, " +
+            "category_id AS dimension_id, SUM(sum_minor) AS sum_minor " +
+            "FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "GROUP BY bucket, category_id ORDER BY bucket, sum_minor DESC",
+    )
+    public suspend fun timeSeriesByCategory(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        bucketDays: Int,
+    ): List<BucketCategoryRow>
+
+    /**
+     * Category totals for A2.
+     *
+     * `SUM(txn_count)` is correct *within* a category because an entry has one
+     * date; it would not be correct across categories, and no query here does
+     * that. The all-categories transaction count is [distinctEntryTotal].
+     */
+    @Query(
+        "SELECT category_id AS dimension_id, SUM(sum_minor) AS sum_minor, " +
+            "SUM(txn_count) AS txn_count FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "GROUP BY category_id ORDER BY sum_minor DESC",
+    )
+    public suspend fun categoryTotals(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+    ): List<DimensionTotalRow>
+
+    /** Subcategory totals under their parents, for A3's drill-down. */
+    @Query(
+        "SELECT category_id, subcategory_id AS dimension_id, " +
+            "SUM(sum_minor) AS sum_minor, SUM(txn_count) AS txn_count " +
+            "FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to AND subcategory_id != '' " +
+            "GROUP BY category_id, subcategory_id ORDER BY sum_minor DESC",
+    )
+    public suspend fun subcategoryTotals(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+    ): List<SubcategoryTotalRow>
+
+    /** Merchant totals for A4's leaderboard. */
+    @Query(
+        "SELECT merchant_id AS dimension_id, SUM(sum_minor) AS sum_minor, " +
+            "SUM(txn_count) AS txn_count FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "GROUP BY merchant_id ORDER BY sum_minor DESC",
+    )
+    public suspend fun merchantTotals(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+    ): List<DimensionTotalRow>
+
+    /** Payment-method totals for A5. */
+    @Query(
+        "SELECT payment_method_id AS dimension_id, SUM(sum_minor) AS sum_minor, " +
+            "SUM(txn_count) AS txn_count FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "GROUP BY payment_method_id ORDER BY sum_minor DESC",
+    )
+    public suspend fun paymentMethodTotals(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+    ): List<DimensionTotalRow>
+
+    /** The window's total. One number, so it costs one row. */
+    @Query(
+        "SELECT COALESCE(SUM(sum_minor), 0) FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to",
+    )
+    public suspend fun windowTotal(ledger: LedgerType, from: Int, to: Int): Long
+
+    /**
+     * **The all-categories transaction count, and it may not come from the
+     * rollup** (§5.6).
+     *
+     * `txn_count` fans out across `category_id`, so summing it over every
+     * category double-counts any entry filed to more than one. This is the one
+     * analytics read that names `ledger_entry`, and it is exactly the drill-down
+     * shape `CLAUDE.md` §8 permits: a single `COUNT(DISTINCT)` over an indexed
+     * date range for one book, not a chart.
+     */
+    @Query(
+        "SELECT COUNT(DISTINCT id) FROM ledger_entry WHERE ledger = :ledger " +
+            "AND deleted_at IS NULL AND local_date BETWEEN :from AND :to",
+    )
+    public suspend fun distinctEntryTotal(ledger: LedgerType, from: Int, to: Int): Int
+
     /** Every bucket in one book — the reconciliation diff reads this twice. */
     @Query("SELECT * FROM daily_rollup WHERE ledger = :ledger ORDER BY local_date")
     public suspend fun allFor(ledger: LedgerType): List<DailyRollupEntity>

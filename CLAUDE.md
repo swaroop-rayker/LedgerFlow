@@ -113,6 +113,29 @@ LedgerFlow/
 
 Debug builds use `applicationIdSuffix ".debug"` and coexist with release installs. This is deliberate. Don't remove it.
 
+**A build failure naming `internal` symbols in files you never touched is a
+poisoned build cache, not your code.** Seen for real: `preMergeCheck` reported
+dozens of `Unresolved reference 'CsvWriter'` errors in `CsvMoneyTest.kt` — a
+file untouched for weeks — for **`playSafe` only**, while `smsFull` was
+entirely green. The actual cause was one line 250 lines earlier in the log:
+
+```
+e: Incremental compilation failed: The following FqNames can't be derived from
+   DirtyData.dirtyLookupSymbols: com.ledgerflow.core.data.vault.VaultSession
+```
+
+That left a bad cache entry for `:core:data:compilePlaySafeDebugKotlin`, which
+every later run then restored **`FROM-CACHE`** — so the compiled main output was
+missing a newly added class, and because `CsvWriter`/`CsvTables` are `internal`
+the test compilation's friend-path resolution collapsed and reported every use
+as unresolved.
+
+**`--rerun-tasks` does not fix it**: the task re-runs and is then satisfied from
+the cache anyway. The fix is `--no-build-cache --rerun-tasks`. Before debugging
+files you did not edit, search the log for the *first* `^e: ` line, and confirm
+the baseline with `git stash push -u` — if the stashed tree is also green or
+UP-TO-DATE, the cache is what changed, not the code.
+
 ---
 
 ## 5. Code Conventions

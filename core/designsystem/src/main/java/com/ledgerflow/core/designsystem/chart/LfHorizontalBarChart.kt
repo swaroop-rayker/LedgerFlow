@@ -97,7 +97,12 @@ public fun LfHorizontalBarChart(
                         maxLines = 1,
                         softWrap = false,
                         modifier = Modifier
-                            .padding(start = LfTheme.spacing.sm)
+                            // `md`, not `sm`: at font scale 2.0 the label
+                            // expands to fill its weight and its ellipsis ends
+                            // up flush against the amount, so "Dr. Lal P..."
+                            // and "₹410.00" read as one string. Reviewed in
+                            // `chart-leaderboard-2x` before this was changed.
+                            .padding(start = LfTheme.spacing.md)
                             .clearAndSetSemantics { },
                     )
                 }
