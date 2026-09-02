@@ -694,17 +694,51 @@ Supports both ledgers (segmented control DEBIT | CREDIT at the top). Supports mu
 
 **Filters (composable, all simultaneously active):** ledger (fixed per screen), date range, category multi-select, subcategory multi-select, payment method multi-select, merchant multi-select, amount range, source, has-attachment, text search across note/merchant/item name.
 
-**Views:**
-| View | Chart |
-|---|---|
-| Spend over time | Stacked bar (by category) / line (total) with period toggle |
-| Category breakdown | Donut + ranked list with % and Δ vs previous period |
-| Subcategory drill-down | Nested list, tap-to-expand, treemap option |
-| Merchant leaderboard | Horizontal bar, Top-N + "Other" |
-| Payment method split | Donut |
-| Calendar heatmap | Day-cell intensity grid (month view) |
-| Budget progress | Ring/linear progress per category with burn-rate projection |
-| Recurring detection | List of suspected recurring merchants (interval clustering, ≥3 occurrences, σ/μ < 0.25) |
+**Views.** The full catalogue, its reasoning and its phasing live in
+`docs/DATAVIZ-PLAN.md`; this table is the summary and the two must not diverge.
+
+| View | Chart | Phase |
+|---|---|---|
+| Spend over time | Stacked bar (by category) / line (total) with period toggle | P3 |
+| Category breakdown | Donut + ranked list with % and Δ vs previous period | P3 |
+| Subcategory drill-down | Nested list, tap-to-expand; **treemap deferred** — optional, and the one non-obvious layout algorithm in the catalogue | P3 |
+| Merchant leaderboard | Horizontal bar, Top-N + "Other" | P3 |
+| Payment method split | Donut | P3 |
+| Calendar heatmap | Day-cell intensity grid (month view) | P3 |
+| Budget progress | Ring/linear progress per category with burn-rate projection | P3 |
+| Recurring detection | List of suspected recurring merchants (interval clustering, ≥ 3 occurrences, σ/μ < 0.25) | P3 |
+| **Capture coverage** | Share of spending, by value and by count, that arrived automatically vs. was typed by hand | **P3** |
+| **Parser gap list** | Merchants almost always entered manually — i.e. exactly where the shipped ruleset is blind | **P3** |
+| **Two-book parallel view** | Debit and credit on mirrored axes, visibly separate, never a net line | **P3** |
+| **Personal price index** | Per item, unit price over time; ranked "biggest movers" with sparklines, plus a basket index | P4 |
+| **Price vs. quantity bridge** | "+₹1,240 = +₹890 prices, +₹350 volume" — variance decomposition | P4 |
+| **Same item across merchants** | Unit price for one item, per merchant | P4 |
+| **Pack-size unit economics** | Effective price per unit by pack size | P4 |
+| Recurring cash-flow runway | Detected recurring charges falling before period end | P5 |
+| Dedupe evidence, confidence distribution, pipeline latency | Ingest diagnostics — diagnostics screen, not the Analytics tab | P5 |
+| Shrinkflation detector, basket composition drift | Same item, quantity fell; what you buy at one merchant over time | P6+ |
+
+**Two structural notes that are easy to get wrong.**
+
+**Recurring detection cannot read `daily_rollup`.** The rollup is a daily *sum*
+per dimension; interval clustering needs the sequence of individual occurrence
+dates for a merchant, which a sum has discarded. It reads base tables via
+Paging 3, which `CLAUDE.md` §8 already permits for drill-downs. The same is true
+of the cash-flow runway derived from it.
+
+**The item-grain views (P4) do not read `daily_rollup` either, and it must not
+be widened to serve them.** A unit price is a *ratio*: it is not additive, so it
+cannot live in a `SUM` table, and putting a non-money real number beside a Law 3
+column invites exactly the confusion Law 3 exists to prevent. They read an *item
+observation* structure — `line_item` joined to `ledger_entry`, `DEBIT`-bound like
+the two entry views — which starts as a `@DatabaseView` and is materialised only
+if a measurement at P4 demands it. See `docs/DATAVIZ-PLAN.md` §5.
+
+**Capture coverage and the parser gap list need no new schema and no OCR.** They
+run on `ledger_entry.source`, which has existed since v1, which is why they land
+in P3 beside the specced views. They also close a loop: the gap list names where
+capture is blind, and each blind spot becomes a parser rule and a permanent
+corpus fixture (`CLAUDE.md` §11).
 
 **Performance requirement:** 5Y queries must render in **<300 ms**. Achieved via a `daily_rollup` materialized table (`date, ledger, categoryId, subcategoryId, merchantId, paymentMethodId, sumMinor, txnCount`) rebuilt incrementally by `RollupWorker` on every ledger write and reconciled nightly. Charts read rollups; drill-downs read base tables via Paging 3.
 
@@ -1323,7 +1357,7 @@ Min touch target 48 dp. Content descriptions on every icon-only control. Amounts
 
 **Settled: a hand-rolled Compose `Canvas` chart layer, no charting dependency — ADR-0005.** Do **not** use MPAndroidChart (View-based, `AndroidView` interop, fights Compose recomposition and kills frame budget), and do not reach for Vico either. The deciding argument is the pre-binning requirement below rather than APK size: because a chart may never hold the full series, a pan/zoom gesture is not a transform over held data but a signal to re-bin and re-query `daily_rollup` at the new resolution — so the viewport belongs to the ViewModel that issues the query, and a library's internal transform would have to be suppressed to get there. A Cartesian library also covers only the stacked bar and the line; the donut, calendar heatmap, budget ring and optional treemap are hand-rolled under either choice.
 
-The primitives live in `:core:designsystem` as `LfStackedBarChart`, `LfLineChart`, `LfDonutChart`, `LfHorizontalBarChart`, `LfCalendarHeatmap` and `LfBudgetRing` — the module whose Roborazzi harness already records every golden at 1× and 2× font scale, so the §12 font-scale gate applies to charts mechanically. If the time chart's axis proves to be a tar pit, ADR-0005's stated reversal is to put a library behind `LfStackedBarChart` alone.
+The primitives live in `:core:designsystem` as `LfStackedBarChart`, `LfLineChart`, `LfDonutChart`, `LfHorizontalBarChart`, `LfCalendarHeatmap` and `LfBudgetRing` (P3), joined at P4 by `LfSparkline`, `LfBridgeChart` and `LfDotPlot` for the item-grain views. Six primitives cover the whole of P3, and a striking number of the surfaces in §5.6 are *a list with a small graphic* rather than a chart — which is deliberate, and is what `CLAUDE.md`'s compactness brief asks for. They share one **axis engine**, whose tick selection is unit-tested independently of rendering (`AxisTicksTest`): it is the one piece of this with a correct answer that does not depend on how it looks — the module whose Roborazzi harness already records every golden at 1× and 2× font scale, so the §12 font-scale gate applies to charts mechanically. If the time chart's axis proves to be a tar pit, ADR-0005's stated reversal is to put a library behind `LfStackedBarChart` alone.
 
 Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — achieved by pre-binning to the display resolution before handing data to the chart. No chart ever receives more points than it has horizontal pixels.
 
@@ -1391,9 +1425,9 @@ The unbundled variant is incompatible with "no `INTERNET` permission in release"
 | **P0 — Foundation** | Modules, version catalog, DI, theme, encrypted Room + SQLCipher, key management (§7.2, **KEK-A + KEK-B only** — KEK-C since dropped, ADR-0011), 24-word phrase onboarding + word challenge + Recovery Kit, base-currency selection, backup/restore round-trip | See §13.1 — the criteria are restated there because the original "verified on a second device" is not achievable in the stated dev environment. |
 | **P1 — Manual core** | Unlock flow wired (§7.3), Hilt, `:core:domain` + `:core:data`, schema v2, manual entry with draft persistence **and itemised entries (ADR-0018)**, categories/subcategories, merchants (addable from the entry form), payment methods, both ledgers, Ledger list with filters + Paging 3, CSV export, **`TransactionIngestSource` abstraction + `smsFull`/`playSafe` flavour skeleton (both compiling, both installable)** | Can fully use the app without SMS/OCR. Both flavours build in CI. |
 | **P2 — Automated ingest** | Shared rule engine, `ParseIngestWorker`, cross-source dedupe, Inbox, notification actions, approve/discard — **plus both capture adapters: SMS receiver (`smsFull`) and `NotificationIngestService` (both flavours)**. Permission UX, listener rebind and the §5.2 health banner shipped at P2-8. | 50-SMS + 50-notification golden corpus passing. Dedupe test: same UPI txn via both sources → exactly one pending row. **Met at P2-9, with the corpus's composition stated rather than implied.** The dedupe test shipped at P2-5 (`Dedupe_SameTxnAcrossSources_ProducesOnePending`). The corpus reached **52 SMS + 53 notifications** as a **mixed** corpus — the owner's decision, because `adb` cannot deliver an SMS or post a notification as another app, so a hundred real messages would have put this exit months away. Every fixture declares `provenance`; `CorpusProvenanceTest` floors the real count so it can never quietly shrink and requires each real fixture to record what was substituted out of it, since this repository is public. **The honest number is 4 real SMS and 0 real notifications** — §16 Q15 is what an unmarked synthetic corpus costs, and the floor is what stops this one becoming the same thing. Expanding it immediately surfaced two live truncation defects (§16 Q17), which is the argument that it was worth doing. `TESTING.md` F23 is what starts turning the real column. |
-| **P3 — Analytics** | Rollup table + worker, all chart views, filters, period comparison, budgets + alerts | 5Y query < 300 ms. |
-| **P4 — OCR** | CameraX, file/PDF import, line-item extraction, review editor, category memory, attachments | ≥90% recall on receipt corpus. |
-| **P5 — Polish & harden** | Baseline profiles, screenshot suite, a11y pass, XLSX export, diagnostics screen, Play listing + `playSafe` release track, API 37 readiness | All §11 budgets met. |
+| **P3 — Analytics** | Rollup table + worker, all chart views, filters, period comparison, budgets + alerts. **Plus the three P3 differentiators** — capture coverage, the parser gap list and the two-book parallel view — which need no new schema and no OCR (`docs/DATAVIZ-PLAN.md` Family C, D). Charting is hand-rolled `Lf*` Canvas, no dependency (ADR-0005). | 5Y query < 300 ms, **measured on the device**. Reviewed goldens at 1x and 2x for every new chart. |
+| **P4 — OCR** | CameraX, file/PDF import, line-item extraction, review editor, category memory, attachments. `pending_line_item` lands here (§16 Q7) — it is what lets *ingest* produce an itemised candidate at all. **This is what unlocks the item-grain analytics** (`docs/DATAVIZ-PLAN.md` Family B): personal price index, price-vs-quantity bridge, cross-merchant and pack-size unit pricing. | ≥90% recall on receipt corpus — which is also the real gate on the price views, since they are worthless on a corpus that misreads quantities. |
+| **P5 — Polish & harden** | Baseline profiles, screenshot suite, a11y pass, XLSX export, diagnostics screen — which is where the **ingest diagnostics** live (dedupe evidence, parser confidence distribution, pipeline latency), plus the recurring cash-flow runway. Play listing + `playSafe` release track, API 37 readiness | All §11 budgets met. |
 
 ### 13.1 P0 exit criteria
 
@@ -1606,3 +1640,7 @@ Added while building the `TransactionIngestSource` abstraction at P1:
 Added at P3, while deciding ADR-0005:
 
 18. **`ci.yml`'s APK-size step measures an artifact §11 does not describe, and fails at 22.77 MB.** The step globs `*/outputs/apk/*/debug/*.apk` and compares each against 15 MB. What that glob finds is a **universal debug** APK — four ABIs, no R8, no resource shrinking — while §11's budget is written for an **arm64 release split**. Measured on this box: `app-smsFull-debug.apk` and `app-playSafe-debug.apk` are both **22.77 MB**, of which 7.3 MB is four copies of `libsqlcipher.so` (arm64 alone is 2.10 MB) and ~35 MB uncompressed is unshrunk dex. So the `assemble` job fails on the **first CI run this repository has ever had**, for a reason that says nothing about the app. Two separate fixes, and they should not be conflated: the step must build and measure the artifact §11 names, and only then can Q10's "defend or move the number" be answered on evidence. Until it is, **the release APK budget has never been measured** — which is why ADR-0005 declines to spend an unknown quantity of it.
+
+Added at P3, while planning the analytics catalogue (`docs/DATAVIZ-PLAN.md`):
+
+19. **Charts have no categorical colour source, and the obvious one is not quite right.** A donut or stacked bar over a dozen categories needs a dozen distinguishable colours. `LfTheme` has no categorical ramp, and `CLAUDE.md` is firm that the palette does not change to solve a layout problem — so inventing one mid-implementation is exactly the move that rule forbids. The tempting answer is `category.color_argb`, which already exists: every category carries the colour the user chose, so charts would be coloured by the user's own taxonomy and no palette would be added at all. The catch is that those colours were picked to read as **small dots in a list**, not as **adjacent arcs in a donut**: two neighbours can come out near-identical, and contrast against the card is not guaranteed in either theme. Three candidates, in `docs/DATAVIZ-PLAN.md` §7.1: use `color_argb` as-is; use its hue but normalise lightness/saturation per slice so arcs stay separable (recommended starting point); or add a real categorical ramp to `LfTheme` and keep `color_argb` for list dots. **Blocks the rendering of the category and payment-method donuts, and nothing else** — it is a palette decision and therefore the owner's.

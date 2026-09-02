@@ -174,6 +174,58 @@ every line below is something a change has already violated at least once.
   type scale and hierarchy first; colour is not a fix for a crowded row.
 
 
+**Charts and analytics** — the full catalogue and its phasing live in
+`docs/DATAVIZ-PLAN.md`; `SPEC.md` §5.6 is the summary. These are the build
+rules, and every one of them has a failure mode rather than a preference behind
+it.
+
+- **Hand-rolled `Lf*` Canvas primitives in `:core:designsystem`. No charting
+  dependency** (ADR-0005). Adding a coordinate to `libs.versions.toml` for a
+  chart is the visible signal that ADR is being reopened. They go in
+  `:core:designsystem` and not `:feature:analytics` because that is where the
+  Roborazzi harness lives and where a chart therefore inherits the fontScale-2.0
+  gate mechanically rather than by inspection.
+- **A chart never holds the series.** §11 forbids handing one more points than
+  it has horizontal pixels, so a zoom or pan is a **re-query of `daily_rollup`
+  at the new resolution**, not a transform over held data. The viewport state
+  belongs to the ViewModel that issues the query. Getting this backwards is how
+  a 5Y view ends up loading 1,825 points to draw 300 of them.
+- **Analytics reads `daily_rollup`; drill-downs read base tables via Paging 3.**
+  Two named exceptions, both of which must stay exceptions: **recurring
+  detection** needs the sequence of individual occurrence dates per merchant,
+  which a daily sum has thrown away; and the **P4 item-grain views** read an
+  item-observation view, because a unit price is a ratio and cannot live in a
+  `SUM` table.
+- **Never widen `daily_rollup` to carry unit prices, item names or any ratio.**
+  It sums money per dimension. "Just add it to the rollup" is the obvious wrong
+  move, and it parks a non-money real number next to a Law 3 column.
+- **Every rollup statement binds `ledger`** (Law 2). `daily_rollup` has no
+  protective views the way `ledger_entry` does, so
+  `LedgerIsolationTest.noQueryTouchesDailyRollupWithoutBindingALedger` is the
+  only thing standing between a plausible-looking `SUM(sum_minor)` and a figure
+  that nets a month of income against a month of spending. Budgets sharpen it:
+  §5.7 scopes them to debit and `budget` has no `ledger` column, so "debit only"
+  is *entirely* a property of the read. A literal `'DEBIT'` in the SQL satisfies
+  the guard and is preferred to a parameter with one legal value.
+- **No chart, axis, legend or total may combine the two books.** There is no
+  netted figure anywhere in this app, and the two-book parallel view exists to
+  make that separation legible rather than to apologise for it.
+- **Money is `Long`; chart coordinates are not.** Law 3 bans `Float`/`Double`
+  for a monetary amount. Pixel positions, σ/μ ratios in recurring detection
+  and price-index values are legitimately real-valued and always were.
+- **The chart is usually not the content.** In most of these surfaces the ranked
+  list is what the user reads and the graphic is orientation. Size it that way —
+  a donut that fills the viewport above a list the user actually came for is the
+  compactness brief violated with a circle.
+- **Goldens at 1x and 2x for every chart, reviewed, never blind-recorded**
+  (§12). A chart that clips a label at 2.0 is BUG9 wearing a new hat.
+- **Semantics per segment** (`SPEC.md` §9.6). A donut slice a screen reader can
+  name. Charts are data, not decoration, and `clearAndSetSemantics` on one is a
+  bug rather than a shortcut.
+- **Tick selection is unit-tested independently of rendering** (`AxisTicksTest`).
+  It is the one piece here with a correct answer that does not depend on how it
+  looks — ticks at 0/117/234 are wrong in a way no screenshot diff will call.
+
 **Room**
 - Every DAO returns `Flow<T>` for reads, `suspend` for writes.
 - **Reads go through the `debit_entries` / `credit_entries` views, never `ledger_entry` directly** (ADR-0002). Any query that does name the base table takes a `ledger: LedgerType` parameter — no overload omits it. `LedgerIsolationTest` fails the build otherwise.
@@ -294,6 +346,11 @@ Targets live in `SPEC.md` §11. Practical rules while coding:
 | A "Total balance" that nets credits against debits | two separate totals, always |
 | `android.widget.Toast` | Material `Snackbar` (`LfSnackbar`) |
 | MPAndroidChart / any View-based chart | Compose-native charts |
+| Any charting dependency at all | hand-rolled `Lf*` Canvas (ADR-0005) |
+| Handing a chart the whole 5Y series | pre-binned to pixel width; zoom re-queries |
+| A unit price or item name in `daily_rollup` | item-observation view (P4) |
+| `SUM(sum_minor)` without binding `ledger` | a literal `'DEBIT'`/`'CREDIT'` or `:ledger` |
+| A donut bigger than the list beside it | the graphic orients; the list is the content |
 | Apache POI for XLSX | lightweight writer (see ADR-0004) |
 | `allowBackup="true"` | `false` + own `.lfbk` backup |
 | Storing anything in `cacheDir` | `filesDir` |
