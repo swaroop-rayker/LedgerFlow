@@ -1,5 +1,6 @@
 {
   "sender": "VM-HDFCBK",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "card-spend-at-merchant",
     "amountMinor": 249900,

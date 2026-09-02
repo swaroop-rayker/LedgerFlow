@@ -1,0 +1,7 @@
+{
+  "sender": "BHIM",
+  "packageName": "in.org.npci.upiapp",
+  "provenance": "synthetic",
+  "note": "Synthetic, and it must extract NOTHING. These apps post far more chatter than payments -- offers, reminders, requests -- from the SAME allowlisted package as a real debit, which is exactly why each needs asserting. A rule that swallowed one of these would turn an advert into an Inbox item the user has to dismiss by hand, and the Inbox is the one surface that has to stay worth reading.",
+  "expected": null
+}

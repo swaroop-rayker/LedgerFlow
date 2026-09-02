@@ -1,5 +1,6 @@
 {
   "sender": "AD-HDFCBK",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "upi-debit-vpa",
     "amountMinor": 12400000,

@@ -1,0 +1,11 @@
+{
+  "sender": "AD-PAYTMB-S",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "generic-amount-then-verb",
+    "amountMinor": 9900,
+    "currency": "INR",
+    "direction": "DEBIT"
+  }
+}

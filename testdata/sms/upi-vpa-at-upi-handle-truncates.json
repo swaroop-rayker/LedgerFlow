@@ -1,0 +1,13 @@
+{
+  "sender": "AD-AUBANK-S",
+  "provenance": "synthetic",
+  "note": "Synthetic, and it pins a KNOWN DEFECT rather than desired behaviour. `upi-debit-vpa` ends the merchant group on `(?:\\.|\bon\b|\bUPI\b|\bRef\b|$)`. `@` is a non-word character, so a VPA ending in the NPCI handle `@upi` puts a word boundary immediately before it and the merchant is truncated to 'kirana@'. `@upi` is a real handle, so this truncates real payees. The expectation below is what the shipped ruleset DOES, not what it should do -- when the rule is fixed this fixture's expectation changes in the same commit, which is the visible diff that makes the fix reviewable. Found by the P2-9 corpus expansion, not by a user.",
+  "expected": {
+    "ruleId": "upi-debit-vpa",
+    "amountMinor": 1000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "kirana@",
+    "accountLast4": "9902"
+  }
+}

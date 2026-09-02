@@ -1,0 +1,16 @@
+{
+  "sender": "VM-ICICIB-T",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "hdfc-upi-credit-alert",
+    "amountMinor": 500000,
+    "currency": "INR",
+    "direction": "CREDIT",
+    "merchantRaw": "priya@okaxis",
+    "accountLast4": "8842",
+    "instrumentHint": "UPI",
+    "referenceNo": "523456789012",
+    "occurredAtLocalDate": "2026-09-08"
+  }
+}

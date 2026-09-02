@@ -34,12 +34,27 @@ import org.junit.Test
  * bank's own sender ID must not become a transaction, and nothing but a fixture
  * asserts that.
  *
- * **These starter fixtures are synthetic**, modelled on published formats. They
- * are enough to hold the engine's shape, and they are *not* the P2 exit
- * criterion — §13 asks for 50 SMS and 50 notifications, and §15.8 is explicit
- * that they must be real messages. A corpus of invented examples tests the rules
- * against the assumptions that produced them, which is circular. Real ones are
- * the only thing that closes it.
+ * **Most of this corpus is synthetic, and every case says which it is.** §13's
+ * 50 + 50 was reached at P2-9 with a *mixed* corpus rather than a real-only one
+ * — the owner's decision, taken because `adb` cannot deliver an SMS or post a
+ * notification as another app, so a hundred real messages would have put P2's
+ * exit months away.
+ *
+ * That trade is only honest if the mix is visible, so `CorpusProvenanceTest`
+ * enforces the marking, floors the real count so it can never quietly shrink,
+ * and requires every *real* fixture to record what was substituted out of it —
+ * this repository is public and a real bank message carries an account tail, a
+ * payee and a reference.
+ *
+ * **A synthetic corpus tests the rules against the assumptions that produced
+ * them, which is circular**, and §16 Q15 is what that costs: every fixture
+ * supplied a sender the allowlist had been written against, so the allowlist
+ * matched no real Indian bank for three whole steps with every test green. Real
+ * messages are still the only thing that breaks the circle — `TESTING.md` F23
+ * and §15.8 — which is why the floor exists rather than a target.
+ *
+ * It is not worthless either, and P2-9 is the evidence: expanding it surfaced
+ * two live truncation defects (§16 Q17) that no existing fixture reached.
  */
 class GoldenCorpusTest {
 

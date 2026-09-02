@@ -1,0 +1,16 @@
+{
+  "sender": "AD-KOTAKB-S",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "hdfc-upi-sent-multiline",
+    "amountMinor": 8900,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "CHAI POINT",
+    "accountLast4": "9013",
+    "instrumentHint": "UPI",
+    "referenceNo": "712345678903",
+    "occurredAtLocalDate": "2026-09-05"
+  }
+}

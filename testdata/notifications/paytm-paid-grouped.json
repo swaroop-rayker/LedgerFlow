@@ -1,6 +1,7 @@
 {
-  "packageName": "net.one97.paytm",
   "sender": "Paytm",
+  "packageName": "net.one97.paytm",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "notification-upi-paid",
     "amountMinor": 1200000,

@@ -1,0 +1,14 @@
+{
+  "sender": "AD-INDUSB-S",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "card-spend-at-merchant",
+    "amountMinor": 56025,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "INDIAN OIL",
+    "accountLast4": "5540",
+    "instrumentHint": "CARD"
+  }
+}

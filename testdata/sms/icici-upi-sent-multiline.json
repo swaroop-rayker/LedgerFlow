@@ -1,0 +1,16 @@
+{
+  "sender": "AD-ICICIB-S",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "hdfc-upi-sent-multiline",
+    "amountMinor": 25000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "BLUE DART EXPRESS",
+    "accountLast4": "8842",
+    "instrumentHint": "UPI",
+    "referenceNo": "512345678901",
+    "occurredAtLocalDate": "2026-09-03"
+  }
+}

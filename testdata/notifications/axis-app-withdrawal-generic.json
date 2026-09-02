@@ -1,0 +1,12 @@
+{
+  "sender": "Axis Mobile",
+  "packageName": "com.axis.mobile",
+  "provenance": "synthetic",
+  "note": "Synthetic. A BANK APP's own notification, not a UPI app's. Its package is on the D-10 allowlist but is NOT in `notification-upi-paid`'s sender pattern, so it falls through to the generic rules and lands at confidence 0.45 with no merchant. That is the correct outcome and worth pinning: these are a large share of what a real phone actually posts, and the low confidence is what sends them to the Inbox for a human rather than into the ledger. Never captured for real -- see TESTING.md F23.",
+  "expected": {
+    "ruleId": "generic-verb-then-amount",
+    "amountMinor": 300000,
+    "currency": "INR",
+    "direction": "DEBIT"
+  }
+}

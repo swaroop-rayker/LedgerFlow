@@ -1,0 +1,6 @@
+{
+  "sender": "VM-ICICIB-T",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs. It must extract NOTHING: the sender is allowlisted and sends real debits too, so a rule that swallowed this would turn routine bank chatter into Inbox items to dismiss by hand.",
+  "expected": null
+}

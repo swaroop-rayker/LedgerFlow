@@ -1,0 +1,13 @@
+{
+  "sender": "AD-CANBNK-S",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "atm-withdrawal",
+    "amountMinor": 200000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "accountLast4": "4408",
+    "instrumentHint": "ATM"
+  }
+}

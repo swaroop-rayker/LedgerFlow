@@ -1,0 +1,14 @@
+{
+  "sender": "Google Pay",
+  "packageName": "com.google.android.apps.nbu.paisa.user",
+  "provenance": "synthetic",
+  "note": "Synthetic, and it pins a KNOWN DEFECT rather than desired behaviour. `notification-upi-paid` ends the merchant group on `(?:\\.|\busing\b|\bfrom\b|$)`, so the FIRST full stop inside a merchant name terminates it: 'Dr. Lal PathLabs' is captured as 'Dr'. Real merchant names contain full stops -- 'Dr.', 'M/s.', 'St.' -- so this truncates real payees, and the resulting merchant is short enough to look like a plausible name rather than an obvious error. The expectation below is what the shipped ruleset DOES. When the rule is fixed this expectation changes in the same commit, which is the visible diff that makes the fix reviewable. Found by the P2-9 corpus expansion; the same shape truncates SMS payees too -- see upi-vpa-at-upi-handle-truncates.",
+  "expected": {
+    "ruleId": "notification-upi-paid",
+    "amountMinor": 72500,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "Dr",
+    "instrumentHint": "UPI"
+  }
+}

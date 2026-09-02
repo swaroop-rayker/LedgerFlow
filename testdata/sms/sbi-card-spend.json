@@ -1,0 +1,15 @@
+{
+  "sender": "VM-SBIINB-T",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "card-spend-at-merchant",
+    "amountMinor": 1549900,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "CROMA",
+    "accountLast4": "2256",
+    "instrumentHint": "CARD",
+    "occurredAtLocalDate": "2026-09-14"
+  }
+}

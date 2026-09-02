@@ -1,0 +1,16 @@
+{
+  "sender": "AD-AXISBK-S",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "hdfc-upi-credit-alert",
+    "amountMinor": 15000,
+    "currency": "INR",
+    "direction": "CREDIT",
+    "merchantRaw": "rahul@ybl",
+    "accountLast4": "4471",
+    "instrumentHint": "UPI",
+    "referenceNo": "623456789013",
+    "occurredAtLocalDate": "2026-09-09"
+  }
+}

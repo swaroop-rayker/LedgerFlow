@@ -1,5 +1,6 @@
 {
   "sender": "VM-FEDBNK",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "generic-verb-then-amount",
     "amountMinor": 100000,

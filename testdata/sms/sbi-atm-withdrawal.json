@@ -1,5 +1,6 @@
 {
   "sender": "JD-ATMSBI",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "atm-withdrawal",
     "amountMinor": 1000000,

@@ -1,5 +1,6 @@
 {
   "sender": "VM-HDFCBK",
+  "provenance": "real",
   "note": "REAL format, from the owner's phone (2026-08-26). Structure and wording are verbatim; the account last4 and the UPI reference were substituted, because testdata/ is committed and those two are the identifying values. Nothing a rule matches on was changed.",
   "expected": {
     "ruleId": "hdfc-upi-sent-multiline",

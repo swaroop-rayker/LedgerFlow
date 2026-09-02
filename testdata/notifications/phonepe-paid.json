@@ -1,6 +1,7 @@
 {
-  "packageName": "com.phonepe.app",
   "sender": "PhonePe",
+  "packageName": "com.phonepe.app",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "notification-upi-paid",
     "amountMinor": 8550,

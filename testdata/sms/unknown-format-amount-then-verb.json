@@ -1,5 +1,6 @@
 {
   "sender": "VM-RBLBNK",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "generic-amount-then-verb",
     "amountMinor": 75000,

@@ -1,5 +1,6 @@
 {
   "sender": "VM-KOTAKB",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "transfer-credit-neft-imps",
     "amountMinor": 8500000,

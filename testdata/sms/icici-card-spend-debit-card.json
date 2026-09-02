@@ -1,0 +1,15 @@
+{
+  "sender": "VM-ICICIB-T",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the published/observed message shape for this bank and instrument. Not a captured message: no real account, payee or reference appears in it. Recorded as synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "card-spend-at-merchant",
+    "amountMinor": 234000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "RELIANCE FRESH",
+    "accountLast4": "8842",
+    "instrumentHint": "CARD",
+    "occurredAtLocalDate": "2026-09-13"
+  }
+}

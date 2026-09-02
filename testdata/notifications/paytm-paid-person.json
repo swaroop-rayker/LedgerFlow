@@ -1,0 +1,14 @@
+{
+  "sender": "Paytm",
+  "packageName": "net.one97.paytm",
+  "provenance": "synthetic",
+  "note": "Synthetic, modelled on the shape these apps post for a UPI payment. Not a captured notification -- notification ingest has never seen a real one (TESTING.md F23). Marked synthetic because §16 Q15 is what an unmarked invented corpus costs.",
+  "expected": {
+    "ruleId": "notification-upi-paid",
+    "amountMinor": 500000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "Sunita Verma",
+    "instrumentHint": "UPI"
+  }
+}

@@ -1,5 +1,6 @@
 {
   "sender": "VM-HDFCBK",
+  "provenance": "real",
   "note": "REAL format, from the owner's phone (2026-08-26). Structure and wording verbatim; the account last4, the payer's VPA local-part and the UPI reference were substituted. Nothing a rule matches on was changed.",
   "expected": {
     "ruleId": "hdfc-upi-credit-alert",

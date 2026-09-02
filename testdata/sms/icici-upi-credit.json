@@ -1,5 +1,6 @@
 {
   "sender": "VM-ICICIB",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "upi-credit-vpa",
     "amountMinor": 500000,

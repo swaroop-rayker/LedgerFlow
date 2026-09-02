@@ -1,6 +1,7 @@
 {
-  "packageName": "in.org.npci.upiapp",
   "sender": "BHIM",
+  "packageName": "in.org.npci.upiapp",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "notification-upi-paid",
     "amountMinor": 50000,

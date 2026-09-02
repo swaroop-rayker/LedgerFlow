@@ -1,5 +1,6 @@
 {
   "sender": "AD-ICICIB",
+  "provenance": "synthetic",
   "expected": {
     "ruleId": "transfer-credit-neft-imps",
     "amountMinor": 150000,
