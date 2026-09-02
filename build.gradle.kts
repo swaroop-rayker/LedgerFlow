@@ -277,6 +277,23 @@ tasks.register("preMergeCheck") {
     )
     dependsOn(verifiableModules.map { "$it:detekt" })
     dependsOn(verifiableModules.map { "$it:test" })
+
+    // §12's screenshot gate, and the whole point of this task is CI parity --
+    // CI's `screenshot` job runs exactly `verifyRoborazziSmsFullDebug`, and
+    // `pr-gate` requires it, so a PR that is green here and red there would make
+    // this task a lie. Wired at P2-9, when Roborazzi was finally set up.
+    //
+    // Named by task rather than added to `verifiableModules`: only modules that
+    // apply the Roborazzi plugin have it, and `dependsOn` on a task that does
+    // not exist fails configuration rather than being skipped.
+    dependsOn(
+        verifiableModules
+            .filter { path ->
+                subprojects.single { it.path == path }
+                    .tasks.findByName("verifyRoborazziSmsFullDebug") != null
+            }
+            .map { "$it:verifyRoborazziSmsFullDebug" },
+    )
 }
 
 /**

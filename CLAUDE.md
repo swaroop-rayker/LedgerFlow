@@ -94,8 +94,8 @@ LedgerFlow/
 .\gradlew testSmsFullDebugUnitTest        # unit tests
 .\gradlew connectedSmsFullDebugAndroidTest # instrumented tests (device required)
 .\gradlew :core:database:connectedAndroidTest  # migration tests specifically
-.\gradlew verifyRoborazziDebug            # screenshot diff check
-.\gradlew recordRoborazziDebug            # re-record golden screenshots (review diffs!)
+.\gradlew verifyRoborazziSmsFullDebug     # screenshot diff check -- exactly what CI's `screenshot` job runs
+.\gradlew recordRoborazziSmsFullDebug     # re-record goldens. REVIEW the diff first; never re-record blind (§12)
 .\gradlew detekt lintSmsFullDebug         # static analysis
 .\gradlew bannedApiCheck                  # `!!` / cacheDir bans (Laws 5 & 7)
 .\gradlew restrictedPermissionCheck       # pins the EXACT permission set per source set (D-04, Law 6)
