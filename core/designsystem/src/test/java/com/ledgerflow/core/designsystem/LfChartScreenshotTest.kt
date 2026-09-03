@@ -25,6 +25,8 @@ import com.ledgerflow.core.designsystem.chart.LfDonutSlice
 import com.ledgerflow.core.designsystem.chart.LfHeatmapDay
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
+import com.ledgerflow.core.designsystem.chart.LfTreemap
+import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import org.junit.Rule
 import org.junit.Test
@@ -230,6 +232,41 @@ class LfChartScreenshotTest {
                 color = Color(0xFF82C9A0),
             )
         }
+    }
+
+    // ── A3: the treemap ──────────────────────────────────────
+
+    @Test
+    fun treemap_1x() = capture("chart-treemap-1x", 1.0f) { Treemap() }
+
+    @Test
+    fun treemap_2x() = capture("chart-treemap-2x", 2.0f) { Treemap() }
+
+    /**
+     * A realistic long tail: two large categories and six small ones.
+     *
+     * **The picture is the only check on label fitting.** The layout's
+     * arithmetic is asserted in `LfTreemapLayoutTest` — areas proportional,
+     * no overlaps, nothing outside the frame — and none of that says whether a
+     * name is readable in the box it landed in. A tile too small for its label
+     * gets none, and at font scale 2.0 that threshold moves: the 2x golden is
+     * where labels are expected to *disappear* rather than to clip, which is
+     * BUG9's rule applied to a Canvas.
+     */
+    @Composable
+    private fun Treemap() {
+        LfTreemap(
+            tiles = listOf(
+                LfTreemapDatum("a", "Groceries", 420_000L, Color(0xFF7FB3D5)),
+                LfTreemapDatum("b", "Rent", 300_000L, Color(0xFFE59866)),
+                LfTreemapDatum("c", "Transport", 90_000L, Color(0xFF82C9A0)),
+                LfTreemapDatum("d", "Utilities", 60_000L, Color(0xFFC39BD3)),
+                LfTreemapDatum("e", "Health", 35_000L, Color(0xFFF0B27A)),
+                LfTreemapDatum("f", "Subscriptions", 20_000L, Color(0xFF85929E)),
+                LfTreemapDatum("g", "Gifts", 9_000L, Color(0xFF76D7C4)),
+                LfTreemapDatum("h", "Sundries", 4_000L, Color(0xFFD98880)),
+            ),
+        )
     }
 
     /**

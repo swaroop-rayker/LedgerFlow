@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.time.LocalDates
+import com.ledgerflow.core.designsystem.chart.LfViewportGesture
 import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
@@ -66,8 +67,13 @@ public class AnalyticsViewModel @Inject constructor(
                 load()
             }
 
-            AnalyticsEvent.FiltersClicked -> _state.update { it.copy(showFilterSheet = true) }
-            AnalyticsEvent.FiltersDismissed -> _state.update { it.copy(showFilterSheet = false) }
+            is AnalyticsEvent.FilterSheetShown -> _state.update {
+                it.copy(showFilterSheet = event.visible)
+            }
+
+            is AnalyticsEvent.RangePickerShown -> _state.update {
+                it.copy(showRangePicker = event.visible)
+            }
 
             is AnalyticsEvent.FiltersChanged -> {
                 _state.update { it.copy(filters = event.filters) }
@@ -81,13 +87,7 @@ public class AnalyticsViewModel @Inject constructor(
                 load()
             }
 
-            AnalyticsEvent.CustomRangeClicked -> _state.update {
-                it.copy(showRangePicker = true)
-            }
-
-            AnalyticsEvent.CustomRangeDismissed -> _state.update {
-                it.copy(showRangePicker = false)
-            }
+            is AnalyticsEvent.ViewportMoved -> moveViewport(event.gesture)
 
             is AnalyticsEvent.CustomRangePicked -> {
                 _state.update {
@@ -104,6 +104,12 @@ public class AnalyticsViewModel @Inject constructor(
                 _state.update { it.copy(comparePrevious = !it.comparePrevious) }
                 load()
             }
+            AnalyticsEvent.TreemapToggled -> {
+                // Presentational, like the expand below: the same totals drawn
+                // a second way, so no query.
+                _state.update { it.copy(treemapShown = !it.treemapShown) }
+            }
+
             is AnalyticsEvent.CategoryExpanded -> {
                 // Purely presentational: the subcategories are already in the
                 // snapshot, so expanding one is not a query.
@@ -120,19 +126,61 @@ public class AnalyticsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * A pan or a pinch, resolved into a new window and a fresh query.
+     *
+     * **This is the whole of what a gesture does** (ADR-0005). The chart holds
+     * no series to transform — §11 forbids it having one — so the gesture moves
+     * the window and the next frame is a re-query at the new resolution, which
+     * is exactly the ownership a charting library would have taken.
+     */
+    private fun moveViewport(gesture: LfViewportGesture) {
+        val window = currentWindow(_state.value)
+        val moved = when (gesture) {
+            is LfViewportGesture.Pan -> window.pannedBy(gesture.fractionOfSpan)
+            is LfViewportGesture.Zoom -> window.zoomedBy(gesture.scale)
+        }
+        // A gesture that rounds to no movement, or one that hit a zoom limit,
+        // must not re-issue the identical query -- it would flicker the chart
+        // to arrive back where it already was.
+        if (moved.from == window.from && moved.to == window.to) return
+
+        _state.update {
+            // A panned or zoomed window is no longer "Month", so the chip
+            // follows the data rather than claiming a range the screen is not
+            // showing.
+            it.copy(
+                range = AnalyticsRange.CUSTOM,
+                customFrom = moved.from,
+                customTo = moved.to,
+            )
+        }
+        load()
+    }
+
+    /**
+     * The window the current state describes.
+     *
+     * One resolver, because the gesture handler and the loader must agree about
+     * what is on screen: a pan computed from a different window than the one
+     * displayed moves the chart somewhere the user did not point.
+     */
+    private fun currentWindow(state: AnalyticsUiState): AnalyticsWindow {
+        val from = state.customFrom
+        val to = state.customTo
+        return if (state.range == AnalyticsRange.CUSTOM && from != null && to != null) {
+            AnalyticsWindow.custom(from, to)
+        } else {
+            AnalyticsWindow.endingOn(LocalDates.of(clock.nowMillis()), state.range)
+        }
+    }
+
     private fun load() {
         loadJob?.cancel()
         _state.update { it.copy(isLoading = true) }
         loadJob = viewModelScope.launch {
             val current = _state.value
-            val today = LocalDates.of(clock.nowMillis())
-            val from = current.customFrom
-            val to = current.customTo
-            val window = if (current.range == AnalyticsRange.CUSTOM && from != null && to != null) {
-                AnalyticsWindow.custom(from, to)
-            } else {
-                AnalyticsWindow.endingOn(today, current.range)
-            }
+            val window = currentWindow(current)
             val currency = ledgerRepository.baseCurrency() ?: DEFAULT_CURRENCY
             val snapshot = getSnapshot(
                 ledger = current.ledger,

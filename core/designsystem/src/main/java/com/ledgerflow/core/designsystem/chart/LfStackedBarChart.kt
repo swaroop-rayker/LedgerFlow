@@ -1,10 +1,15 @@
 package com.ledgerflow.core.designsystem.chart
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -17,6 +22,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import kotlin.math.abs
 
 /**
  * Spend over time (`SPEC.md` §5.6, A1).
@@ -51,6 +57,7 @@ public fun LfStackedBarChart(
     modifier: Modifier = Modifier,
     height: Dp = DefaultHeight,
     contentDescription: String? = null,
+    onViewportChange: ((LfViewportGesture) -> Unit)? = null,
 ) {
     val measurer = rememberTextMeasurer()
     val colors = LfTheme.colors
@@ -62,7 +69,14 @@ public fun LfStackedBarChart(
         modifier = modifier
             .fillMaxWidth()
             .height(height)
-            .semantics { this.contentDescription = description },
+            .semantics { this.contentDescription = description }
+            .then(
+                if (onViewportChange == null) {
+                    Modifier
+                } else {
+                    Modifier.viewportGestures(onViewportChange)
+                },
+            ),
     ) {
         if (columns.isEmpty()) return@Canvas
 
@@ -222,3 +236,100 @@ private const val EMPTY_TRACK_PX = 2f
 private const val BAR_WIDTH_RATIO = 0.62f
 
 private val DefaultHeight: Dp = 168.dp
+
+/**
+ * What a pan or a pinch means, in terms the caller can re-query with.
+ *
+ * **Not a transform.** §11 forbids the chart holding more points than it has
+ * pixels, so it cannot pan or zoom by moving data it is keeping — it does not
+ * keep any. ADR-0005 is explicit that this is the arrangement a charting
+ * library could not accommodate: the gesture is *reported*, the ViewModel moves
+ * the window, and the next frame is a fresh query at the new resolution.
+ */
+public sealed interface LfViewportGesture {
+
+    /**
+     * Shift the window by a fraction of its own span.
+     *
+     * A fraction rather than pixels or days, because the chart does not know
+     * what a pixel is worth — that depends on the window the caller chose. -0.25
+     * means "a quarter of a window into the past".
+     */
+    public data class Pan(val fractionOfSpan: Float) : LfViewportGesture
+
+    /**
+     * Scale the window about its centre. Greater than 1 zooms *out*.
+     *
+     * Pinching apart shows less time, which is the convention everywhere else,
+     * so the composable inverts the raw gesture before reporting it: callers
+     * should not have to know which way a pinch runs.
+     */
+    public data class Zoom(val scale: Float) : LfViewportGesture
+}
+
+/**
+ * Reports pan and pinch, and reports them **once per gesture, not per event**.
+ *
+ * A drag emits dozens of pointer events; forwarding each one would issue dozens
+ * of queries and the chart would settle on whichever finished last rather than
+ * where the finger stopped. So the movement is accumulated and reported when
+ * the gesture ends — the same reason the ViewModel cancels an in-flight load on
+ * a range change.
+ *
+ * A gesture smaller than [MIN_PAN_FRACTION] is ignored: a stray touch while
+ * scrolling the page should not silently move the window the user is reading.
+ */
+private fun Modifier.viewportGestures(
+    onViewportChange: (LfViewportGesture) -> Unit,
+): Modifier = this
+    .pointerInput(onViewportChange) {
+        var accumulated = 0f
+        detectHorizontalDragGestures(
+            onDragEnd = {
+                val fraction = accumulated / size.width.toFloat()
+                // Dragging right moves the window into the past, the way a
+                // finger drags paper rather than moving a viewfinder.
+                if (abs(fraction) >= MIN_PAN_FRACTION) {
+                    onViewportChange(LfViewportGesture.Pan(-fraction))
+                }
+                accumulated = 0f
+            },
+            onDragCancel = { accumulated = 0f },
+        ) { _, dragAmount -> accumulated += dragAmount }
+    }
+    .pointerInput(onViewportChange) {
+        // **Hand-rolled rather than `detectTransformGestures`, and this is not
+        // a preference.** That detector consumes *any* pan once it passes slop,
+        // including a one-finger vertical drag -- which on device meant the
+        // chart silently ate the page's scroll and the user could not get past
+        // it by dragging on the one element filling a third of the screen.
+        // Here nothing is consumed until a second pointer is down, so a
+        // single-finger drag falls through to the horizontal detector above and
+        // to the `LazyColumn` beneath.
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false)
+            var scale = 1f
+            var pinched = false
+            while (true) {
+                val event = awaitPointerEvent()
+                if (event.changes.size >= 2) {
+                    pinched = true
+                    scale *= event.calculateZoom()
+                    event.changes.forEach { it.consume() }
+                }
+                if (event.changes.none { it.pressed }) break
+            }
+            // Reported once, at the end: a pinch emits dozens of events, and
+            // one query per event would settle on whichever finished last
+            // rather than where the fingers stopped.
+            if (pinched && abs(scale - 1f) >= MIN_ZOOM_DELTA) {
+                onViewportChange(LfViewportGesture.Zoom(1f / scale))
+            }
+        }
+    }
+
+/** A twentieth of the chart's width, below which a drag is a stray touch. */
+private const val MIN_PAN_FRACTION = 0.05f
+
+/** Ten percent, below which a pinch is hand tremor rather than intent. */
+private const val MIN_ZOOM_DELTA = 0.1f

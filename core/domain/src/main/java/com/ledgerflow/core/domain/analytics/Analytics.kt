@@ -95,6 +95,38 @@ public data class AnalyticsWindow(
     /** Columns this window produces. */
     public val bucketCount: Int get() = (spanDays + bucketDays - 1) / bucketDays
 
+    /**
+     * The window shifted by a fraction of its own span (ADR-0005's pan).
+     *
+     * The result is always a CUSTOM window: once a user has panned, "Month" no
+     * longer describes what they are looking at, and leaving the chip selected
+     * would make the screen claim a range it is not showing.
+     */
+    public fun pannedBy(fractionOfSpan: Float): AnalyticsWindow {
+        val shift = (spanDays * fractionOfSpan).toInt()
+        if (shift == 0) return this
+        return custom(from + shift, to + shift)
+    }
+
+    /**
+     * The window scaled about its centre (ADR-0005's zoom).
+     *
+     * Clamped at both ends. One day at the bottom, because a window of zero
+     * days has no `BETWEEN` that can match and would render as an empty chart
+     * rather than as a limit reached. [MAX_SPAN_DAYS] at the top, because each
+     * pinch multiplies the span and eight of them would take a month out past a
+     * century — §11's 5Y budget is the largest span this app claims to serve,
+     * and a zoom that quietly exceeds it is a performance target with no
+     * enforcement. Also CUSTOM afterwards, for the reason [pannedBy] gives.
+     */
+    public fun zoomedBy(scale: Float): AnalyticsWindow {
+        val newSpan = (spanDays * scale).toInt().coerceIn(1, MAX_SPAN_DAYS)
+        if (newSpan == spanDays) return this
+        val centre = from + spanDays / 2
+        val half = newSpan / 2
+        return custom(centre - half, centre - half + newSpan - 1)
+    }
+
     public companion object {
         /**
          * Comfortably fewer than a phone's horizontal pixels, and few enough
@@ -102,6 +134,9 @@ public data class AnalyticsWindow(
          * give 61, so this is the same order of magnitude by design.
          */
         public const val MAX_BUCKETS: Int = 64
+
+        /** The widest window a zoom may reach — 5Y, the largest preset (§11). */
+        public const val MAX_SPAN_DAYS: Int = 1_825
 
         /** The window ending today. */
         public fun endingOn(today: Int, range: AnalyticsRange): AnalyticsWindow =

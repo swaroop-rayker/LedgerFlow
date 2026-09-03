@@ -34,6 +34,8 @@ import com.ledgerflow.core.designsystem.chart.LfDonutSlice
 import com.ledgerflow.core.designsystem.chart.LfHeatmapDay
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
+import com.ledgerflow.core.designsystem.chart.LfTreemap
+import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -100,12 +102,12 @@ public fun AnalyticsScreen(
                     } else {
                         "Filters (" + state.filters.activeCount + ")"
                     },
-                    onClick = { onEvent(AnalyticsEvent.FiltersClicked) },
+                    onClick = { onEvent(AnalyticsEvent.FilterSheetShown(visible = true)) },
                     style = LfButtonStyle.Inline,
                 )
                 LfButton(
                     text = "Custom range",
-                    onClick = { onEvent(AnalyticsEvent.CustomRangeClicked) },
+                    onClick = { onEvent(AnalyticsEvent.RangePickerShown(visible = true)) },
                     style = LfButtonStyle.Inline,
                 )
             }
@@ -113,6 +115,15 @@ public fun AnalyticsScreen(
 
         val snapshot = state.snapshot
         if (state.showEmptyState || snapshot == null) {
+            // **A panned window that is empty still keeps its chart.** Found on
+            // device: dragging back to a quiet fortnight replaced the whole
+            // section with "nothing to chart", which removed the only surface
+            // that could pan forward again -- the user was stranded and had to
+            // re-pick a range. A custom window is a place the user navigated
+            // to, so the way back stays on screen.
+            if (snapshot != null && state.range == AnalyticsRange.CUSTOM) {
+                timeChartSection(state, snapshot, onEvent)
+            }
             emptySection(state)
         } else {
             chartSections(state, snapshot, onEvent)
@@ -130,11 +141,22 @@ public fun AnalyticsScreen(
 private fun LazyListScope.emptySection(state: AnalyticsUiState) {
     item(key = "empty", contentType = "empty") {
         LfEmptyState(
-            title = if (state.isLoading) "Loading" else "Nothing to chart yet",
-            body = if (state.isLoading) {
-                "Reading your ledger."
-            } else {
-                "Approve a transaction and it will show up here."
+            title = when {
+                state.isLoading -> "Loading"
+                state.emptyBecauseFiltered -> "Nothing matched"
+                state.range == AnalyticsRange.CUSTOM -> "Nothing in this range"
+                else -> "Nothing to chart yet"
+            },
+            // Three different sentences, because they ask for three different
+            // things. `emptyBecauseFiltered` existed for exactly this and was
+            // not wired to any copy: a filtered screen was telling the user to
+            // approve a transaction, which is how someone concludes their data
+            // has gone missing.
+            body = when {
+                state.isLoading -> "Reading your ledger."
+                state.emptyBecauseFiltered -> "No spending matches these filters."
+                state.range == AnalyticsRange.CUSTOM -> "Drag the chart or pick another range."
+                else -> "Approve a transaction and it will show up here."
             },
         )
     }
@@ -159,25 +181,19 @@ private fun LazyListScope.chartSections(
         TotalCard(snapshot = snapshot, currency = state.baseCurrency)
     }
 
-    // A1 — spend over time.
-    item(key = "over-time", contentType = "chart") {
-        SectionCard(title = "Spend over time") {
-            LfStackedBarChart(
-                columns = snapshot.toColumns(),
-                formatAxisValue = { minor -> MoneyFormat.symbolised(minor, state.baseCurrency) },
-            )
-        }
-    }
+    timeChartSection(state, snapshot, onEvent)
 
     // A2 — category breakdown, with A3's drill-down inside it.
     item(key = "categories", contentType = "chart") {
         SectionCard(title = "By category") {
-            DonutWithList(
+            CategoryBreakdown(
                 totals = snapshot.categories,
                 currency = state.baseCurrency,
                 expandedId = state.expandedCategoryId,
                 subcategories = snapshot.subcategories,
+                treemapShown = state.treemapShown,
                 onExpand = { onEvent(AnalyticsEvent.CategoryExpanded(it)) },
+                onToggleTreemap = { onEvent(AnalyticsEvent.TreemapToggled) },
             )
         }
     }
@@ -203,6 +219,32 @@ private fun LazyListScope.chartSections(
     }
 
     dailyAndCommitmentSections(state, snapshot)
+}
+
+/**
+ * A1 — spend over time.
+ *
+ * Its own function because it is the one section that renders when the rest of
+ * the screen does not: an empty *custom* window keeps its chart so the pan that
+ * arrived there can leave again.
+ */
+private fun LazyListScope.timeChartSection(
+    state: AnalyticsUiState,
+    snapshot: AnalyticsSnapshot,
+    onEvent: (AnalyticsEvent) -> Unit,
+) {
+    item(key = "over-time", contentType = "chart") {
+        SectionCard(title = "Spend over time") {
+            LfStackedBarChart(
+                columns = snapshot.toColumns(),
+                formatAxisValue = { minor -> MoneyFormat.symbolised(minor, state.baseCurrency) },
+                // Drag to pan, pinch to zoom -- and neither moves anything held
+                // here. ADR-0005: the gesture moves the *window* and the next
+                // frame is a fresh query at the new resolution.
+                onViewportChange = { onEvent(AnalyticsEvent.ViewportMoved(it)) },
+            )
+        }
+    }
 }
 
 /**
@@ -466,6 +508,52 @@ private fun SectionCard(title: String?, content: @Composable () -> Unit) {
 }
 
 /**
+ * A2/A3: the same categories, drawn as a donut or as a treemap, over the list.
+ *
+ * **The list is not the toggle's business.** Whichever graphic is showing, the
+ * ranked list below it is unchanged -- that is the `CLAUDE.md` rule that the
+ * graphic orients and the list is the content, and it is also why switching
+ * views cannot lose the user's place in the drill-down.
+ */
+@Composable
+private fun CategoryBreakdown(
+    totals: List<DimensionTotal>,
+    currency: String,
+    expandedId: String?,
+    subcategories: Map<String, List<DimensionTotal>>,
+    treemapShown: Boolean,
+    onExpand: (String) -> Unit,
+    onToggleTreemap: () -> Unit,
+) {
+    if (totals.isEmpty()) return
+
+    LfActionRow(alignment = LfActionAlignment.End) {
+        LfButton(
+            text = if (treemapShown) "Donut" else "Treemap",
+            onClick = onToggleTreemap,
+            style = LfButtonStyle.Inline,
+        )
+    }
+
+    if (treemapShown) {
+        LfTreemap(
+            tiles = totals.map { total ->
+                LfTreemapDatum(
+                    id = total.id,
+                    label = total.name,
+                    value = total.amount.minor,
+                    color = LfCategoryPalette.colorForId(total.id, total.colorArgb),
+                )
+            },
+            onTileClick = onExpand,
+        )
+        CategoryList(totals, currency, expandedId, subcategories, onExpand)
+    } else {
+        DonutWithList(totals, currency, expandedId, subcategories, onExpand)
+    }
+}
+
+/**
  * A2 and A5: a small donut over the ranked list that carries the figures.
  *
  * Only the top slices get an arc; the rest are folded into "Other" so the ring
@@ -513,6 +601,18 @@ private fun DonutWithList(
     // it is 104dp now.
     LfDonutChart(slices = slices)
 
+    CategoryList(totals, currency, expandedId, subcategories, onExpand)
+}
+
+/** The ranked list with A3's drill-down, shared by the donut and the treemap. */
+@Composable
+private fun CategoryList(
+    totals: List<DimensionTotal>,
+    currency: String,
+    expandedId: String?,
+    subcategories: Map<String, List<DimensionTotal>>,
+    onExpand: (String) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
         totals.forEach { total ->
             DimensionRow(

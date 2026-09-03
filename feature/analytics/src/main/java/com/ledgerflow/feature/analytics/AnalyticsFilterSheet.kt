@@ -55,8 +55,8 @@ public fun AnalyticsFilterSheet(
         title = "Filters",
         body = "Narrow every figure on this screen. All of these apply together.",
         confirmText = "Done",
-        onConfirm = { onEvent(AnalyticsEvent.FiltersDismissed) },
-        onDismiss = { onEvent(AnalyticsEvent.FiltersDismissed) },
+        onConfirm = { onEvent(AnalyticsEvent.FilterSheetShown(visible = false)) },
+        onDismiss = { onEvent(AnalyticsEvent.FilterSheetShown(visible = false)) },
         dismissText = "Close",
         detail = {
             FilterForm(
@@ -204,7 +204,7 @@ private fun ChipRow(
 public fun AnalyticsRangePicker(onEvent: (AnalyticsEvent) -> Unit) {
     val state = rememberDateRangePickerState()
     DatePickerDialog(
-        onDismissRequest = { onEvent(AnalyticsEvent.CustomRangeDismissed) },
+        onDismissRequest = { onEvent(AnalyticsEvent.RangePickerShown(visible = false)) },
         confirmButton = {
             LfButton(
                 text = "Apply",
@@ -222,7 +222,7 @@ public fun AnalyticsRangePicker(onEvent: (AnalyticsEvent) -> Unit) {
                         // A half-picked range is not a range. Dismissing is
                         // honest; applying one date silently would produce a
                         // window the user did not choose.
-                        onEvent(AnalyticsEvent.CustomRangeDismissed)
+                        onEvent(AnalyticsEvent.RangePickerShown(visible = false))
                     }
                 },
                 style = LfButtonStyle.Inline,
@@ -231,7 +231,7 @@ public fun AnalyticsRangePicker(onEvent: (AnalyticsEvent) -> Unit) {
         dismissButton = {
             LfButton(
                 text = "Cancel",
-                onClick = { onEvent(AnalyticsEvent.CustomRangeDismissed) },
+                onClick = { onEvent(AnalyticsEvent.RangePickerShown(visible = false)) },
                 style = LfButtonStyle.Inline,
             )
         },

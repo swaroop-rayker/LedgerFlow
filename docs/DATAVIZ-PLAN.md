@@ -80,7 +80,7 @@ needs accumulated history.
 |---|---|---|---|---|---|
 | A1 | **Spend over time** | Stacked bar by category, or a line for the total, with a day/week/month bucket toggle | `daily_rollup` | `LfStackedBarChart`, `LfLineChart` | P3 |
 | A2 | **Category breakdown** | Donut plus a ranked list with % and Δ against the previous period | `daily_rollup` | `LfDonutChart` + list | P3 |
-| A3 | **Subcategory drill-down** | Nested list, tap-to-expand | `daily_rollup` | list; **treemap deferred** (§7) | P3 (list) |
+| A3 | **Subcategory drill-down** | Nested list, tap-to-expand | `daily_rollup` | list + optional squarified treemap (§7.2) | P3 |
 | A4 | **Merchant leaderboard** | Top-N plus "Other" | `daily_rollup` | `LfHorizontalBarChart` | P3 |
 | A5 | **Payment method split** | Donut | `daily_rollup` | `LfDonutChart` | P3 |
 | A6 | **Calendar heatmap** | Month grid, day-cell intensity | `daily_rollup` | `LfCalendarHeatmap` | P3 |
@@ -158,7 +158,7 @@ already required by §5.5.
 |---|---|---|
 | **P3 — Analytics** | A1–A9, C1, C2, D1 | 5Y query < 300 ms, measured on device. Goldens for every new chart, reviewed. |
 | **P4 — OCR** | B1–B4 | Item extraction recall ≥ 90% (§13) is the real gate; the price surfaces are worthless on a corpus that misreads quantities. |
-| **P5 — Polish** | A10, C3–C5, treemap *if* §7's trigger fires | Diagnostics screen ships; all §11 budgets met. |
+| **P5 — Polish** | A10, C3–C5 | Diagnostics screen ships; all §11 budgets met. |
 | **P6+** | B5, B6 | Needs months of accumulated item history. Not scheduled. |
 
 P3 is 12 surfaces, of which 9 are specced and 3 (C1, C2, D1) are new and cheap.
@@ -205,7 +205,7 @@ obvious wrong move and v9 deliberately leaves room to do it properly.
 | Primitive | Serves | Notes |
 |---|---|---|
 | `LfLineChart` | A1 | Shares the axis engine below |
-| `LfStackedBarChart` | A1, D1, B6 | The hard one: ticks, label collision, pan/zoom |
+| `LfStackedBarChart` | A1, D1, B6 | The hard one: ticks, label collision, pan/zoom. The gesture is *reported* as an `LfViewportGesture`, never applied — the ViewModel moves the window and re-queries |
 | `LfDonutChart` | A2, A5 | `drawArc` in a loop |
 | `LfHorizontalBarChart` | A4, C1, C4 | Barely a chart — a row with a weight-proportional fill |
 | `LfCalendarHeatmap` | A6 | A `LazyVerticalGrid` |
@@ -213,9 +213,10 @@ obvious wrong move and v9 deliberately leaves room to do it properly.
 | `LfSparkline` | B1, B5 | Tiny; inline in a list row |
 | `LfBridgeChart` | B2 | P4 |
 | `LfDotPlot` | B3, B4 | P4 |
+| `LfTreemap` | A3 | Squarified layout in `LfTreemapLayout`, returning fractions so the geometry is unit-tested off-device (§7.2) |
 | **Axis engine** | A1, D1, B2 | Tick selection **unit-tested independently of rendering** (`AxisTicksTest`) — it is the one piece here with a correct answer that does not depend on how it looks |
 
-Six primitives cover all of P3. Three more arrive at P4. Note how many surfaces
+Seven primitives cover all of P3. Three more arrive at P4. Note how many surfaces
 are *lists with a small graphic*, not charts: that is deliberate and matches
 `CLAUDE.md`'s compactness brief.
 
@@ -238,10 +239,25 @@ every category carries the colour the user chose. Options:
 3. Add a proper categorical ramp to `LfTheme` and keep `color_argb` for list
    dots only.
 
-**7.2 — Treemap (A3).** `SPEC.md` §5.6 marks it optional and it stays deferred.
-Squarified treemap layout is the one non-obvious algorithm in the catalogue and
-the first credible reason to reopen ADR-0005. **Trigger to revisit:** the nested
-list proves inadequate for subcategory comparison in real use.
+**7.2 — Treemap (A3). Settled: built in P3, as a toggle beside the list.**
+This section previously deferred it to P5 behind a trigger; the owner asked for
+it during P3 and it shipped there, so the plan says so rather than describing a
+state the code left behind.
+
+Squarified layout (Bruls, Huizing & van Wijk) is the one non-obvious algorithm
+in the catalogue, and it was named here as the first credible reason to reopen
+ADR-0005. **It did not become one:** the layout is ninety lines of arithmetic in
+`LfTreemapLayout`, it returns fractions rather than pixels, and it is therefore
+unit-tested off-device — areas proportional, no overlaps, nothing outside the
+frame, tiles roughly square rather than slivers. A charting dependency would
+have brought a second rendering system to avoid writing it.
+
+**The list stays primary.** The toggle swaps the graphic and leaves the ranked
+list and its drill-down untouched, which is `CLAUDE.md`'s rule that the graphic
+orients and the list is the content. Tile labels are drawn only where they
+measurably fit; the ones that do not are simply absent, because text spilling
+across neighbours would make the *large* tiles unreadable in order to label a
+small one — BUG9's rule as it applies to a Canvas.
 
 **7.3 — Where Family C lives.** C1 and C2 are user-facing and belong on
 Analytics. C3–C5 are diagnostics and belong on the P5 diagnostics screen. The

@@ -81,3 +81,17 @@ public data class LfHeatmapDay(
     val formattedAmount: String,
     val blank: Boolean = false,
 )
+
+/**
+ * One tile of A3's optional treemap.
+ *
+ * `value` is money in minor units (Law 3); [LfTreemapLayout] turns it into an
+ * area, which is a chart coordinate and legitimately real-valued.
+ */
+@Immutable
+public data class LfTreemapDatum(
+    val id: String,
+    val label: String,
+    val value: Long,
+    val color: Color,
+)

@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.analytics
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.designsystem.chart.LfViewportGesture
 import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
@@ -38,6 +39,14 @@ public data class AnalyticsUiState(
      * would simply not expand.
      */
     val expandedCategoryId: String? = null,
+    /**
+     * A3's treemap, which is the *secondary* view of the same categories.
+     *
+     * `docs/DATAVIZ-PLAN.md` makes the nested list primary: a treemap answers
+     * "which of these is biggest" at a glance and is worse than a list at
+     * everything else. So it is a toggle, and it is off by default.
+     */
+    val treemapShown: Boolean = false,
     /** §5.6's composable filters. [AnalyticsFilters.None] is the fast path. */
     val filters: AnalyticsFilters = AnalyticsFilters.None,
     val showFilterSheet: Boolean = false,
@@ -74,11 +83,31 @@ public sealed interface AnalyticsEvent {
     public data class RangeSelected(val range: AnalyticsRange) : AnalyticsEvent
     public data object ComparisonToggled : AnalyticsEvent
     public data class CategoryExpanded(val categoryId: String?) : AnalyticsEvent
-    public data object FiltersClicked : AnalyticsEvent
-    public data object FiltersDismissed : AnalyticsEvent
     public data object FiltersCleared : AnalyticsEvent
     public data class FiltersChanged(val filters: AnalyticsFilters) : AnalyticsEvent
-    public data object CustomRangeClicked : AnalyticsEvent
     public data class CustomRangePicked(val from: Int, val to: Int) : AnalyticsEvent
-    public data object CustomRangeDismissed : AnalyticsEvent
+    public data object TreemapToggled : AnalyticsEvent
+
+    /**
+     * The filter sheet was opened or closed.
+     *
+     * One event carrying the new visibility rather than a `Clicked`/`Dismissed`
+     * pair: two events for one boolean is two branches in the handler that can
+     * disagree, and the pair was the shape that pushed `onEvent` past its
+     * complexity budget.
+     */
+    public data class FilterSheetShown(val visible: Boolean) : AnalyticsEvent
+
+    /** The custom-range picker was opened or closed. See [FilterSheetShown]. */
+    public data class RangePickerShown(val visible: Boolean) : AnalyticsEvent
+
+    /**
+     * The time chart was panned or pinched (ADR-0005).
+     *
+     * The gesture does not move anything on its own — it moves the *window*,
+     * and the next frame is a fresh query at the new resolution. That is the
+     * arrangement §11's pre-binning rule forces and the reason no charting
+     * library could have been used.
+     */
+    public data class ViewportMoved(val gesture: LfViewportGesture) : AnalyticsEvent
 }
