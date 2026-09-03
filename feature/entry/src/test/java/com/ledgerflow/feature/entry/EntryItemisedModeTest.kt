@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
@@ -312,7 +313,7 @@ class EntryItemisedModeTest {
     }
 
     private fun viewModel() = EntryViewModel(
-        approveTransaction = ApproveTransactionUseCase(ledger),
+        approveTransaction = ApproveTransactionUseCase(ledger, NoOpBudgetAlertTrigger),
         drafts = drafts,
         ledgerRepository = ledger,
         categories = categories,

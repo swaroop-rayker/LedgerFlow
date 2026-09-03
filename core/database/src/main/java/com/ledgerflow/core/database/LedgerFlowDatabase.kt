@@ -157,8 +157,16 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * `budget` is user intent that nothing in the app can reconstruct —
          * which is why it joins the `.lfbk` payload at v9 and `daily_rollup`
          * deliberately does not. See `MIGRATION_8_9`.
+         *
+         * v10 adds `budget.last_alerted_threshold` and `budget.alert_period_start`
+         * — the memory §5.7's threshold alerts need. Without them a crossing
+         * fires on every evaluation rather than once, which is a notification
+         * each time the user approves anything. On the row rather than in
+         * `app_meta` so the state dies with the budget. Additive; every existing
+         * row defaults to 0, which reads as "nothing announced yet" and is the
+         * honest value for a budget that predates alerting. See `MIGRATION_9_10`.
          */
-        public const val VERSION: Int = 9
+        public const val VERSION: Int = 10
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

@@ -372,6 +372,7 @@ private fun BudgetRoute() {
         BudgetEditorDialog(
             editor = editor,
             availableCategories = state.availableCategories,
+            subcategories = state.subcategoriesForPicked,
             currency = state.baseCurrency,
             onEvent = viewModel::onEvent,
         )

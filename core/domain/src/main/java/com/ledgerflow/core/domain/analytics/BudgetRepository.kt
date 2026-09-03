@@ -76,4 +76,14 @@ public interface BudgetRepository {
      * a timestamp rather than removing the row.
      */
     public suspend fun delete(id: String): BudgetResult<Unit>
+
+    /**
+     * Mark a threshold as announced for a period (§5.7).
+     *
+     * Not a `BudgetResult`: this is bookkeeping the alert path performs on its
+     * own behalf, and there is no user-facing failure to report — a budget
+     * deleted between evaluation and recording simply affects no rows, which is
+     * the correct outcome.
+     */
+    public suspend fun recordAlert(id: String, threshold: Int, periodStart: Int)
 }

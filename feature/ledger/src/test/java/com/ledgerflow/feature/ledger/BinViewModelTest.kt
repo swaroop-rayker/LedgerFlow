@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.ledger
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.PurgeDeletedEntriesUseCase
 import com.ledgerflow.core.domain.usecase.RestoreEntryUseCase
 import com.ledgerflow.core.model.DeletedEntry
@@ -308,7 +309,7 @@ class BinViewModelTest {
     private fun viewModel(): BinViewModel {
         val viewModel = BinViewModel(
             ledger = ledger,
-            restoreEntries = RestoreEntryUseCase(ledger),
+            restoreEntries = RestoreEntryUseCase(ledger, NoOpBudgetAlertTrigger),
             purgeEntries = PurgeDeletedEntriesUseCase(ledger, storage),
         )
         CoroutineScope(dispatcher).launch { viewModel.state.collect {} }

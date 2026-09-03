@@ -63,4 +63,17 @@ public interface BudgetDao {
             "AND category_id = :categoryId AND subcategory_id IS :subcategoryId",
     )
     public suspend fun exists(categoryId: String, subcategoryId: String?): Boolean
+
+    /**
+     * Record that a threshold has been announced for a given period.
+     *
+     * Both columns move together: the threshold alone would suppress next
+     * month's 80% crossing, and the period alone would not know what had
+     * already been said.
+     */
+    @Query(
+        "UPDATE budget SET last_alerted_threshold = :threshold, " +
+            "alert_period_start = :periodStart WHERE id = :id",
+    )
+    public suspend fun recordAlert(id: String, threshold: Int, periodStart: Int)
 }

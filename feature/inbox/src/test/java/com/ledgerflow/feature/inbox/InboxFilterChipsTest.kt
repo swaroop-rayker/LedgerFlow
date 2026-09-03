@@ -5,6 +5,7 @@ import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
@@ -91,7 +92,7 @@ class InboxFilterChipsTest {
             approvePending = ApprovePendingUseCase(
                 pending,
                 merchants,
-                ApproveTransactionUseCase(ledger),
+                ApproveTransactionUseCase(ledger, NoOpBudgetAlertTrigger),
             ),
             discardPending = DiscardPendingUseCase(pending),
             restorePending = RestorePendingUseCase(pending),

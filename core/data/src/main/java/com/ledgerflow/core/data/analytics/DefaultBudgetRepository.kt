@@ -106,6 +106,18 @@ public class DefaultBudgetRepository @Inject constructor(
             }
         }
 
+    override suspend fun recordAlert(id: String, threshold: Int, periodStart: Int) {
+        withContext(io) {
+            // `openForBackgroundWork()` rather than `requireDatabase()`: the
+            // alert evaluation runs in a Worker with no Activity alive, where
+            // `requireDatabase()` throws -- and that throw lands in a
+            // `runCatching` and comes back as a clean success that recorded
+            // nothing, which is BUG13's exact shape (CLAUDE.md §7).
+            session.openForBackgroundWork()?.budgetDao()
+                ?.recordAlert(id, threshold, periodStart)
+        }
+    }
+
     override suspend fun delete(id: String): BudgetResult<Unit> = withContext(io) {
         val affected = session.requireDatabase().budgetDao()
             .softDelete(id, clock.nowMillis())

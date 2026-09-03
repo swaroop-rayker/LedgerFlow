@@ -23,6 +23,7 @@ import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.domain.ledger.EntryDraft
 import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.domain.vault.VaultInitRequest
 import com.ledgerflow.core.model.Category
@@ -313,6 +314,7 @@ class Bug6_DraftSurvivesProcessDeathTest {
         fun entryViewModel() = EntryViewModel(
             approveTransaction = ApproveTransactionUseCase(
                 DefaultLedgerRepository(vault, ids, clock, Dispatchers.IO),
+                NoOpBudgetAlertTrigger,
             ),
             drafts = DefaultDraftRepository(vault, ids, clock, Dispatchers.IO),
             ledgerRepository = DefaultLedgerRepository(vault, ids, clock, Dispatchers.IO),

@@ -2,6 +2,7 @@ package com.ledgerflow.feature.inbox
 
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.inbox.InboxError
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.ApprovalEdits
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
@@ -40,7 +41,7 @@ class ApprovePendingUseCaseTest {
     private val approve = ApprovePendingUseCase(
         repository = pending,
         merchants = merchants,
-        approveTransaction = ApproveTransactionUseCase(ledger),
+        approveTransaction = ApproveTransactionUseCase(ledger, NoOpBudgetAlertTrigger),
     )
 
     private fun candidate(

@@ -21,6 +21,9 @@ public data class Budget(
     val startDate: Int,
     val rolloverEnabled: Boolean,
     val alertThresholds: List<Int>,
+    /** Highest threshold already announced for [alertPeriodStart]. */
+    val lastAlertedThreshold: Int = 0,
+    val alertPeriodStart: Int = 0,
 )
 
 /**
@@ -39,26 +42,60 @@ public data class BudgetProgress(
     val periodEnd: Int,
     val daysElapsed: Int,
     val projectedSpend: Money,
+    /**
+     * Unspent carried in from the previous period (§5.7's optional rollover).
+     *
+     * Zero when rollover is off, and **never negative**: carrying an *overspend*
+     * forward would silently shrink next month's budget, which is a punishment
+     * the user did not agree to when they ticked a box labelled "roll over
+     * unspent". §5.7 says unspent, so unspent is what carries.
+     */
+    val rolledOver: Money = Money(0L),
 ) {
+    /** The budget actually available this period, rollover included. */
+    val effectiveAmount: Money get() = Money(budget.amount.minor + rolledOver.minor)
+
     /**
      * Spend as a fraction of the budget. A chart coordinate, not money — the
      * amounts either side of the division stay `Long` (Law 3).
      */
     public val fraction: Float
-        get() = if (budget.amount.minor <= 0L) {
+        get() = if (effectiveAmount.minor <= 0L) {
             0f
         } else {
-            (spent.minor.toDouble() / budget.amount.minor.toDouble()).toFloat()
+            (spent.minor.toDouble() / effectiveAmount.minor.toDouble()).toFloat()
         }
 
     /** The highest threshold this budget has crossed, or null. */
     public fun crossedThreshold(): Int? = budget.alertThresholds
         .sortedDescending()
-        .firstOrNull { threshold -> spent.minor * PERCENT >= budget.amount.minor * threshold }
+        .firstOrNull { threshold -> spent.minor * PERCENT >= effectiveAmount.minor * threshold }
 
     /** True when the *projection* overruns even though today's spend does not. */
     public val onCourseToOverrun: Boolean
-        get() = spent.minor <= budget.amount.minor && projectedSpend.minor > budget.amount.minor
+        get() = spent.minor <= effectiveAmount.minor &&
+            projectedSpend.minor > effectiveAmount.minor
+}
+
+/**
+ * Which threshold, if any, this budget should announce right now (§5.7).
+ *
+ * **Returns null unless the crossing is news.** A threshold already recorded
+ * for *this* period is silent; the same threshold in a *new* period is not,
+ * which is what [Budget.alertPeriodStart] exists to distinguish. Without both
+ * checks the alert fires on every evaluation after the crossing — a
+ * notification each time the user approves anything, which is how a useful
+ * alert becomes one that gets turned off.
+ *
+ * Only the **highest** newly-crossed threshold is announced. Spending that
+ * jumps from 50% to 120% in one purchase is one event, and telling the user
+ * twice about it is telling them once too many.
+ */
+public fun BudgetProgress.thresholdToAnnounce(): Int? {
+    val crossed = crossedThreshold() ?: return null
+    val samePeriod = budget.alertPeriodStart == periodStart
+    if (samePeriod && crossed <= budget.lastAlertedThreshold) return null
+    return crossed
 }
 
 /**
@@ -119,6 +156,20 @@ public object BudgetPeriods {
      * period — which is arithmetically right and is exactly why the UI labels
      * this a projection rather than a forecast to be trusted.
      */
+    /**
+     * The previous period's unspent remainder (§5.7's rollover).
+     *
+     * Clamped at zero: an overspend does not carry. Integer arithmetic, because
+     * the result is money (Law 3).
+     *
+     * **One period back, not all of them.** Compounding every past period's
+     * remainder would make this month's "budget" a number the user never chose
+     * and cannot predict; carrying one period is the version someone can hold
+     * in their head, which is the whole point of a budget.
+     */
+    public fun rollover(budgetAmount: Money, previousSpend: Money): Money =
+        Money((budgetAmount.minor - previousSpend.minor).coerceAtLeast(0L))
+
     public fun project(spent: Money, daysElapsed: Int, periodLength: Int): Money {
         if (daysElapsed <= 0) return spent
         val days = daysElapsed.coerceAtMost(periodLength)

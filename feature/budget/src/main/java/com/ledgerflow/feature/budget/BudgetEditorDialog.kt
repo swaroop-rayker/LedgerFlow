@@ -8,14 +8,23 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
+import com.ledgerflow.core.designsystem.component.LfButton
+import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
@@ -39,9 +48,18 @@ import com.ledgerflow.core.model.Category
 public fun BudgetEditorDialog(
     editor: BudgetEditorState,
     availableCategories: List<Category>,
+    subcategories: List<Category>,
     currency: String,
     onEvent: (BudgetEvent) -> Unit,
 ) {
+    if (editor.showDatePicker) {
+        StartDatePicker(
+            selected = editor.startDate,
+            onPicked = { onEvent(BudgetEvent.StartDatePicked(it)) },
+            onDismiss = { onEvent(BudgetEvent.DatePickerDismissed) },
+        )
+    }
+
     LfDialog(
         title = if (editor.isEdit) "Edit budget" else "New budget",
         body = if (editor.isEdit) {
@@ -53,50 +71,98 @@ public fun BudgetEditorDialog(
         onConfirm = { onEvent(BudgetEvent.SaveClicked) },
         onDismiss = { onEvent(BudgetEvent.EditorDismissed) },
         detail = {
-            // **Scrollable, and device testing is why.** A real taxonomy has a
-            // dozen debit categories; as a plain Column the chip cloud pushed
-            // the amount field past the dialog's maximum height with no way to
-            // reach it, so a budget could be started and never finished. The
-            // cap keeps the dialog from growing to fill the screen on a tall
-            // device, and the scroll makes the rest reachable on a short one.
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = EDITOR_MAX_HEIGHT)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            ) {
-                if (!editor.isEdit) {
-                    CategoryPicker(
-                        categories = availableCategories,
-                        selectedId = editor.categoryId,
-                        onPick = { onEvent(BudgetEvent.CategoryPicked(it)) },
-                    )
-                    PeriodPicker(
-                        selected = editor.period,
-                        onPick = { onEvent(BudgetEvent.PeriodPicked(it)) },
-                    )
-                }
-
-                LfAmountField(
-                    value = editor.amountText,
-                    onValueChange = { onEvent(BudgetEvent.AmountChanged(it)) },
-                    currencyCode = currency,
-                    label = "Amount",
-                )
-
-                if (editor.error != null) {
-                    Text(
-                        text = editor.error,
-                        style = LfTheme.typography.label,
-                        color = LfTheme.colors.warn,
-                    )
-                }
-            }
+            EditorForm(
+                editor = editor,
+                availableCategories = availableCategories,
+                subcategories = subcategories,
+                currency = currency,
+                onEvent = onEvent,
+            )
         },
     )
 }
 
+/**
+ * The form itself.
+ *
+ * **Scrollable, and device testing is why.** A real taxonomy has around forty
+ * debit categories; as a plain Column they pushed the amount field past the
+ * dialog's maximum height with no way to reach it, so the form could be opened
+ * and never completed. The cap stops the dialog growing to fill a tall screen;
+ * the scroll makes the rest reachable on a short one.
+ */
+@Composable
+private fun EditorForm(
+    editor: BudgetEditorState,
+    availableCategories: List<Category>,
+    subcategories: List<Category>,
+    currency: String,
+    onEvent: (BudgetEvent) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = EDITOR_MAX_HEIGHT)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+    ) {
+        if (!editor.isEdit) {
+            CategoryPicker(
+                categories = availableCategories,
+                selectedId = editor.categoryId,
+                onPick = { onEvent(BudgetEvent.CategoryPicked(it)) },
+            )
+            // §5.7's "optionally per-subcategory". Only shown when the picked
+            // category has children -- an empty picker is a control that can
+            // only disappoint.
+            if (subcategories.isNotEmpty()) {
+                SubcategoryPicker(
+                    subcategories = subcategories,
+                    selectedId = editor.subcategoryId,
+                    onPick = { onEvent(BudgetEvent.SubcategoryPicked(it)) },
+                )
+            }
+            PeriodPicker(
+                selected = editor.period,
+                onPick = { onEvent(BudgetEvent.PeriodPicked(it)) },
+            )
+            StartDateRow(
+                startDate = editor.startDate,
+                onClick = { onEvent(BudgetEvent.StartDateClicked) },
+            )
+            RolloverRow(
+                enabled = editor.rolloverEnabled,
+                onToggle = { onEvent(BudgetEvent.RolloverToggled) },
+            )
+        }
+
+        LfAmountField(
+            value = editor.amountText,
+            onValueChange = { onEvent(BudgetEvent.AmountChanged(it)) },
+            currencyCode = currency,
+            label = "Amount",
+        )
+
+        if (editor.error != null) {
+            Text(
+                text = editor.error,
+                style = LfTheme.typography.label,
+                color = LfTheme.colors.warn,
+            )
+        }
+    }
+}
+
+/**
+ * The category this budget limits.
+ *
+ * **One scrolling row, not a wrapping cloud** — and the device decided it. The
+ * seeded taxonomy has around forty debit categories; as a `FlowRow` they filled
+ * the whole dialog and pushed Period and Amount out of reach, so the form could
+ * be opened and never completed. A single row costs one line whatever the
+ * category count, which puts the field the user came to fill immediately below
+ * it. Same shape as the Analytics range chips, for the same reason.
+ */
 @Composable
 private fun CategoryPicker(
     categories: List<Category>,
@@ -108,13 +174,6 @@ private fun CategoryPicker(
         style = LfTheme.typography.label,
         color = LfTheme.colors.textSecondary,
     )
-    // **One scrolling row, not a wrapping cloud** — and the device is what
-    // decided it. The seeded taxonomy has around forty debit categories; as a
-    // `FlowRow` they filled the whole dialog and pushed Period and Amount out
-    // of reach, so the form could be opened and never completed. A single row
-    // costs one line whatever the category count, which puts the field the user
-    // came to fill immediately below it. Same shape as the Analytics range
-    // chips, for the same reason.
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
@@ -132,6 +191,135 @@ private fun CategoryPicker(
         }
     }
 }
+
+/**
+ * §5.7's optional subcategory scoping.
+ *
+ * "All of <category>" is an explicit chip rather than a deselect gesture: a
+ * picker where the way back is "tap the selected one again" is a rule the user
+ * has to discover, and the whole-category budget is the common case.
+ */
+@Composable
+private fun SubcategoryPicker(
+    subcategories: List<Category>,
+    selectedId: String?,
+    onPick: (String?) -> Unit,
+) {
+    Text(
+        text = "Narrow to",
+        style = LfTheme.typography.label,
+        color = LfTheme.colors.textSecondary,
+    )
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+    ) {
+        item(key = "all") {
+            LfChip(
+                label = "All",
+                style = if (selectedId == null) LfChipStyle.Selected else LfChipStyle.Assist,
+                onClick = { onPick(null) },
+            )
+        }
+        items(subcategories, key = { it.id }) { child ->
+            LfChip(
+                label = child.name,
+                style = if (child.id == selectedId) {
+                    LfChipStyle.Selected
+                } else {
+                    LfChipStyle.Assist
+                },
+                onClick = { onPick(child.id) },
+            )
+        }
+    }
+}
+
+/**
+ * When the period starts, and therefore when every later period does.
+ *
+ * §5.7's periods repeat from `start_date` rather than snapping to a calendar,
+ * so this is not cosmetic: a monthly budget started on the 10th runs the 10th
+ * to the 9th. The row states the chosen date rather than hiding it behind an
+ * icon, because the consequence is invisible otherwise.
+ */
+@Composable
+private fun StartDateRow(startDate: Int, onClick: () -> Unit) {
+    Text(
+        text = "Starts",
+        style = LfTheme.typography.label,
+        color = LfTheme.colors.textSecondary,
+    )
+    LfActionRow(alignment = LfActionAlignment.Start) {
+        LfButton(
+            text = formatEpochDay(startDate),
+            onClick = onClick,
+            style = LfButtonStyle.Inline,
+        )
+    }
+}
+
+@Composable
+private fun RolloverRow(enabled: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Roll over what is left",
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.textPrimary,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = enabled, onCheckedChange = { onToggle() })
+    }
+}
+
+/**
+ * Material's date picker, converted to and from days since epoch.
+ *
+ * The dialog speaks UTC millis; `local_date` is a day number (§6.1). Converting
+ * at the boundary keeps the timezone question in one place rather than letting
+ * millis leak into a column that deliberately has no time in it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StartDatePicker(selected: Int, onPicked: (Int) -> Unit, onDismiss: () -> Unit) {
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = selected.toLong() * MILLIS_PER_DAY,
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            LfButton(
+                text = "Set",
+                onClick = {
+                    val millis = state.selectedDateMillis
+                    if (millis != null) onPicked((millis / MILLIS_PER_DAY).toInt())
+                    else onDismiss()
+                },
+                style = LfButtonStyle.Inline,
+            )
+        },
+        dismissButton = {
+            LfButton(text = "Cancel", onClick = onDismiss, style = LfButtonStyle.Inline)
+        },
+    ) {
+        DatePicker(state = state)
+    }
+}
+
+/** `12 Aug 2026` from a day number. */
+private fun formatEpochDay(epochDay: Int): String {
+    val date = java.time.LocalDate.ofEpochDay(epochDay.toLong())
+    return "${date.dayOfMonth} " +
+        date.month.getDisplayName(
+            java.time.format.TextStyle.SHORT,
+            java.util.Locale.getDefault(),
+        ) + " ${date.year}"
+}
+
+private const val MILLIS_PER_DAY = 86_400_000L
 
 @Composable
 private fun PeriodPicker(selected: BudgetPeriod, onPick: (BudgetPeriod) -> Unit) {

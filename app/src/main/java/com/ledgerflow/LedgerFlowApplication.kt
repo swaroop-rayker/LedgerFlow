@@ -8,6 +8,7 @@ import android.os.strictmode.Violation
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.ledgerflow.feature.analytics.work.RollupWorker
+import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.ingest.notify.InboxNotifications
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -55,6 +56,12 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
         // every cold start resets the period, so on a phone the user opens
         // daily the pass would be perpetually deferred and never once run.
         RollupWorker.schedule(this)
+        // §5.7's alert channel, created before the first crossing for the same
+        // reason `inbox_high` is: a channel that does not exist yet cannot be
+        // found and muted in system settings, and the user should be able to
+        // turn budget alerts off without first going over a budget to conjure
+        // the switch.
+        BudgetNotifications.ensureChannel(this)
     }
 
     /**

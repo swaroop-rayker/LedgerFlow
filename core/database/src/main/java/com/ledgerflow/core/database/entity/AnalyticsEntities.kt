@@ -81,6 +81,34 @@ public data class BudgetEntity(
      */
     @ColumnInfo(name = "deleted_at")
     val deletedAt: Long? = null,
+
+    /**
+     * The highest alert threshold already announced for the current period.
+     *
+     * **Without it a threshold alert repeats.** §5.7 wants a notification when
+     * spending crosses 80% and again at 100%; a check with no memory fires on
+     * every evaluation after the crossing, which is a notification every time
+     * the user approves anything. Zero means nothing announced yet, and it
+     * resets when the period rolls over — the same budget crossing 80% next
+     * month is news again.
+     *
+     * On the row rather than in `app_meta` because it is per-budget state that
+     * must die with the budget: a key-value entry would outlive a deleted
+     * budget and would have to be swept up by hand.
+     */
+    @ColumnInfo(name = "last_alerted_threshold", defaultValue = "0")
+    val lastAlertedThreshold: Int = 0,
+
+    /**
+     * The period this alert state belongs to, as its start date.
+     *
+     * The threshold alone is not enough: 80% crossed *last* month must not
+     * suppress 80% crossed this month. Comparing the stored period start with
+     * the current one is what makes the reset automatic rather than something a
+     * worker has to remember to do.
+     */
+    @ColumnInfo(name = "alert_period_start", defaultValue = "0")
+    val alertPeriodStart: Int = 0,
 )
 
 /**

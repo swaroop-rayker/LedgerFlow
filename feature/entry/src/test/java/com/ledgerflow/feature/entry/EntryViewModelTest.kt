@@ -8,6 +8,7 @@ import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.domain.taxonomy.TaxonomyError
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
@@ -710,7 +711,7 @@ class EntryViewModelTest {
      *   action's "new entry", which is what every other test here wants.
      */
     private fun viewModel(openingDraftId: String? = null) = EntryViewModel(
-        approveTransaction = ApproveTransactionUseCase(ledger),
+        approveTransaction = ApproveTransactionUseCase(ledger, NoOpBudgetAlertTrigger),
         drafts = drafts,
         ledgerRepository = ledger,
         categories = categories,

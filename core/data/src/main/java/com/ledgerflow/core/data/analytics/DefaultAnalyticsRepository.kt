@@ -7,6 +7,7 @@ import com.ledgerflow.core.database.dao.DimensionTotalRow
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
+import com.ledgerflow.core.domain.analytics.Budget
 import com.ledgerflow.core.domain.analytics.BudgetPeriods
 import com.ledgerflow.core.domain.analytics.BudgetProgress
 import com.ledgerflow.core.domain.analytics.DayTotal
@@ -49,7 +50,15 @@ public class DefaultAnalyticsRepository @Inject constructor(
         window: AnalyticsWindow,
         comparePrevious: Boolean,
     ): AnalyticsSnapshot = withContext(io) {
-        val database = session.requireDatabase()
+        // **`openForBackgroundWork()`, not `requireDatabase()`.** The budget
+        // alert evaluation reaches this from a Worker with no Activity alive,
+        // where `requireDatabase()` throws -- and the throw lands in a
+        // `runCatching` and returns a clean success that read nothing, which is
+        // BUG13 exactly (CLAUDE.md §7). An unopenable vault yields an empty
+        // snapshot, which is honest: there is nothing to report, rather than a
+        // lie that there is nothing to spend.
+        val database = session.openForBackgroundWork()
+            ?: return@withContext emptySnapshot(ledger, window)
         val names = NameBook.read(database)
         val dao = database.dailyRollupDao()
 
@@ -165,6 +174,7 @@ public class DefaultAnalyticsRepository @Inject constructor(
             }
             val length = BudgetPeriods.lengthInDays(budget.period)
             val elapsed = (today - period.first + 1).coerceIn(0, length)
+            val rolledOver = rolloverFor(budget, period, rollups)
             BudgetProgress(
                 budget = budget,
                 categoryName = names.category(budget.categoryId),
@@ -174,6 +184,7 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 periodEnd = period.last,
                 daysElapsed = elapsed,
                 projectedSpend = BudgetPeriods.project(Money(spent), elapsed, length),
+                rolledOver = rolledOver,
             )
         }
     }
@@ -207,6 +218,19 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 )
             }
         }
+
+    private fun emptySnapshot(ledger: LedgerType, window: AnalyticsWindow) = AnalyticsSnapshot(
+        ledger = ledger,
+        window = window,
+        total = Money(0L),
+        previousTotal = null,
+        transactionCount = 0,
+        timeBuckets = emptyList(),
+        categories = emptyList(),
+        subcategories = emptyMap(),
+        merchants = emptyList(),
+        paymentMethods = emptyList(),
+    )
 
     /**
      * A1's columns, stacked by category.
@@ -263,6 +287,40 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 },
             )
         }
+    }
+
+    /**
+     * What the previous period left unspent (§5.7's rollover).
+     *
+     * Zero when the budget does not roll over, and zero for its **first**
+     * period — there is no earlier period to carry from, and treating a missing
+     * period as fully unspent would hand the user a double budget on day one.
+     *
+     * One period back only. Compounding every past remainder would make this
+     * month's figure something nobody chose and nobody can predict.
+     */
+    private suspend fun rolloverFor(
+        budget: Budget,
+        period: IntRange,
+        rollups: com.ledgerflow.core.database.dao.DailyRollupDao,
+    ): Money {
+        if (!budget.rolloverEnabled) return Money(0L)
+        val length = BudgetPeriods.lengthInDays(budget.period)
+        val previousStart = period.first - length
+        if (previousStart < budget.startDate) return Money(0L)
+
+        val subcategoryId = budget.subcategoryId
+        val previousSpend = if (subcategoryId == null) {
+            rollups.categorySpend(budget.categoryId, previousStart, period.first - 1)
+        } else {
+            rollups.subcategorySpend(
+                categoryId = budget.categoryId,
+                subcategoryId = subcategoryId,
+                from = previousStart,
+                to = period.first - 1,
+            )
+        }
+        return BudgetPeriods.rollover(budget.amount, Money(previousSpend))
     }
 
     private fun DimensionTotalRow.toTotal(

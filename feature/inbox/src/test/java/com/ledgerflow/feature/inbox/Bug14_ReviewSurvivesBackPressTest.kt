@@ -6,6 +6,7 @@ import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
@@ -95,7 +96,7 @@ class Bug14_ReviewSurvivesBackPressTest {
         approvePending = ApprovePendingUseCase(
             pending,
             merchants,
-            ApproveTransactionUseCase(ledger),
+            ApproveTransactionUseCase(ledger, NoOpBudgetAlertTrigger),
         ),
         discardPending = DiscardPendingUseCase(pending),
         pendingRepository = pending,

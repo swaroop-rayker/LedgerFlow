@@ -26,6 +26,8 @@ internal fun BudgetEntity.toDomainBudget(): Budget = Budget(
     alertThresholds = alertThresholds.split(",")
         .mapNotNull { it.trim().toIntOrNull() }
         .ifEmpty { DEFAULT_THRESHOLDS },
+    lastAlertedThreshold = lastAlertedThreshold,
+    alertPeriodStart = alertPeriodStart,
 )
 
 /** §5.7's `80,100`. */

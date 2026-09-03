@@ -60,50 +60,120 @@ public class BudgetViewModel @Inject constructor(
         reload()
     }
 
+    /**
+     * Split by what the event is about — the list, or the form.
+     *
+     * The two halves grew past the point where the whole `when` fits on a
+     * screen, and they are read at different times: the list events are the
+     * screen's verbs, the editor events are one dialog's field-by-field state.
+     */
     public fun onEvent(event: BudgetEvent) {
         when (event) {
-            BudgetEvent.AddClicked -> _state.update { it.copy(editor = BudgetEditorState()) }
-
-            is BudgetEvent.EditClicked -> _state.update { current ->
-                val progress = current.budgets.firstOrNull { it.budget.id == event.id }
-                    ?: return@update current
-                current.copy(
-                    editor = BudgetEditorState(
-                        editingId = progress.budget.id,
-                        categoryId = progress.budget.categoryId,
-                        categoryName = progress.categoryName,
-                        period = progress.budget.period,
-                        amountText = MoneyFormat.plain(
-                            progress.budget.amount.minor,
-                            current.baseCurrency,
-                        ),
-                    ),
+            BudgetEvent.AddClicked -> _state.update {
+                // The period starts today unless the picker moves it. Guessing
+                // the 1st of the month would silently choose a period the user
+                // did not, and §5.7's periods repeat from `start_date`.
+                it.copy(
+                    editor = BudgetEditorState(startDate = LocalDates.of(clock.nowMillis())),
+                    subcategoriesForPicked = emptyList(),
                 )
             }
+            is BudgetEvent.EditClicked -> openEditor(event.id)
+            is BudgetEvent.DeleteClicked -> delete(event.id)
+            BudgetEvent.SaveClicked -> save()
+            BudgetEvent.MessageShown -> _state.update { it.copy(message = null) }
+            BudgetEvent.EditorDismissed -> _state.update { it.copy(editor = null) }
+            else -> onEditorEvent(event)
+        }
+    }
 
-            is BudgetEvent.CategoryPicked -> _state.update { current ->
-                val category = current.availableCategories.firstOrNull { it.id == event.categoryId }
-                current.copy(
-                    editor = current.editor?.copy(
-                        categoryId = event.categoryId,
-                        categoryName = category?.name.orEmpty(),
-                        error = null,
+    private fun openEditor(id: String) {
+        _state.update { current ->
+            val progress = current.budgets.firstOrNull { it.budget.id == id }
+                ?: return@update current
+            current.copy(
+                editor = BudgetEditorState(
+                    editingId = progress.budget.id,
+                    categoryId = progress.budget.categoryId,
+                    categoryName = progress.categoryName,
+                    period = progress.budget.period,
+                    amountText = MoneyFormat.plain(
+                        progress.budget.amount.minor,
+                        current.baseCurrency,
                     ),
-                )
+                    subcategoryId = progress.budget.subcategoryId,
+                    startDate = progress.budget.startDate,
+                    rolloverEnabled = progress.budget.rolloverEnabled,
+                ),
+            )
+        }
+    }
+
+    /** Field-by-field edits. Every branch is a `copy` on the editor. */
+    private fun onEditorEvent(event: BudgetEvent) {
+        when (event) {
+            is BudgetEvent.CategoryPicked -> {
+                _state.update { current ->
+                    val category =
+                        current.availableCategories.firstOrNull { it.id == event.categoryId }
+                    current.copy(
+                        editor = current.editor?.copy(
+                            categoryId = event.categoryId,
+                            categoryName = category?.name.orEmpty(),
+                            // Changing category invalidates the old choice: a
+                            // subcategory of a different parent would file
+                            // spending nowhere the budget can see.
+                            subcategoryId = null,
+                            error = null,
+                        ),
+                    )
+                }
+                loadSubcategories(event.categoryId)
+            }
+
+            is BudgetEvent.SubcategoryPicked -> _state.update {
+                it.copy(editor = it.editor?.copy(subcategoryId = event.subcategoryId))
             }
 
             is BudgetEvent.PeriodPicked -> _state.update {
                 it.copy(editor = it.editor?.copy(period = event.period))
             }
 
+            BudgetEvent.RolloverToggled -> _state.update { current ->
+                val editor = current.editor ?: return@update current
+                current.copy(editor = editor.copy(rolloverEnabled = !editor.rolloverEnabled))
+            }
+
+            BudgetEvent.StartDateClicked -> _state.update {
+                it.copy(editor = it.editor?.copy(showDatePicker = true))
+            }
+
+            is BudgetEvent.StartDatePicked -> _state.update {
+                it.copy(
+                    editor = it.editor?.copy(
+                        startDate = event.epochDay,
+                        showDatePicker = false,
+                    ),
+                )
+            }
+
+            BudgetEvent.DatePickerDismissed -> _state.update {
+                it.copy(editor = it.editor?.copy(showDatePicker = false))
+            }
+
             is BudgetEvent.AmountChanged -> _state.update {
                 it.copy(editor = it.editor?.copy(amountText = event.text, error = null))
             }
 
-            BudgetEvent.EditorDismissed -> _state.update { it.copy(editor = null) }
-            BudgetEvent.MessageShown -> _state.update { it.copy(message = null) }
-            BudgetEvent.SaveClicked -> save()
-            is BudgetEvent.DeleteClicked -> delete(event.id)
+            // Handled by `onEvent`; listed so the `when` stays exhaustive over
+            // the sealed type rather than needing an `else` (CLAUDE.md §5).
+            BudgetEvent.AddClicked,
+            is BudgetEvent.EditClicked,
+            is BudgetEvent.DeleteClicked,
+            BudgetEvent.SaveClicked,
+            BudgetEvent.EditorDismissed,
+            BudgetEvent.MessageShown,
+            -> Unit
         }
     }
 
@@ -135,13 +205,11 @@ public class BudgetViewModel @Inject constructor(
                 createBudget(
                     NewBudget(
                         categoryId = categoryId,
+                        subcategoryId = editor.subcategoryId,
                         period = editor.period,
                         amount = Money(minor),
-                        // The period starts today, which is the only start date
-                        // that needs no explanation. A date picker can come
-                        // later; guessing the 1st of the month would silently
-                        // choose a period the user did not.
-                        startDate = LocalDates.of(clock.nowMillis()),
+                        startDate = editor.startDate,
+                        rolloverEnabled = editor.rolloverEnabled,
                     ),
                 )
             }
@@ -167,6 +235,16 @@ public class BudgetViewModel @Inject constructor(
                 }
                 is BudgetResult.Failure -> _state.update { it.copy(message = "Could not delete") }
             }
+        }
+    }
+
+    private fun loadSubcategories(categoryId: String) {
+        viewModelScope.launch {
+            val children = categories.observeTree(LedgerType.DEBIT).first()
+                .firstOrNull { it.parent.id == categoryId }
+                ?.children
+                .orEmpty()
+            _state.update { it.copy(subcategoriesForPicked = children) }
         }
     }
 

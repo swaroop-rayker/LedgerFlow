@@ -2,6 +2,7 @@ package com.ledgerflow.core.domain.usecase
 
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
+import com.ledgerflow.core.domain.analytics.BudgetAlertTrigger
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.domain.vault.StorageMaintenance
@@ -29,10 +30,17 @@ import javax.inject.Inject
  */
 public class ApproveTransactionUseCase @Inject constructor(
     private val ledger: LedgerRepository,
+    private val budgetAlerts: BudgetAlertTrigger,
 ) {
     /** @return the committed entry, or the reason it was refused. */
     public suspend operator fun invoke(request: ApprovalRequest): LedgerResult<LedgerEntry> =
-        ledger.approve(request)
+        ledger.approve(request).also { result ->
+            // §5.7's alerts, and only on success: a refused approval changed no
+            // spending, so evaluating would be work that can only conclude
+            // nothing. The trigger enqueues and returns -- the evaluation and
+            // any notification happen in a Worker.
+            if (result is LedgerResult.Success) budgetAlerts.onSpendingChanged()
+        }
 }
 
 /**
@@ -127,9 +135,18 @@ public class PurgeDeletedEntriesUseCase @Inject constructor(
  */
 public class RestoreEntryUseCase @Inject constructor(
     private val ledger: LedgerRepository,
+    private val budgetAlerts: BudgetAlertTrigger,
 ) {
-    public suspend operator fun invoke(entries: List<BinnedRef>): Int =
-        entries.count { ledger.restoreEntry(it.ledger, it.id) is LedgerResult.Success }
+    public suspend operator fun invoke(entries: List<BinnedRef>): Int {
+        val restored =
+            entries.count { ledger.restoreEntry(it.ledger, it.id) is LedgerResult.Success }
+        // Restoring puts spending back into a past period, so it can cross a
+        // threshold that was not crossed while the entry sat in the bin. The
+        // other two doors -- soft delete and purge -- only ever reduce spend,
+        // and a reduction cannot newly cross a threshold upward.
+        if (restored > 0) budgetAlerts.onSpendingChanged()
+        return restored
+    }
 }
 
 /**
