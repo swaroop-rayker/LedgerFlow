@@ -11,6 +11,8 @@ import com.ledgerflow.core.domain.analytics.AnalyticsWindow
 import com.ledgerflow.core.domain.analytics.Budget
 import com.ledgerflow.core.domain.analytics.BudgetPeriods
 import com.ledgerflow.core.domain.analytics.BudgetProgress
+import com.ledgerflow.core.domain.analytics.CaptureCoverage
+import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.DayTotal
 import com.ledgerflow.core.domain.analytics.DimensionTotal
 import com.ledgerflow.core.domain.analytics.Occurrence
@@ -112,6 +114,7 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 today = window.to,
                 through = window.to + window.range.days,
             ),
+            captureCoverage = buildCaptureCoverage(dao, ledger, window, filters),
         )
     }
 
@@ -237,6 +240,43 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 )
             }
         }
+
+    /**
+     * C1 — capture coverage over the same window and filters as everything else.
+     *
+     * **It honours the filters, including the source filter**, and that is the
+     * consistent answer rather than the clever one. Filtering to "Manual" does
+     * make this section read 100% typed by hand, which is useless but true; the
+     * sheet promises "Narrow every figure on this screen", and one section
+     * quietly exempting itself would make that copy a lie. The useful cases —
+     * "how much of my Food spending is captured?" — are the same mechanism.
+     */
+    private suspend fun buildCaptureCoverage(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        ledger: LedgerType,
+        window: AnalyticsWindow,
+        filters: AnalyticsFilters,
+    ): CaptureCoverage = CaptureCoverage.from(
+        dao.captureCoverage(
+            ledger = ledger,
+            from = window.from,
+            to = window.to,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+            minAmount = filters.minAmount?.minor,
+            maxAmount = filters.maxAmount?.minor,
+            filterSources = filters.sources.flag(),
+            sources = filters.sources.map { it.name }.orPlaceholder(),
+            query = filters.query,
+            like = filters.query.toLikePattern(),
+        ).associate { row -> row.source to CaptureShare(row.sumMinor, row.txnCount) },
+    )
 
     private fun emptySnapshot(ledger: LedgerType, window: AnalyticsWindow) = AnalyticsSnapshot(
         ledger = ledger,
@@ -393,6 +433,8 @@ public class DefaultAnalyticsRepository @Inject constructor(
             bucketDays = window.bucketDays,
             filterCategories = filters.categoryIds.flag(),
             categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
             filterMerchants = filters.merchantIds.flag(),
             merchantIds = filters.merchantIds.orPlaceholder(),
             filterMethods = filters.paymentMethodIds.flag(),
@@ -435,6 +477,8 @@ public class DefaultAnalyticsRepository @Inject constructor(
             to = window.to,
             filterCategories = filters.categoryIds.flag(),
             categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
             filterMerchants = filters.merchantIds.flag(),
             merchantIds = filters.merchantIds.orPlaceholder(),
             filterMethods = filters.paymentMethodIds.flag(),

@@ -3,9 +3,9 @@ package com.ledgerflow.feature.analytics
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,6 +51,8 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
 import com.ledgerflow.core.domain.analytics.BudgetProgress
+import com.ledgerflow.core.domain.analytics.CaptureCoverage
+import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.DimensionTotal
 import com.ledgerflow.core.domain.analytics.RecurringMerchant
 
@@ -306,7 +308,76 @@ private fun LazyListScope.dailyAndCommitmentSections(
             }
         }
     }
+
+    // C1 — capture coverage. Last, because it is about the *app* rather than
+    // the money, and someone opening Analytics came for the money.
+    if (!snapshot.captureCoverage.isEmpty) {
+        item(key = "coverage", contentType = "coverage") {
+            SectionCard(title = "How this got here") {
+                CaptureCoverageSection(
+                    coverage = snapshot.captureCoverage,
+                    currency = state.baseCurrency,
+                )
+            }
+        }
+    }
 }
+
+/**
+ * C1 — capture coverage (`docs/DATAVIZ-PLAN.md` Family C).
+ *
+ * **The headline is a percentage and the bars are the evidence.** The number
+ * people want is one figure — "how much of this did I not have to type" — and a
+ * chart alone makes them compute it. The bars sit under it because a single
+ * percentage hides which way the remainder went once importing is involved.
+ *
+ * **By value on the bars, by count in the caption.** They routinely disagree:
+ * one rent transfer typed by hand can put capture under half by value while it
+ * is nine tenths by count, and reporting only the first would make an app that
+ * captures almost everything look broken. Both, on two lines, is cheaper than
+ * two charts and says more.
+ */
+@Composable
+private fun CaptureCoverageSection(coverage: CaptureCoverage, currency: String) {
+    val colors = LfTheme.colors
+    Text(
+        text = "${coverage.automaticPercentByValue}% captured automatically",
+        style = LfTheme.typography.titleM,
+        color = colors.textPrimary,
+    )
+    Text(
+        // The count sentence, which is the half a percentage of money hides.
+        text = "${coverage.automatic.count} of ${coverage.totalCount} " +
+            (if (coverage.totalCount == 1) "entry" else "entries") +
+            " (${coverage.automaticPercentByCount}%)",
+        style = LfTheme.typography.label,
+        color = colors.textSecondary,
+    )
+    LfHorizontalBarChart(
+        data = buildList {
+            add(coverage.bar("Automatic", coverage.automatic, currency, colors.accent))
+            add(coverage.bar("By hand", coverage.manual, currency, colors.textTertiary))
+            // Imported is a real third answer and is hidden when it is zero: a
+            // permanent empty row would imply the user should be importing.
+            if (coverage.imported.count > 0) {
+                add(coverage.bar("Imported", coverage.imported, currency, colors.textTertiary))
+            }
+        },
+    )
+}
+
+private fun CaptureCoverage.bar(
+    label: String,
+    share: CaptureShare,
+    currency: String,
+    color: Color,
+) = LfBarDatum(
+    id = label,
+    label = label,
+    value = share.amount.minor,
+    formattedValue = MoneyFormat.symbolised(share.amount.minor, currency),
+    color = color,
+)
 
 @Composable
 private fun BudgetRow(progress: BudgetProgress, currency: String) {

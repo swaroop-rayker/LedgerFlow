@@ -245,6 +245,15 @@ public data class AnalyticsSnapshot(
      * two disagree about what is recurring.
      */
     val runway: List<RecurringMerchant> = emptyList(),
+    /**
+     * C1 - how much of this window arrived automatically.
+     *
+     * Read from `ledger_entry.source`, which is why it costs no schema. Part of
+     * the snapshot rather than its own query for the reason this class exists:
+     * one window, one read, so the screen cannot show a coverage figure from a
+     * range the charts above it are no longer displaying.
+     */
+    val captureCoverage: CaptureCoverage = CaptureCoverage.Empty,
 ) {
     public val isEmpty: Boolean get() = total.minor == 0L && transactionCount == 0
 

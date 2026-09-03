@@ -13,6 +13,7 @@ import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.EntryAssignment
+import com.ledgerflow.core.model.EntryOrigin
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
@@ -201,6 +202,84 @@ class AnalyticsFilterTest {
         assertThat(snapshot.transactionCount).isEqualTo(1)
     }
 
+    /**
+     * C1 — capture coverage sums to the total the screen is already showing.
+     *
+     * **The grain is the point.** Summing `e.amount_minor` would be defensible
+     * in isolation and wrong here: the itemised entry in [seed] is ₹1,000 across
+     * two lines, and an entry-grain sum would make coverage's denominator differ
+     * from the headline total by nothing visible — the percentages would be
+     * against a figure appearing nowhere else on the screen. This asserts the
+     * two agree.
+     */
+    @Test
+    fun captureCoverageSumsToTheSameTotalTheScreenShows() = runBlocking<Unit> {
+        seed()
+
+        val snapshot = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters.None,
+        )
+
+        assertThat(snapshot.captureCoverage.totalMinor).isEqualTo(snapshot.total.minor)
+        assertThat(snapshot.captureCoverage.totalCount).isEqualTo(snapshot.transactionCount)
+    }
+
+    /**
+     * The split is read from `ledger_entry.source`, per bucket.
+     *
+     * `approve` writes MANUAL by default, so a captured entry has to be asked
+     * for explicitly — which is also the shape of the real pipeline, where only
+     * the ingest path sets anything else.
+     */
+    @Test
+    fun captureCoverageSplitsAutomaticFromTypedByHand() = runBlocking<Unit> {
+        approve(60_000L, groceries.id, zepto.id, source = EntrySource.NOTIFICATION)
+        approve(20_000L, groceries.id, zepto.id, source = EntrySource.SMS)
+        approve(20_000L, home.id, zepto.id, source = EntrySource.MANUAL)
+
+        val coverage = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters.None,
+        ).captureCoverage
+
+        assertThat(coverage.automatic.amount.minor).isEqualTo(80_000L)
+        assertThat(coverage.automatic.count).isEqualTo(2)
+        assertThat(coverage.manual.amount.minor).isEqualTo(20_000L)
+        // 80,000 of 100,000 by value; 2 of 3 by count. They disagree, which is
+        // why C1 reports both.
+        assertThat(coverage.automaticPercentByValue).isEqualTo(80)
+        assertThat(coverage.automaticPercentByCount).isEqualTo(67)
+    }
+
+    /**
+     * **Coverage narrows with every other figure on the screen.**
+     *
+     * The filter sheet promises "Narrow every figure on this screen", so a
+     * section quietly exempting itself would make that copy a lie — and the
+     * useful question ("how much of my *Food* spending is captured?") is the
+     * same mechanism.
+     */
+    @Test
+    fun captureCoverageHonoursTheFilters() = runBlocking<Unit> {
+        approve(60_000L, groceries.id, zepto.id, source = EntrySource.NOTIFICATION)
+        approve(40_000L, home.id, zepto.id, source = EntrySource.MANUAL)
+
+        val coverage = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters(categoryIds = setOf(groceries.id)),
+        ).captureCoverage
+
+        assertThat(coverage.totalMinor).isEqualTo(60_000L)
+        assertThat(coverage.automaticPercentByValue).isEqualTo(100)
+    }
+
     @Test
     fun filteringByMerchant_narrowsEveryFigure() = runBlocking<Unit> {
         seed()
@@ -372,6 +451,7 @@ class AnalyticsFilterTest {
         note: String? = null,
         lines: List<NewLineItem> = emptyList(),
         subcategoryId: String? = null,
+        source: EntrySource = EntrySource.MANUAL,
     ) {
         val occurredAt = LocalDate.ofEpochDay(today.toLong())
             .atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
@@ -387,6 +467,7 @@ class AnalyticsFilterTest {
                 ),
                 note = note,
                 lineItems = lines,
+                origin = EntryOrigin(source),
             ),
         )
         assertThat(result).isInstanceOf(LedgerResult.Success::class.java)

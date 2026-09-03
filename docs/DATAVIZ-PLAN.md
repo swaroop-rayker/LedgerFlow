@@ -120,7 +120,7 @@ is computed on-device, in an app with no `INTERNET` permission in release
 
 | # | Surface | What the user sees | Data | Phase |
 |---|---|---|---|---|
-| C1 | **Capture coverage** | Share of spending, by value and by count, that arrived automatically vs. was typed by hand | `ledger_entry.source` | **P3** |
+| C1 | **Capture coverage** | Share of spending, by value and by count, that arrived automatically vs. was typed by hand | `ledger_entry.source` | **P3 — shipped** |
 | C2 | **Parser gap list** | Merchants you almost always enter manually — i.e. exactly where the ruleset is blind | `ledger_entry.source` + `merchant_id` | **P3** |
 | C3 | **Dedupe evidence** | "47 double-notifications suppressed this month" | `pending_transaction.suppressed_by_id` | P5 |
 | C4 | **Confidence distribution** | Histogram of parser confidence; the low tail names the senders to fix | `pending_transaction.confidence` | P5 |
@@ -128,7 +128,28 @@ is computed on-device, in an app with no `INTERNET` permission in release
 
 **C1 and C2 need no new schema and no OCR — they run on the vault as it exists
 today,** which makes them the cheapest differentiated thing in the entire
-catalogue and the reason they sit in P3 beside the specced views.
+catalogue and the reason they sit in P3 beside the specced views. C1 is built;
+it reuses `LfHorizontalBarChart` and introduced no new primitive.
+
+**Two decisions C1 made that the table above does not carry.**
+
+*Three buckets, not two.* An **imported** entry is neither captured nor typed —
+nobody entered it and no parser read it. Folding it into "automatic" would
+inflate the one number this surface exists to report, and folding it into "by
+hand" would understate it, so it gets its own bucket and is hidden when empty.
+
+*It honours the analytics filters, including the source filter.* Filtering to
+"Manual" does make the section read 100% typed by hand, which is useless but
+true. The filter sheet promises "Narrow every figure on this screen", and one
+section quietly exempting itself would make that copy a lie — while the useful
+question, "how much of my *Food* spending is captured?", is the same mechanism.
+
+*And the money is read at line grain*, like every other aggregate on the screen,
+so C1's denominator is the total the user is already looking at. Summing
+`e.amount_minor` is the obvious alternative and is wrong twice over: the
+percentages would be against a figure appearing nowhere else, and the
+`LEFT JOIN line_item` fans a split bill into one row per line, so an entry-grain
+sum double-counts it outright.
 
 They also close a loop nothing else in the category has: C2 tells the user where
 capture is blind, and each blind spot is a candidate for a parser rule and a

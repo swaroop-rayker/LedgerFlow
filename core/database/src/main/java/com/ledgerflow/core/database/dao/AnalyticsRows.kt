@@ -1,6 +1,7 @@
 package com.ledgerflow.core.database.dao
 
 import androidx.room.ColumnInfo
+import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Money
 
 /**
@@ -35,6 +36,19 @@ public data class TimeBucketRow(
  */
 public data class DimensionTotalRow(
     @ColumnInfo(name = "dimension_id") val dimensionId: String,
+    @ColumnInfo(name = "sum_minor") val sumMinor: Money,
+    @ColumnInfo(name = "txn_count") val txnCount: Int,
+)
+
+/**
+ * One source's money and distinct-entry count, for C1's capture coverage.
+ *
+ * `source` is the column `ledger_entry` already carries, so C1 needs no schema
+ * of its own — which is why `docs/DATAVIZ-PLAN.md` puts it in P3 beside the
+ * specced views rather than behind OCR.
+ */
+public data class SourceTotalRow(
+    @ColumnInfo(name = "source") val source: EntrySource,
     @ColumnInfo(name = "sum_minor") val sumMinor: Money,
     @ColumnInfo(name = "txn_count") val txnCount: Int,
 )

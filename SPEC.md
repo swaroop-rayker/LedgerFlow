@@ -707,7 +707,7 @@ Supports both ledgers (segmented control DEBIT | CREDIT at the top). Supports mu
 | Calendar heatmap | Day-cell intensity grid (month view) | P3 |
 | Budget progress | Ring/linear progress per category with burn-rate projection | P3 |
 | Recurring detection | List of suspected recurring merchants (interval clustering, ≥ 3 occurrences, σ/μ < 0.25) | P3 |
-| **Capture coverage** | Share of spending, by value and by count, that arrived automatically vs. was typed by hand | **P3** |
+| **Capture coverage** | Share of spending, by value and by count, that arrived automatically vs. was typed by hand. **Three buckets, not two** — an *imported* entry is neither captured nor typed, so folding it either way would misreport the one number this view exists for. Read at line grain like every other aggregate, so its denominator is the total already on screen | **P3** |
 | **Parser gap list** | Merchants almost always entered manually — i.e. exactly where the shipped ruleset is blind | **P3** |
 | **Two-book parallel view** | Debit and credit on mirrored axes, visibly separate, never a net line | **P3** |
 | **Personal price index** | Per item, unit price over time; ranked "biggest movers" with sparklines, plus a basket index | P4 |
