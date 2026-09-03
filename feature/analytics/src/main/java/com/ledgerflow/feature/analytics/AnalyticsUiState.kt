@@ -1,9 +1,12 @@
 package com.ledgerflow.feature.analytics
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
+import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.Merchant
 
 /**
  * Analytics, A1–A5 (`SPEC.md` §5.6).
@@ -35,6 +38,16 @@ public data class AnalyticsUiState(
      * would simply not expand.
      */
     val expandedCategoryId: String? = null,
+    /** §5.6's composable filters. [AnalyticsFilters.None] is the fast path. */
+    val filters: AnalyticsFilters = AnalyticsFilters.None,
+    val showFilterSheet: Boolean = false,
+    /** Custom range being picked, or null. */
+    val customFrom: Int? = null,
+    val customTo: Int? = null,
+    val showRangePicker: Boolean = false,
+    /** Everything the filter sheet may offer. */
+    val allCategories: List<Category> = emptyList(),
+    val allMerchants: List<Merchant> = emptyList(),
 ) {
     /**
      * Distinguishes "nothing yet" from "nothing here".
@@ -44,6 +57,16 @@ public data class AnalyticsUiState(
      * flash of "no spending" before the real numbers arrive.
      */
     public val showEmptyState: Boolean get() = !isLoading && (snapshot?.isEmpty ?: true)
+
+    /**
+     * Whether the empty state is "you have no spending" or "nothing matched".
+     *
+     * They are different sentences and the difference matters: one invites the
+     * user to add an entry, the other to widen the filter. Showing the first
+     * when a filter is active is how a screen makes someone think their data is
+     * missing.
+     */
+    public val emptyBecauseFiltered: Boolean get() = showEmptyState && !filters.isEmpty
 }
 
 /** Events flow up as one lambda (`CLAUDE.md` §5). */
@@ -51,4 +74,11 @@ public sealed interface AnalyticsEvent {
     public data class RangeSelected(val range: AnalyticsRange) : AnalyticsEvent
     public data object ComparisonToggled : AnalyticsEvent
     public data class CategoryExpanded(val categoryId: String?) : AnalyticsEvent
+    public data object FiltersClicked : AnalyticsEvent
+    public data object FiltersDismissed : AnalyticsEvent
+    public data object FiltersCleared : AnalyticsEvent
+    public data class FiltersChanged(val filters: AnalyticsFilters) : AnalyticsEvent
+    public data object CustomRangeClicked : AnalyticsEvent
+    public data class CustomRangePicked(val from: Int, val to: Int) : AnalyticsEvent
+    public data object CustomRangeDismissed : AnalyticsEvent
 }

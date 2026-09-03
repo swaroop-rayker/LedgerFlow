@@ -34,6 +34,10 @@ import com.ledgerflow.core.designsystem.chart.LfDonutSlice
 import com.ledgerflow.core.designsystem.chart.LfHeatmapDay
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
+import com.ledgerflow.core.designsystem.component.LfActionAlignment
+import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfButton
+import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
 import com.ledgerflow.core.designsystem.component.LfChip
@@ -79,6 +83,32 @@ public fun AnalyticsScreen(
         }
         item(key = "ranges", contentType = "ranges") {
             RangeRow(selected = state.range, onEvent = onEvent)
+        }
+
+        item(key = "filters", contentType = "filters") {
+            LfActionRow(
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                alignment = LfActionAlignment.Start,
+            ) {
+                LfButton(
+                    // The count is on the control, so an active filter is
+                    // visible without opening the sheet -- a screen quietly
+                    // showing a subset is how someone concludes their data is
+                    // missing.
+                    text = if (state.filters.isEmpty) {
+                        "Filters"
+                    } else {
+                        "Filters (" + state.filters.activeCount + ")"
+                    },
+                    onClick = { onEvent(AnalyticsEvent.FiltersClicked) },
+                    style = LfButtonStyle.Inline,
+                )
+                LfButton(
+                    text = "Custom range",
+                    onClick = { onEvent(AnalyticsEvent.CustomRangeClicked) },
+                    style = LfButtonStyle.Inline,
+                )
+            }
         }
 
         val snapshot = state.snapshot

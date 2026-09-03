@@ -1,5 +1,6 @@
 package com.ledgerflow.core.domain.usecase
 
+import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
@@ -20,5 +21,6 @@ public class GetAnalyticsSnapshotUseCase @Inject constructor(
         ledger: LedgerType,
         window: AnalyticsWindow,
         comparePrevious: Boolean = true,
-    ): AnalyticsSnapshot = analytics.snapshot(ledger, window, comparePrevious)
+        filters: AnalyticsFilters = AnalyticsFilters.None,
+    ): AnalyticsSnapshot = analytics.snapshot(ledger, window, comparePrevious, filters)
 }

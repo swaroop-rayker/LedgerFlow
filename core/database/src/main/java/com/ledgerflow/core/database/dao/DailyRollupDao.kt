@@ -334,6 +334,311 @@ public interface DailyRollupDao {
         to: Int,
     ): Long
 
+    // ── Filtered analytics reads (SPEC.md §5.6's composable filters) ───────
+    //
+    // **Still `@Query`, not `@RawQuery`, and that is deliberate.** A raw query
+    // is built at runtime, so `LedgerIsolationTest` — which scans SQL string
+    // literals — could not see it, and every Law 2 rule would pass without
+    // having looked. The dynamic part is expressed instead as
+    // `(:filterX = 0 OR column IN (:xs))`: Room binds the list, SQLite skips
+    // the `IN` when the flag is 0, and the statement stays a literal the guard
+    // can read.
+    //
+    // Only *dimension* filters appear here. Amount, source and text name columns
+    // `daily_rollup` does not carry and must never be given (`CLAUDE.md` §5);
+    // those route to the base tables instead.
+
+    @Query(
+        "SELECT ((local_date - :from) / :bucketDays) AS bucket, " +
+            "SUM(sum_minor) AS sum_minor, SUM(txn_count) AS txn_count " +
+            "FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "AND (:filterCategories = 0 OR category_id IN (:categoryIds)) " +
+            "AND (:filterSubcategories = 0 OR subcategory_id IN (:subcategoryIds)) " +
+            "AND (:filterMerchants = 0 OR merchant_id IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR payment_method_id IN (:paymentMethodIds)) " +
+            "GROUP BY bucket ORDER BY bucket",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun timeSeriesFiltered(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        bucketDays: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterSubcategories: Int,
+        subcategoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+    ): List<TimeBucketRow>
+
+    @Query(
+        "SELECT ((local_date - :from) / :bucketDays) AS bucket, " +
+            "category_id AS dimension_id, SUM(sum_minor) AS sum_minor " +
+            "FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "AND (:filterCategories = 0 OR category_id IN (:categoryIds)) " +
+            "AND (:filterSubcategories = 0 OR subcategory_id IN (:subcategoryIds)) " +
+            "AND (:filterMerchants = 0 OR merchant_id IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR payment_method_id IN (:paymentMethodIds)) " +
+            "GROUP BY bucket, category_id ORDER BY bucket, sum_minor DESC",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun timeSeriesByCategoryFiltered(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        bucketDays: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterSubcategories: Int,
+        subcategoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+    ): List<BucketCategoryRow>
+
+    /**
+     * Totals for one dimension, filtered.
+     *
+     * `:groupBy` selects which column is the dimension, so one statement serves
+     * the category, merchant and payment-method breakdowns rather than three
+     * near-identical ones that could drift in their filter clause — which is the
+     * clause most likely to be edited.
+     */
+    @Query(
+        "SELECT CASE :groupBy " +
+            "WHEN 'category' THEN category_id " +
+            "WHEN 'merchant' THEN merchant_id " +
+            "ELSE payment_method_id END AS dimension_id, " +
+            "SUM(sum_minor) AS sum_minor, SUM(txn_count) AS txn_count " +
+            "FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "AND (:filterCategories = 0 OR category_id IN (:categoryIds)) " +
+            "AND (:filterSubcategories = 0 OR subcategory_id IN (:subcategoryIds)) " +
+            "AND (:filterMerchants = 0 OR merchant_id IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR payment_method_id IN (:paymentMethodIds)) " +
+            "GROUP BY dimension_id ORDER BY sum_minor DESC",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun dimensionTotalsFiltered(
+        ledger: LedgerType,
+        groupBy: String,
+        from: Int,
+        to: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterSubcategories: Int,
+        subcategoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+    ): List<DimensionTotalRow>
+
+    @Query(
+        "SELECT category_id, subcategory_id AS dimension_id, " +
+            "SUM(sum_minor) AS sum_minor, SUM(txn_count) AS txn_count " +
+            "FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to AND subcategory_id != '' " +
+            "AND (:filterCategories = 0 OR category_id IN (:categoryIds)) " +
+            "AND (:filterSubcategories = 0 OR subcategory_id IN (:subcategoryIds)) " +
+            "AND (:filterMerchants = 0 OR merchant_id IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR payment_method_id IN (:paymentMethodIds)) " +
+            "GROUP BY category_id, subcategory_id ORDER BY sum_minor DESC",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun subcategoryTotalsFiltered(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterSubcategories: Int,
+        subcategoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+    ): List<DimensionTotalRow>
+
+    @Query(
+        "SELECT local_date, SUM(sum_minor) AS sum_minor, " +
+            "SUM(txn_count) AS txn_count FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "AND (:filterCategories = 0 OR category_id IN (:categoryIds)) " +
+            "AND (:filterSubcategories = 0 OR subcategory_id IN (:subcategoryIds)) " +
+            "AND (:filterMerchants = 0 OR merchant_id IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR payment_method_id IN (:paymentMethodIds)) " +
+            "GROUP BY local_date ORDER BY local_date",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun dailyTotalsFiltered(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterSubcategories: Int,
+        subcategoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+    ): List<DailyTotalRow>
+
+    // ── Base-table aggregates, for filters `daily_rollup` cannot answer ────
+    //
+    // Amount range, source and text search name entry-level columns the rollup
+    // does not carry and must never be given. When one is active the aggregate
+    // comes from `ledger_entry` joined to `line_item` instead.
+    //
+    // **This is the same grain expression `insertRange` uses** (ADR-0018's
+    // `LEFT JOIN` plus `COALESCE`), and that duplication is the price of the
+    // feature: the rollup exists precisely so the common case does not pay for
+    // this scan. The two must agree, so `AnalyticsFilterTest` asserts an
+    // unfiltered base-table read equals the rollup read over the same window —
+    // a drift between them is the failure that would otherwise be invisible.
+    //
+    // `deleted_at IS NULL` matches the views, so binned entries stay out. Every
+    // statement binds `:ledger` (Law 2).
+
+    @Query(
+        "SELECT ((local_date - :from) / :bucketDays) AS bucket, " +
+            "SUM(amount) AS sum_minor, COUNT(DISTINCT entry_id) AS txn_count FROM (" +
+            "SELECT e.local_date AS local_date, " +
+            "COALESCE(li.total_minor, e.amount_minor) AS amount, e.id AS entry_id " +
+            "FROM ledger_entry e LEFT JOIN line_item li ON li.entry_id = e.id " +
+            "LEFT JOIN merchant m ON m.id = e.merchant_id " +
+            "WHERE e.ledger = :ledger AND e.deleted_at IS NULL " +
+            "AND e.local_date BETWEEN :from AND :to " +
+            "AND (:filterCategories = 0 OR " +
+            "COALESCE(li.category_id, e.category_id, '') IN (:categoryIds)) " +
+            "AND (:filterMerchants = 0 OR COALESCE(e.merchant_id, '') IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR " +
+            "COALESCE(e.payment_method_id, '') IN (:paymentMethodIds)) " +
+            "AND (:minAmount IS NULL OR e.amount_minor >= :minAmount) " +
+            "AND (:maxAmount IS NULL OR e.amount_minor <= :maxAmount) " +
+            "AND (:filterSources = 0 OR e.source IN (:sources)) " +
+            "AND (:query = '' OR e.note LIKE :like ESCAPE '\\' " +
+            "OR m.canonical_name LIKE :like ESCAPE '\\' " +
+            "OR li.name LIKE :like ESCAPE '\\')) " +
+            "GROUP BY bucket ORDER BY bucket",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun timeSeriesFromEntries(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        bucketDays: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+        minAmount: Long?,
+        maxAmount: Long?,
+        filterSources: Int,
+        sources: List<String>,
+        query: String,
+        like: String,
+    ): List<TimeBucketRow>
+
+    /**
+     * Dimension totals from the base tables, filtered.
+     *
+     * `:groupBy` picks the dimension, as in [dimensionTotalsFiltered], and for
+     * the same reason: one filter clause that cannot drift between three
+     * breakdowns.
+     */
+    @Query(
+        "SELECT dimension_id, SUM(amount) AS sum_minor, " +
+            "COUNT(DISTINCT entry_id) AS txn_count FROM (" +
+            "SELECT CASE :groupBy " +
+            "WHEN 'category' THEN COALESCE(li.category_id, e.category_id, '') " +
+            "WHEN 'merchant' THEN COALESCE(e.merchant_id, '') " +
+            "ELSE COALESCE(e.payment_method_id, '') END AS dimension_id, " +
+            "COALESCE(li.total_minor, e.amount_minor) AS amount, e.id AS entry_id " +
+            "FROM ledger_entry e LEFT JOIN line_item li ON li.entry_id = e.id " +
+            "LEFT JOIN merchant m ON m.id = e.merchant_id " +
+            "WHERE e.ledger = :ledger AND e.deleted_at IS NULL " +
+            "AND e.local_date BETWEEN :from AND :to " +
+            "AND (:filterCategories = 0 OR " +
+            "COALESCE(li.category_id, e.category_id, '') IN (:categoryIds)) " +
+            "AND (:filterMerchants = 0 OR COALESCE(e.merchant_id, '') IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR " +
+            "COALESCE(e.payment_method_id, '') IN (:paymentMethodIds)) " +
+            "AND (:minAmount IS NULL OR e.amount_minor >= :minAmount) " +
+            "AND (:maxAmount IS NULL OR e.amount_minor <= :maxAmount) " +
+            "AND (:filterSources = 0 OR e.source IN (:sources)) " +
+            "AND (:query = '' OR e.note LIKE :like ESCAPE '\\' " +
+            "OR m.canonical_name LIKE :like ESCAPE '\\' " +
+            "OR li.name LIKE :like ESCAPE '\\')) " +
+            "GROUP BY dimension_id ORDER BY sum_minor DESC",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun dimensionTotalsFromEntries(
+        ledger: LedgerType,
+        groupBy: String,
+        from: Int,
+        to: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+        minAmount: Long?,
+        maxAmount: Long?,
+        filterSources: Int,
+        sources: List<String>,
+        query: String,
+        like: String,
+    ): List<DimensionTotalRow>
+
+    /** The window's total and distinct-entry count under an entry-level filter. */
+    @Query(
+        "SELECT COUNT(DISTINCT e.id) FROM ledger_entry e " +
+            "LEFT JOIN line_item li ON li.entry_id = e.id " +
+            "LEFT JOIN merchant m ON m.id = e.merchant_id " +
+            "WHERE e.ledger = :ledger AND e.deleted_at IS NULL " +
+            "AND e.local_date BETWEEN :from AND :to " +
+            "AND (:filterCategories = 0 OR " +
+            "COALESCE(li.category_id, e.category_id, '') IN (:categoryIds)) " +
+            "AND (:filterMerchants = 0 OR COALESCE(e.merchant_id, '') IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR " +
+            "COALESCE(e.payment_method_id, '') IN (:paymentMethodIds)) " +
+            "AND (:minAmount IS NULL OR e.amount_minor >= :minAmount) " +
+            "AND (:maxAmount IS NULL OR e.amount_minor <= :maxAmount) " +
+            "AND (:filterSources = 0 OR e.source IN (:sources)) " +
+            "AND (:query = '' OR e.note LIKE :like ESCAPE '\\' " +
+            "OR m.canonical_name LIKE :like ESCAPE '\\' " +
+            "OR li.name LIKE :like ESCAPE '\\')",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun distinctEntriesFromEntries(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+        minAmount: Long?,
+        maxAmount: Long?,
+        filterSources: Int,
+        sources: List<String>,
+        query: String,
+        like: String,
+    ): Int
+
     /** Every bucket in one book — the reconciliation diff reads this twice. */
     @Query("SELECT * FROM daily_rollup WHERE ledger = :ledger ORDER BY local_date")
     public suspend fun allFor(ledger: LedgerType): List<DailyRollupEntity>

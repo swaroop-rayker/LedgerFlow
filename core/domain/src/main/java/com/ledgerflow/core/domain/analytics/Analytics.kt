@@ -30,6 +30,18 @@ public enum class AnalyticsRange(
     SIX_MONTHS(days = 180, bucketDays = 7, label = "6M"),
     YEAR(days = 365, bucketDays = 14, label = "1Y"),
     FIVE_YEARS(days = 1_825, bucketDays = 30, label = "5Y"),
+
+    /**
+     * §5.6's custom range.
+     *
+     * [days] and [bucketDays] are placeholders: a custom window is built from
+     * two dates the user picked, and [AnalyticsWindow.custom] recomputes both
+     * from the span so the bucket count stays inside a phone's width whatever
+     * range is chosen. Reading these constants for a custom window is a bug,
+     * which is why they are the same as MONTH rather than something that would
+     * look plausible.
+     */
+    CUSTOM(days = 30, bucketDays = 1, label = "Custom"),
     ;
 
     /** Columns this range produces. 5Y is 61 — well under any phone's width. */
@@ -55,14 +67,59 @@ public data class AnalyticsWindow(
      */
     public fun previous(): AnalyticsWindow = AnalyticsWindow(
         range = range,
-        from = from - range.days,
+        // The *actual* span, not the enum's nominal days -- a custom window has
+        // no nominal length, and comparing a 12-day custom range against the
+        // preceding 30 days would be a comparison of two different things.
+        from = from - spanDays,
         to = from - 1,
     )
 
+    /** Days the window spans, inclusive. Correct for CUSTOM too. */
+    public val spanDays: Int get() = to - from + 1
+
+    /**
+     * Bucket width for this window, honouring a custom span.
+     *
+     * §11 forbids handing a chart more columns than it has horizontal pixels,
+     * and a user may pick any two dates — including ten years apart. The width
+     * is derived so the count stays at or below [MAX_BUCKETS] whatever they
+     * choose.
+     */
+    public val bucketDays: Int
+        get() = if (range != AnalyticsRange.CUSTOM) {
+            range.bucketDays
+        } else {
+            ((spanDays + MAX_BUCKETS - 1) / MAX_BUCKETS).coerceAtLeast(1)
+        }
+
+    /** Columns this window produces. */
+    public val bucketCount: Int get() = (spanDays + bucketDays - 1) / bucketDays
+
     public companion object {
+        /**
+         * Comfortably fewer than a phone's horizontal pixels, and few enough
+         * that a bar is still wide enough to see. 5Y's fixed 30-day buckets
+         * give 61, so this is the same order of magnitude by design.
+         */
+        public const val MAX_BUCKETS: Int = 64
+
         /** The window ending today. */
         public fun endingOn(today: Int, range: AnalyticsRange): AnalyticsWindow =
             AnalyticsWindow(range = range, from = today - range.days + 1, to = today)
+
+        /**
+         * §5.6's custom range, from two dates the user picked.
+         *
+         * Ordered defensively: a picker that lets the end precede the start is
+         * one tap from a window with a negative span, and a negative span makes
+         * every downstream `BETWEEN` return nothing — an empty chart that looks
+         * like missing data rather than a mistake.
+         */
+        public fun custom(from: Int, to: Int): AnalyticsWindow = AnalyticsWindow(
+            range = AnalyticsRange.CUSTOM,
+            from = minOf(from, to),
+            to = maxOf(from, to),
+        )
     }
 }
 
@@ -178,5 +235,6 @@ public interface AnalyticsRepository {
         ledger: LedgerType,
         window: AnalyticsWindow,
         comparePrevious: Boolean,
+        filters: AnalyticsFilters = AnalyticsFilters.None,
     ): AnalyticsSnapshot
 }

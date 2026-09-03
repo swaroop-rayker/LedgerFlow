@@ -34,6 +34,8 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.feature.analytics.AnalyticsFilterSheet
+import com.ledgerflow.feature.analytics.AnalyticsRangePicker
 import com.ledgerflow.feature.analytics.AnalyticsScreen
 import com.ledgerflow.feature.analytics.AnalyticsViewModel
 import com.ledgerflow.feature.budget.BudgetEditorDialog
@@ -204,6 +206,20 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
         val viewModel: AnalyticsViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
         AnalyticsScreen(state = state, onEvent = viewModel::onEvent)
+        // Both hoisted to the route, so the screen stays a pure function of
+        // its state -- the same shape the budget editor and taxonomy dialogs
+        // use.
+        if (state.showFilterSheet) {
+            AnalyticsFilterSheet(
+                filters = state.filters,
+                categories = state.allCategories,
+                merchants = state.allMerchants,
+                onEvent = viewModel::onEvent,
+            )
+        }
+        if (state.showRangePicker) {
+            AnalyticsRangePicker(onEvent = viewModel::onEvent)
+        }
     }
     composable<Destination.More> {
         val viewModel: MoreViewModel = hiltViewModel()

@@ -4,6 +4,7 @@ import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.dao.DimensionTotalRow
+import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
@@ -49,6 +50,7 @@ public class DefaultAnalyticsRepository @Inject constructor(
         ledger: LedgerType,
         window: AnalyticsWindow,
         comparePrevious: Boolean,
+        filters: AnalyticsFilters,
     ): AnalyticsSnapshot = withContext(io) {
         // **`openForBackgroundWork()`, not `requireDatabase()`.** The budget
         // alert evaluation reaches this from a Worker with no Activity alive,
@@ -64,8 +66,8 @@ public class DefaultAnalyticsRepository @Inject constructor(
 
         val recurring = detectRecurring(dao, ledger, names, window.to)
         val previous = if (comparePrevious) window.previous() else null
-        val previousCategories = previous?.let {
-            dao.categoryTotals(ledger, it.from, it.to).associate { row ->
+        val previousCategories = previous?.let { earlier ->
+            dimensionTotals(dao, ledger, CATEGORY, earlier, filters).associate { row ->
                 row.dimensionId to row.sumMinor
             }
         }.orEmpty()
@@ -73,13 +75,13 @@ public class DefaultAnalyticsRepository @Inject constructor(
         AnalyticsSnapshot(
             ledger = ledger,
             window = window,
-            total = Money(dao.windowTotal(ledger, window.from, window.to)),
-            previousTotal = previous?.let { Money(dao.windowTotal(ledger, it.from, it.to)) },
+            total = windowTotal(dao, ledger, window, filters),
+            previousTotal = previous?.let { windowTotal(dao, ledger, it, filters) },
             // Not the sum of the categories' counts: `txn_count` fans out across
             // `category_id`, so summing it double-counts a split bill (§5.6).
-            transactionCount = dao.distinctEntryTotal(ledger, window.from, window.to),
-            timeBuckets = buildTimeBuckets(dao, ledger, window, names),
-            categories = dao.categoryTotals(ledger, window.from, window.to).map { row ->
+            transactionCount = distinctEntries(dao, ledger, window, filters),
+            timeBuckets = buildTimeBuckets(dao, ledger, window, names, filters),
+            categories = dimensionTotals(dao, ledger, CATEGORY, window, filters).map { row ->
                 row.toTotal(
                     name = names.category(row.dimensionId),
                     colorArgb = names.categoryColor(row.dimensionId),
@@ -90,17 +92,17 @@ public class DefaultAnalyticsRepository @Inject constructor(
                     },
                 )
             },
-            subcategories = buildSubcategories(dao, ledger, window, names),
-            merchants = dao.merchantTotals(ledger, window.from, window.to).map { row ->
+            subcategories = buildSubcategories(dao, ledger, window, names, filters),
+            merchants = dimensionTotals(dao, ledger, MERCHANT, window, filters).map { row ->
                 row.toTotal(name = names.merchant(row.dimensionId), colorArgb = null)
             },
-            paymentMethods = dao.paymentMethodTotals(ledger, window.from, window.to).map { row ->
+            paymentMethods = dimensionTotals(dao, ledger, METHOD, window, filters).map { row ->
                 row.toTotal(
                     name = names.paymentMethod(row.dimensionId),
                     colorArgb = names.paymentMethodColor(row.dimensionId),
                 )
             },
-            days = dao.dailyTotals(ledger, window.from, window.to).map { row ->
+            days = dailyTotals(dao, ledger, window, filters).map { row ->
                 DayTotal(row.localDate, row.sumMinor, row.txnCount)
             },
             budgets = buildBudgets(database, ledger, names, window.to),
@@ -203,9 +205,22 @@ public class DefaultAnalyticsRepository @Inject constructor(
         ledger: LedgerType,
         window: AnalyticsWindow,
         names: NameBook,
+        filters: AnalyticsFilters,
     ): Map<String, List<DimensionTotal>> = dao
-        .subcategoryTotals(ledger, window.from, window.to)
-        .groupBy { it.categoryId }
+        .subcategoryTotalsFiltered(
+            ledger = ledger,
+            from = window.from,
+            to = window.to,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+        )
+        .groupBy { it.dimensionId }
         .mapValues { (_, rows) ->
             rows.map { row ->
                 DimensionTotal(
@@ -247,20 +262,33 @@ public class DefaultAnalyticsRepository @Inject constructor(
         ledger: LedgerType,
         window: AnalyticsWindow,
         names: NameBook,
+        filters: AnalyticsFilters,
     ): List<TimeBucket> {
-        val segments = dao.timeSeriesByCategory(
-            ledger = ledger,
-            from = window.from,
-            to = window.to,
-            bucketDays = window.range.bucketDays,
-        ).groupBy { it.bucket }
+        // Stacking is a rollup-only read: the base-table path has no
+        // per-category series, and building one would be a third copy of the
+        // grain expression. Under an entry-level filter the bars are drawn as a
+        // single total segment -- honest, and the ranked list beside them still
+        // carries the per-category detail.
+        val segments = if (filters.needsBaseTables) {
+            emptyMap()
+        } else {
+            dao.timeSeriesByCategoryFiltered(
+                ledger = ledger,
+                from = window.from,
+                to = window.to,
+                bucketDays = window.bucketDays,
+                filterCategories = filters.categoryIds.flag(),
+                categoryIds = filters.categoryIds.orPlaceholder(),
+                filterSubcategories = filters.subcategoryIds.flag(),
+                subcategoryIds = filters.subcategoryIds.orPlaceholder(),
+                filterMerchants = filters.merchantIds.flag(),
+                merchantIds = filters.merchantIds.orPlaceholder(),
+                filterMethods = filters.paymentMethodIds.flag(),
+                paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+            ).groupBy { it.bucket }
+        }
 
-        val totals = dao.timeSeries(
-            ledger = ledger,
-            from = window.from,
-            to = window.to,
-            bucketDays = window.range.bucketDays,
-        ).associateBy { it.bucket }
+        val totals = timeSeries(dao, ledger, window, filters).associateBy { it.bucket }
 
         // **Every bucket in the window, including the empty ones.** SQL returns
         // only days that had spending, and handing those straight to the chart
@@ -268,12 +296,12 @@ public class DefaultAnalyticsRepository @Inject constructor(
         // whole plot -- which reads as "this is the month" rather than "this is
         // one day of it". Observed on device with two real entries: one column,
         // full width. The gaps are the information.
-        return (0 until window.range.bucketCount).map { bucket ->
-            val start = window.from + bucket * window.range.bucketDays
+        return (0 until window.bucketCount).map { bucket ->
+            val start = window.from + bucket * window.bucketDays
             TimeBucket(
                 bucket = bucket,
                 startDate = start,
-                endDate = (start + window.range.bucketDays - 1).coerceAtMost(window.to),
+                endDate = (start + window.bucketDays - 1).coerceAtMost(window.to),
                 amount = totals[bucket]?.sumMinor ?: Money(0L),
                 byCategory = segments[bucket].orEmpty().map { segment ->
                     DimensionTotal(
@@ -321,6 +349,167 @@ public class DefaultAnalyticsRepository @Inject constructor(
             )
         }
         return BudgetPeriods.rollover(budget.amount, Money(previousSpend))
+    }
+
+    /**
+     * The window's total, summed from the category breakdown.
+     *
+     * Not a separate `SUM` query: under a filter the total must be the sum of
+     * exactly what the screen shows, and a second statement with its own copy
+     * of the filter clause is how a chart and its own caption end up
+     * disagreeing. Categories are the finest dimension every path returns, so
+     * summing them is the total by construction.
+     */
+    private suspend fun windowTotal(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        ledger: LedgerType,
+        window: AnalyticsWindow,
+        filters: AnalyticsFilters,
+    ): Money = Money(
+        dimensionTotals(dao, ledger, CATEGORY, window, filters).sumOf { it.sumMinor.minor },
+    )
+
+    // ── The one decision this class makes: rollup, or base tables ─────────
+    //
+    // `daily_rollup` answers whenever it can, because that is what §11's 5Y
+    // budget depends on. It cannot answer a filter naming an entry's amount,
+    // source or note -- those columns are not in it and must never be added
+    // (`CLAUDE.md` §5) -- so those route to the base tables and pay for it.
+
+    private suspend fun timeSeries(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        ledger: LedgerType,
+        window: AnalyticsWindow,
+        filters: AnalyticsFilters,
+    ) = if (filters.needsBaseTables) {
+        dao.timeSeriesFromEntries(
+            ledger = ledger,
+            from = window.from,
+            to = window.to,
+            bucketDays = window.bucketDays,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+            minAmount = filters.minAmount?.minor,
+            maxAmount = filters.maxAmount?.minor,
+            filterSources = filters.sources.flag(),
+            sources = filters.sources.map { it.name }.orPlaceholder(),
+            query = filters.query,
+            like = filters.query.toLikePattern(),
+        )
+    } else {
+        dao.timeSeriesFiltered(
+            ledger = ledger,
+            from = window.from,
+            to = window.to,
+            bucketDays = window.bucketDays,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+        )
+    }
+
+    private suspend fun dimensionTotals(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        ledger: LedgerType,
+        groupBy: String,
+        window: AnalyticsWindow,
+        filters: AnalyticsFilters,
+    ) = if (filters.needsBaseTables) {
+        dao.dimensionTotalsFromEntries(
+            ledger = ledger,
+            groupBy = groupBy,
+            from = window.from,
+            to = window.to,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+            minAmount = filters.minAmount?.minor,
+            maxAmount = filters.maxAmount?.minor,
+            filterSources = filters.sources.flag(),
+            sources = filters.sources.map { it.name }.orPlaceholder(),
+            query = filters.query,
+            like = filters.query.toLikePattern(),
+        )
+    } else {
+        dao.dimensionTotalsFiltered(
+            ledger = ledger,
+            groupBy = groupBy,
+            from = window.from,
+            to = window.to,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+        )
+    }
+
+    private suspend fun dailyTotals(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        ledger: LedgerType,
+        window: AnalyticsWindow,
+        filters: AnalyticsFilters,
+    ) = if (filters.needsBaseTables) {
+        // A6's grid has no base-table form: a heatmap under a text search is a
+        // sparse month that says less than the list beside it. Empty is the
+        // honest answer, and the section hides itself.
+        emptyList()
+    } else {
+        dao.dailyTotalsFiltered(
+            ledger = ledger,
+            from = window.from,
+            to = window.to,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+        )
+    }
+
+    private suspend fun distinctEntries(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        ledger: LedgerType,
+        window: AnalyticsWindow,
+        filters: AnalyticsFilters,
+    ): Int = if (filters.isEmpty) {
+        dao.distinctEntryTotal(ledger, window.from, window.to)
+    } else {
+        dao.distinctEntriesFromEntries(
+            ledger = ledger,
+            from = window.from,
+            to = window.to,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+            minAmount = filters.minAmount?.minor,
+            maxAmount = filters.maxAmount?.minor,
+            filterSources = filters.sources.flag(),
+            sources = filters.sources.map { it.name }.orPlaceholder(),
+            query = filters.query,
+            like = filters.query.toLikePattern(),
+        )
     }
 
     private fun DimensionTotalRow.toTotal(
@@ -395,3 +584,44 @@ private class NameBook(
  */
 private const val RECURRING_LOOKBACK_DAYS = 730
 
+/**
+ * 1 when the set narrows something, 0 when it does not.
+ *
+ * The flag is what lets a filtered read stay a static `@Query`: the clause is
+ * `(:flag = 0 OR column IN (:ids))`, so a 0 short-circuits the whole predicate
+ * to true and one statement serves both the filtered and unfiltered case —
+ * while staying a literal `LedgerIsolationTest` can read.
+ *
+ * **The polarity is worth stating because getting it backwards is silent.**
+ * Inverted, an *unfiltered* read evaluates `IN (placeholder)`, matches nothing,
+ * and every figure on the screen comes back zero — which reads as "you have no
+ * spending", not as a bug. `AnalyticsFilterTest` caught exactly that.
+ */
+private fun Collection<*>.flag(): Int = if (isEmpty()) 0 else 1
+
+/**
+ * Room refuses to bind an empty list, so an unused `IN` gets one impossible id.
+ *
+ * It is never evaluated — the flag above short-circuits first — but the
+ * statement still has to be *bindable*, and an empty list is not.
+ */
+private fun Collection<String>.orPlaceholder(): List<String> =
+    if (isEmpty()) listOf(EMPTY_FILTER_PLACEHOLDER) else toList()
+
+/**
+ * `%term%`, with SQL's wildcards escaped out of the user's text.
+ *
+ * A search for "50%" must mean the characters "50%", not "anything containing
+ * 50". Without this, one `%` in a note turns a search into a match-all and the
+ * user sees every entry back with no indication why.
+ */
+private fun String.toLikePattern(): String {
+    val escaped = replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return "%" + escaped + "%"
+}
+
+private const val EMPTY_FILTER_PLACEHOLDER = "\u0000-no-filter"
+
+private const val CATEGORY = "category"
+private const val MERCHANT = "merchant"
+private const val METHOD = "method"
