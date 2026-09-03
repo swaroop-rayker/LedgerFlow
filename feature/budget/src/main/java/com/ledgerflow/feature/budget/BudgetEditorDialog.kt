@@ -63,7 +63,10 @@ public fun BudgetEditorDialog(
     LfDialog(
         title = if (editor.isEdit) "Edit budget" else "New budget",
         body = if (editor.isEdit) {
-            "Change how much ${editor.categoryName} may cost each period."
+            // Says "period" rather than only "how much", because since Q20 the
+            // dialog changes the window too -- and moving it re-cuts the period
+            // in flight, which the copy should not spring on anyone.
+            "Change the limit for ${editor.categoryName}, or the period it runs over."
         } else {
             "Pick a category and set a limit for the period."
         },
@@ -106,6 +109,11 @@ private fun EditorForm(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
+        // **Only the category pair is fixed** (Q20). It is what the budget *is*
+        // -- the repository enforces one live budget per category/subcategory
+        // -- so changing it is creating a different budget, not editing this
+        // one. Everything below was hidden here too until Q20, which is how an
+        // accidentally-ticked rollover became a delete-and-rebuild.
         if (!editor.isEdit) {
             CategoryPicker(
                 categories = availableCategories,
@@ -122,20 +130,21 @@ private fun EditorForm(
                     onPick = { onEvent(BudgetEvent.SubcategoryPicked(it)) },
                 )
             }
-            PeriodPicker(
-                selected = editor.period,
-                onPick = { onEvent(BudgetEvent.PeriodPicked(it)) },
-            )
-            StartDateRow(
-                startDate = editor.startDate,
-                onClick = { onEvent(BudgetEvent.StartDateClicked) },
-            )
-            LfSwitchRow(
-                label = "Roll over what is left",
-                checked = editor.rolloverEnabled,
-                onCheckedChange = { onEvent(BudgetEvent.RolloverToggled) },
-            )
         }
+
+        PeriodPicker(
+            selected = editor.period,
+            onPick = { onEvent(BudgetEvent.PeriodPicked(it)) },
+        )
+        StartDateRow(
+            startDate = editor.startDate,
+            onClick = { onEvent(BudgetEvent.StartDateClicked) },
+        )
+        LfSwitchRow(
+            label = "Roll over what is left",
+            checked = editor.rolloverEnabled,
+            onCheckedChange = { onEvent(BudgetEvent.RolloverToggled) },
+        )
 
         LfAmountField(
             value = editor.amountText,

@@ -9,13 +9,14 @@ import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
 import com.ledgerflow.core.domain.analytics.BudgetError
 import com.ledgerflow.core.domain.analytics.BudgetResult
+import com.ledgerflow.core.domain.analytics.BudgetSettings
 import com.ledgerflow.core.domain.analytics.NewBudget
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
 import com.ledgerflow.core.domain.usecase.CreateBudgetUseCase
 import com.ledgerflow.core.domain.usecase.DeleteBudgetUseCase
 import com.ledgerflow.core.domain.usecase.GetAnalyticsSnapshotUseCase
-import com.ledgerflow.core.domain.usecase.UpdateBudgetAmountUseCase
+import com.ledgerflow.core.domain.usecase.UpdateBudgetUseCase
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
@@ -46,7 +47,7 @@ import kotlinx.coroutines.launch
 public class BudgetViewModel @Inject constructor(
     private val getSnapshot: GetAnalyticsSnapshotUseCase,
     private val createBudget: CreateBudgetUseCase,
-    private val updateAmount: UpdateBudgetAmountUseCase,
+    private val updateBudget: UpdateBudgetUseCase,
     private val deleteBudget: DeleteBudgetUseCase,
     private val categories: CategoryRepository,
     private val ledgerRepository: LedgerRepository,
@@ -200,7 +201,18 @@ public class BudgetViewModel @Inject constructor(
 
         viewModelScope.launch {
             val result = if (editor.isEdit) {
-                updateAmount(requireNotNull(editor.editingId), Money(minor))
+                // Everything but the category, which is what the budget *is*
+                // (Q20). The editor state already carried these three from
+                // `openEditor`; only the write path was missing.
+                updateBudget(
+                    id = requireNotNull(editor.editingId),
+                    settings = BudgetSettings(
+                        amount = Money(minor),
+                        period = editor.period,
+                        startDate = editor.startDate,
+                        rolloverEnabled = editor.rolloverEnabled,
+                    ),
+                )
             } else {
                 createBudget(
                     NewBudget(

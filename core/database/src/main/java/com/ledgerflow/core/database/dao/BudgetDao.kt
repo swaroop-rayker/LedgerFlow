@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.ledgerflow.core.database.entity.BudgetEntity
+import com.ledgerflow.core.model.BudgetPeriod
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -45,8 +46,27 @@ public interface BudgetDao {
     @Query("UPDATE budget SET deleted_at = :now WHERE id = :id AND deleted_at IS NULL")
     public suspend fun softDelete(id: String, now: Long): Int
 
-    @Query("UPDATE budget SET amount_minor = :amountMinor WHERE id = :id AND deleted_at IS NULL")
-    public suspend fun updateAmount(id: String, amountMinor: Long): Int
+    /**
+     * The four settings a user may change after creation (Q20).
+     *
+     * One statement rather than four, so a `BudgetAlertWorker` can never read a
+     * half-applied budget — an amount already updated against a period that has
+     * not been. `deleted_at IS NULL` for the same reason `softDelete` binds it:
+     * editing a binned budget would silently resurrect its figures on a screen
+     * that does not list it.
+     */
+    @Query(
+        "UPDATE budget SET amount_minor = :amountMinor, period = :period, " +
+            "start_date = :startDate, rollover_enabled = :rolloverEnabled " +
+            "WHERE id = :id AND deleted_at IS NULL",
+    )
+    public suspend fun update(
+        id: String,
+        amountMinor: Long,
+        period: BudgetPeriod,
+        startDate: Int,
+        rolloverEnabled: Boolean,
+    ): Int
 
     /**
      * Is this category already budgeted?

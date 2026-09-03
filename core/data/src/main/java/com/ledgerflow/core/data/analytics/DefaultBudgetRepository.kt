@@ -10,6 +10,7 @@ import com.ledgerflow.core.domain.analytics.Budget
 import com.ledgerflow.core.domain.analytics.BudgetError
 import com.ledgerflow.core.domain.analytics.BudgetRepository
 import com.ledgerflow.core.domain.analytics.BudgetResult
+import com.ledgerflow.core.domain.analytics.BudgetSettings
 import com.ledgerflow.core.domain.analytics.NewBudget
 import com.ledgerflow.core.model.Money
 import javax.inject.Inject
@@ -90,12 +91,18 @@ public class DefaultBudgetRepository @Inject constructor(
         }
     }
 
-    override suspend fun updateAmount(id: String, amount: Money): BudgetResult<Unit> =
+    override suspend fun update(id: String, settings: BudgetSettings): BudgetResult<Unit> =
         withContext(io) {
-            if (amount.minor <= 0L) {
+            if (settings.amount.minor <= 0L) {
                 return@withContext BudgetResult.Failure(BudgetError.AmountNotPositive)
             }
-            val affected = session.requireDatabase().budgetDao().updateAmount(id, amount.minor)
+            val affected = session.requireDatabase().budgetDao().update(
+                id = id,
+                amountMinor = settings.amount.minor,
+                period = settings.period,
+                startDate = settings.startDate,
+                rolloverEnabled = settings.rolloverEnabled,
+            )
             // Zero rows means "already deleted" or "no such budget", and the
             // statement cannot tell them apart -- which is the point, the same
             // way `softDeleteEntry` handles it.

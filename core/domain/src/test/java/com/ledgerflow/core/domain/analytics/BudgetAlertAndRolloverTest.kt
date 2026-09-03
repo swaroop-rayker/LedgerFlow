@@ -77,6 +77,52 @@ class BudgetAlertAndRolloverTest {
         assertThat(progress.thresholdToAnnounce()).isEqualTo(80)
     }
 
+    /**
+     * **Editing the period re-announces, with no reset and no extra column**
+     * (Q20).
+     *
+     * `update` deliberately leaves `lastAlertedThreshold` and
+     * `alertPeriodStart` alone. It can, because suppression is keyed on
+     * `alertPeriodStart == periodStart` and re-cutting the period moves
+     * `periodStart` — so a shape change is indistinguishable from arriving in a
+     * new period, which is exactly what it is. This pins that, because the
+     * obvious "improvement" is to clear the two columns on every edit, and that
+     * would also re-announce for an edit that changed only the *amount*.
+     */
+    @Test
+    fun movingTheStartDate_makesAnAlreadyAnnouncedThresholdNewsAgain() {
+        val alreadyAnnounced = progress(
+            spent = 850_000L,
+            amount = 1_000_000L,
+            lastAlerted = 80,
+            alertPeriodStart = PERIOD_START,
+        )
+        assertThat(alreadyAnnounced.thresholdToAnnounce()).isNull()
+
+        // The same budget after the user moved its start date: the window it
+        // sits in has a different first day, so the crossing is news again.
+        val afterEdit = alreadyAnnounced.copy(
+            periodStart = PERIOD_START + 5,
+            periodEnd = PERIOD_START + 34,
+        )
+
+        assertThat(afterEdit.thresholdToAnnounce()).isEqualTo(80)
+    }
+
+    /** ...and an edit that leaves the window alone stays silent. */
+    @Test
+    fun editingOnlyTheAmount_doesNotReAnnounceTheSameThreshold() {
+        val afterAmountEdit = progress(
+            spent = 850_000L,
+            // Raised from 1,000,000 -- still over 80% of the new figure.
+            amount = 1_050_000L,
+            lastAlerted = 80,
+            alertPeriodStart = PERIOD_START,
+        )
+
+        assertThat(afterAmountEdit.thresholdToAnnounce()).isNull()
+    }
+
     @Test
     fun belowEveryThreshold_saysNothing() {
         assertThat(progress(spent = 100_000L, amount = 1_000_000L).thresholdToAnnounce()).isNull()

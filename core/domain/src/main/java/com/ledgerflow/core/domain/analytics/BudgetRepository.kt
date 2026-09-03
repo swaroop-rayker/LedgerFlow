@@ -25,6 +25,27 @@ public data class NewBudget(
 /** §5.7's defaults: warn at 80% of the budget, and again at 100%. */
 public val DEFAULT_ALERT_THRESHOLDS: List<Int> = listOf(80, 100)
 
+/**
+ * The parts of a budget the user may change afterwards (`SPEC.md` §5.7, Q20).
+ *
+ * **Everything except identity.** `categoryId` and `subcategoryId` are what the
+ * budget *is* — the repository enforces one live budget per pair, so changing
+ * them is creating a different budget, not editing this one. The alert columns
+ * are bookkeeping the user never sets.
+ *
+ * All four move in **one statement**. Amount and period decide the same
+ * figure ("₹2,000 of what window"), and writing them separately leaves a moment
+ * where a monthly amount is being read against a weekly window — brief, but a
+ * `BudgetAlertWorker` running in it would announce a threshold against a budget
+ * that never existed.
+ */
+public data class BudgetSettings(
+    val amount: Money,
+    val period: BudgetPeriod,
+    val startDate: Int,
+    val rolloverEnabled: Boolean,
+)
+
 /** Why a budget could not be saved. Returned, never thrown (`CLAUDE.md` §5). */
 public sealed interface BudgetError {
     /** The category vanished between opening the form and saving it. */
@@ -66,7 +87,24 @@ public interface BudgetRepository {
 
     public suspend fun create(request: NewBudget): BudgetResult<Budget>
 
-    public suspend fun updateAmount(id: String, amount: Money): BudgetResult<Unit>
+    /**
+     * Change a budget's amount, period, start date and rollover (Q20).
+     *
+     * **The current period is re-cut on the spot**, because a period is derived
+     * from `startDate` and the period length rather than stored — there is no
+     * "this period" record to preserve. So moving either one moves the window
+     * the user is standing in, and their spend-so-far figure changes with no
+     * transaction behind it. That is the honest reading of the edit: they asked
+     * for a different window and they are shown it.
+     *
+     * **Alert state is deliberately left alone.** `thresholdToAnnounce`
+     * suppresses on `alertPeriodStart == periodStart`, and re-cutting the
+     * period changes `periodStart` — so a shape change re-announces a crossing
+     * by itself, with no reset and no extra column. An edit that leaves the
+     * boundaries where they were keeps the suppression, which is also right:
+     * the same window should not announce the same threshold twice.
+     */
+    public suspend fun update(id: String, settings: BudgetSettings): BudgetResult<Unit>
 
     /**
      * Soft delete (`CLAUDE.md` §7's shape for user-authored rows).

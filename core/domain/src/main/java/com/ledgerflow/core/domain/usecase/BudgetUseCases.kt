@@ -3,6 +3,7 @@ package com.ledgerflow.core.domain.usecase
 import com.ledgerflow.core.domain.analytics.Budget
 import com.ledgerflow.core.domain.analytics.BudgetRepository
 import com.ledgerflow.core.domain.analytics.BudgetResult
+import com.ledgerflow.core.domain.analytics.BudgetSettings
 import com.ledgerflow.core.domain.analytics.NewBudget
 import com.ledgerflow.core.model.Money
 import javax.inject.Inject
@@ -22,11 +23,18 @@ public class CreateBudgetUseCase @Inject constructor(
         budgets.create(request)
 }
 
-public class UpdateBudgetAmountUseCase @Inject constructor(
+/**
+ * Edit a budget's amount, period, start date and rollover (§5.7, Q20).
+ *
+ * Was `UpdateBudgetAmountUseCase`, which is what the name of the thing it could
+ * change had made of it: the editor offered one field because the write path
+ * offered one field.
+ */
+public class UpdateBudgetUseCase @Inject constructor(
     private val budgets: BudgetRepository,
 ) {
-    public suspend operator fun invoke(id: String, amount: Money): BudgetResult<Unit> =
-        budgets.updateAmount(id, amount)
+    public suspend operator fun invoke(id: String, settings: BudgetSettings): BudgetResult<Unit> =
+        budgets.update(id, settings)
 }
 
 /**

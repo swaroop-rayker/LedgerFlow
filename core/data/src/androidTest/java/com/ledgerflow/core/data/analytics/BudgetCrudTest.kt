@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.data.ledger.LedgerTestVault
 import com.ledgerflow.core.domain.analytics.BudgetError
 import com.ledgerflow.core.domain.analytics.BudgetResult
+import com.ledgerflow.core.domain.analytics.BudgetSettings
 import com.ledgerflow.core.domain.analytics.NewBudget
 import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
@@ -163,14 +164,99 @@ class BudgetCrudTest {
     fun theAmountCanBeEdited_butNotToZero() = runBlocking<Unit> {
         val budget = budgets.create(request(groceries.id, 1_200_000L)).success()
 
-        budgets.updateAmount(budget.id, Money(1_500_000L)).success()
+        budgets.update(budget.id, settings(1_500_000L)).success()
         assertThat(budgets.observeAll().first().single().amount.minor).isEqualTo(1_500_000L)
 
-        val zeroed = budgets.updateAmount(budget.id, Money(0L))
+        val zeroed = budgets.update(budget.id, settings(0L))
         assertThat((zeroed as BudgetResult.Failure).error)
             .isEqualTo(BudgetError.AmountNotPositive)
         assertThat(budgets.observeAll().first().single().amount.minor).isEqualTo(1_500_000L)
     }
+
+    /**
+     * Q20: period, start date and rollover are editable too.
+     *
+     * They were not, and the editor showed one field because the write path
+     * offered one — so an accidentally-ticked rollover could only be undone by
+     * deleting the budget and building it again.
+     */
+    @Test
+    fun thePeriodStartDateAndRolloverCanAllBeEdited() = runBlocking<Unit> {
+        val budget = budgets.create(request(groceries.id, 1_200_000L)).success()
+        assertThat(budget.period).isEqualTo(BudgetPeriod.MONTHLY)
+        assertThat(budget.rolloverEnabled).isFalse()
+
+        budgets.update(
+            budget.id,
+            BudgetSettings(
+                amount = Money(900_000L),
+                period = BudgetPeriod.WEEKLY,
+                startDate = today - 3,
+                rolloverEnabled = true,
+            ),
+        ).success()
+
+        val edited = budgets.observeAll().first().single()
+        assertThat(edited.amount.minor).isEqualTo(900_000L)
+        assertThat(edited.period).isEqualTo(BudgetPeriod.WEEKLY)
+        assertThat(edited.startDate).isEqualTo(today - 3)
+        assertThat(edited.rolloverEnabled).isTrue()
+    }
+
+    /**
+     * **The edit is one statement, so nothing lands half-applied.**
+     *
+     * Amount and period decide the same figure — "₹2,000 of what window" — and
+     * a `BudgetAlertWorker` running between two separate writes would evaluate
+     * a monthly amount against a weekly window and announce a threshold for a
+     * budget that never existed. Asserted by checking a *rejected* edit leaves
+     * every field as it was, not just the amount that failed validation.
+     */
+    @Test
+    fun aRejectedEditChangesNothingAtAll() = runBlocking<Unit> {
+        val budget = budgets.create(request(groceries.id, 1_200_000L)).success()
+
+        val rejected = budgets.update(
+            budget.id,
+            BudgetSettings(
+                amount = Money(0L),
+                period = BudgetPeriod.YEARLY,
+                startDate = today - 100,
+                rolloverEnabled = true,
+            ),
+        )
+
+        assertThat(rejected).isInstanceOf(BudgetResult.Failure::class.java)
+        val unchanged = budgets.observeAll().first().single()
+        assertThat(unchanged.amount.minor).isEqualTo(1_200_000L)
+        assertThat(unchanged.period).isEqualTo(BudgetPeriod.MONTHLY)
+        assertThat(unchanged.startDate).isEqualTo(today)
+        assertThat(unchanged.rolloverEnabled).isFalse()
+    }
+
+    /**
+     * A binned budget cannot be edited back into relevance.
+     *
+     * The statement binds `deleted_at IS NULL` for the same reason `softDelete`
+     * does: the budget screen does not list binned rows, so an edit that
+     * succeeded against one would change figures nobody could see.
+     */
+    @Test
+    fun aDeletedBudgetCannotBeEdited() = runBlocking<Unit> {
+        val budget = budgets.create(request(groceries.id, 1_200_000L)).success()
+        budgets.delete(budget.id).success()
+
+        val result = budgets.update(budget.id, settings(500_000L))
+
+        assertThat(result).isInstanceOf(BudgetResult.Failure::class.java)
+    }
+
+    private fun settings(amount: Long) = BudgetSettings(
+        amount = Money(amount),
+        period = BudgetPeriod.MONTHLY,
+        startDate = today,
+        rolloverEnabled = false,
+    )
 
     private fun request(categoryId: String, amount: Long) = NewBudget(
         categoryId = categoryId,
