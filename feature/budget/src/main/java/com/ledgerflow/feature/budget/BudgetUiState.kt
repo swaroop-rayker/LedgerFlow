@@ -65,11 +65,22 @@ public data class BudgetEditorState(
     val startDate: Int = 0,
     val rolloverEnabled: Boolean = false,
     val showDatePicker: Boolean = false,
+    /**
+     * Which taxonomy picker is open over the form, or null.
+     *
+     * On the editor state rather than `remember`ed in the dialog, for the same
+     * reason every other flag here is: `CLAUDE.md` §5 hoists screen state to
+     * the ViewModel.
+     */
+    val openPicker: BudgetPickerField? = null,
     val error: String? = null,
 ) {
     public val isEdit: Boolean get() = editingId != null
     public val canSave: Boolean get() = categoryId != null && amountText.isNotBlank()
 }
+
+/** The taxonomy fields the editor opens a picker for (§5.7). */
+public enum class BudgetPickerField { CATEGORY, SUBCATEGORY }
 
 public sealed interface BudgetEvent {
     public data object AddClicked : BudgetEvent
@@ -86,4 +97,7 @@ public sealed interface BudgetEvent {
     public data object SaveClicked : BudgetEvent
     public data object EditorDismissed : BudgetEvent
     public data object MessageShown : BudgetEvent
+
+    /** A taxonomy picker was opened, or closed by passing null. */
+    public data class PickerOpened(val field: BudgetPickerField?) : BudgetEvent
 }

@@ -57,6 +57,15 @@ public data class AnalyticsUiState(
     /** Everything the filter sheet may offer. */
     val allCategories: List<Category> = emptyList(),
     val allMerchants: List<Merchant> = emptyList(),
+    /**
+     * Which filter field has its picker open, or null.
+     *
+     * Hoisted here rather than `remember`ed in the sheet, for the reason
+     * [expandedCategoryId] gives: `CLAUDE.md` §5 puts screen state on the
+     * ViewModel, and a dialog whose visibility lives in the composable is the
+     * one piece of the screen a process death would silently reset.
+     */
+    val openFilterField: AnalyticsFilterField? = null,
 ) {
     /**
      * Distinguishes "nothing yet" from "nothing here".
@@ -78,15 +87,53 @@ public data class AnalyticsUiState(
     public val emptyBecauseFiltered: Boolean get() = showEmptyState && !filters.isEmpty
 }
 
+/**
+ * The filter fields that open a picker (§5.6).
+ *
+ * Source is here with the three taxonomy fields even though it is five fixed
+ * values, because the alternative is two idioms in one sheet — and the sheet
+ * having two idioms is what this replaced.
+ */
+public enum class AnalyticsFilterField(public val label: String) {
+    CATEGORY("Category"),
+    SUBCATEGORY("Subcategory"),
+    MERCHANT("Merchant"),
+    SOURCE("Source"),
+}
+
 /** Events flow up as one lambda (`CLAUDE.md` §5). */
 public sealed interface AnalyticsEvent {
     public data class RangeSelected(val range: AnalyticsRange) : AnalyticsEvent
+
+    /**
+     * The screen came back to the foreground and its figures may be stale.
+     *
+     * The snapshot is a **one-shot read**, not a flow, because §11's budget is
+     * for a 5Y aggregate and re-running it on every ledger write would be a
+     * query per approval. The cost of that choice is this: the ViewModel
+     * survives a tab switch, so an entry approved elsewhere left Analytics
+     * showing the total from before — observed on device as ₹7.90 beside a
+     * ledger holding ₹12,307.90, which reads as the screen being broken rather
+     * than out of date.
+     */
+    public data object Resumed : AnalyticsEvent
     public data object ComparisonToggled : AnalyticsEvent
     public data class CategoryExpanded(val categoryId: String?) : AnalyticsEvent
     public data object FiltersCleared : AnalyticsEvent
     public data class FiltersChanged(val filters: AnalyticsFilters) : AnalyticsEvent
     public data class CustomRangePicked(val from: Int, val to: Int) : AnalyticsEvent
     public data object TreemapToggled : AnalyticsEvent
+
+    /**
+     * The events that only open or close something, and re-query nothing.
+     *
+     * A sub-interface rather than a comment, so the handler for them can be a
+     * separate exhaustive `when` — grouping them as three bare arms of
+     * `onEvent` meant either an `else` on a sealed type (banned, §5) or a
+     * handler whose bulk was visibility toggles hiding the branches that
+     * actually load data.
+     */
+    public sealed interface Surface : AnalyticsEvent
 
     /**
      * The filter sheet was opened or closed.
@@ -96,10 +143,10 @@ public sealed interface AnalyticsEvent {
      * disagree, and the pair was the shape that pushed `onEvent` past its
      * complexity budget.
      */
-    public data class FilterSheetShown(val visible: Boolean) : AnalyticsEvent
+    public data class FilterSheetShown(val visible: Boolean) : Surface
 
     /** The custom-range picker was opened or closed. See [FilterSheetShown]. */
-    public data class RangePickerShown(val visible: Boolean) : AnalyticsEvent
+    public data class RangePickerShown(val visible: Boolean) : Surface
 
     /**
      * The time chart was panned or pinched (ADR-0005).
@@ -110,4 +157,7 @@ public sealed interface AnalyticsEvent {
      * library could have been used.
      */
     public data class ViewportMoved(val gesture: LfViewportGesture) : AnalyticsEvent
+
+    /** A filter's picker was opened, or closed by passing null. */
+    public data class FilterFieldOpened(val field: AnalyticsFilterField?) : Surface
 }

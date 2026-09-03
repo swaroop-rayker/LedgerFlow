@@ -451,6 +451,16 @@ public interface DailyRollupDao {
             "AND (:filterMethods = 0 OR payment_method_id IN (:paymentMethodIds)) " +
             "GROUP BY category_id, subcategory_id ORDER BY sum_minor DESC",
     )
+    /**
+     * **Returns [SubcategoryTotalRow], not [DimensionTotalRow].**
+     *
+     * The `SELECT` always named `category_id`, but the row type had no field
+     * for it, so Room dropped the column and the caller was left grouping by
+     * the only id it could see — the subcategory's. That produced a map keyed
+     * by subcategory against a screen that looks it up by *category*, so A3's
+     * drill-down expanded to nothing, for every category, always. The type is
+     * the fix: a row that carries both ids cannot be grouped by the wrong one.
+     */
     @Suppress("LongParameterList")
     public suspend fun subcategoryTotalsFiltered(
         ledger: LedgerType,
@@ -464,7 +474,7 @@ public interface DailyRollupDao {
         merchantIds: List<String>,
         filterMethods: Int,
         paymentMethodIds: List<String>,
-    ): List<DimensionTotalRow>
+    ): List<SubcategoryTotalRow>
 
     @Query(
         "SELECT local_date, SUM(sum_minor) AS sum_minor, " +
@@ -601,7 +611,15 @@ public interface DailyRollupDao {
         like: String,
     ): List<DimensionTotalRow>
 
-    /** The window's total and distinct-entry count under an entry-level filter. */
+    /**
+     * The window's distinct-entry count under an entry-level filter.
+     *
+     * **Every filter the total binds, this binds too.** It shipped without the
+     * subcategory clause, so filtering to one subcategory showed the right
+     * money beside the wrong count — "₹12,300.00" over "3 transactions" for a
+     * single entry. A figure that disagrees with the one next to it is worse
+     * than either being absent, because nothing on screen says which to trust.
+     */
     @Query(
         "SELECT COUNT(DISTINCT e.id) FROM ledger_entry e " +
             "LEFT JOIN line_item li ON li.entry_id = e.id " +
@@ -610,6 +628,8 @@ public interface DailyRollupDao {
             "AND e.local_date BETWEEN :from AND :to " +
             "AND (:filterCategories = 0 OR " +
             "COALESCE(li.category_id, e.category_id, '') IN (:categoryIds)) " +
+            "AND (:filterSubcategories = 0 OR " +
+            "COALESCE(li.subcategory_id, e.subcategory_id, '') IN (:subcategoryIds)) " +
             "AND (:filterMerchants = 0 OR COALESCE(e.merchant_id, '') IN (:merchantIds)) " +
             "AND (:filterMethods = 0 OR " +
             "COALESCE(e.payment_method_id, '') IN (:paymentMethodIds)) " +
@@ -627,6 +647,8 @@ public interface DailyRollupDao {
         to: Int,
         filterCategories: Int,
         categoryIds: List<String>,
+        filterSubcategories: Int,
+        subcategoryIds: List<String>,
         filterMerchants: Int,
         merchantIds: List<String>,
         filterMethods: Int,

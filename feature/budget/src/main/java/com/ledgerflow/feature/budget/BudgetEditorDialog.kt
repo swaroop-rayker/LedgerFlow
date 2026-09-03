@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DatePicker
@@ -31,6 +29,9 @@ import com.ledgerflow.core.designsystem.component.LfSwitchRow
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.Category
+import com.ledgerflow.core.ui.picker.LfDetailRow
+import com.ledgerflow.core.ui.picker.LfPickerDialog
+import com.ledgerflow.core.ui.picker.LfPickerOption
 
 /**
  * Create or edit a budget (`SPEC.md` §5.7).
@@ -59,6 +60,13 @@ public fun BudgetEditorDialog(
             onDismiss = { onEvent(BudgetEvent.DatePickerDismissed) },
         )
     }
+
+    BudgetPickers(
+        editor = editor,
+        availableCategories = availableCategories,
+        subcategories = subcategories,
+        onEvent = onEvent,
+    )
 
     LfDialog(
         title = if (editor.isEdit) "Edit budget" else "New budget",
@@ -115,19 +123,21 @@ private fun EditorForm(
         // one. Everything below was hidden here too until Q20, which is how an
         // accidentally-ticked rollover became a delete-and-rebuild.
         if (!editor.isEdit) {
-            CategoryPicker(
-                categories = availableCategories,
-                selectedId = editor.categoryId,
-                onPick = { onEvent(BudgetEvent.CategoryPicked(it)) },
+            LfDetailRow(
+                label = "Category",
+                value = availableCategories.firstOrNull { it.id == editor.categoryId }?.name,
+                placeholder = "Choose one",
+                onClick = { onEvent(BudgetEvent.PickerOpened(BudgetPickerField.CATEGORY)) },
             )
-            // §5.7's "optionally per-subcategory". Only shown when the picked
-            // category has children -- an empty picker is a control that can
-            // only disappoint.
+            // §5.7's "optionally per-subcategory". Only offered when the picked
+            // category has children -- a picker that can only disappoint is
+            // worse than no picker.
             if (subcategories.isNotEmpty()) {
-                SubcategoryPicker(
-                    subcategories = subcategories,
-                    selectedId = editor.subcategoryId,
-                    onPick = { onEvent(BudgetEvent.SubcategoryPicked(it)) },
+                LfDetailRow(
+                    label = "Narrow to",
+                    value = subcategories.firstOrNull { it.id == editor.subcategoryId }?.name,
+                    placeholder = "All of it",
+                    onClick = { onEvent(BudgetEvent.PickerOpened(BudgetPickerField.SUBCATEGORY)) },
                 )
             }
         }
@@ -164,84 +174,61 @@ private fun EditorForm(
 }
 
 /**
- * The category this budget limits.
+ * The taxonomy pickers, over the editor.
  *
- * **One scrolling row, not a wrapping cloud** — and the device decided it. The
- * seeded taxonomy has around forty debit categories; as a `FlowRow` they filled
- * the whole dialog and pushed Period and Amount out of reach, so the form could
- * be opened and never completed. A single row costs one line whatever the
- * category count, which puts the field the user came to fill immediately below
- * it. Same shape as the Analytics range chips, for the same reason.
+ * **The app's one picker, not a chip strip.** Both fields shipped as
+ * horizontally scrolling `LazyRow`s of chips — which was itself a fix for a
+ * `FlowRow` cloud of forty categories that filled the dialog — and both were
+ * still a second way of choosing a category in an app whose entry form already
+ * had one. A row that opens `LfPickerDialog` costs the same single line as the
+ * chip strip and shows the whole list vertically when tapped, with the
+ * selection in the accessibility tree rather than only in the palette.
  */
 @Composable
-private fun CategoryPicker(
-    categories: List<Category>,
-    selectedId: String?,
-    onPick: (String) -> Unit,
-) {
-    Text(
-        text = "Category",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
-    )
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-    ) {
-        items(categories, key = { it.id }) { category ->
-            LfChip(
-                label = category.name,
-                style = if (category.id == selectedId) {
-                    LfChipStyle.Selected
-                } else {
-                    LfChipStyle.Assist
-                },
-                onClick = { onPick(category.id) },
-            )
-        }
-    }
-}
-
-/**
- * §5.7's optional subcategory scoping.
- *
- * "All of <category>" is an explicit chip rather than a deselect gesture: a
- * picker where the way back is "tap the selected one again" is a rule the user
- * has to discover, and the whole-category budget is the common case.
- */
-@Composable
-private fun SubcategoryPicker(
+private fun BudgetPickers(
+    editor: BudgetEditorState,
+    availableCategories: List<Category>,
     subcategories: List<Category>,
-    selectedId: String?,
-    onPick: (String?) -> Unit,
+    onEvent: (BudgetEvent) -> Unit,
 ) {
-    Text(
-        text = "Narrow to",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
-    )
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-    ) {
-        item(key = "all") {
-            LfChip(
-                label = "All",
-                style = if (selectedId == null) LfChipStyle.Selected else LfChipStyle.Assist,
-                onClick = { onPick(null) },
-            )
-        }
-        items(subcategories, key = { it.id }) { child ->
-            LfChip(
-                label = child.name,
-                style = if (child.id == selectedId) {
-                    LfChipStyle.Selected
-                } else {
-                    LfChipStyle.Assist
-                },
-                onClick = { onPick(child.id) },
-            )
-        }
+    when (editor.openPicker) {
+        null -> Unit
+
+        BudgetPickerField.CATEGORY -> LfPickerDialog(
+            title = "Category",
+            body = "Debit categories without a budget yet.",
+            // Top-level only. `observe` returns the taxonomy flat, so the
+            // unfiltered list offered subcategories as budget categories --
+            // beside a separate control for narrowing to a subcategory, which
+            // made the two fields read as the same question asked twice.
+            options = availableCategories
+                .filterNot { it.isSubcategory }
+                .map { LfPickerOption(it.id, it.name) },
+            selectedId = editor.categoryId,
+            onSelect = { id ->
+                if (id != null) onEvent(BudgetEvent.CategoryPicked(id))
+                onEvent(BudgetEvent.PickerOpened(null))
+            },
+            onDismiss = { onEvent(BudgetEvent.PickerOpened(null)) },
+            emptyMessage = "Every category already has a budget.",
+        )
+
+        BudgetPickerField.SUBCATEGORY -> LfPickerDialog(
+            title = "Narrow to",
+            body = "Limit the budget to one subcategory, or leave it across the whole category.",
+            options = subcategories.map { LfPickerOption(it.id, it.name) },
+            selectedId = editor.subcategoryId,
+            // Clearing *is* "all of it", which is why the whole-category case
+            // needs no option of its own: `LfPickerDialog`'s confirm slot is
+            // already the un-choose, and an explicit "All" chip beside it would
+            // be two controls for one decision.
+            onSelect = { id ->
+                onEvent(BudgetEvent.SubcategoryPicked(id))
+                onEvent(BudgetEvent.PickerOpened(null))
+            },
+            onDismiss = { onEvent(BudgetEvent.PickerOpened(null)) },
+            emptyMessage = "This category has no subcategories.",
+        )
     }
 }
 

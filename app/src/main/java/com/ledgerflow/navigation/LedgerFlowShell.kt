@@ -1,18 +1,18 @@
 package com.ledgerflow.navigation
 
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -28,12 +28,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ledgerflow.core.designsystem.component.LfBottomBar
-import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfScaffold
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.feature.analytics.AnalyticsEvent
 import com.ledgerflow.feature.analytics.AnalyticsFilterSheet
 import com.ledgerflow.feature.analytics.AnalyticsRangePicker
 import com.ledgerflow.feature.analytics.AnalyticsScreen
@@ -41,21 +42,21 @@ import com.ledgerflow.feature.analytics.AnalyticsViewModel
 import com.ledgerflow.feature.budget.BudgetEditorDialog
 import com.ledgerflow.feature.budget.BudgetScreen
 import com.ledgerflow.feature.budget.BudgetViewModel
-import com.ledgerflow.feature.export.ExportRoute
 import com.ledgerflow.feature.categories.CategoriesScreen
 import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.dashboard.DashboardRoute
-import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.entry.EntryScreen
 import com.ledgerflow.feature.entry.EntryViewModel
-import com.ledgerflow.feature.ledger.BinScreen
+import com.ledgerflow.feature.export.ExportRoute
 import com.ledgerflow.feature.inbox.InboxScreen
 import com.ledgerflow.feature.inbox.InboxViewModel
 import com.ledgerflow.feature.inbox.ReviewScreen
 import com.ledgerflow.feature.inbox.ReviewViewModel
+import com.ledgerflow.feature.ledger.BinScreen
 import com.ledgerflow.feature.ledger.BinViewModel
 import com.ledgerflow.feature.ledger.LedgerScreen
 import com.ledgerflow.feature.ledger.LedgerViewModel
+import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.settings.MoreScreen
 import com.ledgerflow.feature.settings.MoreViewModel
 
@@ -205,6 +206,14 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
     composable<Destination.Analytics> {
         val viewModel: AnalyticsViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
+        // Re-read on resume, because the snapshot is a one-shot query rather
+        // than a flow (§11) and this ViewModel outlives a tab switch. Without
+        // it, approving an entry and coming back here shows the total from
+        // before -- which looks like a broken screen, not a stale one.
+        LifecycleResumeEffect(viewModel) {
+            viewModel.onEvent(AnalyticsEvent.Resumed)
+            onPauseOrDispose { }
+        }
         AnalyticsScreen(state = state, onEvent = viewModel::onEvent)
         // Both hoisted to the route, so the screen stays a pure function of
         // its state -- the same shape the budget editor and taxonomy dialogs
@@ -214,6 +223,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
                 filters = state.filters,
                 categories = state.allCategories,
                 merchants = state.allMerchants,
+                openField = state.openFilterField,
                 onEvent = viewModel::onEvent,
             )
         }

@@ -478,7 +478,13 @@ private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {
         Text(
             // The count comes from `COUNT(DISTINCT id)`, never from summing
             // `txn_count` across categories -- a split bill would count twice.
-            text = "${snapshot.transactionCount} transactions",
+            // Singular when it is one. Visible the moment a filter narrows to a
+            // single entry, which is exactly when someone is looking closely.
+            text = if (snapshot.transactionCount == 1) {
+                "1 transaction"
+            } else {
+                "${snapshot.transactionCount} transactions"
+            },
             style = LfTheme.typography.bodyM,
             color = LfTheme.colors.textSecondary,
         )

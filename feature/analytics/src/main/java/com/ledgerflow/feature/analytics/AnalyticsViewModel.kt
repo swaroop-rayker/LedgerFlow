@@ -67,13 +67,9 @@ public class AnalyticsViewModel @Inject constructor(
                 load()
             }
 
-            is AnalyticsEvent.FilterSheetShown -> _state.update {
-                it.copy(showFilterSheet = event.visible)
-            }
+            is AnalyticsEvent.Surface -> showSurface(event)
 
-            is AnalyticsEvent.RangePickerShown -> _state.update {
-                it.copy(showRangePicker = event.visible)
-            }
+            AnalyticsEvent.Resumed -> load()
 
             is AnalyticsEvent.FiltersChanged -> {
                 _state.update { it.copy(filters = event.filters) }
@@ -122,6 +118,30 @@ public class AnalyticsViewModel @Inject constructor(
                         }
                     current.copy(expandedCategoryId = next)
                 }
+            }
+        }
+    }
+
+    /**
+     * The three "is this dialog open" events, which change no data.
+     *
+     * Together rather than as three arms of `onEvent`, which detekt was right
+     * to flag: a handler whose bulk is visibility toggles hides the four
+     * branches that actually re-query.
+     */
+    private fun showSurface(event: AnalyticsEvent.Surface) {
+        _state.update { current ->
+            when (event) {
+                // Closing the sheet closes any picker over it, or reopening the
+                // sheet would come back with a dialog the user had dismissed.
+                is AnalyticsEvent.FilterSheetShown ->
+                    current.copy(showFilterSheet = event.visible, openFilterField = null)
+
+                is AnalyticsEvent.FilterFieldOpened ->
+                    current.copy(openFilterField = event.field)
+
+                is AnalyticsEvent.RangePickerShown ->
+                    current.copy(showRangePicker = event.visible)
             }
         }
     }

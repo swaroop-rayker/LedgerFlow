@@ -220,7 +220,11 @@ public class DefaultAnalyticsRepository @Inject constructor(
             filterMethods = filters.paymentMethodIds.flag(),
             paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
         )
-        .groupBy { it.dimensionId }
+        // **By the parent**, which is how `AnalyticsScreen` looks it up: the
+        // expanded row hands back a *category* id and asks for its children.
+        // Grouping by `dimensionId` keyed the map by subcategory, so every
+        // lookup missed and the drill-down silently expanded to nothing.
+        .groupBy { it.categoryId }
         .mapValues { (_, rows) ->
             rows.map { row ->
                 DimensionTotal(
@@ -499,6 +503,8 @@ public class DefaultAnalyticsRepository @Inject constructor(
             to = window.to,
             filterCategories = filters.categoryIds.flag(),
             categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
             filterMerchants = filters.merchantIds.flag(),
             merchantIds = filters.merchantIds.orPlaceholder(),
             filterMethods = filters.paymentMethodIds.flag(),

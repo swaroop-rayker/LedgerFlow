@@ -44,6 +44,15 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
  * means the visible rows do not sum to the whole, so a share-of-total fill would
  * render every bar misleadingly short. Share-of-largest is the honest reading of
  * a ranked list, and the figures beside them carry the absolute truth.
+ *
+ * **The fill is a tint, never the colour at full strength.** It shipped as the
+ * solid accent, and text sits *on* it — so the largest merchant's row was
+ * near-black type on saturated blue and could not be read at all, while the
+ * shortest row was perfectly legible. A bar whose readability depends on how
+ * much someone spent is not a chart. [FILL_ALPHA] composites the colour toward
+ * whatever surface is behind it, which is why one constant works in both
+ * themes: light on light, dark on dark, and the text stays at full contrast
+ * over either.
  */
 @Composable
 public fun LfHorizontalBarChart(
@@ -70,7 +79,7 @@ public fun LfHorizontalBarChart(
                         contentDescription = "${datum.label}, ${datum.formattedValue}"
                     },
             ) {
-                FractionalFill(fraction = fraction, color = datum.color)
+                FractionalFill(fraction = fraction, color = datum.color.copy(alpha = FILL_ALPHA))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -92,8 +101,13 @@ public fun LfHorizontalBarChart(
                     )
                     Text(
                         text = datum.formattedValue,
+                        // `textPrimary`, not `textSecondary`. The hierarchy
+                        // argument for a dimmer figure assumes a plain
+                        // background; over a tint it is the amount that loses
+                        // contrast first, and the amount is what the row is
+                        // for.
                         style = LfTheme.typography.amountM,
-                        color = LfTheme.colors.textSecondary,
+                        color = LfTheme.colors.textPrimary,
                         maxLines = 1,
                         softWrap = false,
                         modifier = Modifier
@@ -132,5 +146,14 @@ private fun FractionalFill(fraction: Float, color: Color) {
         layout(width, constraints.maxHeight) {}
     }
 }
+
+/**
+ * Light enough that the darkest text reads over it at every fill length.
+ *
+ * Chosen against the accent blue, which is the most saturated colour any row
+ * uses; a paler category colour only gets safer. Reviewed in
+ * `chart-leaderboard-1x` and `-2x` rather than picked from a palette table.
+ */
+private const val FILL_ALPHA = 0.22f
 
 private val DefaultRowHeight: Dp = 36.dp

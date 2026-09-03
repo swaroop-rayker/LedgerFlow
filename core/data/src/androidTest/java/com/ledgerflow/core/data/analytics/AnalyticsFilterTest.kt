@@ -129,6 +129,78 @@ class AnalyticsFilterTest {
         assertThat(snapshot.categories.map { it.name }).containsExactly("Home")
     }
 
+    /**
+     * A3's drill-down: the map is keyed by the **parent**, and it is populated.
+     *
+     * It was neither. `subcategoryTotalsFiltered` declared `DimensionTotalRow`,
+     * which has no `category_id` field, so Room dropped the column the `SELECT`
+     * was already fetching and the repository grouped by the only id left — the
+     * subcategory's. `AnalyticsScreen` looks the map up by category id, so every
+     * lookup missed and tapping a category expanded to nothing, always.
+     *
+     * Nothing caught it because the map was still *shaped* right: a non-empty
+     * `Map<String, List<DimensionTotal>>` with correct totals under wrong keys.
+     * This asserts the key, which is the part that was wrong.
+     */
+    @Test
+    fun theSubcategoryBreakdownIsKeyedByItsParentCategory() = runBlocking<Unit> {
+        val rice = vault.categories.create(
+            NewCategory(LedgerType.DEBIT, "Rice", parentId = groceries.id),
+        ).success()
+        val dairy = vault.categories.create(
+            NewCategory(LedgerType.DEBIT, "Dairy", parentId = groceries.id),
+        ).success()
+        approve(30_000L, groceries.id, zepto.id, subcategoryId = rice.id)
+        approve(12_000L, groceries.id, zepto.id, subcategoryId = dairy.id)
+
+        val snapshot = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters.None,
+        )
+
+        // Keyed by the parent, not by either child.
+        assertThat(snapshot.subcategories.keys).containsExactly(groceries.id)
+        assertThat(snapshot.subcategories.getValue(groceries.id).map { it.name })
+            .containsExactly("Rice", "Dairy")
+        assertThat(snapshot.subcategories.getValue(groceries.id).sumOf { it.amount.minor })
+            .isEqualTo(42_000L)
+
+        // And the screen's own lookup — by the id the category row carries —
+        // finds them, which is the thing the user could not do.
+        val groceryRow = snapshot.categories.single { it.id == groceries.id }
+        assertThat(snapshot.subcategories[groceryRow.id]).hasSize(2)
+    }
+
+    /**
+     * **The count binds every filter the total binds.**
+     *
+     * `distinctEntriesFromEntries` had no subcategory clause, so filtering to
+     * one subcategory returned that subcategory's money beside the *window's*
+     * entry count — on device, "₹12,300.00" over "3 transactions" for a single
+     * entry. Two figures side by side that disagree is worse than either being
+     * missing, because nothing on screen says which one to believe.
+     */
+    @Test
+    fun filteringBySubcategory_narrowsTheCountAndTheTotalTogether() = runBlocking<Unit> {
+        val rice = vault.categories.create(
+            NewCategory(LedgerType.DEBIT, "Rice", parentId = groceries.id),
+        ).success()
+        seed()
+        approve(30_000L, groceries.id, zepto.id, subcategoryId = rice.id)
+
+        val snapshot = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters(subcategoryIds = setOf(rice.id)),
+        )
+
+        assertThat(snapshot.total.minor).isEqualTo(30_000L)
+        assertThat(snapshot.transactionCount).isEqualTo(1)
+    }
+
     @Test
     fun filteringByMerchant_narrowsEveryFigure() = runBlocking<Unit> {
         seed()
@@ -299,6 +371,7 @@ class AnalyticsFilterTest {
         merchantId: String?,
         note: String? = null,
         lines: List<NewLineItem> = emptyList(),
+        subcategoryId: String? = null,
     ) {
         val occurredAt = LocalDate.ofEpochDay(today.toLong())
             .atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
@@ -307,7 +380,11 @@ class AnalyticsFilterTest {
                 ledger = LedgerType.DEBIT,
                 amount = Money(amount),
                 occurredAt = occurredAt,
-                assignment = EntryAssignment(categoryId = categoryId, merchantId = merchantId),
+                assignment = EntryAssignment(
+                    categoryId = categoryId,
+                    subcategoryId = subcategoryId,
+                    merchantId = merchantId,
+                ),
                 note = note,
                 lineItems = lines,
             ),

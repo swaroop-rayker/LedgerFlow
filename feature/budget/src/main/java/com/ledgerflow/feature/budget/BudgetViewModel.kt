@@ -83,6 +83,9 @@ public class BudgetViewModel @Inject constructor(
             is BudgetEvent.DeleteClicked -> delete(event.id)
             BudgetEvent.SaveClicked -> save()
             BudgetEvent.MessageShown -> _state.update { it.copy(message = null) }
+            is BudgetEvent.PickerOpened -> _state.update { current ->
+                current.copy(editor = current.editor?.copy(openPicker = event.field))
+            }
             BudgetEvent.EditorDismissed -> _state.update { it.copy(editor = null) }
             else -> onEditorEvent(event)
         }
@@ -171,6 +174,7 @@ public class BudgetViewModel @Inject constructor(
             BudgetEvent.AddClicked,
             is BudgetEvent.EditClicked,
             is BudgetEvent.DeleteClicked,
+            is BudgetEvent.PickerOpened,
             BudgetEvent.SaveClicked,
             BudgetEvent.EditorDismissed,
             BudgetEvent.MessageShown,
