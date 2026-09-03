@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.DateRangePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDateRangePickerState
@@ -236,8 +238,63 @@ public fun AnalyticsRangePicker(onEvent: (AnalyticsEvent) -> Unit) {
             )
         },
     ) {
-        DateRangePicker(state = state)
+        DateRangePicker(
+            state = state,
+            // **Material's default header breaks mid-phrase on a real device.**
+            // Seen at the owner's font scale: "Start date - End / date" wrapped
+            // across two lines beside the mode-toggle pencil, which is BUG17's
+            // shape exactly -- a heading competing with a control for one line.
+            // Ours is short, and it says what has been picked rather than
+            // labelling two empty slots.
+            title = null,
+            headline = { RangeHeadline(state) },
+            // The pencil switches to typed-date entry, a second input path with
+            // its own parsing and its own failure modes, for a range the user
+            // is already picking by tapping. Dropping it also gives the
+            // headline the whole line.
+            showModeToggle = false,
+        )
     }
+}
+
+/** What has been picked so far, on one line and in the user's own locale. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RangeHeadline(state: DateRangePickerState) {
+    val start = state.selectedStartDateMillis
+    val end = state.selectedEndDateMillis
+    Text(
+        text = when {
+            start == null -> "Pick a start date"
+            end == null -> pickedDateLabel(start) + " to…"
+            else -> pickedDateLabel(start) + " to " + pickedDateLabel(end)
+        },
+        style = LfTheme.typography.titleM,
+        color = LfTheme.colors.textPrimary,
+        modifier = Modifier.padding(
+            start = LfTheme.spacing.lg,
+            end = LfTheme.spacing.lg,
+            bottom = LfTheme.spacing.sm,
+        ),
+    )
+}
+
+/**
+ * `12 Aug 2026` from the picker's UTC millis.
+ *
+ * UTC because that is the timezone `DateRangePicker` reports in, and reading it
+ * as local time shifts every picked date by a day for anyone east of Greenwich
+ * — which is everyone using this app.
+ */
+private fun pickedDateLabel(utcMillis: Long): String {
+    val date = java.time.Instant.ofEpochMilli(utcMillis)
+        .atZone(java.time.ZoneOffset.UTC)
+        .toLocalDate()
+    val month = date.month.getDisplayName(
+        java.time.format.TextStyle.SHORT,
+        java.util.Locale.getDefault(),
+    )
+    return "${date.dayOfMonth} $month ${date.year}"
 }
 
 private fun Set<String>.toggle(id: String): Set<String> =

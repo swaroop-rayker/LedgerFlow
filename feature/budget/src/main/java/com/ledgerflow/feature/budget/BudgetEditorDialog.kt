@@ -2,17 +2,16 @@ package com.ledgerflow.feature.budget
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
@@ -28,6 +27,7 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
+import com.ledgerflow.core.designsystem.component.LfSwitchRow
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.Category
@@ -130,9 +130,10 @@ private fun EditorForm(
                 startDate = editor.startDate,
                 onClick = { onEvent(BudgetEvent.StartDateClicked) },
             )
-            RolloverRow(
-                enabled = editor.rolloverEnabled,
-                onToggle = { onEvent(BudgetEvent.RolloverToggled) },
+            LfSwitchRow(
+                label = "Roll over what is left",
+                checked = editor.rolloverEnabled,
+                onCheckedChange = { onEvent(BudgetEvent.RolloverToggled) },
             )
         }
 
@@ -256,22 +257,6 @@ private fun StartDateRow(startDate: Int, onClick: () -> Unit) {
             onClick = onClick,
             style = LfButtonStyle.Inline,
         )
-    }
-}
-
-@Composable
-private fun RolloverRow(enabled: Boolean, onToggle: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Roll over what is left",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(checked = enabled, onCheckedChange = { onToggle() })
     }
 }
 
