@@ -53,3 +53,23 @@ public data class BucketCategoryRow(
     @ColumnInfo(name = "dimension_id") val dimensionId: String,
     @ColumnInfo(name = "sum_minor") val sumMinor: Money,
 )
+
+/** One day's total, for A6's calendar heatmap. `localDate` is days since epoch. */
+public data class DailyTotalRow(
+    @ColumnInfo(name = "local_date") val localDate: Int,
+    @ColumnInfo(name = "sum_minor") val sumMinor: Money,
+    @ColumnInfo(name = "txn_count") val txnCount: Int,
+)
+
+/**
+ * One payment to one merchant, for A8's interval clustering.
+ *
+ * Individual occurrences, not a daily sum — which is why A8 is one of the two
+ * surfaces `CLAUDE.md` §8 exempts from "analytics reads `daily_rollup`". A sum
+ * per day has thrown away the sequence of dates the clustering needs.
+ */
+public data class MerchantOccurrenceRow(
+    @ColumnInfo(name = "merchant_id") val merchantId: String,
+    @ColumnInfo(name = "local_date") val localDate: Int,
+    @ColumnInfo(name = "amount_minor") val amountMinor: Money,
+)

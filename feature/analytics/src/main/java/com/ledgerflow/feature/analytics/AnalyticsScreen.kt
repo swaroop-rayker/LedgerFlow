@@ -26,9 +26,12 @@ import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
+import com.ledgerflow.core.designsystem.chart.LfBudgetBar
+import com.ledgerflow.core.designsystem.chart.LfCalendarHeatmap
 import com.ledgerflow.core.designsystem.chart.LfCategoryPalette
 import com.ledgerflow.core.designsystem.chart.LfDonutChart
 import com.ledgerflow.core.designsystem.chart.LfDonutSlice
+import com.ledgerflow.core.designsystem.chart.LfHeatmapDay
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
 import com.ledgerflow.core.designsystem.component.LfCard
@@ -41,7 +44,9 @@ import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
+import com.ledgerflow.core.domain.analytics.BudgetProgress
 import com.ledgerflow.core.domain.analytics.DimensionTotal
+import com.ledgerflow.core.domain.analytics.RecurringMerchant
 
 /**
  * Analytics — A1 through A5 (`SPEC.md` §5.6).
@@ -166,7 +171,191 @@ private fun LazyListScope.chartSections(
             LfHorizontalBarChart(data = snapshot.toMerchantBars(state.baseCurrency))
         }
     }
+
+    dailyAndCommitmentSections(state, snapshot)
 }
+
+/**
+ * A6, A7, A10 and A8 — the sections that are about *rhythm* rather than totals.
+ *
+ * Split from [chartSections] because that one had grown past the point where
+ * the whole of it fits on a screen, which is the same argument for splitting a
+ * long function anywhere: the five spending views and the four commitment views
+ * answer different questions and are read at different times.
+ *
+ * **Each one hides itself when it has nothing to say.** An empty budgets card
+ * asks the user to act on a feature they have not set up, and an empty
+ * "looks recurring" card asserts a negative the detection cannot actually make
+ * on three months of data.
+ */
+private fun LazyListScope.dailyAndCommitmentSections(
+    state: AnalyticsUiState,
+    snapshot: AnalyticsSnapshot,
+) {
+    // A6 — calendar heatmap. Only for ranges where a day-grid means something:
+    // a 5Y heatmap is 1,825 cells, which is a texture, not a calendar.
+    if (state.range.days <= HEATMAP_MAX_DAYS) {
+        item(key = "heatmap", contentType = "chart") {
+            SectionCard(title = "By day") {
+                LfCalendarHeatmap(days = snapshot.toHeatmapDays(state.baseCurrency))
+            }
+        }
+    }
+
+    // A7 — budget progress. Absent rather than empty when no budgets exist:
+    // an empty card asks the user to act on a feature they have not set up.
+    if (snapshot.budgets.isNotEmpty()) {
+        item(key = "budgets", contentType = "budgets") {
+            SectionCard(title = "Budgets") {
+                snapshot.budgets.forEach { progress ->
+                    BudgetRow(progress = progress, currency = state.baseCurrency)
+                }
+            }
+        }
+    }
+
+    // A10 — the runway, above A8 because a figure due this week outranks the
+    // list of everything that repeats.
+    if (snapshot.runway.isNotEmpty()) {
+        item(key = "runway", contentType = "runway") {
+            SectionCard(title = "Due this period") {
+                RunwaySummary(snapshot = snapshot, currency = state.baseCurrency)
+            }
+        }
+    }
+
+    // A8 — recurring detection.
+    if (snapshot.recurring.isNotEmpty()) {
+        item(key = "recurring", contentType = "recurring") {
+            SectionCard(title = "Looks recurring") {
+                snapshot.recurring.forEach { merchant ->
+                    RecurringRow(merchant = merchant, currency = state.baseCurrency)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BudgetRow(progress: BudgetProgress, currency: String) {
+    LfBudgetBar(
+        label = progress.categoryName,
+        formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
+        formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
+        fraction = progress.fraction,
+        projectedFraction = progress.projectedFraction(),
+        color = LfCategoryPalette.colorForId(
+            progress.budget.categoryId,
+            progress.categoryColorArgb,
+        ),
+    )
+    if (progress.onCourseToOverrun) {
+        Text(
+            // The burn-rate sentence §5.6 asks for, stated as a projection
+            // rather than a prediction -- the user front-loading a month's
+            // groceries on the 1st is not on course for thirty times that.
+            text = "At this pace, " +
+                MoneyFormat.symbolised(progress.projectedSpend.minor, currency) +
+                " by period end",
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.warn,
+        )
+    }
+}
+
+@Composable
+private fun RunwaySummary(snapshot: AnalyticsSnapshot, currency: String) {
+    Text(
+        text = MoneyFormat.symbolised(snapshot.runwayTotal.minor, currency),
+        style = LfTheme.typography.amountM,
+        color = LfTheme.colors.textPrimary,
+        maxLines = 1,
+        softWrap = false,
+    )
+    Text(
+        // "expected", not "due": these are detected patterns, not a schedule
+        // the app has been told about.
+        text = "${snapshot.runway.size} recurring charges expected",
+        style = LfTheme.typography.label,
+        color = LfTheme.colors.textSecondary,
+    )
+    snapshot.runway.forEach { merchant ->
+        RecurringRow(merchant = merchant, currency = currency)
+    }
+}
+
+@Composable
+private fun RecurringRow(merchant: RecurringMerchant, currency: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = LfTheme.spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = merchant.name,
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "about every ${merchant.intervalDays} days",
+                style = LfTheme.typography.label,
+                color = LfTheme.colors.textTertiary,
+                maxLines = 1,
+            )
+        }
+        Text(
+            text = MoneyFormat.symbolised(merchant.typicalAmount.minor, currency),
+            style = LfTheme.typography.amountM,
+            color = LfTheme.colors.textSecondary,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/**
+ * The month grid for A6, padded so the 1st lands under its weekday.
+ *
+ * Built from the window's end, which is the month the user is looking at. Days
+ * with no spending still get a cell — the month has a fixed shape and a hole in
+ * it reads as missing data.
+ */
+@Composable
+private fun AnalyticsSnapshot.toHeatmapDays(currency: String): List<LfHeatmapDay> {
+    val end = java.time.LocalDate.ofEpochDay(window.to.toLong())
+    val first = end.withDayOfMonth(1)
+    val byDate = days.associateBy { it.localDate }
+    // ISO: Monday is 1, and the grid's first column is Monday.
+    val leading = first.dayOfWeek.value - 1
+
+    return buildList {
+        repeat(leading) { add(LfHeatmapDay(0, 0L, "", blank = true)) }
+        for (day in 1..end.lengthOfMonth()) {
+            val epochDay = first.plusDays((day - 1).toLong()).toEpochDay().toInt()
+            val amount = byDate[epochDay]?.amount?.minor ?: 0L
+            add(
+                LfHeatmapDay(
+                    dayOfMonth = day,
+                    amount = amount,
+                    formattedAmount = MoneyFormat.symbolised(amount, currency),
+                ),
+            )
+        }
+    }
+}
+
+/** Today's pace as a fraction of the budget — a chart coordinate, not money. */
+private fun BudgetProgress.projectedFraction(): Float =
+    if (budget.amount.minor <= 0L) {
+        0f
+    } else {
+        (projectedSpend.minor.toDouble() / budget.amount.minor.toDouble()).toFloat()
+    }
 
 @Composable
 private fun AnalyticsSnapshot.toMerchantBars(currency: String): List<LfBarDatum> {
@@ -288,13 +477,11 @@ private fun DonutWithList(
         }
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LfDonutChart(slices = slices)
-    }
+    // The donut sits on its own, small, above the list. `CLAUDE.md`: the
+    // graphic orients and the list is what the user came to read -- measured on
+    // device at 132dp it filled a third of the card for a single category, so
+    // it is 104dp now.
+    LfDonutChart(slices = slices)
 
     Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
         totals.forEach { total ->
@@ -419,6 +606,12 @@ private fun shortDateLabel(epochDay: Int): String {
             java.util.Locale.getDefault(),
         )
 }
+
+/**
+ * A day grid is only a calendar while a month fits in it. Beyond this the
+ * cells stop being days anyone can find and the section hides itself.
+ */
+private const val HEATMAP_MAX_DAYS = 31
 
 private const val TOP_SLICES = 6
 private const val TOP_MERCHANTS = 8

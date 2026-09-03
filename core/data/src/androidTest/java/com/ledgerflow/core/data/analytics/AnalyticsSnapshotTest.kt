@@ -148,6 +148,29 @@ class AnalyticsSnapshotTest {
         assertThat(populated.single().byCategory.sumOf { it.amount.minor }).isEqualTo(145_000L)
     }
 
+    /**
+     * **The series spans the whole window, gaps included.**
+     *
+     * Found on device: with two real entries in a 30-day view the chart drew
+     * one bar across the entire plot, because SQL returns only days that had
+     * spending. That reads as "this is the month" rather than "this is one day
+     * of it" — the empty buckets are the information.
+     */
+    @Test
+    fun theTimeSeriesCoversEveryBucket_notOnlyTheOnesWithSpending() = runBlocking<Unit> {
+        seed()
+
+        val snapshot = analytics.snapshot(LedgerType.DEBIT, window(), comparePrevious = false)
+
+        assertThat(snapshot.timeBuckets).hasSize(AnalyticsRange.MONTH.bucketCount)
+        assertThat(snapshot.timeBuckets.count { it.amount.minor > 0L }).isEqualTo(1)
+        // Still the honest total: the zeros add nothing.
+        assertThat(snapshot.timeBuckets.sumOf { it.amount.minor }).isEqualTo(145_000L)
+        // Ordered and contiguous, so the axis reads left to right.
+        assertThat(snapshot.timeBuckets.map { it.bucket })
+            .isEqualTo((0 until AnalyticsRange.MONTH.bucketCount).toList())
+    }
+
     @Test
     fun theUnfiledSentinelIsNamed_notBlank() = runBlocking<Unit> {
         // A line with no category lands on '' and must read as something.

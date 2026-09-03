@@ -256,6 +256,84 @@ public interface DailyRollupDao {
     )
     public suspend fun distinctEntryTotal(ledger: LedgerType, from: Int, to: Int): Int
 
+    /**
+     * Per-day totals for A6's calendar heatmap.
+     *
+     * Real dates rather than [timeSeries]'s bucket ordinals, because a heatmap
+     * cell *is* a calendar day and has to know which one. A month is 31 rows.
+     */
+    @Query(
+        "SELECT local_date, SUM(sum_minor) AS sum_minor, " +
+            "SUM(txn_count) AS txn_count FROM daily_rollup WHERE ledger = :ledger " +
+            "AND local_date BETWEEN :from AND :to " +
+            "GROUP BY local_date ORDER BY local_date",
+    )
+    public suspend fun dailyTotals(ledger: LedgerType, from: Int, to: Int): List<DailyTotalRow>
+
+    /**
+     * **A8's occurrences, and the second read that may not use `daily_rollup`.**
+     *
+     * Interval clustering needs the sequence of individual payment dates per
+     * merchant; a daily sum has discarded exactly that. `CLAUDE.md` §8 names
+     * this as one of two standing exceptions, and it is the drill-down shape the
+     * same section permits — one indexed range scan over one book, not a chart.
+     *
+     * Entries with no merchant are excluded: "no merchant" is a sentinel, not a
+     * counterparty, and clustering the dates of everything unattributed would
+     * manufacture a subscription out of unrelated spending.
+     */
+    @Query(
+        "SELECT merchant_id, local_date, amount_minor FROM ledger_entry " +
+            "WHERE ledger = :ledger AND deleted_at IS NULL " +
+            "AND merchant_id IS NOT NULL AND local_date BETWEEN :from AND :to " +
+            "ORDER BY merchant_id, local_date",
+    )
+    public suspend fun merchantOccurrences(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+    ): List<MerchantOccurrenceRow>
+
+    /**
+     * A7: what one category has cost inside a budget's period.
+     *
+     * **`'DEBIT'` as a literal, not a parameter.** §5.7 scopes budgets to the
+     * debit ledger and §6.1 gives `budget` no `ledger` column, so "debit only"
+     * is entirely a property of this read. A `:ledger` parameter here would have
+     * exactly one legal value and would invite someone to pass the other one;
+     * the literal satisfies `LedgerIsolationTest` and states the rule in the
+     * SQL where it is enforced.
+     *
+     * Line grain comes for free — `daily_rollup` is already fed at it
+     * (ADR-0018), so a ₹400 kettle inside a grocery bill lands in the home
+     * budget rather than the grocery one, which is what §5.6 promises.
+     */
+    @Query(
+        "SELECT COALESCE(SUM(sum_minor), 0) FROM daily_rollup " +
+            "WHERE ledger = 'DEBIT' AND category_id = :categoryId " +
+            "AND local_date BETWEEN :from AND :to",
+    )
+    public suspend fun categorySpend(categoryId: String, from: Int, to: Int): Long
+
+    /**
+     * The same, narrowed to one subcategory (§5.7's optional scoping).
+     *
+     * A separate statement rather than a nullable parameter, because
+     * `subcategory_id = NULL` matches nothing in SQL and would silently report
+     * every subcategory-scoped budget as unspent.
+     */
+    @Query(
+        "SELECT COALESCE(SUM(sum_minor), 0) FROM daily_rollup " +
+            "WHERE ledger = 'DEBIT' AND category_id = :categoryId " +
+            "AND subcategory_id = :subcategoryId AND local_date BETWEEN :from AND :to",
+    )
+    public suspend fun subcategorySpend(
+        categoryId: String,
+        subcategoryId: String,
+        from: Int,
+        to: Int,
+    ): Long
+
     /** Every bucket in one book — the reconciliation diff reads this twice. */
     @Query("SELECT * FROM daily_rollup WHERE ledger = :ledger ORDER BY local_date")
     public suspend fun allFor(ledger: LedgerType): List<DailyRollupEntity>

@@ -65,3 +65,19 @@ public data class LfBarColumn(
 ) {
     public val total: Long get() = segments.sumOf { it.value }
 }
+
+/**
+ * One cell of A6's calendar heatmap.
+ *
+ * [dayOfMonth] is 1-based and [amount] is money in minor units (Law 3).
+ * [blank] marks the leading cells before the 1st so the grid lines up under the
+ * right weekday column — a padding cell, not a day with nothing on it, which is
+ * a different thing the grid also has to show.
+ */
+@Immutable
+public data class LfHeatmapDay(
+    val dayOfMonth: Int,
+    val amount: Long,
+    val formattedAmount: String,
+    val blank: Boolean = false,
+)

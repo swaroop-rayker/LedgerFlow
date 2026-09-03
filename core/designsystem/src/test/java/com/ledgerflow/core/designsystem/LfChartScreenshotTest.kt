@@ -18,8 +18,11 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
+import com.ledgerflow.core.designsystem.chart.LfBudgetBar
+import com.ledgerflow.core.designsystem.chart.LfCalendarHeatmap
 import com.ledgerflow.core.designsystem.chart.LfDonutChart
 import com.ledgerflow.core.designsystem.chart.LfDonutSlice
+import com.ledgerflow.core.designsystem.chart.LfHeatmapDay
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
 import com.ledgerflow.core.designsystem.theme.LfTheme
@@ -146,6 +149,88 @@ class LfChartScreenshotTest {
 
     @Test
     fun stackedBars_2x() = capture("chart-stacked-2x", 2.0f) { StackedBars() }
+
+    // ── A6: the calendar heatmap ───────────────────────────────────────────
+
+    @Test
+    fun heatmap_1x() = capture("chart-heatmap-1x", 1.0f) { Heatmap() }
+
+    @Test
+    fun heatmap_2x() = capture("chart-heatmap-2x", 2.0f) { Heatmap() }
+
+    /**
+     * A month with one very heavy day.
+     *
+     * That is the case the alpha floor exists for: scaled purely by ratio, a
+     * single ₹9,000 day would flatten every ₹200 day to near-invisible and the
+     * grid would read as "one day of spending", which is the opposite of what a
+     * heatmap is for. Two blank leading cells check the 1st lands under its
+     * weekday, and several zero days check that an empty cell still renders.
+     */
+    @Composable
+    private fun Heatmap() {
+        LfCalendarHeatmap(
+            days = buildList {
+                repeat(2) { add(LfHeatmapDay(0, 0L, "", blank = true)) }
+                val amounts = listOf(
+                    45_000L, 0L, 12_000L, 900_000L, 20_000L, 0L, 31_000L,
+                    18_000L, 0L, 62_000L, 0L, 24_000L, 51_000L, 8_000L,
+                    0L, 39_000L, 15_000L, 0L, 72_000L, 11_000L, 0L,
+                    28_000L, 44_000L, 0L, 19_000L, 33_000L, 0L, 57_000L,
+                    22_000L, 0L,
+                )
+                amounts.forEachIndexed { index, amount ->
+                    add(LfHeatmapDay(index + 1, amount, "₹${amount / 100}"))
+                }
+            },
+        )
+    }
+
+    // ── A7: budget progress ────────────────────────────────────────────────
+
+    @Test
+    fun budgets_1x() = capture("chart-budgets-1x", 1.0f) { Budgets() }
+
+    @Test
+    fun budgets_2x() = capture("chart-budgets-2x", 2.0f) { Budgets() }
+
+    /**
+     * Three budgets in the three states that matter.
+     *
+     * Comfortable; **on course to overrun** — under budget today but with the
+     * projection tick further along, which is the whole reason A7 draws two
+     * marks; and already over, which switches to `warn`. A long category name
+     * is included because the amount pair beside it must never truncate.
+     */
+    @Composable
+    private fun Budgets() {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
+            LfBudgetBar(
+                label = "Groceries",
+                formattedSpent = "₹4,200",
+                formattedBudget = "₹12,000",
+                fraction = 0.35f,
+                projectedFraction = 0.55f,
+                color = Color(0xFF7FB3D5),
+            )
+            LfBudgetBar(
+                label = "Eating out and deliveries",
+                formattedSpent = "₹3,100",
+                formattedBudget = "₹4,000",
+                fraction = 0.78f,
+                projectedFraction = 1.0f,
+                color = Color(0xFFE59866),
+            )
+            LfBudgetBar(
+                label = "Transport",
+                formattedSpent = "₹2,600",
+                formattedBudget = "₹2,000",
+                fraction = 1.3f,
+                projectedFraction = 1.4f,
+                color = Color(0xFF82C9A0),
+            )
+        }
+    }
 
     /**
      * Twelve buckets in a narrow chart, which is more x-labels than can fit.

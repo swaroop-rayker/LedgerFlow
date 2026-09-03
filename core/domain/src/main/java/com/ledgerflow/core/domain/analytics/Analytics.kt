@@ -83,6 +83,19 @@ public data class TimeBucket(
 )
 
 /**
+ * One day of A6's calendar heatmap.
+ *
+ * Only days with spending are returned; the grid fills the gaps, because a
+ * month has a fixed shape and an absent day is a day with nothing on it rather
+ * than a day that is missing.
+ */
+public data class DayTotal(
+    val localDate: Int,
+    val amount: Money,
+    val transactionCount: Int,
+)
+
+/**
  * A total for one dimension value, with its share and its movement.
  *
  * [id] is `''` for the "does not apply" sentinel (§6.1.1) — uncategorised
@@ -126,8 +139,25 @@ public data class AnalyticsSnapshot(
     val subcategories: Map<String, List<DimensionTotal>>,
     val merchants: List<DimensionTotal>,
     val paymentMethods: List<DimensionTotal>,
+    /** A6 — one entry per day that had spending. */
+    val days: List<DayTotal> = emptyList(),
+    /** A7 — every live budget, against the period containing today. */
+    val budgets: List<BudgetProgress> = emptyList(),
+    /** A8 — merchants whose payments cluster into a regular interval. */
+    val recurring: List<RecurringMerchant> = emptyList(),
+    /**
+     * A10 — detected charges falling between today and the window's end.
+     *
+     * A subset of [recurring], not a separate detection: the runway is a
+     * *reading* of A8's output, and computing it independently would let the
+     * two disagree about what is recurring.
+     */
+    val runway: List<RecurringMerchant> = emptyList(),
 ) {
     public val isEmpty: Boolean get() = total.minor == 0L && transactionCount == 0
+
+    /** A10's headline: what the detected charges add up to. Law 3 — `Long`. */
+    public val runwayTotal: Money get() = Money(runway.sumOf { it.typicalAmount.minor })
 }
 
 /**

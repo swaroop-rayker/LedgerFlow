@@ -130,5 +130,5 @@ private const val START_ANGLE = -90f
 
 private const val SLICE_GAP_DEGREES = 1.5f
 
-private val DefaultDiameter: Dp = 132.dp
-private val DefaultThickness: Dp = 18.dp
+private val DefaultDiameter: Dp = 104.dp
+private val DefaultThickness: Dp = 14.dp
