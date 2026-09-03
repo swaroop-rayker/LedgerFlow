@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":feature:entry"))
     implementation(project(":feature:ledger"))
     implementation(project(":feature:analytics"))
+    implementation(project(":feature:budget"))
     implementation(project(":feature:categories"))
     implementation(project(":feature:export"))
     // No UI of its own, and that is the point at S11: what :app takes from it

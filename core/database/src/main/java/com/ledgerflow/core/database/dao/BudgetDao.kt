@@ -44,4 +44,23 @@ public interface BudgetDao {
      */
     @Query("UPDATE budget SET deleted_at = :now WHERE id = :id AND deleted_at IS NULL")
     public suspend fun softDelete(id: String, now: Long): Int
+
+    @Query("UPDATE budget SET amount_minor = :amountMinor WHERE id = :id AND deleted_at IS NULL")
+    public suspend fun updateAmount(id: String, amountMinor: Long): Int
+
+    /**
+     * Is this category already budgeted?
+     *
+     * `IS` rather than `=` for the subcategory, because SQL's `=` is never true
+     * against `NULL` — with `=`, a second whole-category budget would find no
+     * existing row and the uniqueness rule §5.7 relies on would silently admit
+     * duplicates. Exactly the class of defect §6.1.1 removed elsewhere by
+     * replacing nulls with sentinels; this column kept its nullable form
+     * (there is no unique index to satisfy), so the query carries the burden.
+     */
+    @Query(
+        "SELECT COUNT(*) > 0 FROM budget WHERE deleted_at IS NULL " +
+            "AND category_id = :categoryId AND subcategory_id IS :subcategoryId",
+    )
+    public suspend fun exists(categoryId: String, subcategoryId: String?): Boolean
 }

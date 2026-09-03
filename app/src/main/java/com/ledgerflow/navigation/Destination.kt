@@ -51,6 +51,10 @@ public sealed interface Destination {
     @Serializable
     public data object Categories : Destination
 
+    /** Budget management (§5.7). Reached from More, like Categories. */
+    @Serializable
+    public data object Budgets : Destination
+
     @Serializable
     public data object Export : Destination
 

@@ -36,6 +36,9 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.feature.analytics.AnalyticsScreen
 import com.ledgerflow.feature.analytics.AnalyticsViewModel
+import com.ledgerflow.feature.budget.BudgetEditorDialog
+import com.ledgerflow.feature.budget.BudgetScreen
+import com.ledgerflow.feature.budget.BudgetViewModel
 import com.ledgerflow.feature.export.ExportRoute
 import com.ledgerflow.feature.categories.CategoriesScreen
 import com.ledgerflow.feature.categories.CategoriesViewModel
@@ -215,6 +218,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
         MoreScreen(
             state = state,
             onCategories = { navController.navigate(Destination.Categories) },
+            onBudgets = { navController.navigate(Destination.Budgets) },
             onExport = { navController.navigate(Destination.Export) },
             onDeletedEntries = { navController.navigate(Destination.DeletedEntries) },
             onNotificationAccess = { navController.navigate(Destination.NotificationAccess) },
@@ -239,6 +243,7 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
             onDone = { navController.popBackStack() },
         )
     }
+    composable<Destination.Budgets> { BudgetRoute() }
     composable<Destination.Categories> {
         val viewModel: CategoriesViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -350,6 +355,29 @@ private fun NavHostController.switchTab(destination: Destination) {
     }
 }
 
+/**
+ * Budgets (§5.7), with its editor.
+ *
+ * A named composable rather than a lambda inside the graph: the editor is
+ * hoisted to the route so [BudgetScreen] stays a pure function of its state —
+ * the shape the taxonomy dialogs already use — and the graph function stays
+ * short enough to read in one go.
+ */
+@Composable
+private fun BudgetRoute() {
+    val viewModel: BudgetViewModel = hiltViewModel()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    BudgetScreen(state = state, onEvent = viewModel::onEvent)
+    state.editor?.let { editor ->
+        BudgetEditorDialog(
+            editor = editor,
+            availableCategories = state.availableCategories,
+            currency = state.baseCurrency,
+            onEvent = viewModel::onEvent,
+        )
+    }
+}
+
 /** True when [destination] is the current entry or an ancestor of it. */
 private fun NavDestination?.isAt(destination: Destination): Boolean =
     this?.hierarchy?.any { it.hasRoute(destination::class) } == true
@@ -362,6 +390,7 @@ private val Destination.label: String
         Destination.More -> "More"
         is Destination.Entry -> "Add"
         Destination.Categories -> "Categories"
+        Destination.Budgets -> "Budgets"
         Destination.Export -> "Export"
         Destination.DeletedEntries -> "Deleted"
         Destination.Inbox -> "Inbox"

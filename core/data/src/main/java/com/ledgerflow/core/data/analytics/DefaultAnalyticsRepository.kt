@@ -7,7 +7,6 @@ import com.ledgerflow.core.database.dao.DimensionTotalRow
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
-import com.ledgerflow.core.domain.analytics.Budget
 import com.ledgerflow.core.domain.analytics.BudgetPeriods
 import com.ledgerflow.core.domain.analytics.BudgetProgress
 import com.ledgerflow.core.domain.analytics.DayTotal
@@ -151,7 +150,7 @@ public class DefaultAnalyticsRepository @Inject constructor(
 
         val rollups = database.dailyRollupDao()
         return database.budgetDao().live().map { row ->
-            val budget = row.toDomain()
+            val budget = row.toDomainBudget()
             val period = BudgetPeriods.currentPeriod(budget, today)
             val subcategoryId = budget.subcategoryId
             val spent = if (subcategoryId == null) {
@@ -330,22 +329,6 @@ private class NameBook(
     }
 }
 
-private fun com.ledgerflow.core.database.entity.BudgetEntity.toDomain() = Budget(
-    id = id,
-    categoryId = categoryId,
-    subcategoryId = subcategoryId,
-    period = period,
-    amount = amountMinor,
-    startDate = startDate,
-    rolloverEnabled = rolloverEnabled,
-    // Stored as "80,100" (§6.1). A malformed entry degrades to the default
-    // rather than throwing: a budget that cannot render its thresholds should
-    // still render its progress.
-    alertThresholds = alertThresholds.split(",")
-        .mapNotNull { it.trim().toIntOrNull() }
-        .ifEmpty { listOf(DEFAULT_WARN_THRESHOLD, DEFAULT_LIMIT_THRESHOLD) },
-)
-
 /**
  * Two years of history for A8.
  *
@@ -354,5 +337,3 @@ private fun com.ledgerflow.core.database.entity.BudgetEntity.toDomain() = Budget
  */
 private const val RECURRING_LOOKBACK_DAYS = 730
 
-private const val DEFAULT_WARN_THRESHOLD = 80
-private const val DEFAULT_LIMIT_THRESHOLD = 100

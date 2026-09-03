@@ -31,6 +31,7 @@ import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 public fun MoreScreen(
     state: MoreUiState,
     onCategories: () -> Unit,
+    onBudgets: () -> Unit,
     onExport: () -> Unit,
     onDeletedEntries: () -> Unit,
     onNotificationAccess: () -> Unit,
@@ -61,6 +62,11 @@ public fun MoreScreen(
                 title = "Categories & merchants",
                 subtitle = "Organise how spending is grouped",
                 onClick = onCategories,
+            )
+            MoreRow(
+                title = "Budgets",
+                subtitle = "Set a limit per category",
+                onClick = onBudgets,
             )
             MoreRow(
                 title = "Export",
@@ -166,6 +172,7 @@ private fun MorePreview() {
         MoreScreen(
             state = MoreUiState(deletedCount = 3, isLoaded = true),
             onCategories = {},
+            onBudgets = {},
             onExport = {},
             onDeletedEntries = {},
             onNotificationAccess = {},
@@ -183,6 +190,7 @@ private fun MoreEmptyBinPreview() {
         MoreScreen(
             state = MoreUiState(deletedCount = 0, isLoaded = true),
             onCategories = {},
+            onBudgets = {},
             onExport = {},
             onDeletedEntries = {},
             onNotificationAccess = {},
