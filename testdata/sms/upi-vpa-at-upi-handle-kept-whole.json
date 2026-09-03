@@ -1,0 +1,13 @@
+{
+  "sender": "AD-AUBANK-S",
+  "provenance": "synthetic",
+  "note": "Synthetic. It pinned a KNOWN DEFECT and now pins the fix (SPEC Q17). `upi-debit-vpa` ended the merchant group on `(?:\\.|\\bon\\b|\\bUPI\\b|\\bRef\\b|$)` with a leading `\\s*` that could match zero characters. `@` is a non-word character, so a VPA using the NPCI handle `@upi` put a word boundary immediately before it and the alternation fired *inside the address*: `kirana@upi` was captured as `kirana@`. The word alternatives now require real whitespace in front of them (`\\s+(?:on|UPI|Ref)\\b`), so they can only end the merchant at a token boundary, never mid-address. The expectation below is the corrected capture. Found by the P2-9 corpus expansion, not by a user; `upi-credit-vpa` carried the same tail and was fixed with it.",
+  "expected": {
+    "ruleId": "upi-debit-vpa",
+    "amountMinor": 1000,
+    "currency": "INR",
+    "direction": "DEBIT",
+    "merchantRaw": "kirana@upi",
+    "accountLast4": "9902"
+  }
+}

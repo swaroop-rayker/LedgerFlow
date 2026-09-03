@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.theme.LfColors
@@ -53,6 +54,24 @@ public fun LfChip(
                 contentDescription?.let { description ->
                     Modifier.semantics { this.contentDescription = description }
                 } ?: Modifier,
+            )
+            // **Selection is state, not just a colour** (§9.6, Q21). A selected
+            // chip differed from an unselected one only in its palette, so a
+            // `uiautomator` dump of the budget editor reported every period chip
+            // as `selected="false"` while one of them was visibly outlined --
+            // and a screen reader could not tell which analytics range was
+            // active or which categories a filtered figure excluded.
+            //
+            // Only where the chip is a *choice*. A chip with no `onClick` is a
+            // label -- the Recovery screen's word list is twenty-four of them --
+            // and announcing "not selected" for each would be noise about a
+            // state it does not have.
+            .then(
+                if (onClick == null) {
+                    Modifier
+                } else {
+                    Modifier.semantics { selected = style == LfChipStyle.Selected }
+                },
             ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(spacing.sm),
