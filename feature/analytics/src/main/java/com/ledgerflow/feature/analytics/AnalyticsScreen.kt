@@ -195,10 +195,16 @@ private fun LazyListScope.chartSections(
         item(key = "both-books", contentType = "chart") {
             SectionCard(title = "Both books") {
                 Text(
-                    // States the refusal rather than hiding it. This is the
-                    // figure every competitor leads with, and Law 2 is the
-                    // reason there isn't one -- saying so is the point of D1.
-                    text = "Money in and money out, never combined into one figure.",
+                    // States the refusal rather than hiding it -- the netted
+                    // figure is what every competitor leads with, and Law 2 is
+                    // why there isn't one here.
+                    //
+                    // **And it names an empty book.** Seen on device: with no
+                    // income recorded, the upper half is blank, and blank space
+                    // reads as a chart that failed rather than as a book with
+                    // nothing in it. The mirror stays -- an empty half *is* the
+                    // information -- but the caption now says so.
+                    text = snapshot.bothBooksCaption(),
                     style = LfTheme.typography.label,
                     color = LfTheme.colors.textSecondary,
                 )
@@ -718,6 +724,24 @@ private fun BookTotal(
             maxLines = 1,
             softWrap = false,
         )
+    }
+}
+
+/**
+ * What the two-book card says above its chart.
+ *
+ * Three sentences for three shapes of month, because "never combined into one
+ * figure" is the right thing to say about a chart with two halves and the wrong
+ * thing to say about one with an empty half — there, the reader needs to know
+ * the blank is a fact rather than a failure.
+ */
+private fun AnalyticsSnapshot.bothBooksCaption(): String {
+    val anyIn = parallelBooks.any { it.credit.minor > 0L }
+    val anyOut = parallelBooks.any { it.debit.minor > 0L }
+    return when {
+        !anyIn && anyOut -> "Nothing came in this period. Money out sits below the line."
+        anyIn && !anyOut -> "Nothing went out this period. Money in sits above the line."
+        else -> "Money in and money out, never combined into one figure."
     }
 }
 

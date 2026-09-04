@@ -172,4 +172,12 @@ private const val LABEL_ROOM_PX = 6f
 private const val ZERO_LINE_PX = 2f
 private const val GRID_PX = 1f
 
-private val DefaultHeight: Dp = 160.dp
+/**
+ * Trimmed from 160dp after seeing it on device with an empty upper half.
+ *
+ * A mirrored chart spends half its height on each book, so a month with no
+ * income costs the scrolling content 80dp of white — and `CLAUDE.md`'s brief is
+ * that chrome pays for the list, not the other way round. 132dp keeps both
+ * halves readable while sitting closer to the 104dp donut a screen up.
+ */
+private val DefaultHeight: Dp = 132.dp
