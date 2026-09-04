@@ -54,6 +54,20 @@ public data class AnalyticsUiState(
     val customFrom: Int? = null,
     val customTo: Int? = null,
     val showRangePicker: Boolean = false,
+    /**
+     * The Custom sheet: type a period, or step through to the date picker.
+     *
+     * Two ways to say the same thing, because they are different questions.
+     * "The last three months" is a *duration* and picking two dates to express
+     * it is arithmetic the user should not be doing; "5 August to 4 September"
+     * is a *pair of dates* and no duration expresses it. The sheet offers the
+     * first and opens the second.
+     */
+    val showCustomSheet: Boolean = false,
+    /** Free text, like the amount field: validated on apply, not on keystroke. */
+    val customYears: String = "",
+    val customMonths: String = "",
+    val customDays: String = "",
     /** Everything the filter sheet may offer. */
     val allCategories: List<Category> = emptyList(),
     val allMerchants: List<Merchant> = emptyList(),
@@ -85,6 +99,13 @@ public data class AnalyticsUiState(
      * missing.
      */
     public val emptyBecauseFiltered: Boolean get() = showEmptyState && !filters.isEmpty
+}
+
+/** The three units a custom period is typed in. */
+public enum class PeriodUnit(public val label: String) {
+    YEARS("Years"),
+    MONTHS("Months"),
+    DAYS("Days"),
 }
 
 /**
@@ -147,6 +168,18 @@ public sealed interface AnalyticsEvent {
 
     /** The custom-range picker was opened or closed. See [FilterSheetShown]. */
     public data class RangePickerShown(val visible: Boolean) : Surface
+
+    /** The Custom sheet was opened or closed. See [FilterSheetShown]. */
+    public data class CustomSheetShown(val visible: Boolean) : Surface
+
+    /** One of the three period fields changed. */
+    public data class CustomPeriodChanged(
+        val unit: PeriodUnit,
+        val text: String,
+    ) : AnalyticsEvent
+
+    /** Apply the typed period as the window. */
+    public data object CustomPeriodApplied : AnalyticsEvent
 
     /**
      * The time chart was panned or pinched (ADR-0005).

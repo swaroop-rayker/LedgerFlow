@@ -143,6 +143,52 @@ public data class AnalyticsWindow(
             AnalyticsWindow(range = range, from = today - range.days + 1, to = today)
 
         /**
+         * §5.6's custom range, typed as a **duration** rather than two dates.
+         *
+         * "The last 3 months" is how people describe a period, and picking two
+         * dates to express it is arithmetic the user should not be doing. The
+         * three units combine, so "1 year 2 months 10 days" is one window.
+         *
+         * **Calendar-accurate, unlike [AnalyticsRange]'s buckets.** A `MONTH`
+         * bucket is 30 days because grouping needs a fixed divisor in SQL; a
+         * *typed* month is the calendar one, because that is what the person
+         * typing it meant. `java.time` does the walk, in Kotlin, where the
+         * timezone question `local_date` exists to avoid never arises.
+         *
+         * **Inclusive of today**, matching [endingOn]: "the last month" on
+         * 4 September is 5 August through 4 September, which is 31 days, not a
+         * 30-day window ending yesterday.
+         *
+         * Clamped to [MAX_SPAN_DAYS] for the reason [zoomedBy] is — §11's 5Y
+         * budget is the largest span this app claims to serve, and two different
+         * ceilings for the same concept would be arbitrary. The caller is
+         * expected to say so rather than silently shrink the answer.
+         *
+         * @return null when every unit is zero or negative. A window of nothing
+         *   is not a window, and returning one would render as an empty chart
+         *   rather than as a form that has not been filled in.
+         */
+        public fun lastPeriod(
+            today: Int,
+            years: Int = 0,
+            months: Int = 0,
+            days: Int = 0,
+        ): AnalyticsWindow? {
+            if (years <= 0 && months <= 0 && days <= 0) return null
+
+            val end = java.time.LocalDate.ofEpochDay(today.toLong())
+            val start = end
+                .minusYears(years.coerceAtLeast(0).toLong())
+                .minusMonths(months.coerceAtLeast(0).toLong())
+                .minusDays(days.coerceAtLeast(0).toLong())
+                .plusDays(1)
+
+            val from = start.toEpochDay().toInt()
+            val span = (today - from + 1).coerceIn(1, MAX_SPAN_DAYS)
+            return custom(today - span + 1, today)
+        }
+
+        /**
          * §5.6's custom range, from two dates the user picked.
          *
          * Ordered defensively: a picker that lets the end precede the start is

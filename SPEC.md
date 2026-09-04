@@ -690,6 +690,10 @@ Supports both ledgers (segmented control DEBIT | CREDIT at the top). Supports mu
 
 **Time windows:** Day, Week, Month, 3M, 6M, 1Y, 5Y, Custom range. Every window supports a **previous-period comparison** toggle.
 
+**Custom is a question, not a range** (BUG21). Tapping it opens a sheet that asks *how far back*, in **years, months and days, which combine** — "1 year 2 months" is one window. That is how people describe a period, and making them express it as two calendar dates is arithmetic the app should do. A **typed month is the calendar month**, unlike `AnalyticsRange.MONTH`'s fixed 30-day *bucket*: the divisor is fixed because grouping needs one, and the person typing "1 month" means the calendar. Inclusive of today, so "the last month" on 4 September is 5 August through 4 September — 31 days.
+
+A live preview names the two dates the period resolves to before Apply is pressed, because a duration is abstract until it does. Exact dates remain one tap away in the same sheet: a duration cannot say "5 August to 4 September", and no period expresses an arbitrary pair. Typed periods are capped at **5 years**, the same ceiling a pinch-zoom hits (§11), and the sheet says so rather than silently shrinking the answer.
+
 **Aggregation dimensions:** category, subcategory, category group, merchant, payment method, source (SMS/OCR/MANUAL), line-item vs entry grain.
 
 **Filters (composable, all simultaneously active):** ledger (fixed per screen), date range, category multi-select, subcategory multi-select, payment method multi-select, merchant multi-select, amount range, source, has-attachment, text search across note/merchant/item name.

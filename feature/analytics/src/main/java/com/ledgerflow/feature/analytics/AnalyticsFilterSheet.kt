@@ -1,10 +1,13 @@
 package com.ledgerflow.feature.analytics
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
@@ -14,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
@@ -24,6 +28,7 @@ import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AnalyticsFilters
+import com.ledgerflow.core.domain.analytics.AnalyticsWindow
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Merchant
@@ -290,6 +295,105 @@ private fun AnalyticsFilterField.summarise(
     selectedIds = selectedIn(filters),
     options = optionsFrom(filters, categories, merchants),
 )
+
+/**
+ * §5.6's custom range, asked as a **period** first and dates second.
+ *
+ * "The last three months" is how people describe a range, and expressing it as
+ * two calendar dates is arithmetic they should not be doing — the date picker
+ * alone made every relative range a subtraction. The three units combine, so
+ * "1 year 2 months" is one window.
+ *
+ * **The exact dates are still one tap away**, because a duration cannot say
+ * "5 August to 4 September". Two ways in, for two different questions.
+ *
+ * The preview under the fields is the whole safety net: a period is abstract
+ * until it names two dates, and someone typing "18 months" should see what they
+ * are about to get before they get it.
+ */
+@Composable
+public fun AnalyticsCustomRangeSheet(
+    state: AnalyticsUiState,
+    today: Int,
+    onEvent: (AnalyticsEvent) -> Unit,
+) {
+    val window = AnalyticsWindow.lastPeriod(
+        today = today,
+        years = state.customYears.toIntOrNull() ?: 0,
+        months = state.customMonths.toIntOrNull() ?: 0,
+        days = state.customDays.toIntOrNull() ?: 0,
+    )
+
+    LfDialog(
+        title = "Custom range",
+        body = "How far back should this screen look?",
+        confirmText = "Apply",
+        onConfirm = { onEvent(AnalyticsEvent.CustomPeriodApplied) },
+        onDismiss = { onEvent(AnalyticsEvent.CustomSheetShown(visible = false)) },
+        dismissText = "Cancel",
+        detail = {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+                    PeriodUnit.entries.forEach { unit ->
+                        LfTextField(
+                            value = state.valueFor(unit),
+                            onValueChange = { onEvent(AnalyticsEvent.CustomPeriodChanged(unit, it)) },
+                            label = unit.label,
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                    }
+                }
+
+                Text(
+                    // Names the dates a period resolves to, or says the form is
+                    // empty. Either way the Apply button is never a guess.
+                    text = window?.let { "${dateLabel(it.from)} to ${dateLabel(it.to)}" +
+                        " · ${it.spanDays} days" }
+                        ?: "Enter a number in at least one field.",
+                    style = LfTheme.typography.label,
+                    color = LfTheme.colors.textSecondary,
+                )
+
+                if (window != null && window.spanDays == AnalyticsWindow.MAX_SPAN_DAYS) {
+                    Text(
+                        // Says so rather than shrinking the answer quietly.
+                        text = "Capped at five years, the longest range this screen reports.",
+                        style = LfTheme.typography.label,
+                        color = LfTheme.colors.warn,
+                    )
+                }
+
+                LfActionRow(alignment = LfActionAlignment.Start) {
+                    LfButton(
+                        text = "Pick exact dates",
+                        onClick = {
+                            onEvent(AnalyticsEvent.CustomSheetShown(visible = false))
+                            onEvent(AnalyticsEvent.RangePickerShown(visible = true))
+                        },
+                        style = LfButtonStyle.Inline,
+                    )
+                }
+            }
+        },
+    )
+}
+
+private fun AnalyticsUiState.valueFor(unit: PeriodUnit): String = when (unit) {
+    PeriodUnit.YEARS -> customYears
+    PeriodUnit.MONTHS -> customMonths
+    PeriodUnit.DAYS -> customDays
+}
+
+/** `5 Aug 2026` from a days-since-epoch value. */
+private fun dateLabel(epochDay: Int): String {
+    val date = java.time.LocalDate.ofEpochDay(epochDay.toLong())
+    val month = date.month.getDisplayName(
+        java.time.format.TextStyle.SHORT,
+        java.util.Locale.getDefault(),
+    )
+    return "${date.dayOfMonth} $month ${date.year}"
+}
 
 /**
  * §5.6's custom range, as two dates.

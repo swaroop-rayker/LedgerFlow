@@ -156,6 +156,91 @@ class AnalyticsViewportTest {
         assertThat(back.to).isEqualTo(month.to)
     }
 
+    // ── A typed period, rather than two picked dates ───────────────────────
+
+    /**
+     * **A typed month is the calendar one.**
+     *
+     * `AnalyticsRange.MONTH` is 30 days because a bucket divisor has to be
+     * fixed; somebody typing "1 month" means the calendar month, and August has
+     * 31 days. Getting this wrong is invisible — the chart still draws — so it
+     * is asserted against a named date rather than a formula.
+     */
+    @Test
+    fun oneTypedMonth_isTheCalendarMonth_inclusiveOfToday() {
+        // 4 September 2026.
+        val today = java.time.LocalDate.of(2026, 9, 4).toEpochDay().toInt()
+
+        val window = requireNotNull(AnalyticsWindow.lastPeriod(today, months = 1))
+
+        assertThat(java.time.LocalDate.ofEpochDay(window.from.toLong()))
+            .isEqualTo(java.time.LocalDate.of(2026, 8, 5))
+        assertThat(java.time.LocalDate.ofEpochDay(window.to.toLong()))
+            .isEqualTo(java.time.LocalDate.of(2026, 9, 4))
+        assertThat(window.spanDays).isEqualTo(31)
+    }
+
+    /** February is short, and the arithmetic has to know that. */
+    @Test
+    fun oneTypedMonth_acrossFebruary_isShorter() {
+        val today = java.time.LocalDate.of(2026, 3, 10).toEpochDay().toInt()
+
+        val window = requireNotNull(AnalyticsWindow.lastPeriod(today, months = 1))
+
+        assertThat(java.time.LocalDate.ofEpochDay(window.from.toLong()))
+            .isEqualTo(java.time.LocalDate.of(2026, 2, 11))
+        assertThat(window.spanDays).isEqualTo(28)
+    }
+
+    /** The three units combine, which is the point of typing one. */
+    @Test
+    fun yearsMonthsAndDaysCombineIntoOneWindow() {
+        val today = java.time.LocalDate.of(2026, 9, 4).toEpochDay().toInt()
+
+        val window = requireNotNull(
+            AnalyticsWindow.lastPeriod(today, years = 1, months = 2, days = 10),
+        )
+
+        // 4 Sept 2026 less a year is 4 Sept 2025, less two months is 4 July,
+        // less ten days is 24 June -- and the window opens the day after, so
+        // that today is the last of exactly that many.
+        assertThat(java.time.LocalDate.ofEpochDay(window.from.toLong()))
+            .isEqualTo(java.time.LocalDate.of(2025, 6, 25))
+        assertThat(window.range).isEqualTo(AnalyticsRange.CUSTOM)
+    }
+
+    @Test
+    fun aTypedPeriodOfSevenDaysMatchesTheWeekPreset() {
+        val week = AnalyticsWindow.endingOn(TODAY, AnalyticsRange.WEEK)
+
+        val typed = requireNotNull(AnalyticsWindow.lastPeriod(TODAY, days = 7))
+
+        assertThat(typed.from).isEqualTo(week.from)
+        assertThat(typed.to).isEqualTo(week.to)
+    }
+
+    /**
+     * **An unfilled form is not a window.**
+     *
+     * Returning a zero-length range would render as an empty chart, which reads
+     * as "you spent nothing" rather than "you have not typed anything yet".
+     */
+    @Test
+    fun aPeriodOfNothingIsNotAWindow() {
+        assertThat(AnalyticsWindow.lastPeriod(TODAY)).isNull()
+        assertThat(AnalyticsWindow.lastPeriod(TODAY, years = 0, months = 0, days = 0)).isNull()
+        assertThat(AnalyticsWindow.lastPeriod(TODAY, days = -5)).isNull()
+    }
+
+    /** Clamped at the same 5Y ceiling a pinch is, so there is one maximum. */
+    @Test
+    fun aTypedPeriodIsCappedAtTheFiveYearSpan() {
+        val window = requireNotNull(AnalyticsWindow.lastPeriod(TODAY, years = 20))
+
+        assertThat(window.spanDays).isEqualTo(AnalyticsWindow.MAX_SPAN_DAYS)
+        assertThat(window.to).isEqualTo(TODAY)
+    }
+
     private companion object {
         /** 2026-09-03, the day this was written. Any epoch day would do. */
         const val TODAY = 20_699

@@ -2,6 +2,7 @@ package com.ledgerflow.feature.analytics
 
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.common.time.Clock
+import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
@@ -42,7 +43,7 @@ class AnalyticsRangeSelectionTest {
     fun tearDown() = Dispatchers.resetMain()
 
     /**
-     * **Tapping Custom asks for dates.**
+     * **Tapping Custom asks how far back**, rather than selecting a window.
      *
      * It used to select a range with none. `range` became CUSTOM with null
      * dates, the window resolver fell through to `endingOn(today, CUSTOM)`, and
@@ -51,14 +52,14 @@ class AnalyticsRangeSelectionTest {
      * control that looks like it worked and did not.
      */
     @Test
-    fun tappingCustom_opensTheDatePicker_ratherThanSelectingAWindow() = runTest {
+    fun tappingCustom_opensTheCustomSheet_ratherThanSelectingAWindow() = runTest {
         val viewModel = viewModel()
         advanceUntilIdle()
 
         viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.CUSTOM))
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.showRangePicker).isTrue()
+        assertThat(viewModel.state.value.showCustomSheet).isTrue()
         // And it has *not* silently moved the window it is showing.
         assertThat(viewModel.state.value.range).isEqualTo(AnalyticsRange.MONTH)
     }
@@ -71,7 +72,7 @@ class AnalyticsRangeSelectionTest {
      * exactly when it is the selected one.
      */
     @Test
-    fun tappingCustom_whileAlreadyCustom_reopensThePicker() = runTest {
+    fun tappingCustom_whileAlreadyCustom_reopensTheSheet() = runTest {
         val viewModel = viewModel()
         advanceUntilIdle()
         viewModel.onEvent(AnalyticsEvent.CustomRangePicked(from = 20_000, to = 20_030))
@@ -81,7 +82,7 @@ class AnalyticsRangeSelectionTest {
         viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.CUSTOM))
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.showRangePicker).isTrue()
+        assertThat(viewModel.state.value.showCustomSheet).isTrue()
         // The dates already chosen survive the reopen; cancelling must not
         // silently discard the window the screen is showing.
         assertThat(viewModel.state.value.customFrom).isEqualTo(20_000)
@@ -98,7 +99,85 @@ class AnalyticsRangeSelectionTest {
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.range).isEqualTo(AnalyticsRange.YEAR)
-        assertThat(viewModel.state.value.showRangePicker).isFalse()
+        assertThat(viewModel.state.value.showCustomSheet).isFalse()
+    }
+
+    /**
+     * A typed period becomes the window (§5.6).
+     *
+     * "The last three months" is the way people describe a range; expressing it
+     * as two calendar dates is arithmetic they should not have to do.
+     */
+    @Test
+    fun atypedPeriodBecomesTheWindow_andClosesTheSheet() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.CUSTOM))
+
+        viewModel.onEvent(AnalyticsEvent.CustomPeriodChanged(PeriodUnit.MONTHS, "3"))
+        viewModel.onEvent(AnalyticsEvent.CustomPeriodApplied)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertThat(state.range).isEqualTo(AnalyticsRange.CUSTOM)
+        assertThat(state.showCustomSheet).isFalse()
+        // Three calendar months back from the fixed clock, inclusive of today.
+        val expected = requireNotNull(
+            AnalyticsWindow.lastPeriod(LocalDates.of(FIXED_NOW), months = 3),
+        )
+        assertThat(state.customFrom).isEqualTo(expected.from)
+        assertThat(state.customTo).isEqualTo(expected.to)
+    }
+
+    /** The three units combine into one window. */
+    @Test
+    fun theThreeUnitsCombine() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AnalyticsEvent.CustomPeriodChanged(PeriodUnit.YEARS, "1"))
+        viewModel.onEvent(AnalyticsEvent.CustomPeriodChanged(PeriodUnit.DAYS, "10"))
+        viewModel.onEvent(AnalyticsEvent.CustomPeriodApplied)
+        advanceUntilIdle()
+
+        val expected = requireNotNull(
+            AnalyticsWindow.lastPeriod(LocalDates.of(FIXED_NOW), years = 1, days = 10),
+        )
+        assertThat(viewModel.state.value.customFrom).isEqualTo(expected.from)
+    }
+
+    /**
+     * **An empty form applies nothing**, rather than selecting a window of zero
+     * days that would render as "you spent nothing".
+     */
+    @Test
+    fun applyingAnEmptyPeriodChangesNothing() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.CUSTOM))
+
+        viewModel.onEvent(AnalyticsEvent.CustomPeriodApplied)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.range).isEqualTo(AnalyticsRange.MONTH)
+        assertThat(viewModel.state.value.showCustomSheet).isTrue()
+    }
+
+    /**
+     * The fields take digits and nothing else.
+     *
+     * A field that accepts "12abc" and rejects it on apply makes the user hunt
+     * for the mistake; one that never takes the letter leaves nothing to hunt.
+     */
+    @Test
+    fun theFieldsRefuseAnythingButDigits() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AnalyticsEvent.CustomPeriodChanged(PeriodUnit.MONTHS, "1a2b"))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.customMonths).isEqualTo("12")
     }
 
     private fun viewModel() = AnalyticsViewModel(

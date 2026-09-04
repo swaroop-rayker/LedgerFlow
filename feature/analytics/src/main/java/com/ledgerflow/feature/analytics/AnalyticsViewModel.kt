@@ -56,37 +56,16 @@ public class AnalyticsViewModel @Inject constructor(
 
     public fun onEvent(event: AnalyticsEvent) {
         when (event) {
-            is AnalyticsEvent.RangeSelected -> {
-                // **Custom is a question, not a range.** Selecting it cannot set
-                // a window, because the dates are the user's to choose — so the
-                // chip opens the picker instead. It did not, and the result was
-                // a control that looked selectable and did nothing visible:
-                // `range` became CUSTOM with no dates, `currentWindow` fell
-                // through to `endingOn(today, CUSTOM)`, and `CUSTOM.days` is the
-                // placeholder 30 that the enum's own KDoc calls a bug to read.
-                // Tapping "Custom" silently showed a Month.
-                //
-                // **Before the equality check, deliberately.** Tapping Custom
-                // while a custom range is already active is how someone changes
-                // the dates they picked; an early return there would make the
-                // chip dead exactly when it is selected.
-                if (event.range == AnalyticsRange.CUSTOM) {
-                    _state.update { it.copy(showRangePicker = true) }
-                    return
-                }
-                if (event.range == _state.value.range) return
-                _state.update {
-                    // Leaving a custom range discards its dates: keeping them
-                    // would make "Custom" silently reselect a window the user
-                    // may have set weeks ago.
-                    it.copy(range = event.range, customFrom = null, customTo = null)
-                }
-                load()
-            }
+            is AnalyticsEvent.RangeSelected -> selectRange(event.range)
 
             is AnalyticsEvent.Surface -> showSurface(event)
 
             AnalyticsEvent.Resumed -> load()
+
+            is AnalyticsEvent.CustomPeriodChanged ->
+                changePeriodField(event.unit, event.text)
+
+            AnalyticsEvent.CustomPeriodApplied -> applyTypedPeriod()
 
             is AnalyticsEvent.FiltersChanged -> {
                 _state.update { it.copy(filters = event.filters) }
@@ -159,6 +138,13 @@ public class AnalyticsViewModel @Inject constructor(
 
                 is AnalyticsEvent.RangePickerShown ->
                     current.copy(showRangePicker = event.visible)
+
+                // Opening the date picker closes the sheet behind it: they are
+                // two answers to one question, and leaving the sheet stacked
+                // under the picker means cancelling lands back on a form the
+                // user has already moved past.
+                is AnalyticsEvent.CustomSheetShown ->
+                    current.copy(showCustomSheet = event.visible)
             }
         }
     }
@@ -190,6 +176,89 @@ public class AnalyticsViewModel @Inject constructor(
                 range = AnalyticsRange.CUSTOM,
                 customFrom = moved.from,
                 customTo = moved.to,
+            )
+        }
+        load()
+    }
+
+    /**
+     * A range chip was tapped.
+     *
+     * Its own function because `onEvent` had grown past the point where the
+     * branches that *re-query* are visible among the ones that only open
+     * something — the same reason `showSurface` exists.
+     */
+    private fun selectRange(range: AnalyticsRange) {
+        // **Custom is a question, not a range.** Selecting it cannot set a
+        // window, because the dates are the user's to choose — so the chip
+        // opens the Custom sheet instead. It did not, and the result was a
+        // control that looked selectable and did nothing visible: `range`
+        // became CUSTOM with no dates, `currentWindow` fell through to
+        // `endingOn(today, CUSTOM)`, and `CUSTOM.days` is the placeholder 30
+        // that the enum's own KDoc calls a bug to read. Tapping "Custom"
+        // silently showed a Month (BUG21).
+        //
+        // **Before the equality check, deliberately.** Tapping Custom while a
+        // custom range is already active is how someone changes the period
+        // they typed; an early return there would make the chip dead exactly
+        // when it is the selected one.
+        if (range == AnalyticsRange.CUSTOM) {
+            _state.update { it.copy(showCustomSheet = true) }
+            return
+        }
+        if (range == _state.value.range) return
+
+        _state.update {
+            // Leaving a custom range discards its dates: keeping them would
+            // make "Custom" silently reselect a window the user may have set
+            // weeks ago.
+            it.copy(range = range, customFrom = null, customTo = null)
+        }
+        load()
+    }
+
+    /**
+     * One of the three period fields.
+     *
+     * **Digits only, capped in length.** A field that accepts "12abc" and
+     * rejects it on apply makes the user hunt for the mistake; one that never
+     * takes the letter leaves nothing to hunt for.
+     */
+    private fun changePeriodField(unit: PeriodUnit, text: String) {
+        val cleaned = text.filter { it.isDigit() }.take(MAX_PERIOD_DIGITS)
+        _state.update { current ->
+            when (unit) {
+                PeriodUnit.YEARS -> current.copy(customYears = cleaned)
+                PeriodUnit.MONTHS -> current.copy(customMonths = cleaned)
+                PeriodUnit.DAYS -> current.copy(customDays = cleaned)
+            }
+        }
+    }
+
+    /**
+     * Turn the three typed fields into the window (§5.6).
+     *
+     * **Silently does nothing when the form is empty**, which is what
+     * `lastPeriod` returning null means — and the sheet keeps its Apply button
+     * disabled in that state, so this is the second half of a rule rather than
+     * the only one. A zero-length window would render as an empty chart, which
+     * reads as "you spent nothing" rather than "you have not typed anything".
+     */
+    private fun applyTypedPeriod() {
+        val current = _state.value
+        val window = AnalyticsWindow.lastPeriod(
+            today = LocalDates.of(clock.nowMillis()),
+            years = current.customYears.toIntOrNull() ?: 0,
+            months = current.customMonths.toIntOrNull() ?: 0,
+            days = current.customDays.toIntOrNull() ?: 0,
+        ) ?: return
+
+        _state.update {
+            it.copy(
+                range = AnalyticsRange.CUSTOM,
+                customFrom = window.from,
+                customTo = window.to,
+                showCustomSheet = false,
             )
         }
         load()
@@ -242,3 +311,6 @@ public class AnalyticsViewModel @Inject constructor(
         const val DEFAULT_CURRENCY = "INR"
     }
 }
+
+/** Three digits is 999 years; nothing legible needs four. */
+private const val MAX_PERIOD_DIGITS = 3

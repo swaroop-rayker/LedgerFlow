@@ -27,6 +27,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.designsystem.component.LfBottomBar
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
@@ -34,10 +35,12 @@ import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.feature.analytics.AnalyticsCustomRangeSheet
 import com.ledgerflow.feature.analytics.AnalyticsEvent
 import com.ledgerflow.feature.analytics.AnalyticsFilterSheet
 import com.ledgerflow.feature.analytics.AnalyticsRangePicker
 import com.ledgerflow.feature.analytics.AnalyticsScreen
+import com.ledgerflow.feature.analytics.AnalyticsUiState
 import com.ledgerflow.feature.analytics.AnalyticsViewModel
 import com.ledgerflow.feature.budget.BudgetEditorDialog
 import com.ledgerflow.feature.budget.BudgetScreen
@@ -173,6 +176,44 @@ private fun LedgerFlowNavHost(
     }
 }
 
+/**
+ * The three surfaces the Analytics route hosts over its screen.
+ *
+ * Lifted out of `tabDestinations` when a third arrived and pushed that function
+ * past its length budget — which detekt was right about: a navigation graph
+ * whose bulk is dialog plumbing stops reading as a list of destinations.
+ *
+ * Hoisted to the route rather than owned by the screen, so `AnalyticsScreen`
+ * stays a pure function of its state — the same shape the budget editor and the
+ * taxonomy dialogs use.
+ */
+@Composable
+private fun AnalyticsDialogs(state: AnalyticsUiState, onEvent: (AnalyticsEvent) -> Unit) {
+    // Both hoisted to the route, so the screen stays a pure function of
+    // its state -- the same shape the budget editor and taxonomy dialogs
+    // use.
+    if (state.showFilterSheet) {
+        AnalyticsFilterSheet(
+            filters = state.filters,
+            categories = state.allCategories,
+            merchants = state.allMerchants,
+            openField = state.openFilterField,
+            onEvent = onEvent,
+        )
+    }
+    if (state.showCustomSheet) {
+        AnalyticsCustomRangeSheet(
+            state = state,
+            today = LocalDates.of(System.currentTimeMillis()),
+            onEvent = onEvent,
+        )
+    }
+    if (state.showRangePicker) {
+        AnalyticsRangePicker(onEvent = onEvent)
+    }
+
+}
+
 /** The four that keep the bottom bar (§9.3). */
 private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
     composable<Destination.Dashboard> {
@@ -215,22 +256,9 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             onPauseOrDispose { }
         }
         AnalyticsScreen(state = state, onEvent = viewModel::onEvent)
-        // Both hoisted to the route, so the screen stays a pure function of
-        // its state -- the same shape the budget editor and taxonomy dialogs
-        // use.
-        if (state.showFilterSheet) {
-            AnalyticsFilterSheet(
-                filters = state.filters,
-                categories = state.allCategories,
-                merchants = state.allMerchants,
-                openField = state.openFilterField,
-                onEvent = viewModel::onEvent,
-            )
-        }
-        if (state.showRangePicker) {
-            AnalyticsRangePicker(onEvent = viewModel::onEvent)
-        }
+        AnalyticsDialogs(state = state, onEvent = viewModel::onEvent)
     }
+
     composable<Destination.More> {
         val viewModel: MoreViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
