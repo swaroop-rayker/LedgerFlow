@@ -7,6 +7,9 @@ android {
 }
 
 dependencies {
+    // The range-chip tests drive the real ViewModel against the shared fakes.
+    testImplementation(project(":core:testing"))
+
     // The nightly rollup reconciliation (ADR-0006) runs in a Worker, for the
     // same reason ingest's parse step does: it must survive with no Activity
     // alive. `hilt-work` is what lets it be constructed with its use case

@@ -57,6 +57,23 @@ public class AnalyticsViewModel @Inject constructor(
     public fun onEvent(event: AnalyticsEvent) {
         when (event) {
             is AnalyticsEvent.RangeSelected -> {
+                // **Custom is a question, not a range.** Selecting it cannot set
+                // a window, because the dates are the user's to choose — so the
+                // chip opens the picker instead. It did not, and the result was
+                // a control that looked selectable and did nothing visible:
+                // `range` became CUSTOM with no dates, `currentWindow` fell
+                // through to `endingOn(today, CUSTOM)`, and `CUSTOM.days` is the
+                // placeholder 30 that the enum's own KDoc calls a bug to read.
+                // Tapping "Custom" silently showed a Month.
+                //
+                // **Before the equality check, deliberately.** Tapping Custom
+                // while a custom range is already active is how someone changes
+                // the dates they picked; an early return there would make the
+                // chip dead exactly when it is selected.
+                if (event.range == AnalyticsRange.CUSTOM) {
+                    _state.update { it.copy(showRangePicker = true) }
+                    return
+                }
                 if (event.range == _state.value.range) return
                 _state.update {
                     // Leaving a custom range discards its dates: keeping them
