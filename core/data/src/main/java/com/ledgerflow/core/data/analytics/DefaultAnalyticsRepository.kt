@@ -16,6 +16,8 @@ import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.DayTotal
 import com.ledgerflow.core.domain.analytics.DimensionTotal
 import com.ledgerflow.core.domain.analytics.Occurrence
+import com.ledgerflow.core.domain.analytics.ParserGap
+import com.ledgerflow.core.domain.analytics.ParserGapDetection
 import com.ledgerflow.core.domain.analytics.RecurringDetection
 import com.ledgerflow.core.domain.analytics.RecurringMerchant
 import com.ledgerflow.core.domain.analytics.TimeBucket
@@ -115,6 +117,7 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 through = window.to + window.range.days,
             ),
             captureCoverage = buildCaptureCoverage(dao, ledger, window, filters),
+            parserGaps = buildParserGaps(dao, ledger, window, names, filters),
         )
     }
 
@@ -276,6 +279,59 @@ public class DefaultAnalyticsRepository @Inject constructor(
             query = filters.query,
             like = filters.query.toLikePattern(),
         ).associate { row -> row.source to CaptureShare(row.sumMinor, row.txnCount) },
+    )
+
+    /**
+     * C2 — merchants whose entries are almost always typed by hand.
+     *
+     * The query returns one row per merchant per source; the fold turns those
+     * into a manual count against a total, and [ParserGapDetection] decides
+     * which of them is a habit rather than an accident. Splitting it that way
+     * keeps the thresholds arguable in a unit test instead of buried in SQL.
+     */
+    private suspend fun buildParserGaps(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        ledger: LedgerType,
+        window: AnalyticsWindow,
+        names: NameBook,
+        filters: AnalyticsFilters,
+    ): List<ParserGap> = ParserGapDetection.detect(
+        dao.merchantSourceTotals(
+            ledger = ledger,
+            from = window.from,
+            to = window.to,
+            filterCategories = filters.categoryIds.flag(),
+            categoryIds = filters.categoryIds.orPlaceholder(),
+            filterSubcategories = filters.subcategoryIds.flag(),
+            subcategoryIds = filters.subcategoryIds.orPlaceholder(),
+            filterMerchants = filters.merchantIds.flag(),
+            merchantIds = filters.merchantIds.orPlaceholder(),
+            filterMethods = filters.paymentMethodIds.flag(),
+            paymentMethodIds = filters.paymentMethodIds.orPlaceholder(),
+            minAmount = filters.minAmount?.minor,
+            maxAmount = filters.maxAmount?.minor,
+            filterSources = filters.sources.flag(),
+            sources = filters.sources.map { it.name }.orPlaceholder(),
+            query = filters.query,
+            like = filters.query.toLikePattern(),
+        )
+            .groupBy { it.merchantId }
+            .map { (merchantId, rows) ->
+                val manual = rows.filterNot { it.source in CaptureCoverage.AutomaticSources }
+                ParserGap(
+                    merchantId = merchantId,
+                    name = names.merchant(merchantId),
+                    // **Imported counts as manual here, unlike C1.** C1 asks
+                    // "did this arrive by itself"; C2 asks "is the ruleset
+                    // blind to this merchant", and an imported row is evidence
+                    // that no rule read it. The two surfaces read the same
+                    // column for different questions, so they bucket it
+                    // differently on purpose.
+                    manualCount = manual.sumOf { it.txnCount },
+                    totalCount = rows.sumOf { it.txnCount },
+                    manualAmount = Money(manual.sumOf { it.sumMinor.minor }),
+                )
+            },
     )
 
     private fun emptySnapshot(ledger: LedgerType, window: AnalyticsWindow) = AnalyticsSnapshot(

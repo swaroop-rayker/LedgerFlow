@@ -53,6 +53,21 @@ public data class SourceTotalRow(
     @ColumnInfo(name = "txn_count") val txnCount: Int,
 )
 
+/**
+ * One merchant's money and count for one source, for C2's parser gap list.
+ *
+ * Merchant *and* source, folded into per-merchant manual/captured counts in
+ * Kotlin rather than with a `CASE WHEN` in SQL — the same division of labour
+ * this repository uses everywhere: aggregates in SQL, meaning in Kotlin. The
+ * row count is merchants x sources, which is small on any real vault.
+ */
+public data class MerchantSourceTotalRow(
+    @ColumnInfo(name = "merchant_id") val merchantId: String,
+    @ColumnInfo(name = "source") val source: EntrySource,
+    @ColumnInfo(name = "sum_minor") val sumMinor: Money,
+    @ColumnInfo(name = "txn_count") val txnCount: Int,
+)
+
 /** A subcategory total under its parent (A3). */
 public data class SubcategoryTotalRow(
     @ColumnInfo(name = "category_id") val categoryId: String,

@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.data.ledger.LedgerTestVault
 import com.ledgerflow.core.domain.analytics.AnalyticsFilters
+import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
@@ -280,6 +281,74 @@ class AnalyticsFilterTest {
         assertThat(coverage.automaticPercentByValue).isEqualTo(100)
     }
 
+    /**
+     * C2 — the merchant typed by hand three times is named; the captured one is
+     * not.
+     */
+    @Test
+    fun theParserGapListNamesMerchantsTypedByHand() = runBlocking<Unit> {
+        repeat(3) { approve(10_000L, groceries.id, zepto.id, source = EntrySource.MANUAL) }
+        repeat(3) { approve(10_000L, groceries.id, swiggy.id, source = EntrySource.NOTIFICATION) }
+
+        val gaps = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters.None,
+        ).parserGaps
+
+        assertThat(gaps.map { it.name }).containsExactly("Zepto")
+        assertThat(gaps.single().manualCount).isEqualTo(3)
+        assertThat(gaps.single().totalCount).isEqualTo(3)
+        assertThat(gaps.single().manualAmount.minor).isEqualTo(30_000L)
+    }
+
+    /**
+     * **An entry with no merchant is not a gap.**
+     *
+     * A parser rule cannot target the absence of a payee, so an "Unfiled" row
+     * would be the one line on this list nobody could act on — and `seed()`
+     * alone produces enough unfiled spend to put it at the top.
+     */
+    @Test
+    fun entriesWithNoMerchantAreNotGaps() = runBlocking<Unit> {
+        repeat(4) { approve(10_000L, groceries.id, merchantId = null) }
+
+        val gaps = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters.None,
+        ).parserGaps
+
+        assertThat(gaps).isEmpty()
+    }
+
+    /**
+     * An imported entry counts as a gap, where C1 counts it as neither.
+     *
+     * The two surfaces read the same column for different questions: C1 asks
+     * "did this arrive by itself", and an import did not arrive at all; C2 asks
+     * "is the ruleset blind to this merchant", and an import is evidence that no
+     * rule read it. Pinned because the divergence looks like an inconsistency
+     * until you ask what each is for.
+     */
+    @Test
+    fun animportedEntryIsAGapEvenThoughC1CallsItNeither() = runBlocking<Unit> {
+        repeat(3) { approve(10_000L, groceries.id, zepto.id, source = EntrySource.IMPORT) }
+
+        val snapshot = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters.None,
+        )
+
+        assertThat(snapshot.parserGaps.map { it.name }).containsExactly("Zepto")
+        assertThat(snapshot.captureCoverage.imported.count).isEqualTo(3)
+        assertThat(snapshot.captureCoverage.manual).isEqualTo(CaptureShare.Empty)
+    }
+
     @Test
     fun filteringByMerchant_narrowsEveryFigure() = runBlocking<Unit> {
         seed()
@@ -447,7 +516,7 @@ class AnalyticsFilterTest {
     private suspend fun approve(
         amount: Long,
         categoryId: String?,
-        merchantId: String?,
+        merchantId: String? = null,
         note: String? = null,
         lines: List<NewLineItem> = emptyList(),
         subcategoryId: String? = null,

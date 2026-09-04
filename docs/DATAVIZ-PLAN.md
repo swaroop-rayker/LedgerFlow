@@ -121,7 +121,7 @@ is computed on-device, in an app with no `INTERNET` permission in release
 | # | Surface | What the user sees | Data | Phase |
 |---|---|---|---|---|
 | C1 | **Capture coverage** | Share of spending, by value and by count, that arrived automatically vs. was typed by hand | `ledger_entry.source` | **P3 — shipped** |
-| C2 | **Parser gap list** | Merchants you almost always enter manually — i.e. exactly where the ruleset is blind | `ledger_entry.source` + `merchant_id` | **P3** |
+| C2 | **Parser gap list** | Merchants you almost always enter manually — i.e. exactly where the ruleset is blind | `ledger_entry.source` + `merchant_id` | **P3 — shipped** |
 | C3 | **Dedupe evidence** | "47 double-notifications suppressed this month" | `pending_transaction.suppressed_by_id` | P5 |
 | C4 | **Confidence distribution** | Histogram of parser confidence; the low tail names the senders to fix | `pending_transaction.confidence` | P5 |
 | C5 | **Pipeline latency** | Capture → pending → approved, and where the queue stalls | `pending_transaction` timestamps | P5 |
@@ -150,6 +150,37 @@ so C1's denominator is the total the user is already looking at. Summing
 percentages would be against a figure appearing nowhere else, and the
 `LEFT JOIN line_item` fans a split bill into one row per line, so an entry-grain
 sum double-counts it outright.
+
+**C2's three decisions, likewise.**
+
+*A habit, not an accident.* A merchant needs at least three entries in the
+window and at least two thirds of them typed before it counts as a gap. The
+first threshold is `RecurringDetection.MINIMUM_OCCURRENCES`, deliberately: both
+surfaces ask "is this a pattern", and answering it with two different numbers in
+one app would be arbitrary. The second is what "almost always" means as a
+number — a merchant captured half the time is *partly* covered, and the fix
+there is a different job from writing a rule that does not exist.
+
+*Ranked by frequency, not by amount.* Every row is a candidate parser rule, and
+the value of writing one is the typing it saves in future — which is a
+frequency. Money is the tiebreaker only when counts are equal. Ranking by amount
+would put a once-a-year rent transfer above a chaiwala typed twelve times, and
+the rent rule would pay back once.
+
+*Unfiled entries are excluded.* A rule cannot target the absence of a payee, so
+an "Unfiled" row would be the one line on the list nobody could act on.
+
+**C2 buckets an *imported* entry as manual, where C1 counts it as neither** —
+which looks like an inconsistency until you ask what each is for. C1 asks "did
+this arrive by itself", and an import did not arrive at all. C2 asks "is the
+ruleset blind to this merchant", and an import is evidence that no rule read it.
+Same column, two questions, pinned by a test so nobody quietly unifies them.
+
+**Unlike A8, C2 uses the selected window rather than a fixed lookback.**
+Recurring detection reaches past the range because it needs a *sequence of
+dates* to fit an interval, and a one-month view would find nothing. C2 needs
+only counts, and a count over the range the user is looking at is a denominator
+they can see.
 
 They also close a loop nothing else in the category has: C2 tells the user where
 capture is blind, and each blind spot is a candidate for a parser rule and a

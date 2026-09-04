@@ -682,6 +682,63 @@ public interface DailyRollupDao {
     ): List<SourceTotalRow>
 
     /**
+     * C2 — per merchant, per source, over the window.
+     *
+     * **Merchants only.** `merchant_id != ''` drops unfiled entries, because a
+     * parser rule cannot target the absence of a payee — an "Unfiled" row at the
+     * top of a gap list would be the one entry on it nobody can act on.
+     *
+     * The window and the filters, like every other figure on the screen.
+     * Unlike A8, which needs a *sequence of dates* to fit an interval and
+     * therefore reaches past the selected range, C2 needs only counts — and a
+     * count over the range the user is looking at is a denominator they can see.
+     */
+    @Query(
+        "SELECT merchant_id, source, COALESCE(SUM(amount), 0) AS sum_minor, " +
+            "COUNT(DISTINCT entry_id) AS txn_count FROM (" +
+            "SELECT COALESCE(e.merchant_id, '') AS merchant_id, e.source AS source, " +
+            "COALESCE(li.total_minor, e.amount_minor) AS amount, e.id AS entry_id " +
+            "FROM ledger_entry e LEFT JOIN line_item li ON li.entry_id = e.id " +
+            "LEFT JOIN merchant m ON m.id = e.merchant_id " +
+            "WHERE e.ledger = :ledger AND e.deleted_at IS NULL " +
+            "AND e.local_date BETWEEN :from AND :to " +
+            "AND (:filterCategories = 0 OR " +
+            "COALESCE(li.category_id, e.category_id, '') IN (:categoryIds)) " +
+            "AND (:filterSubcategories = 0 OR " +
+            "COALESCE(li.subcategory_id, e.subcategory_id, '') IN (:subcategoryIds)) " +
+            "AND (:filterMerchants = 0 OR COALESCE(e.merchant_id, '') IN (:merchantIds)) " +
+            "AND (:filterMethods = 0 OR " +
+            "COALESCE(e.payment_method_id, '') IN (:paymentMethodIds)) " +
+            "AND (:minAmount IS NULL OR e.amount_minor >= :minAmount) " +
+            "AND (:maxAmount IS NULL OR e.amount_minor <= :maxAmount) " +
+            "AND (:filterSources = 0 OR e.source IN (:sources)) " +
+            "AND (:query = '' OR e.note LIKE :like ESCAPE '\\' " +
+            "OR m.canonical_name LIKE :like ESCAPE '\\' " +
+            "OR li.name LIKE :like ESCAPE '\\')) " +
+            "WHERE merchant_id != '' GROUP BY merchant_id, source",
+    )
+    @Suppress("LongParameterList")
+    public suspend fun merchantSourceTotals(
+        ledger: LedgerType,
+        from: Int,
+        to: Int,
+        filterCategories: Int,
+        categoryIds: List<String>,
+        filterSubcategories: Int,
+        subcategoryIds: List<String>,
+        filterMerchants: Int,
+        merchantIds: List<String>,
+        filterMethods: Int,
+        paymentMethodIds: List<String>,
+        minAmount: Long?,
+        maxAmount: Long?,
+        filterSources: Int,
+        sources: List<String>,
+        query: String,
+        like: String,
+    ): List<MerchantSourceTotalRow>
+
+    /**
      * The window's distinct-entry count under an entry-level filter.
      *
      * **Every filter the total binds, this binds too.** It shipped without the

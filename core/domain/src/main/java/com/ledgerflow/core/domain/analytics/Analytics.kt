@@ -254,6 +254,13 @@ public data class AnalyticsSnapshot(
      * range the charts above it are no longer displaying.
      */
     val captureCoverage: CaptureCoverage = CaptureCoverage.Empty,
+    /**
+     * C2 - merchants the ruleset is blind to, worst first.
+     *
+     * Empty is the good outcome and the common one on a small vault, so the
+     * section hides rather than showing a congratulatory card nobody asked for.
+     */
+    val parserGaps: List<ParserGap> = emptyList(),
 ) {
     public val isEmpty: Boolean get() = total.minor == 0L && transactionCount == 0
 

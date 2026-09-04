@@ -54,6 +54,7 @@ import com.ledgerflow.core.domain.analytics.BudgetProgress
 import com.ledgerflow.core.domain.analytics.CaptureCoverage
 import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.DimensionTotal
+import com.ledgerflow.core.domain.analytics.ParserGap
 import com.ledgerflow.core.domain.analytics.RecurringMerchant
 
 /**
@@ -320,6 +321,69 @@ private fun LazyListScope.dailyAndCommitmentSections(
                 )
             }
         }
+    }
+
+    // C2 — the parser gap list, under C1 because it is the follow-up question:
+    // C1 says how much you type, C2 says where. Absent when there is nothing to
+    // report, which is the good outcome and needs no card to say so.
+    if (snapshot.parserGaps.isNotEmpty()) {
+        item(key = "gaps", contentType = "gaps") {
+            SectionCard(title = "Usually typed by hand") {
+                Text(
+                    text = "Capture is missing these. Each one is a rule worth adding.",
+                    style = LfTheme.typography.label,
+                    color = LfTheme.colors.textSecondary,
+                )
+                snapshot.parserGaps.forEach { gap ->
+                    ParserGapRow(gap = gap, currency = state.baseCurrency)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * C2 — one merchant the ruleset is blind to.
+ *
+ * **The count leads and the money follows**, because the row is a candidate
+ * parser rule and the value of writing one is the typing it saves — a
+ * frequency, not an amount. The money is there so a large gap is still visible
+ * as one, not because it decides the order.
+ */
+@Composable
+private fun ParserGapRow(gap: ParserGap, currency: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = LfTheme.spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = gap.name,
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${gap.manualCount} of ${gap.totalCount} typed by hand",
+                style = LfTheme.typography.label,
+                color = LfTheme.colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        // The amount never truncates (BUG9): a shortened merchant name is
+        // recoverable, a shortened figure is a wrong number on screen.
+        Text(
+            text = MoneyFormat.symbolised(gap.manualAmount.minor, currency),
+            style = LfTheme.typography.amountM,
+            color = LfTheme.colors.textPrimary,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
