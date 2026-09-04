@@ -65,6 +65,16 @@ public class DefaultRollupRepository @Inject constructor(
         }
     }
 
+    override suspend fun backfillIfNeverReconciled(): Int = withContext(io) {
+        val database = session.openForBackgroundWork() ?: return@withContext 0
+        // `reconcile()` stamps this key, so its absence means the pass has never
+        // completed on this install -- which is exactly the cold cache the v8→v9
+        // migration left behind.
+        val stamped = database.appMetaDao().value(AppMetaEntity.KEY_ROLLUP_RECONCILED_AT)
+        if (stamped != null) return@withContext 0
+        reconcile()
+    }
+
     /**
      * Buckets that changed, in either direction.
      *

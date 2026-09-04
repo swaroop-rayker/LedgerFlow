@@ -56,6 +56,10 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
         // every cold start resets the period, so on a phone the user opens
         // daily the pass would be perpetually deferred and never once run.
         RollupWorker.schedule(this)
+        // The nightly pass above waits for idle and charging; this does not,
+        // because a rollup that has never been built makes the whole Analytics
+        // screen wrong until it is. No-op after the first successful run.
+        RollupWorker.fillIfCold(this)
         // §5.7's alert channel, created before the first crossing for the same
         // reason `inbox_high` is: a channel that does not exist yet cannot be
         // found and muted in system settings, and the user should be able to

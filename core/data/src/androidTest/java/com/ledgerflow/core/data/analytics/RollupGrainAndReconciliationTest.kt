@@ -12,6 +12,7 @@ import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.EntryAssignment
 import com.ledgerflow.core.model.LedgerEntry
+import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
 import kotlinx.coroutines.runBlocking
@@ -300,6 +301,54 @@ class RollupGrainAndReconciliationTest {
         assertThat(vault.rollups.reconcile()).isEqualTo(0)
     }
 
+    /**
+     * BUG20 — a rollup that has never been built fills on the next launch.
+     *
+     * `MIGRATION_8_9` creates `daily_rollup` empty and leaves the filling to the
+     * nightly pass, which requires the device to be **idle and charging**. That
+     * is correct for repairing drift and wrong for a cold cache: until it runs,
+     * every analytics figure silently omits every entry approved before the
+     * migration. On the owner's phone the pass had never run, and two real
+     * credits — ₹6,300 and ₹250, plainly visible in the Ledger — were reported
+     * by D1 as "In ₹0.00".
+     *
+     * Emptying the table and clearing the stamp reproduces exactly that state.
+     */
+    @Test
+    fun backfill_fillsARollupThatHasNeverBeenBuilt() = runBlocking<Unit> {
+        approve(amount = 45_000L, categoryId = groceries.id)
+        approve(amount = 500_000L, categoryId = salary.id, ledger = LedgerType.CREDIT)
+        emptyTheRollupAsAColdCache()
+        assertThat(debits()).isEmpty()
+
+        val filled = vault.rollups.backfillIfNeverReconciled()
+
+        assertThat(filled).isGreaterThan(0)
+        assertThat(debits().sumOf { it.sumMinor.minor }).isEqualTo(45_000L)
+        assertThat(credits().sumOf { it.sumMinor.minor }).isEqualTo(500_000L)
+    }
+
+    /**
+     * ...and it is a no-op forever after, so it can run on every cold start.
+     *
+     * The whole point of gating on the stamp rather than on emptiness: a table
+     * that is legitimately empty because the ledger is empty must not trigger a
+     * full recompute on every launch.
+     */
+    @Test
+    fun backfill_doesNothingOnceReconciliationHasRun() = runBlocking<Unit> {
+        approve(amount = 45_000L, categoryId = groceries.id)
+        vault.rollups.reconcile()
+
+        // Corrupt it afterwards: a *second* backfill must decline to repair,
+        // because repairing drift is the nightly pass's job and this one has
+        // already done what it exists for.
+        corruptEveryBucket()
+
+        assertThat(vault.rollups.backfillIfNeverReconciled()).isEqualTo(0)
+        assertThat(debits().single().sumMinor.minor).isEqualTo(1L)
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private suspend fun approve(
@@ -326,6 +375,22 @@ class RollupGrainAndReconciliationTest {
 
     private suspend fun credits(): List<DailyRollupEntity> =
         vault.session.requireDatabase().dailyRollupDao().allFor(LedgerType.CREDIT)
+
+    /**
+     * The state `MIGRATION_8_9` leaves behind: a table with no rows and no
+     * record of ever having been reconciled.
+     *
+     * Both halves matter. Emptying alone would still count as "reconciled" as
+     * far as the stamp goes, which is the case the second test relies on.
+     */
+    private fun emptyTheRollupAsAColdCache() {
+        val db = vault.session.requireDatabase().openHelper.writableDatabase
+        db.execSQL("DELETE FROM daily_rollup")
+        db.execSQL(
+            "DELETE FROM app_meta WHERE " + KEY_COLUMN + " = '" +
+                AppMetaEntity.KEY_ROLLUP_RECONCILED_AT + "'",
+        )
+    }
 
     /** Behind the repository's back, the way real drift would arrive. */
     private fun corruptEveryBucket() {
@@ -367,3 +432,6 @@ class RollupGrainAndReconciliationTest {
         private const val OCCURRED_AT = 1_700_000_000_000L
     }
 }
+
+/** The quoted `key` column of `app_meta`. */
+private const val KEY_COLUMN = "\u0060key\u0060"

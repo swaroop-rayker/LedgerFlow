@@ -37,8 +37,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * and ADR-0006's reconciliation pass rebuilds the whole table from the base
  * tables anyway — so a backfill would be a second implementation of the one
  * routine that ADR exists to keep singular. An empty rollup table is not a
- * wrong rollup table; it is a cold cache, and the first reconciliation fills
- * it.
+ * wrong rollup table; it is a cold cache.
+ *
+ * **"and the first reconciliation fills it" — which it did not (BUG20).** That
+ * sentence stood here and was wrong about *when*. The nightly pass requires the
+ * device to be **idle and charging**, correctly, because it rewrites the whole
+ * table and nothing is waiting on it — except on a cold cache, where every
+ * analytics figure is waiting on it. On the owner's phone the pass had never
+ * once met its constraints, and two real credits sat in the Ledger while the
+ * two-book view reported no income at all. The reasoning above is still right
+ * that the migration should not backfill; what was missing was an *unconstrained
+ * one-shot* on launch, which `RollupWorker.fillIfCold` now performs. It calls
+ * the same recompute, so this ADR's "one routine" still holds — only the
+ * decision about when to run it is new.
  *
  * **No foreign keys are declared**, on either table. `budget.category_id` is
  * unkeyed for the same reason `ledger_entry.category_id` is (ADR-0016) — the
