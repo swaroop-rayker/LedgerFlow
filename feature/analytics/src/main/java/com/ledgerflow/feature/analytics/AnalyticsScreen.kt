@@ -33,6 +33,8 @@ import com.ledgerflow.core.designsystem.chart.LfDonutChart
 import com.ledgerflow.core.designsystem.chart.LfDonutSlice
 import com.ledgerflow.core.designsystem.chart.LfHeatmapDay
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
+import com.ledgerflow.core.designsystem.chart.LfMirroredBarChart
+import com.ledgerflow.core.designsystem.chart.LfMirroredColumn
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
 import com.ledgerflow.core.designsystem.chart.LfTreemap
 import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
@@ -185,6 +187,31 @@ private fun LazyListScope.chartSections(
     }
 
     timeChartSection(state, snapshot, onEvent)
+
+    // D1 — the two books, mirrored. Directly after A1 because it answers the
+    // question A1's single series invites ("and what came in?") before the
+    // screen moves on to breaking the debits down.
+    if (snapshot.parallelBooks.any { it.credit.minor > 0L || it.debit.minor > 0L }) {
+        item(key = "both-books", contentType = "chart") {
+            SectionCard(title = "Both books") {
+                Text(
+                    // States the refusal rather than hiding it. This is the
+                    // figure every competitor leads with, and Law 2 is the
+                    // reason there isn't one -- saying so is the point of D1.
+                    text = "Money in and money out, never combined into one figure.",
+                    style = LfTheme.typography.label,
+                    color = LfTheme.colors.textSecondary,
+                )
+                LfMirroredBarChart(
+                    columns = snapshot.toMirroredColumns(),
+                    formatAxisValue = { minor ->
+                        MoneyFormat.symbolised(minor, state.baseCurrency)
+                    },
+                )
+                BookTotals(snapshot = snapshot, currency = state.baseCurrency)
+            }
+        }
+    }
 
     // A2 — category breakdown, with A3's drill-down inside it.
     item(key = "categories", contentType = "chart") {
@@ -647,6 +674,63 @@ private fun SectionCard(title: String?, content: @Composable () -> Unit) {
         }
     }
 }
+
+/**
+ * D1's two totals — **two figures on two lines, never a third**.
+ *
+ * The temptation here is a "net" row underneath, and Law 2 is not a style
+ * preference: the two books answer different questions and their difference
+ * answers neither. Two lines, each labelled, each absolute.
+ */
+@Composable
+private fun BookTotals(snapshot: AnalyticsSnapshot, currency: String) {
+    val inTotal = snapshot.parallelBooks.sumOf { it.credit.minor }
+    val outTotal = snapshot.parallelBooks.sumOf { it.debit.minor }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
+    ) {
+        BookTotal("In", inTotal, currency, LfTheme.colors.credit, Modifier.weight(1f))
+        BookTotal("Out", outTotal, currency, LfTheme.colors.debit, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun BookTotal(
+    label: String,
+    minor: Long,
+    currency: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            style = LfTheme.typography.label,
+            color = color,
+            maxLines = 1,
+            softWrap = false,
+        )
+        Text(
+            text = MoneyFormat.symbolised(minor, currency),
+            style = LfTheme.typography.amountM,
+            color = LfTheme.colors.textPrimary,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/** D1's columns, already binned by the repository (§11). */
+private fun AnalyticsSnapshot.toMirroredColumns(): List<LfMirroredColumn> =
+    parallelBooks.map { bucket ->
+        LfMirroredColumn(
+            id = bucket.bucket.toString(),
+            label = shortDateLabel(bucket.startDate),
+            creditMinor = bucket.credit.minor,
+            debitMinor = bucket.debit.minor,
+        )
+    }
 
 /**
  * A2/A3: the same categories, drawn as a donut or as a treemap, over the list.

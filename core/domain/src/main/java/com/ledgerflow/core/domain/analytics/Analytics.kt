@@ -175,6 +175,23 @@ public data class TimeBucket(
 )
 
 /**
+ * D1 — one period with **both books, kept apart** (`SPEC.md` §5.6).
+ *
+ * Two fields rather than one signed figure, and that is the whole design. Law 2
+ * forbids netting debits against credits anywhere in this app; a type carrying
+ * a single signed total is a type someone will eventually put a net into, and
+ * the compiler would not stop them. Neither field is ever negative, and nothing
+ * in the codebase subtracts one from the other.
+ */
+public data class ParallelBucket(
+    val bucket: Int,
+    val startDate: Int,
+    val endDate: Int,
+    val credit: Money,
+    val debit: Money,
+)
+
+/**
  * One day of A6's calendar heatmap.
  *
  * Only days with spending are returned; the grid fills the gaps, because a
@@ -261,6 +278,15 @@ public data class AnalyticsSnapshot(
      * section hides rather than showing a congratulatory card nobody asked for.
      */
     val parserGaps: List<ParserGap> = emptyList(),
+    /**
+     * D1 - both books over the window, never combined.
+     *
+     * Built from **two** reads, each binding its own ledger, rather than one
+     * query that groups by it: Law 2's guard requires every statement touching
+     * the base table to name a ledger, and two bound reads are also the shape
+     * that makes a netted figure impossible to write by accident.
+     */
+    val parallelBooks: List<ParallelBucket> = emptyList(),
 ) {
     public val isEmpty: Boolean get() = total.minor == 0L && transactionCount == 0
 

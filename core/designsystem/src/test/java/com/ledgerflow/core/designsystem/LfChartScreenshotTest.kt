@@ -24,6 +24,8 @@ import com.ledgerflow.core.designsystem.chart.LfDonutChart
 import com.ledgerflow.core.designsystem.chart.LfDonutSlice
 import com.ledgerflow.core.designsystem.chart.LfHeatmapDay
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
+import com.ledgerflow.core.designsystem.chart.LfMirroredBarChart
+import com.ledgerflow.core.designsystem.chart.LfMirroredColumn
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
 import com.ledgerflow.core.designsystem.chart.LfTreemap
 import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
@@ -232,6 +234,41 @@ class LfChartScreenshotTest {
                 color = Color(0xFF82C9A0),
             )
         }
+    }
+
+    // ── D1: the two books, mirrored ────────────────────────────────────────
+
+    @Test
+    fun mirrored_1x() = capture("chart-mirrored-1x", 1.0f) { Mirrored() }
+
+    @Test
+    fun mirrored_2x() = capture("chart-mirrored-2x", 2.0f) { Mirrored() }
+
+    /**
+     * A lopsided month, which is the case the shared scale exists for.
+     *
+     * One large credit against many small debits: with a scale per half the two
+     * books would draw as comparable, which is the false impression a net figure
+     * gives, reintroduced as geometry. Here income must visibly dwarf spending.
+     * A bucket with **no credit at all** is included because the zero line has
+     * to stay drawn through it — the boundary is the chart's argument, and a gap
+     * in it would read as the two books touching.
+     */
+    @Composable
+    private fun Mirrored() {
+        val credits = listOf(0L, 0L, 4_800_000L, 0L, 0L, 0L, 12_000L)
+        val debits = listOf(45_000L, 62_000L, 18_000L, 0L, 88_000L, 31_000L, 74_000L)
+        LfMirroredBarChart(
+            columns = credits.indices.map { index ->
+                LfMirroredColumn(
+                    id = index.toString(),
+                    label = "${index + 1} Aug",
+                    creditMinor = credits[index],
+                    debitMinor = debits[index],
+                )
+            },
+            formatAxisValue = { minor -> "₹${minor / 100}" },
+        )
     }
 
     // ── A3: the treemap ──────────────────────────────────────

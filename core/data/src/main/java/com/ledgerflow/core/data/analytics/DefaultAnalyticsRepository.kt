@@ -16,6 +16,7 @@ import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.DayTotal
 import com.ledgerflow.core.domain.analytics.DimensionTotal
 import com.ledgerflow.core.domain.analytics.Occurrence
+import com.ledgerflow.core.domain.analytics.ParallelBucket
 import com.ledgerflow.core.domain.analytics.ParserGap
 import com.ledgerflow.core.domain.analytics.ParserGapDetection
 import com.ledgerflow.core.domain.analytics.RecurringDetection
@@ -118,6 +119,7 @@ public class DefaultAnalyticsRepository @Inject constructor(
             ),
             captureCoverage = buildCaptureCoverage(dao, ledger, window, filters),
             parserGaps = buildParserGaps(dao, ledger, window, names, filters),
+            parallelBooks = buildParallelBooks(dao, window),
         )
     }
 
@@ -333,6 +335,51 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 )
             },
     )
+
+    /**
+     * D1 — both books over the window, side by side and never combined.
+     *
+     * **Two reads, each binding its own ledger.** One query grouping by
+     * `ledger` would return the same numbers and would be the wrong shape:
+     * Law 2's guard requires every statement naming the base table to bind a
+     * discriminator, and two separately-bound reads make a netted figure
+     * something you would have to write on purpose rather than something a
+     * `SUM` could produce by accident.
+     *
+     * **The window only — no filters.** Unlike every other section, and for a
+     * reason specific to this one: the taxonomy filters name categories, and
+     * §5.5 makes the two books' category trees *disjoint*. A debit category
+     * filter applied to the credit book matches nothing, so the one view whose
+     * entire purpose is showing both books would show one and look broken. The
+     * amount, source and text filters could be applied safely, but a section
+     * that honours three filters and silently drops four is harder to reason
+     * about than one that honours none and says so.
+     */
+    private suspend fun buildParallelBooks(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        window: AnalyticsWindow,
+    ): List<ParallelBucket> {
+        val unfiltered = AnalyticsFilters.None
+        val credits = timeSeries(dao, LedgerType.CREDIT, window, unfiltered).associateBy {
+            it.bucket
+        }
+        val debits = timeSeries(dao, LedgerType.DEBIT, window, unfiltered).associateBy {
+            it.bucket
+        }
+
+        // Every bucket, including the empty ones -- the same reason A1 fills its
+        // gaps: a month with one payment must not render as one full-width bar.
+        return (0 until window.bucketCount).map { bucket ->
+            val start = window.from + bucket * window.bucketDays
+            ParallelBucket(
+                bucket = bucket,
+                startDate = start,
+                endDate = (start + window.bucketDays - 1).coerceAtMost(window.to),
+                credit = credits[bucket]?.sumMinor ?: Money(0L),
+                debit = debits[bucket]?.sumMinor ?: Money(0L),
+            )
+        }
+    }
 
     private fun emptySnapshot(ledger: LedgerType, window: AnalyticsWindow) = AnalyticsSnapshot(
         ledger = ledger,

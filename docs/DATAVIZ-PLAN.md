@@ -194,13 +194,46 @@ screen §11 already schedules for P5, not on the Analytics tab — see §7.
 
 | # | Surface | What the user sees | Phase |
 |---|---|---|---|
-| D1 | **Two-book parallel view** | Debit and credit on mirrored axes, visibly separate, **never a net line** | P3 |
+| D1 | **Two-book parallel view** | Debit and credit on mirrored axes, visibly separate, **never a net line** | **P3 — shipped** |
 
 Low analytic value and high identity value. Law 2 forbids the netted figure
 every competitor's home screen is built around, so a treatment that makes the
-separation legible turns a constraint into the product's signature. Cheap: a
-variant of `LfStackedBarChart` with a reflected y-axis and per-book colouring
-already required by §5.5.
+separation legible turns a constraint into the product's signature.
+
+**Built as `LfMirroredBarChart`, its own primitive rather than a mode on
+`LfStackedBarChart`.** The plan expected a variant; a flag would have put a
+reflected axis, a shared scale and a second colour into the composable A1
+depends on, and A1's goldens would have been re-recorded to prove a chart they
+do not show. Two files is cheaper than one file with a mode.
+
+**Three decisions inside it.**
+
+*One shared scale, not one per half.* Scaling each book to its own half draws
+₹50,000 of income and ₹5,000 of spending as equal bars — which is exactly the
+false impression a net figure gives, reintroduced as geometry. The shared
+maximum is what makes an asymmetric month look asymmetric.
+
+*Both halves labelled with the same positive figure.* A negative number below
+the line invites reading the two as one signed series, which is the netting the
+chart refuses. Below the line means "out".
+
+*Two fields on the data type, never one signed total.* A type that can hold a
+net is a type someone will eventually put one into, and the compiler would not
+stop them.
+
+**The cost, stated rather than hidden:** with a shared scale, a salary month
+compresses the debit half to slivers. That is the true shape of that month, and
+A1 sits directly above with the debits at full scale — D1's job is the
+comparison, not the reading.
+
+**D1 ignores the analytics filters, alone among the sections.** §5.5 makes the
+two books' category trees disjoint, so a debit category filter applied to the
+credit book matches nothing and the one view whose purpose is showing both books
+would show one. The amount, source and text filters could be applied safely, but
+a section honouring three filters and silently dropping four is harder to reason
+about than one that honours none and says so. Pinned by a test, because "make
+every section honour the filters" is an obvious tidy-up that would empty half
+the chart.
 
 ---
 
@@ -257,7 +290,8 @@ obvious wrong move and v9 deliberately leaves room to do it properly.
 | Primitive | Serves | Notes |
 |---|---|---|
 | `LfLineChart` | A1 | Shares the axis engine below |
-| `LfStackedBarChart` | A1, D1, B6 | The hard one: ticks, label collision, pan/zoom. The gesture is *reported* as an `LfViewportGesture`, never applied — the ViewModel moves the window and re-queries |
+| `LfStackedBarChart` | A1, B6 | The hard one: ticks, label collision, pan/zoom. The gesture is *reported* as an `LfViewportGesture`, never applied — the ViewModel moves the window and re-queries |
+| `LfMirroredBarChart` | D1 | Two books about a shared zero line, one scale, no net line. Its own primitive rather than a mode on the stacked bar (§ Family D) |
 | `LfDonutChart` | A2, A5 | `drawArc` in a loop |
 | `LfHorizontalBarChart` | A4, C1, C4 | Barely a chart — a row with a weight-proportional fill |
 | `LfCalendarHeatmap` | A6 | A `LazyVerticalGrid` |
@@ -268,7 +302,7 @@ obvious wrong move and v9 deliberately leaves room to do it properly.
 | `LfTreemap` | A3 | Squarified layout in `LfTreemapLayout`, returning fractions so the geometry is unit-tested off-device (§7.2) |
 | **Axis engine** | A1, D1, B2 | Tick selection **unit-tested independently of rendering** (`AxisTicksTest`) — it is the one piece here with a correct answer that does not depend on how it looks |
 
-Seven primitives cover all of P3. Three more arrive at P4. Note how many surfaces
+Eight primitives cover all of P3. Three more arrive at P4. Note how many surfaces
 are *lists with a small graphic*, not charts: that is deliberate and matches
 `CLAUDE.md`'s compactness brief.
 

@@ -95,3 +95,18 @@ public data class LfTreemapDatum(
     val value: Long,
     val color: Color,
 )
+
+/**
+ * One period, carrying **both books as separate figures**.
+ *
+ * Two fields rather than one signed number, deliberately: a signed total is a
+ * net, and a type that can hold one is a type someone will eventually put one
+ * into. Neither field is ever negative.
+ */
+@Immutable
+public data class LfMirroredColumn(
+    val id: String,
+    val label: String,
+    val creditMinor: Long,
+    val debitMinor: Long,
+)

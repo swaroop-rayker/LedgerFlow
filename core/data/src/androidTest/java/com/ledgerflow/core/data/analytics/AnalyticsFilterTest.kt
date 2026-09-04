@@ -349,6 +349,66 @@ class AnalyticsFilterTest {
         assertThat(snapshot.captureCoverage.manual).isEqualTo(CaptureShare.Empty)
     }
 
+    /**
+     * D1 — both books reach the snapshot, and **neither figure moves the other**.
+     *
+     * Law 2's whole point. A netted implementation would still produce a
+     * plausible-looking chart, so the assertion is that the debit total is
+     * exactly what a debit-only read gives and the credit total is exactly what
+     * was approved into the other book — no subtraction anywhere between them.
+     */
+    @Test
+    fun bothBooksAppearInParallel_andNeitherNetsTheOther() = runBlocking<Unit> {
+        val salary = vault.categories.create(
+            NewCategory(LedgerType.CREDIT, "Salary"),
+        ).success()
+        approve(45_000L, groceries.id, zepto.id)
+        approve(20_000L, home.id, zepto.id)
+        approveCredit(500_000L, salary.id)
+
+        val snapshot = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters.None,
+        )
+
+        val credited = snapshot.parallelBooks.sumOf { it.credit.minor }
+        val debited = snapshot.parallelBooks.sumOf { it.debit.minor }
+        assertThat(credited).isEqualTo(500_000L)
+        // Unchanged by the credit sitting beside it, and equal to the debit
+        // screen's own headline total.
+        assertThat(debited).isEqualTo(65_000L)
+        assertThat(debited).isEqualTo(snapshot.total.minor)
+    }
+
+    /**
+     * **D1 ignores the filters, and that is specific to D1.**
+     *
+     * §5.5 makes the two books' category trees disjoint, so a debit category
+     * filter applied to the credit book matches nothing — and the one view whose
+     * purpose is showing both books would show one, looking broken. Pinned
+     * because "make every section honour the filters" is an obvious tidy-up that
+     * would silently empty half of this chart.
+     */
+    @Test
+    fun theParallelViewKeepsBothBooksEvenUnderADebitFilter() = runBlocking<Unit> {
+        val salary = vault.categories.create(
+            NewCategory(LedgerType.CREDIT, "Salary"),
+        ).success()
+        approve(45_000L, groceries.id, zepto.id)
+        approveCredit(500_000L, salary.id)
+
+        val snapshot = analytics.snapshot(
+            LedgerType.DEBIT,
+            window(),
+            comparePrevious = false,
+            filters = AnalyticsFilters(categoryIds = setOf(groceries.id)),
+        )
+
+        assertThat(snapshot.parallelBooks.sumOf { it.credit.minor }).isEqualTo(500_000L)
+    }
+
     @Test
     fun filteringByMerchant_narrowsEveryFigure() = runBlocking<Unit> {
         seed()
@@ -537,6 +597,21 @@ class AnalyticsFilterTest {
                 note = note,
                 lineItems = lines,
                 origin = EntryOrigin(source),
+            ),
+        )
+        assertThat(result).isInstanceOf(LedgerResult.Success::class.java)
+    }
+
+    /** A credit approval, for D1. The other book, reached the same way. */
+    private suspend fun approveCredit(amount: Long, categoryId: String) {
+        val occurredAt = LocalDate.ofEpochDay(today.toLong())
+            .atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
+        val result = vault.ledger.approve(
+            ApprovalRequest(
+                ledger = LedgerType.CREDIT,
+                amount = Money(amount),
+                occurredAt = occurredAt,
+                assignment = EntryAssignment(categoryId = categoryId),
             ),
         )
         assertThat(result).isInstanceOf(LedgerResult.Success::class.java)
