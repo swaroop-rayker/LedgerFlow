@@ -110,11 +110,13 @@ public fun AnalyticsScreen(
                     onClick = { onEvent(AnalyticsEvent.FilterSheetShown(visible = true)) },
                     style = LfButtonStyle.Inline,
                 )
-                LfButton(
-                    text = "Custom range",
-                    onClick = { onEvent(AnalyticsEvent.RangePickerShown(visible = true)) },
-                    style = LfButtonStyle.Inline,
-                )
+                // **"Custom range" used to sit here and is gone.** Once the
+                // Custom *chip* opened the sheet (BUG21), the button was a
+                // second control for one action — and a duplicate on the one
+                // band of chrome above the scrolling content, which the design
+                // brief says the list pays for. The chip is also the better
+                // affordance: it shows when a custom range is active, which a
+                // button never could.
             }
         }
 
