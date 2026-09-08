@@ -11,7 +11,7 @@ These are settled. Do not relitigate them, do not "helpfully" suggest alternativ
 | | Decision |
 |---|---|
 | **Stack** | Native Kotlin + Jetpack Compose. Not Flutter. Not XML Views. |
-| **Currency** | One base currency per install (default INR), chosen at onboarding. `amount_minor` is **always** base currency. Foreign spend stores `original_amount_minor` + `original_currency` + `fx_rate_micro`, all user-entered. **No FX lookup, no conversion engine, no `INTERNET`.** |
+| **Currency** | One base currency per install (default INR), chosen at onboarding. `amount_minor` is **always** base currency. Foreign spend stores `original_amount_minor` + `original_currency` + `fx_rate_micro`, all user-entered. **No FX lookup and no conversion engine** — rates are user-entered, never fetched. (The app does declare `INTERNET` from P4; see Law 6. It is not used for this, or for anything else we write.) |
 | **Recovery** | 24-word BIP-39 phrase is mandatory and primary. It wraps the DEK *and* encrypts `.lfbk` backups. The optional passphrase wrap (KEK-C) is **dropped** — ADR-0011. Two factors: Keystore and phrase. Do not reintroduce a user-chosen secret anywhere on the key path; it would silently downgrade the scheme to whatever the user typed. |
 | **Ingest** | SMS **and** notification listening are co-equal first-class sources, both shipped in P2, sharing one rule engine and one dedupe layer. Notification ingest is in **both** product flavours; SMS is `smsFull` only. |
 
@@ -34,7 +34,8 @@ Dev environment: **Windows 11 + Android Studio**, testing on a physical device (
 3. **Money is `Long` minor units.** No `Float` or `Double` for a monetary amount, and no currency arithmetic outside `Money`. Ever. The ban is on *money*, not on floating point generally — parser `confidence`, Jaro-Winkler scores and σ/μ ratios are legitimately real-valued, and the CI check is correspondingly scoped to money-shaped identifiers in `core/model` (`amount`, `price`, `total`, `balance`).
 4. **No destructive migrations.** `fallbackToDestructiveMigration()` is banned. Every schema change ships an explicit `Migration` + a `MigrationTest` + an updated committed schema JSON.
 5. **Persistent data lives in `filesDir`/`databases/`.** Never `cacheDir`, never external storage. `cacheDir` is for decoded-image scratch only.
-6. **No `INTERNET` permission in release.** All parsing, OCR, and analytics are on-device. If you think you need the network, you're wrong — raise it as an ADR instead.
+6. **Nothing this app computes touches a network.** All parsing, OCR and analytics are on-device, and no user data is ever sent anywhere. If you think *your* code needs the network, you're wrong — raise it as an ADR instead.
+   **The `INTERNET` permission is no longer the way this is checked** — ADR-0021. From the commit that adds bundled ML Kit, release declares it: the recognizer drags in `transport-backend-cct` (Google's telemetry uploader), R8 refuses to build without those classes, and the owner chose to accept the permission rather than strip it. Recognition itself stays local *structurally* — the model ships inside the APK, so a receipt is never uploaded to be read. What replaces the grep is `EXPECTED_MERGED_PERMISSIONS` in `app/build.gradle.kts`, which pins the packaged permission set per variant and fails on a **second** unexpected entry, plus `OcrRunsWithoutNetworkTest`. Adding a dependency that merges a new permission is now a deliberate act with a pin to update.
 7. **Every bug fixed gets a named regression test.** Name it after the bug (`Bug6_DraftSurvivesProcessDeathTest`). The suite only grows.
 
 ---

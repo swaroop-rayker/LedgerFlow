@@ -19,7 +19,7 @@ A production-grade, offline-first, encrypted personal ledger for Android that in
 |---|---|---|
 | **P1** | **Human-in-the-loop.** No automated source ever commits to the ledger. Everything lands in an Inbox as `PENDING`. | Schema-level: `ledger_entry` rows can only be created via `ApproveTransactionUseCase`. Enforced by a lint rule + instrumentation test. |
 | **P2** | **Ledger isolation.** DEBIT and CREDIT are two disjoint ledgers. They never net, sum, or offset each other. | Every DAO query carries a mandatory `ledger` param. A test asserts zero queries return mixed-ledger rows. |
-| **P3** | **Offline-first, zero-cloud.** No network permission in the base build. All OCR/parsing is on-device. | `AndroidManifest` declares no `INTERNET` permission in `release`. |
+| **P3** | **Offline-first, zero-cloud.** Nothing the app computes touches a network; all OCR/parsing is on-device. | The OCR model ships *inside* the APK, so recognition cannot reach a server. `EXPECTED_MERGED_PERMISSIONS` pins the packaged permission set per variant, and `OcrRunsWithoutNetworkTest` runs recognition with the radio off. **`INTERNET` is declared from P4** — ML Kit merges it transitively and it could not be removed without removing the recogniser (ADR-0021). |
 | **P4** | **Data is sacred.** Losing user data is a P0 incident, not a bug. Undecryptable data == lost data. | Multi-wrapped encryption key + mandatory 24-word recovery phrase (§7). |
 | **P5** | **Money is integers.** All amounts are `Long` minor units (paise/cents). Floating-point money is a build failure. | Custom lint rule bans `Float`/`Double` in `:core:model`. |
 | **P6** | **Every migration is reversible-by-backup.** No destructive migration ships. Ever. | `fallbackToDestructiveMigration()` is banned in release source sets. |
@@ -1009,7 +1009,14 @@ pending_transaction(
 )
 INDEX(status, created_at DESC)
 
-pending_line_item(...)               -- mirrors line_item, pre-approval
+-- NO pending_line_item table -- ADR-0022, closing Q7.
+-- An itemised candidate's lines live in pending_transaction.extracted_json
+-- (what OCR read, ExtractedTransactionJson v2) and its corrections in
+-- review_draft_json (what the user typed, ReviewEdits.lines, shipped at v8).
+-- Nothing queries pending lines relationally: item-grain analytics reads an
+-- item-observation view over line_item after approval (DATAVIZ-PLAN.md 5).
+-- ApproveTransactionUseCase writes the real line_item rows, as it already
+-- does for manual itemised entries (ADR-0018).
 
 parser_rule(id TEXT PK, ruleset_version INTEGER NOT NULL, priority INTEGER NOT NULL,
             sender_pattern TEXT NOT NULL, body_pattern TEXT NOT NULL,
@@ -1025,9 +1032,23 @@ budget(id TEXT PK, category_id TEXT NOT NULL, subcategory_id TEXT NULL,
        start_date INTEGER NOT NULL, rollover_enabled INTEGER NOT NULL DEFAULT 0,
        alert_thresholds TEXT NOT NULL DEFAULT '80,100', deleted_at INTEGER NULL)
 
+-- Lands at P4 in schema v11 -- ADR-0023, closing Q5.
 attachment(id TEXT PK, entry_id TEXT NULL, file_path TEXT NOT NULL,
-           mime TEXT NOT NULL, sha256 TEXT NOT NULL, bytes INTEGER NOT NULL,
+                                     -- RELATIVE to filesDir/attachments/, never
+                                     -- absolute: filesDir moves across reinstall
+                                     -- and restore, so an absolute path is a
+                                     -- BUG1/BUG2 with a long fuse.
+           mime TEXT NOT NULL, sha256 TEXT NOT NULL,
+                                     -- over the PLAINTEXT, before encryption. It
+                                     -- dedupes the same receipt attached twice;
+                                     -- a hash of ciphertext under a fresh nonce
+                                     -- dedupes nothing.
+           bytes INTEGER NOT NULL,
            created_at INTEGER NOT NULL)
+-- The file itself: AES-256-GCM under the DEK in filesDir/attachments/ (7.1),
+-- and phrase-sealed BESIDE the .lfbk in the user's SAF backup tree, never
+-- inside the container (ADR-0023). Stored image is the <=1600px colour frame
+-- the recogniser actually read, not the camera original.
 
 -- Every PK column is NOT NULL and uses '' as the "no such dimension" sentinel
 -- (uncategorized spend, no merchant, …). Room requires non-null PK fields, and
@@ -1387,10 +1408,32 @@ Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — ach
 | Analytics screen (5Y range) | ≤ 300 ms to rendered chart | Instrumented timing test |
 | SMS → notification latency | ≤ 1.5 s | Instrumented |
 | OCR (single receipt page) | ≤ 2.5 s | Instrumented |
-| APK size (arm64 split) | ≤ 15 MB | CI check |
+| APK size (arm64 release split) | ≤ 25 MB | CI check — builds the split and fails if it finds none |
 | Memory (steady state) | ≤ 150 MB PSS | Macrobenchmark |
 
-**The 15 MB budget is provisional and must be re-validated at P4.** Competing for it: SQLCipher's native libraries, a bundled variable font (§9.2 forbids runtime download), Compose, and — the real unknown — ML Kit Text Recognition v2. §2.2 named ML Kit without resolving **bundled vs unbundled**, and the two choices are not interchangeable here:
+**The budget was re-validated at P4 and moved from 15 MB to 25 MB — ADR-0021.**
+The original 15 MB was never measured, because until P4 the build could not
+produce the artefact it names (§16 Q18). Measured on the dev box, arm64-v8a
+release split, R8 and resource shrinking on:
+
+| build | APK | Δ |
+|---|---|---|
+| baseline, no OCR | **4.82 MB** | — |
+| + bundled ML Kit, Latin | **17.17 MB** | **+12.35** |
+| + Devanagari | **17.78 MB** | +0.61 |
+
+**The cost is one native library, not the model.**
+`libmlkit_google_ocr_pipeline.so` is 10.55 MB — five times the entire model
+asset set, and the largest single item in the app (SQLCipher's arm64 `.so` is
+2.00 MB). It is `mmap`ed and demand-paged, so it costs install size and not the
+150 MB PSS target above. **Devanagari is +0.61 MB, not the ~2 MB §16 Q2
+assumed**, because it reuses that same pipeline — which makes the script
+question a corpus question rather than a budget one.
+
+The paragraph below is the pre-measurement reasoning, kept because its
+conclusion held.
+
+**The original 15 MB budget was provisional and to be re-validated at P4.** Competing for it: SQLCipher's native libraries, a bundled variable font (§9.2 forbids runtime download), Compose, and — the real unknown — ML Kit Text Recognition v2. §2.2 named ML Kit without resolving **bundled vs unbundled**, and the two choices are not interchangeable here:
 
 | | Bundled model | Unbundled (Play Services) |
 |---|---|---|
@@ -1400,7 +1443,9 @@ Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — ach
 | Compatible with Law 6 / P3 | ✅ | ❌ |
 | Compatible with `smsFull` sideloading | ✅ | ❌ on Play-Services-less devices |
 
-The unbundled variant is incompatible with "no `INTERNET` permission in release" and with sideloaded distribution, so **the bundled model is the only option consistent with the rest of this spec** — and the budget must absorb it. If measurement at P4 shows 15 MB is unreachable with the bundled model, the budget moves, not the principle. Record the real figure in ADR-0010 and amend this table rather than quietly shipping over budget.
+The unbundled variant needs the network *for recognition itself* and needs Play Services, so a sideloaded `smsFull` install on a de-Googled device could not read a receipt at all. **The bundled model is the only option** — an elimination rather than a trade-off — and the budget absorbed it, as this section provided for ("if measurement at P4 shows 15 MB is unreachable with the bundled model, the budget moves, not the principle").
+
+**One row of the table above did not survive measurement.** Bundled ML Kit *does* pull `play-services-mlkit-text-recognition`, `play-services-base` and `play-services-basement` into the dependency graph, and it merges `android.permission.INTERNET` — from `transport-backend-cct`, Google's telemetry uploader, not from any model download. So "requires Play Services: no" is **unverified rather than disproved**: only a de-Googled device settles whether the bundled path calls into them at runtime, and this project has one device, which has them. Recognition being on-device *is* settled — the model is in the APK. ADR-0021 records the full measurement, the two mitigations that were tested, and the owner's decision to accept the permission rather than strip it.
 
 **Techniques (mandatory):**
 - **Baseline Profiles** generated by `:benchmark` and shipped. Non-negotiable — this is the single biggest startup win.
@@ -1420,13 +1465,40 @@ The unbundled variant is incompatible with "no `INTERNET` permission in release"
 |---|---|---|
 | Unit | JUnit5, Turbine (Flow), MockK (sparingly — prefer fakes), Kotest property tests for the parser | ≥80% line coverage on `:core:*` and all use cases |
 | Parser | Golden-file corpus: `testdata/sms/*.txt` with expected JSON output. Every real-world SMS that ever fails becomes a permanent regression case. | 100% of corpus passes |
-| OCR | Golden receipt images + expected line items, tolerance-based assertions | ≥90% item extraction recall on the corpus |
+| OCR | Golden receipt images + hand-transcribed expected line items | **≥90% item recall AND ≥95% precision, reported per receipt.** See below — the metric needed defining before it could be a gate. |
 | DB migration | `MigrationTestHelper`, full v1→vN chain with seeded data | **Blocking.** No merge without it. |
 | Backup/restore | Instrumented round-trip with row-level equality assertion | **Blocking on every PR.** |
 | UI | Compose UI tests (`createAndroidComposeRule`), semantics-based selectors only | Critical flows: SMS→approve, OCR→approve, manual entry, export |
 | Screenshot | Roborazzi/Paparazzi, 5 configs (phone/tablet × light/dark × fontScale 2.0) | Diff gate |
 | Performance | Macrobenchmark (startup, scroll, baseline profile) | Regression gate ±10% |
 | Manual matrix | `TESTING.md`: install-over-install, force-stop, "Don't keep activities", OTA update, airplane mode, low storage, permission revoke/regrant, 2.0x font, RTL | Pre-release checklist |
+
+**The OCR gate needed a definition, not just a number.** "≥90% item extraction
+recall" is not yet a criterion, and the ways it fails are specific:
+
+- **Recall alone is gameable.** An extractor that emits every text fragment as a
+  line item scores 100%. So **precision is gated too**, and §5.3's
+  reconciliation is what makes a spurious line visible rather than free.
+- **The denominator is the human's transcription** — every line *the owner*
+  recorded as `kind = ITEM` — never what the extractor found. A denominator
+  derived from the output measures nothing.
+- **A hit needs the name to match *and* `total_minor` to be exact.** Names
+  compare after `ItemNameNormalizer` with a Jaro-Winkler threshold, because OCR
+  legitimately reads `TOMATO 1KG` as `TOMAT0 1KG`. Money does not get a
+  tolerance: Law 3's spirit is that a money value is right or it is wrong, and a
+  tolerance is how a corpus flatters itself.
+- **Reported per receipt, never pooled.** One 60-line supermarket bill otherwise
+  drowns ten failures on small slips.
+- **A number needs a corpus size to mean anything.** Below roughly 25 graded
+  receipts / 300 item lines, 90% is noise rather than a measurement.
+
+**The corpus's composition, provenance rules and privacy handling are still
+open** and are the owner's call — unlike SMS, real receipts are trivially
+obtainable (a camera has no equivalent of `adb`'s inability to deliver a message
+as another app), so a synthetic-majority receipt corpus has no honest
+justification. What that costs is transcription time, which is the actual
+decision. `CorpusProvenanceTest`'s ratchet extends here on the day the first
+fixture lands.
 
 **Recursive-testing rule:** every bug fixed gets a test named after it (`Bug6_DraftSurvivesProcessDeathTest`). The bug table in §8 maps 1:1 to test classes. The suite only grows.
 
@@ -1440,7 +1512,7 @@ The unbundled variant is incompatible with "no `INTERNET` permission in release"
 | **P1 — Manual core** | Unlock flow wired (§7.3), Hilt, `:core:domain` + `:core:data`, schema v2, manual entry with draft persistence **and itemised entries (ADR-0018)**, categories/subcategories, merchants (addable from the entry form), payment methods, both ledgers, Ledger list with filters + Paging 3, CSV export, **`TransactionIngestSource` abstraction + `smsFull`/`playSafe` flavour skeleton (both compiling, both installable)** | Can fully use the app without SMS/OCR. Both flavours build in CI. |
 | **P2 — Automated ingest** | Shared rule engine, `ParseIngestWorker`, cross-source dedupe, Inbox, notification actions, approve/discard — **plus both capture adapters: SMS receiver (`smsFull`) and `NotificationIngestService` (both flavours)**. Permission UX, listener rebind and the §5.2 health banner shipped at P2-8. | 50-SMS + 50-notification golden corpus passing. Dedupe test: same UPI txn via both sources → exactly one pending row. **Met at P2-9, with the corpus's composition stated rather than implied.** The dedupe test shipped at P2-5 (`Dedupe_SameTxnAcrossSources_ProducesOnePending`). The corpus reached **52 SMS + 53 notifications** as a **mixed** corpus — the owner's decision, because `adb` cannot deliver an SMS or post a notification as another app, so a hundred real messages would have put this exit months away. Every fixture declares `provenance`; `CorpusProvenanceTest` floors the real count so it can never quietly shrink and requires each real fixture to record what was substituted out of it, since this repository is public. **The honest number is 4 real SMS and 0 real notifications** — §16 Q15 is what an unmarked synthetic corpus costs, and the floor is what stops this one becoming the same thing. Expanding it immediately surfaced two live truncation defects (§16 Q17), which is the argument that it was worth doing. `TESTING.md` F23 is what starts turning the real column. |
 | **P3 — Analytics** | Rollup table + worker, all chart views, filters, period comparison, budgets + alerts. **Plus the three P3 differentiators** — capture coverage, the parser gap list and the two-book parallel view — which need no new schema and no OCR (`docs/DATAVIZ-PLAN.md` Family C, D). Charting is hand-rolled `Lf*` Canvas, no dependency (ADR-0005). | 5Y query < 300 ms, **measured on the device**. Reviewed goldens at 1x and 2x for every new chart. |
-| **P4 — OCR** | CameraX, file/PDF import, line-item extraction, review editor, category memory, attachments. `pending_line_item` lands here (§16 Q7) — it is what lets *ingest* produce an itemised candidate at all. **This is what unlocks the item-grain analytics** (`docs/DATAVIZ-PLAN.md` Family B): personal price index, price-vs-quantity bridge, cross-merchant and pack-size unit pricing. | ≥90% recall on receipt corpus — which is also the real gate on the price views, since they are worthless on a corpus that misreads quantities. |
+| **P4 — OCR** | CameraX, file/PDF import, line-item extraction, review editor, category memory (`item_category_memory`), attachments (`attachment`, ADR-0023). **Schema v11 adds `attachment` and `item_category_memory`** — and *not* `pending_line_item`, which ADR-0022 declines to build: v8's `review_draft_json` already carries itemised lines and OCR's extraction rides `extracted_json`, so an itemised candidate needs no table (§16 Q7). **This is what unlocks the item-grain analytics** (`docs/DATAVIZ-PLAN.md` Family B): personal price index, price-vs-quantity bridge, cross-merchant and pack-size unit pricing. | ≥90% recall on receipt corpus — which is also the real gate on the price views, since they are worthless on a corpus that misreads quantities. |
 | **P5 — Polish & harden** | Baseline profiles, screenshot suite, a11y pass, XLSX export, diagnostics screen — which is where the **ingest diagnostics** live (dedupe evidence, parser confidence distribution, pipeline latency), plus the recurring cash-flow runway. Play listing + `playSafe` release track, API 37 readiness | All §11 budgets met. |
 
 ### 13.1 P0 exit criteria
@@ -1483,6 +1555,9 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | 0018 | What is an entry's category once its line items carry their own? | ✅ **Accepted** — **nothing**: an itemised entry stores no entry-level category, `line_item` is its only filing, and line categories are validated exactly as the entry's are. Rollups and budgets read line grain at P3 (§5.4, §5.6, `CLAUDE.md` §2 Law 2) |
 | 0019 | Is the pre-migration snapshot a `.lfbk`? | ✅ **Accepted** — **no**: an encrypted database *file copy*. A `.lfbk` is phrase-derived (ADR-0011) and the app never holds the phrase at launch, so the specified form was never implementable. Amends §8.1 |
 | 0020 | Where does the notification listener's health live? | ✅ **Accepted** — **outside the vault**, in a DataStore file under `filesDir`. The writer runs at boot with no Activity, so vault storage would be blind in exactly the states §5.2's banner exists to report. Scoped to operational metadata only, guarded by `DatastoreKeySurfaceTest` (§5.2) |
+| 0021 | OCR engine: bundled ML Kit vs unbundled, and what the APK budget really is | ✅ **Accepted** — **bundled**, measured at **+12.35 MB** (arm64 release split 4.82 → 17.17 MB; Devanagari +0.61). Budget moves 15 → **25 MB**. Bundled ML Kit merges `INTERNET` from Google's telemetry uploader; the owner accepted it rather than strip it, so **Law 6 is amended** — recognition stays on-device *structurally* because the model is in the APK. Amends ADR-0010 (§5.3, §11, §16 Q2/Q10/Q18, `CLAUDE.md` §2 Law 6) |
+| 0022 | What shape is `pending_line_item`? | ✅ **Accepted** — **it is not built**. v8's `review_draft_json` already carries itemised lines and OCR's extraction rides the versioned `extracted_json`; nothing queries pending lines relationally, and a table would force a migration, a `BackupPayload` list and a CSV writer for a structure with no reader. Closes Q7 and corrects §13's P4 row (§5.3, §6.1, §13) |
+| 0023 | Where do receipt images live, and do they go in a `.lfbk`? | ✅ **Accepted** — DEK-sealed in `filesDir/attachments/` (§7.1 unchanged), and phrase-sealed **beside** the `.lfbk` in the existing SAF backup *tree*, never inside the container — §5.9's nightly verify-by-decrypt would otherwise rewrite every image every night. Store the ≤1600px frame the recogniser read; keep forever, no timed purge; make the size visible. Closes Q5 (§5.3, §5.9, §6.1, §7.1) |
 
 **ADR-0003 is not reopened.** The kickoff listed it as a blocking decision, but §14 has it Accepted and §7.2 specifies it. The *design* — multi-wrapped DEK, phrase-primary — is settled and stays settled. What was genuinely open is the **library and implementation** choice underneath it, which is a different decision with different trade-offs (binary size, native dependencies, maintenance status) and therefore gets its own record: **ADR-0010**. Amending an accepted ADR to smuggle in a new decision is how decision logs stop being trustworthy.
 
@@ -1542,7 +1617,7 @@ Two workflows: `ci.yml` (every PR + push to `main`) and `release.yml` (tag-trigg
 | `screenshot` | ubuntu | ✅ | Roborazzi/Paparazzi diffs — **BUG5**. JVM-only, no emulator needed. |
 | `instrumented` | ubuntu + KVM emulator, matrix API **26 / 36** | ✅ | **Migration chain (BUG8)**, **backup→wipe→restore round-trip (BUG4)**, draft-survives-process-death (BUG6), approval-transaction integrity, cross-source dedupe |
 | `compose-stability` | ubuntu | ⚠️ warn | New unstable params in hot composables |
-| `assemble` | ubuntu | ✅ | Both flavours build; APK size budget (≤15 MB arm64) |
+| `assemble` | ubuntu | ✅ | Both flavours build; APK size budget (≤25 MB, arm64 **release** split, built with `-Pledgerflow.abiSplits`) |
 | `benchmark` | **self-hosted (your Win11 box + phone)** | manual / nightly | Startup, scroll jank, baseline profile. **Emulator numbers are noise — this must run on real hardware.** |
 
 **Why `instrumented` is non-negotiable:** the migration test and the backup round-trip are the only automated things standing between you and BUG4/BUG8. If emulator jobs get flaky and someone marks them `continue-on-error`, the entire durability guarantee in §7 becomes decorative.
@@ -1590,18 +1665,18 @@ Automation stops at the boundary of real-device behaviour. `TESTING.md` remains 
 ## 16. Open Questions
 
 1. ~~**Raw-message retention.**~~ **CLOSED — D-09.** 90-day purge of raw bodies, as originally specified, enforced by `retention_expires_at` on both raw tables rather than by policy. The window is what makes an unparseable message replayable against a later ruleset; past it, the body is the most sensitive text this app holds and it sits inside a file that can leave the device in a `.lfbk`. **The purge drops the body, not the record** — the parse result and any `pending_transaction` it produced survive, so history is never rewritten by retention.
-2. **OCR language:** Latin script only, or bundle the Devanagari ML Kit model (+~2 MB)?
+2. ~~**OCR language.**~~ **CLOSED — ADR-0021, on measurement.** The premise was the cost: "+~2 MB". Measured, Devanagari is **+0.61 MB**, because it reuses the same 10.55 MB `libmlkit_google_ocr_pipeline.so` that Latin already pays for and adds only `.tflite` assets. At that price the question stops being a budget question. **Latin ships now; Devanagari ships when the receipt corpus contains a bill that needs it** — which is a decision the corpus makes, not one made in advance, and §12's diversity floor requires at least one Devanagari-bearing receipt so the answer is evidence rather than a guess.
 3. **Tablet/foldable:** adaptive two-pane layouts in v1, or phone-only?
 4. ~~**Notification package allowlist.**~~ **CLOSED — D-10.** A curated default (GPay/PhonePe/Paytm/major Indian banks) ships enabled, and every entry is user-editable — addable and disablable — from Settings. An empty default was rejected because notification ingest is the *higher-recall* source (§3.1) and capturing nothing until the user finds a settings screen is a bad first run; a locked list was rejected because a stated privacy guarantee the user cannot inspect or narrow is not much of a guarantee. **The "recently seen" picker lists labels and package names only.** It cannot show content: §5.2's filter runs before any body access, so for a package that is not on the list there is nothing read to show.
-5. **Attachment retention:** keep receipt images forever (storage growth) or offer auto-downscale/purge after N months?
+5. ~~**Attachment retention.**~~ **CLOSED — ADR-0023.** Both halves of the either/or, but not as posed: **downscale always, purge never.** Only the ≤1600px colour frame the recogniser actually read is stored (~250 KB against a ~4 MB original), which is both a ~15× saving and the honest record of what OCR saw. There is no timed purge: D-09's 90-day rule applies to raw message bodies because they are the most sensitive text the app holds *and* they ride inside a `.lfbk` that can leave the device, and neither clause transfers to an image that is not in the container. Deleting a user's receipts on a timer would also contradict soft-delete, the bin and the type-DELETE gate. Growth is made **visible** instead — Settings shows "Receipts — N images, M MB" with a manual bulk delete behind the bin's `Warning` treatment. The question ADR-0023 had to answer that this one never asked: **attachments are phrase-sealed beside the `.lfbk`, not inside it**, because §5.9's nightly verify-by-decrypt would otherwise rewrite the whole image set every night.
 
 Added in v0.3.0 — gaps found during the Phase 0 spec audit and deliberately *not* decided unilaterally:
 
 6. ~~**`draft_entry` has no schema.**~~ **CLOSED — D-06.** One row per in-flight entry, keyed by a client-generated UUIDv7, uniqueness scoped by `UNIQUE(ledger, editing_entry_key)`, form state carried as a versioned JSON payload. Table in §6.1, reasoning in §6.1.2. Lands in schema v2.
-7. **`pending_line_item` is elided** as `(...)` in §6.1, and is **deferred to P4** rather than defined at P2. A bank SMS and a UPI notification carry one amount; nothing in the P2 pipeline can produce an itemised pending row, so the only producer is OCR. Defining it at P2 would mean guessing a shape against a pipeline that does not exist and shipping a table nothing writes to for two phases. It lands with the code that needs it, in the same additive migration. Still presumed to mirror `line_item` minus `entry_id` plus `pending_id` — but "presumably" is still not a schema, which is why this stays open rather than closing.
+7. ~~**`pending_line_item` is elided.**~~ **CLOSED — ADR-0022: it is not built.** Q7 was right that the shape could not be guessed at P2 and right to wait for the producer. Reading the code at P4 changed the answer rather than supplying the presumed DDL. Schema **v8 already added `pending_transaction.review_draft_json`**, which stores `ReviewEdits` — and `ReviewEdits` already carries `lines: List<ReviewEditLine>` with name, unit price, quantity, category and subcategory, read and written by the review screen and surviving process death. So the *edited* half shipped two phases ago. OCR's *extracted* half belongs in `extracted_json`, which is a versioned payload (`ExtractedTransactionJson`, `"v":1` → `"v":2`) and which is JSON precisely because "a candidate is partial by definition — every typed column would be nullable anyway". A receipt line is more partial than a bank-SMS field, not less. **Nothing queries pending lines relationally** — Family B reads an item-observation view over `line_item` *after* approval — and a table would have forced a migration, a `BackupPayload` list and a CSV writer via `ExportCoversEveryTableTest`, all for a structure with no reader. §13's P4 row is corrected accordingly.
 8. ~~**Recovery Kit is written in plaintext.**~~ **CLOSED — D-07.** Plaintext as originally specified, gated behind an explicit confirmation naming what the file is and where it is going. The password-protected PDF was rejected for reintroducing a user-chosen secret into the recovery path. Reasoning in §7.2.
 9. ~~**Is `app_meta.canary` load-bearing?**~~ **CLOSED — D-08.** Kept, with its purpose restated honestly: it detects a DEK/database *mismatch* (bad restore, half-applied rotation), not a wrong key — SQLCipher's HMAC gets there first. Reasoning in §7.3.
-10. **Confirm the APK budget at P4.** §11 now records 15 MB as provisional pending a real measurement with bundled ML Kit. The number needs to be either defended or moved on evidence.
+10. ~~**Confirm the APK budget at P4.**~~ **CLOSED — ADR-0021, moved on evidence to 25 MB.** Measured arm64 release split: **4.82 MB** with no OCR, **17.17 MB** with bundled ML Kit Latin (+12.35), **17.78 MB** with Devanagari too. The cost is one native library — `libmlkit_google_ocr_pipeline.so` at 10.55 MB — not the model, and §11's "several MB" was low by roughly 4×. 25 rather than 20 so P5 is not immediately against the ceiling. The measurement also surfaced what nobody was looking for: bundled ML Kit merges `INTERNET` from Google's telemetry uploader, which amends Law 6 (ADR-0021) and which **no guard in this repository could have seen**, because both the Gradle check and its CI mirror read *source* manifests.
 
 Added in v0.5.0 — found while wiring the unlock flow at P1:
 
@@ -1656,7 +1731,7 @@ Added while building the `TransactionIngestSource` abstraction at P1:
 
 Added at P3, while deciding ADR-0005:
 
-18. **`ci.yml`'s APK-size step measures an artifact §11 does not describe, and fails at 22.77 MB.** The step globs `*/outputs/apk/*/debug/*.apk` and compares each against 15 MB. What that glob finds is a **universal debug** APK — four ABIs, no R8, no resource shrinking — while §11's budget is written for an **arm64 release split**. Measured on this box: `app-smsFull-debug.apk` and `app-playSafe-debug.apk` are both **22.77 MB**, of which 7.3 MB is four copies of `libsqlcipher.so` (arm64 alone is 2.10 MB) and ~35 MB uncompressed is unshrunk dex. So the `assemble` job fails on the **first CI run this repository has ever had**, for a reason that says nothing about the app. Two separate fixes, and they should not be conflated: the step must build and measure the artifact §11 names, and only then can Q10's "defend or move the number" be answered on evidence. Until it is, **the release APK budget has never been measured** — which is why ADR-0005 declines to spend an unknown quantity of it.
+18. ~~**`ci.yml`'s APK-size step measures an artifact §11 does not describe.**~~ **CLOSED — fixed, and it was three defects rather than two.** (a) There was **no arm64 split to measure**: no `splits` block existed anywhere, so the build could not produce the artefact the budget names. (b) The step measured a *universal debug* APK against a budget for an arm64 *release* split — the 22.77 MB that failed this repository's first ever CI run; the same tree's arm64 release split is **4.82 MB**. (c) The glob `*/outputs/apk/*/debug/*.apk` was passed to `find -path`, whose `*` crosses `/`: it matched **35 files here, 32 of them androidTest APKs**, plus `:benchmark`'s 39 MB APK — it passed only because that job assembles nothing else. Fixed with a property-gated `splits` block (`-Pledgerflow.abiSplits`, so the dev loop does not build five APKs per install) and a gate that measures the arm64 release split by name and **fails when it finds nothing** — a size check over zero files otherwise passes, which is the fifth instance in this repository of a guard that could not see the thing it checked.
 
 Added at P3, while planning the analytics catalogue (`docs/DATAVIZ-PLAN.md`):
 
