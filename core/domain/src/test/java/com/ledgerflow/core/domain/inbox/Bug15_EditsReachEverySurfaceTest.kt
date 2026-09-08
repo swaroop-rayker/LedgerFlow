@@ -37,7 +37,7 @@ class Bug15_EditsReachEverySurfaceTest {
         amount = Money(100L),
         currency = "INR",
         direction = ExtractedDirection.DEBIT,
-        merchantRaw = "KARUNAKAR RAYKER",
+        merchantRaw = "RAMESH KUMAR",
         accountLast4 = "6402",
         occurredAt = 1_787_000_000_000L,
         confidence = 0.9,
@@ -98,7 +98,7 @@ class Bug15_EditsReachEverySurfaceTest {
         )
 
         assertThat(row.effective.merchantRaw).isEqualTo("Swiggy")
-        assertThat(row.extracted.merchantRaw).isEqualTo("KARUNAKAR RAYKER")
+        assertThat(row.extracted.merchantRaw).isEqualTo("RAMESH KUMAR")
     }
 
     /**
@@ -152,7 +152,7 @@ class Bug15_EditsReachEverySurfaceTest {
         val row = candidate(ReviewEdits(occurredAt = 1_787_500_000_000L))
 
         assertThat(row.effective.amount).isEqualTo(Money(100L))
-        assertThat(row.effective.merchantRaw).isEqualTo("KARUNAKAR RAYKER")
+        assertThat(row.effective.merchantRaw).isEqualTo("RAMESH KUMAR")
         assertThat(row.effective.direction).isEqualTo(ExtractedDirection.DEBIT)
     }
 
