@@ -152,6 +152,38 @@ internal fun Project.configureAndroidApplication(extension: ApplicationExtension
             }
         }
 
+        // ── ABI splits, so the artefact SPEC.md §11 names can exist ──────────
+        //
+        // §11's budget is "APK size (arm64 split) <= 15 MB", and until P4 this
+        // build could not produce an arm64 split at all -- there was no splits
+        // block, so `assembleSmsFullRelease` emitted a universal APK. CI's size
+        // step then measured a *universal debug* APK (four ABIs, no R8) against
+        // a budget written for an arm64 *release* split, and failed at 22.77 MB
+        // on the first run this repository ever had. Measured properly, the
+        // same commit's arm64 release split is 4.82 MB. §16 Q18.
+        //
+        // **Property-gated, not always on.** `splits` applies to every variant,
+        // so enabling it unconditionally would build several APKs on every
+        // `installSmsFullDebug` and tax the dev loop for a number only the size
+        // gate reads. CI's `assemble` job passes -Pledgerflow.abiSplits.
+        //
+        // `isUniversalApk = true` keeps the all-ABI artefact that is sideloaded
+        // today, so turning the flag on adds an output rather than replacing
+        // one. Which of the two `smsFull` actually distributes is a
+        // distribution decision and is deliberately not made here -- note that
+        // a bundled OCR model ships one native library *per ABI*, so the gap
+        // between the two widens sharply at P4.
+        if (providers.gradleProperty("ledgerflow.abiSplits").isPresent) {
+            splits {
+                abi {
+                    isEnable = true
+                    reset()
+                    include("arm64-v8a", "armeabi-v7a", "x86_64")
+                    isUniversalApk = true
+                }
+            }
+        }
+
         configureJvmToolchain()
     }
 

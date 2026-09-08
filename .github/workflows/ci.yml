@@ -286,18 +286,47 @@ jobs:
 
       - run: ./gradlew assembleSmsFullDebug assemblePlaySafeDebug --stacktrace
 
-      - name: APK size budget (SPEC.md §11 — 15 MB)
+      # SPEC.md §11's budget is written for an "arm64 release split", so that is
+      # what has to be built to measure it: R8 + resource shrinking on, one ABI.
+      # -Pledgerflow.abiSplits turns the splits block on (see
+      # AndroidConventions.kt); without it no split artefact exists at all.
+      - run: ./gradlew assembleSmsFullRelease assemblePlaySafeRelease -Pledgerflow.abiSplits --stacktrace
+
+      - name: APK size budget (SPEC.md §11 — arm64 release split)
         run: |
           set -euo pipefail
-          LIMIT=$((15 * 1024 * 1024))
-          for f in $(find . -path '*/outputs/apk/*/debug/*.apk'); do
+          LIMIT=$((25 * 1024 * 1024))
+
+          # Anchored on `release`, on the arm64 split's own filename, and rooted
+          # at app/ -- all three matter. The previous glob was
+          # '*/outputs/apk/*/debug/*.apk' passed to `find -path`, whose `*`
+          # crosses '/': it therefore also matched :benchmark's 39 MB APK and
+          # every androidTest APK, and it measured a *universal debug* build
+          # against a budget for an arm64 *release* split. It failed at 22.77 MB
+          # on this repository's first CI run for a reason that said nothing
+          # about the app -- the same commit's arm64 release split is 4.82 MB.
+          # SPEC.md §16 Q18.
+          mapfile -t APKS < <(find app/build/outputs/apk -type f -name '*arm64-v8a-release*.apk' | sort)
+
+          # An empty list must fail. A size gate that measures nothing passes,
+          # and this repository has recorded four guards that could not see the
+          # thing they checked.
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::No arm64 release split found. Did -Pledgerflow.abiSplits get dropped?"
+            exit 1
+          fi
+
+          FAIL=0
+          for f in "${APKS[@]}"; do
             SIZE=$(stat -c%s "$f")
-            echo "$f -> $((SIZE / 1024)) KiB"
+            printf '%s -> %s KiB
+' "$f" "$((SIZE / 1024))"
             if [ "$SIZE" -gt "$LIMIT" ]; then
-              echo "::error::$f exceeds the 15 MB budget."
-              exit 1
+              echo "::error::$f exceeds the 25 MB budget (SPEC.md §11)."
+              FAIL=1
             fi
           done
+          exit $FAIL
 
       - uses: actions/upload-artifact@v4
         with:
