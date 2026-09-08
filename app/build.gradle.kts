@@ -1,3 +1,5 @@
+import com.android.build.api.artifact.SingleArtifact
+
 plugins {
     // AGP 9+ has built-in Kotlin support. Applying org.jetbrains.kotlin.android
     // alongside it is an error: https://kotl.in/gradle/agp-built-in-kotlin
@@ -13,6 +15,136 @@ android {
 
     defaultConfig {
         applicationId = "com.ledgerflow"
+    }
+}
+
+/**
+ * The permissions that actually reach a built APK, per variant.
+ *
+ * ## Why this exists alongside the root project's `EXPECTED_PERMISSIONS`
+ *
+ * That guard reads **source** manifests. This one reads the **merged** manifest
+ * -- the thing that is actually packaged -- and they do not agree, because a
+ * dependency's manifest merges permissions that no source set in this
+ * repository declares. Measured at P4: `smsFull` source manifests declare 2
+ * permissions and the shipped APK declares 7. The other five arrive from
+ * WorkManager (`WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED`,
+ * `FOREGROUND_SERVICE`) and androidx.core's dynamic-receiver permission.
+ *
+ * So the source guard's promise -- "the interesting failure was always going to
+ * be the permission that arrives without anyone deciding to add it" -- was true
+ * and the guard could not keep it, because the permission that arrives that way
+ * arrives through a POM, not through a file anyone edits.
+ *
+ * This was found by measurement, not by review: adding bundled ML Kit merges
+ * `android.permission.INTERNET` (from `transport-backend-cct`, Google's
+ * telemetry uploader) and **nothing in the build said so**.
+ *
+ * ## Read through the artifact API, not a path
+ *
+ * `SingleArtifact.MERGED_MANIFEST` is AGP's supported handle on this file.
+ * Hardcoding `build/intermediates/merged_manifest/<variant>/...` would work
+ * today and break on an AGP upgrade -- and it would break by finding *nothing*,
+ * which for a guard means passing. That is the failure this repository has
+ * recorded four times: a check that could not see the thing it checked.
+ *
+ * ## The pin is per variant because the dynamic-receiver permission is
+ *
+ * `${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` embeds the
+ * application id, so it differs across all four variants. Writing it out four
+ * times is deliberate: a pattern here would also match a permission we did not
+ * mean to allow.
+ */
+val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
+    "smsFullDebug" to setOf(
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_SMS",
+        "android.permission.WAKE_LOCK",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.FOREGROUND_SERVICE",
+        "com.ledgerflow.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    ),
+    "smsFullRelease" to setOf(
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_SMS",
+        "android.permission.WAKE_LOCK",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.FOREGROUND_SERVICE",
+        "com.ledgerflow.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    ),
+    // No RECEIVE_SMS, in either build type. That absence is D-04's whole point
+    // and it is the one line here worth checking by eye.
+    "playSafeDebug" to setOf(
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.FOREGROUND_SERVICE",
+        "com.ledgerflow.playsafe.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    ),
+    "playSafeRelease" to setOf(
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.WAKE_LOCK",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.FOREGROUND_SERVICE",
+        "com.ledgerflow.playsafe.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    ),
+)
+
+androidComponents {
+    onVariants { variant ->
+        val expected = EXPECTED_MERGED_PERMISSIONS[variant.name] ?: return@onVariants
+        val merged = variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)
+        val variantName = variant.name
+
+        tasks.register("mergedPermissionCheck${variantName.replaceFirstChar(Char::uppercaseChar)}") {
+            group = "verification"
+            description = "Pins the permissions in $variantName's MERGED manifest (Law 6, D-04)."
+            inputs.file(merged)
+            outputs.upToDateWhen { false }
+
+            doLast {
+                val text = merged.get().asFile.readText()
+                val found = Regex("""<uses-permission[^>]*android:name\s*=\s*"([^"]+)"""")
+                    .findAll(text)
+                    .map { it.groupValues[1] }
+                    .toSet()
+
+                val violations = mutableListOf<String>()
+
+                (found - expected).forEach { extra ->
+                    val why = if (extra.endsWith("INTERNET")) {
+                        "INTERNET reaches the packaged APK. Law 6 says all parsing, OCR and " +
+                            "analytics are on-device. If a dependency merged it, either remove " +
+                            "it with tools:node=\"remove\" or amend Law 6 in an ADR and pin it here."
+                    } else {
+                        "It is in the merged manifest but not pinned. Find who merged it in " +
+                            "app/build/outputs/logs/manifest-merger-*-report.txt, then either " +
+                            "remove it or record here that it was meant."
+                    }
+                    violations += "$variantName: $extra is packaged and NOT pinned -- $why"
+                }
+
+                (expected - found).forEach { gone ->
+                    violations += "$variantName: $gone is pinned but is NOT in the merged " +
+                        "manifest. If it was deliberately removed, drop the pin; a stale pin " +
+                        "guards nothing."
+                }
+
+                if (violations.isNotEmpty()) {
+                    violations.forEach { logger.error("::error::$it") }
+                    throw GradleException(
+                        "mergedPermissionCheck($variantName) found ${violations.size} violation(s).",
+                    )
+                }
+                logger.lifecycle(
+                    "mergedPermissionCheck($variantName): clean (${expected.size} pinned).",
+                )
+            }
+        }
     }
 }
 

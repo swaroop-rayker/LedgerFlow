@@ -122,6 +122,13 @@ tasks.register("bannedApiCheck") {
  * closes the deferred item that this task did not pin the full set.
  *
  * Mirrored by a step in .github/workflows/ci.yml so local and CI failures match.
+ *
+ * **This guard reads source manifests, which is not what ships.** A dependency
+ * merges permissions no source set here declares -- measured at P4, `smsFull`
+ * declares 2 and packages 7. `:app`'s `EXPECTED_MERGED_PERMISSIONS` pins the
+ * merged manifest and is the half of this rule that can see a permission
+ * arriving through a POM. Neither guard subsumes the other: this one says where
+ * a permission may be written, that one says what may be packaged.
  */
 val EXPECTED_PERMISSIONS: Map<String, Set<String>> = mapOf(
     // §5.1's inbox notification. Not restricted, and wanted by BOTH flavours:
@@ -256,6 +263,16 @@ tasks.register("preMergeCheck") {
 
     dependsOn("bannedApiCheck")
     dependsOn("restrictedPermissionCheck")
+    // The merged-manifest half of the permission rule (see EXPECTED_PERMISSIONS'
+    // docs). All four variants: `release` is what ships, and `debug` is what is
+    // on the developer's phone. Merging a manifest costs no R8 run, so pinning
+    // the release variants here does not make the gate meaningfully slower.
+    dependsOn(
+        ":app:mergedPermissionCheckSmsFullDebug",
+        ":app:mergedPermissionCheckSmsFullRelease",
+        ":app:mergedPermissionCheckPlaySafeDebug",
+        ":app:mergedPermissionCheckPlaySafeRelease",
+    )
     dependsOn(":app:assembleSmsFullDebug", ":app:assemblePlaySafeDebug")
     dependsOn(":app:lintSmsFullDebug", ":app:lintPlaySafeDebug")
 
