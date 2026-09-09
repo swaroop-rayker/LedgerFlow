@@ -94,6 +94,7 @@ internal fun toPendingRow(row: PendingTransactionEntity) = PendingTransactionRow
     createdAt = row.createdAt,
     reviewedAt = row.reviewedAt,
     approvedEntryId = row.approvedEntryId,
+    reviewDraftJson = row.reviewDraftJson,
 )
 
 internal fun toRow(entry: LedgerEntryEntity) = LedgerEntryRow(
@@ -170,6 +171,7 @@ internal fun toPendingTransaction(row: PendingTransactionRow) = PendingTransacti
     createdAt = row.createdAt,
     reviewedAt = row.reviewedAt,
     approvedEntryId = row.approvedEntryId,
+    reviewDraftJson = row.reviewDraftJson,
 )
 
 internal fun toCategory(row: CategoryRow) = CategoryEntity(
@@ -240,6 +242,8 @@ internal fun toBudget(row: BudgetRow): BudgetEntity? {
         rolloverEnabled = row.rolloverEnabled,
         alertThresholds = row.alertThresholds,
         deletedAt = row.deletedAt,
+        lastAlertedThreshold = row.lastAlertedThreshold,
+        alertPeriodStart = row.alertPeriodStart,
     )
 }
 
@@ -253,4 +257,6 @@ internal fun toBudgetRow(row: BudgetEntity) = BudgetRow(
     rolloverEnabled = row.rolloverEnabled,
     alertThresholds = row.alertThresholds,
     deletedAt = row.deletedAt,
+    lastAlertedThreshold = row.lastAlertedThreshold,
+    alertPeriodStart = row.alertPeriodStart,
 )

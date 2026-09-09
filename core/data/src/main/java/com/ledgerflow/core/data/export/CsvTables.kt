@@ -237,6 +237,8 @@ internal object CsvTables {
             "id", "ledger", "editing_entry_id", "editing_entry_key",
             "payload_json", "payload_version", "created_at", "created_at_iso",
             "updated_at", "updated_at_iso",
+            "amount_minor", "amount", "category_id", "merchant_id",
+            "occurred_at", "occurred_at_iso",
         ),
         rows = payload.drafts.map { row ->
             listOf(
@@ -250,6 +252,12 @@ internal object CsvTables {
                 CsvWriter.timestamp(row.createdAt),
                 row.updatedAt.toString(),
                 CsvWriter.timestamp(row.updatedAt),
+                row.amountMinor.toString(),
+                CsvWriter.decimal(row.amountMinor),
+                row.categoryId,
+                row.merchantId,
+                row.occurredAt.toString(),
+                CsvWriter.timestamp(row.occurredAt),
             )
         },
     )
@@ -391,7 +399,7 @@ internal object CsvTables {
             "id", "source", "dedupe_key", "suppressed_by_id", "raw_ref_id",
             "extracted_json", "confidence", "status", "needs_manual_fill",
             "created_at", "created_at_iso", "reviewed_at", "reviewed_at_iso",
-            "approved_entry_id",
+            "approved_entry_id", "review_draft_json",
         ),
         rows = payload.pendingTransactions.map { row ->
             listOf(
@@ -409,6 +417,7 @@ internal object CsvTables {
                 row.reviewedAt?.toString(),
                 CsvWriter.timestamp(row.reviewedAt),
                 row.approvedEntryId,
+                row.reviewDraftJson,
             )
         },
     )
@@ -434,6 +443,7 @@ internal object CsvTables {
             "id", "category_id", "subcategory_id", "period",
             "amount_minor", "amount", "start_date", "rollover_enabled",
             "alert_thresholds", "deleted_at", "deleted_at_iso",
+            "last_alerted_threshold", "alert_period_start",
         ),
         rows = payload.budgets.map { row ->
             listOf(
@@ -448,6 +458,10 @@ internal object CsvTables {
                 row.alertThresholds,
                 row.deletedAt?.toString(),
                 CsvWriter.timestamp(row.deletedAt),
+                row.lastAlertedThreshold.toString(),
+                row.alertPeriodStart.toString(),
+                row.lastAlertedThreshold.toString(),
+                row.alertPeriodStart.toString(),
             )
         },
     )

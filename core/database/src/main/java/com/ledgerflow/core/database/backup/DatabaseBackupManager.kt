@@ -194,6 +194,7 @@ public class DatabaseBackupManager(
             DraftEntryRow(
                 row.id, row.ledger.name, row.editingEntryId, row.editingEntryKey,
                 row.payloadJson, row.payloadVersion, row.createdAt, row.updatedAt,
+                row.amountMinor, row.categoryId, row.merchantId, row.occurredAt,
             )
         },
         merchantAliases = database.merchantAliasDao().all().map { row ->
@@ -259,6 +260,10 @@ public class DatabaseBackupManager(
                     payloadVersion = it.payloadVersion,
                     createdAt = it.createdAt,
                     updatedAt = it.updatedAt,
+                    amountMinor = it.amountMinor,
+                    categoryId = it.categoryId,
+                    merchantId = it.merchantId,
+                    occurredAt = it.occurredAt,
                 )
             },
         )

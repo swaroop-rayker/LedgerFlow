@@ -1,6 +1,7 @@
 package com.ledgerflow.core.data.export
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.backup.BackupPayload
 import java.io.File
@@ -148,6 +149,69 @@ class ExportCoversEveryTableTest {
             )
         }
     }
+
+    /**
+     * **Every schema COLUMN reaches the export, not just every table.**
+     *
+     * The rest of this class pins schema → payload → CSV at the *table* level,
+     * which is what Q13 asked for and which leaves a gap one level down: a
+     * column added to a table that already had a `BackupPayload` list is
+     * invisible to every assertion above. The table is covered, the file
+     * exists, the count matches, and the column is silently absent from both
+     * the `.lfbk` and the CSV.
+     *
+     * That is not hypothetical. When this test was written it found three:
+     * `pending_transaction.review_draft_json` (v8 — the user's in-progress
+     * review corrections, and after ADR-0022 the itemised lines of an OCR
+     * candidate), `budget.last_alerted_threshold` / `alert_period_start`
+     * (v10 — restore would re-announce a threshold already announced), and
+     * four denormalised summary columns on `draft_entry` (v4/v5 — the drafts
+     * stack renders from them, so a restored draft would list blank).
+     *
+     * Superset, not equality: ADR-0017 writes money and timestamps **twice** —
+     * the integer verbatim and a rendered form beside it — so a header
+     * legitimately carries names the schema does not have. The direction that
+     * matters is that nothing in the schema is missing from the header.
+     */
+    @Test
+    fun everySchemaColumnReachesTheExport() {
+        val headers = mutableMapOf<String, MutableSet<String>>()
+        CsvTables.documents(EMPTY_PAYLOAD).forEach { document ->
+            val table = document.fileName
+                .removeSuffix(".csv")
+                .removeSuffix("_debit")
+                .removeSuffix("_credit")
+            headers.getOrPut(table) { mutableSetOf() } += document.header
+        }
+
+        val missing = mutableListOf<String>()
+        schemaColumns().forEach { (table, columns) ->
+            if (table in DERIVED_TABLES) return@forEach
+            val exported = headers[table].orEmpty()
+            (columns - exported).forEach { column -> missing += "$table.$column" }
+        }
+
+        assertWithMessage(
+            "these schema columns reach neither the .lfbk nor the CSV, so a restore " +
+                "drops them silently -- add the field to its BackupPayload row, map it in " +
+                "DatabaseBackupManager, and give it a CSV column",
+        ).that(missing).isEmpty()
+    }
+
+    /** Column names per table, from the committed schema. */
+    private fun schemaColumns(): Map<String, Set<String>> =
+        Json.parseToJsonElement(schemaFile().readText())
+            .jsonObject.getValue("database")
+            .jsonObject.getValue("entities")
+            .jsonArray
+            .associate { entity ->
+                val table = entity.jsonObject.getValue("tableName").jsonPrimitive.content
+                val columns = entity.jsonObject.getValue("fields")
+                    .jsonArray
+                    .map { it.jsonObject.getValue("columnName").jsonPrimitive.content }
+                    .toSet()
+                table to columns
+            }
 
     /**
      * The tables Room says exist at the current schema version.

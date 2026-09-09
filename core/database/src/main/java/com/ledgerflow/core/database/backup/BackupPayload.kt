@@ -183,6 +183,15 @@ public data class DraftEntryRow(
     val payloadVersion: Int,
     val createdAt: Long,
     val updatedAt: Long,
+    // v4/v5 -- denormalised out of payloadJson so the drafts stack can render a
+    // row without parsing JSON. Derivable, but not derived on restore: nothing
+    // re-reads the payload until the draft is reopened, so omitting these left a
+    // restored stack listing blank rows. Defaulted so a pre-v11 .lfbk still
+    // decodes.
+    val amountMinor: Long = 0L,
+    val categoryId: String? = null,
+    val merchantId: String? = null,
+    val occurredAt: Long = 0L,
 )
 
 @Serializable
@@ -321,6 +330,15 @@ public data class PendingTransactionRow(
     val createdAt: Long,
     val reviewedAt: Long?,
     val approvedEntryId: String?,
+    /**
+     * v8. The user's in-progress corrections to this candidate.
+     *
+     * Omitting it dropped unsaved review edits on restore -- BUG6's shape, one
+     * table over. ADR-0022 raises the stakes: an itemised OCR candidate's line
+     * list lives here too, so a restore would have returned the extraction
+     * without any of the user's corrections to it.
+     */
+    val reviewDraftJson: String? = null,
 )
 
 /**
@@ -341,4 +359,9 @@ public data class BudgetRow(
     val rolloverEnabled: Boolean,
     val alertThresholds: String,
     val deletedAt: Long?,
+    // v10. Without these a restore re-announces a threshold already announced:
+    // 0 reads as "nothing announced yet", which is true of a fresh budget and
+    // false of a restored one.
+    val lastAlertedThreshold: Int = 0,
+    val alertPeriodStart: Int = 0,
 )
