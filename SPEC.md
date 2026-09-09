@@ -1492,13 +1492,37 @@ recall" is not yet a criterion, and the ways it fails are specific:
 - **A number needs a corpus size to mean anything.** Below roughly 25 graded
   receipts / 300 item lines, 90% is noise rather than a measurement.
 
-**The corpus's composition, provenance rules and privacy handling are still
-open** and are the owner's call — unlike SMS, real receipts are trivially
-obtainable (a camera has no equivalent of `adb`'s inability to deliver a message
-as another app), so a synthetic-majority receipt corpus has no honest
-justification. What that costs is transcription time, which is the actual
-decision. `CorpusProvenanceTest`'s ratchet extends here on the day the first
-fixture lands.
+**Composition and privacy are decided.** Unlike SMS, real receipts are trivially
+obtainable — a camera has no equivalent of `adb`'s inability to deliver a message
+as another app — so a synthetic-majority receipt corpus has no honest
+justification, and the corpus is real. What that costs is transcription time.
+
+**Receipt images and their expected-output JSON live in a private store outside
+this repository.** The images because a real Indian retail receipt carries a card
+tail, often the customer's mobile number, a loyalty id and an invoice number; the
+ground truth because it *is* the shopping list, and structured and greppable it is
+arguably more revealing than the photograph. Redaction was rejected: for an image
+every pixel edit changes what the recogniser reads, so a redacted corpus would
+have drifted from reality invisibly — §16 Q15 in a new costume. Public here are
+the metric, the provenance rules, the ratchet, and a generated manifest of names,
+hashes and counts that makes the corpus auditable without disclosing a line item.
+`ReceiptCorpusTest` skips locally when the store is absent and **fails in CI**,
+because the environment that is supposed to have the corpus must not pass without
+it. See `testdata/receipts/README.md`.
+
+**The corpus grows rather than being built in one sitting** — three receipts a
+week beats thirty in an afternoon, because the set is then drawn from real
+shopping and the extractor is never tuned against a corpus it has already seen in
+full. Until it reaches the floors above, the ≥90% figure is reported as
+**provisional** on every test run.
+
+**Ground truth is committed before the extractor reads that receipt**, enforced
+by `scripts/guard-corpus-order.sh`: no single commit may change both the corpus
+manifest and `feature/ocr/**`. This is `CLAUDE.md` §11's rule for the parser
+corpus applied to receipts, and it exists because the shortcut it forbids —
+dumping the extractor's own output as the expected result and correcting what you
+happen to notice — is fast, inflates recall by an unknown amount, and leaves no
+trace.
 
 **Recursive-testing rule:** every bug fixed gets a test named after it (`Bug6_DraftSurvivesProcessDeathTest`). The bug table in §8 maps 1:1 to test classes. The suite only grows.
 

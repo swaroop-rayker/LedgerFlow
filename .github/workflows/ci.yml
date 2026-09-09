@@ -75,6 +75,13 @@ jobs:
       - name: versionCode monotonicity guard (BUG3)
         run: bash scripts/guard-version.sh
 
+      # Ground truth for a receipt is committed before the extractor that reads
+      # it. Bootstrapping a fixture from the extractor's own output is fast,
+      # undetectable afterwards, and makes the corpus measure the extractor
+      # against its own opinions. SPEC.md §12.
+      - name: OCR corpus-order guard
+        run: bash scripts/guard-corpus-order.sh
+
   # ══════════════════════════════════════════════════════════════════════
   static-analysis:
     name: static analysis

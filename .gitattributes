@@ -40,7 +40,12 @@ core/crypto/src/main/resources/bip39/** -text
 *.aab           binary
 
 # ── Git LFS: golden images bloat the repo and produce useless diffs ───────
-testdata/receipts/**   filter=lfs diff=lfs merge=lfs -text
+# NOTE: testdata/receipts/ was tracked here and is not any more -- ADR-0023's
+# sibling decision. Receipt images AND their expected-output JSON live in a
+# private store outside this repository, because a real receipt carries a card
+# tail and often a phone number, and the ground truth is literally the owner's
+# shopping list. What remains here is a manifest, a README and the guards, none
+# of which is binary. See testdata/receipts/README.md.
 **/screenshots/**      filter=lfs diff=lfs merge=lfs -text
 
 # ── Diff hints ────────────────────────────────────────────────────────────

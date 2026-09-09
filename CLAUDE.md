@@ -68,7 +68,9 @@ LedgerFlow/
 └─ testdata/
    ├─ sms/                        ← golden SMS corpus (input .txt + expected .json)
    ├─ notifications/              ← golden notification corpus (same expected-JSON format)
-   └─ receipts/                   ← golden receipt images + expected line items
+   └─ receipts/                   ← manifest + README only. Images AND expected
+                                    output live in a PRIVATE store (ADR-0023 sibling
+                                    decision); see testdata/receipts/README.md
 ```
 
 **Dependency rule (enforced by a Gradle check):**
