@@ -142,9 +142,15 @@ jobs:
           check 'Non-null assertion `!!` is banned outside tests (Law 7, BUG7). Use requireNotNull(x) { "why" }.' \
                 '[[:alnum:]_)\]]!!' \
                 '*.kt' ':!*/test/*' ':!*/androidTest/*' ':!*Test.kt'
-          check 'No INTERNET permission in release (Law 6).' \
+          # Law 6 as amended by ADR-0021. The RELEASE APK does declare INTERNET
+          # -- bundled ML Kit merges it from Google's telemetry uploader, and that
+          # one is pinned in :app's EXPECTED_MERGED_PERMISSIONS. What must never
+          # happen is US declaring it in a source manifest, which would mean our
+          # own code wanting the network. Law 6's substantive half is unchanged:
+          # nothing this app computes touches one.
+          check 'We must not declare INTERNET ourselves (Law 6, ADR-0021). ML Kit merges one; that is pinned in EXPECTED_MERGED_PERMISSIONS.' \
                 '<uses-permission[^>]*android\.permission\.INTERNET' \
-                'app/src/release'
+                '*AndroidManifest.xml'
           # D-04: RECEIVE_SMS/READ_SMS are Play-restricted and live in exactly
           # one flavour's source set. Merged into src/main they would reach
           # playSafe too, and the Play-eligible build would stop being
@@ -156,6 +162,21 @@ jobs:
                 '<uses-permission[^>]*android\.permission\.(RECEIVE|READ)_SMS' \
                 '*AndroidManifest.xml' ':!*/src/smsFull/*'
           exit $FAIL
+
+      # The greps above are a BLOCKLIST of names we already know about. The
+      # Gradle guards are the ALLOWLIST -- "any permission not pinned fails" --
+      # and until P4 they ran only on a developer's machine, so a PR that merged
+      # a brand-new permission passed CI with nothing to say about it. That is
+      # the property Law 6 now depends on, since ADR-0021 replaced its grep with
+      # a pinned merged manifest, so it has to run where merges are gated.
+      - name: Permission pins (allowlist -- Gradle, source and merged manifests)
+        run: |
+          ./gradlew restrictedPermissionCheck bannedApiCheck \
+            :app:mergedPermissionCheckSmsFullDebug \
+            :app:mergedPermissionCheckSmsFullRelease \
+            :app:mergedPermissionCheckPlaySafeDebug \
+            :app:mergedPermissionCheckPlaySafeRelease \
+            --stacktrace
 
       - run: ./gradlew detekt lintSmsFullDebug lintPlaySafeDebug --stacktrace
 

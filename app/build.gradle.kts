@@ -57,6 +57,8 @@ android {
  */
 val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
     "smsFullDebug" to setOf(
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_SMS",
         "android.permission.WAKE_LOCK",
@@ -66,6 +68,8 @@ val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
         "com.ledgerflow.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
     ),
     "smsFullRelease" to setOf(
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_SMS",
         "android.permission.WAKE_LOCK",
@@ -77,6 +81,8 @@ val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
     // No RECEIVE_SMS, in either build type. That absence is D-04's whole point
     // and it is the one line here worth checking by eye.
     "playSafeDebug" to setOf(
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.WAKE_LOCK",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -85,6 +91,8 @@ val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
         "com.ledgerflow.playsafe.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
     ),
     "playSafeRelease" to setOf(
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.WAKE_LOCK",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -117,9 +125,14 @@ androidComponents {
 
                 (found - expected).forEach { extra ->
                     val why = if (extra.endsWith("INTERNET")) {
-                        "INTERNET reaches the packaged APK. Law 6 says all parsing, OCR and " +
-                            "analytics are on-device. If a dependency merged it, either remove " +
-                            "it with tools:node=\"remove\" or amend Law 6 in an ADR and pin it here."
+                        "INTERNET reaches the packaged APK from a source that is NOT pinned. " +
+                            "One INTERNET is expected and already recorded -- bundled ML Kit " +
+                            "merges it from transport-backend-cct, and ADR-0021 amended Law 6 " +
+                            "for exactly that one. Seeing it here means it arrived somewhere " +
+                            "the pin does not cover, so find who merged it in " +
+                            "app/build/outputs/logs/manifest-merger-*-report.txt before adding " +
+                            "a pin. Law 6's substantive half is unchanged: nothing this app " +
+                            "computes touches a network."
                     } else {
                         "It is in the merged manifest but not pinned. Find who merged it in " +
                             "app/build/outputs/logs/manifest-merger-*-report.txt, then either " +
@@ -172,6 +185,12 @@ dependencies {
     // (SPEC.md §3.1). The Inbox that consumes them is P2.
     implementation(project(":feature:inbox"))
     implementation(project(":feature:ingest"))
+    // P4. Brings CAMERA and, transitively through bundled ML Kit, INTERNET --
+    // both pinned in EXPECTED_MERGED_PERMISSIONS above, which is the point of
+    // wiring it here rather than later: an unwired module's permissions reach
+    // no merged manifest, so the pin would guard nothing until the day the
+    // dependency landed.
+    implementation(project(":feature:ocr"))
     implementation(project(":feature:settings"))
 
     implementation(libs.androidx.activity.compose)

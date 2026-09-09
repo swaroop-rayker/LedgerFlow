@@ -155,6 +155,19 @@ val EXPECTED_PERMISSIONS: Map<String, Set<String>> = mapOf(
     "feature/ingest/src/androidTest/AndroidManifest.xml" to setOf(
         "android.permission.POST_NOTIFICATIONS",
     ),
+    // P4. CAMERA is the second permission this app asks for by choice, and
+    // unlike RECEIVE_SMS it is NOT flavour-restricted: §5.3's capture path is
+    // in both flavours, because OCR is one of the two sources playSafe ships.
+    // So src/main, merging into both, deliberately.
+    //
+    // INTERNET is absent here and that is not an oversight: ML Kit merges it
+    // transitively (ADR-0021), so it appears in the packaged manifest and is
+    // pinned in :app's EXPECTED_MERGED_PERMISSIONS. Writing it into a source
+    // manifest would read as this module asking for the network, which it does
+    // not — the two guards say different things on purpose.
+    "feature/ocr/src/main/AndroidManifest.xml" to setOf(
+        "android.permission.CAMERA",
+    ),
 )
 
 tasks.register("restrictedPermissionCheck") {

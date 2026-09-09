@@ -38,6 +38,17 @@ paging = "3.5.1"
 work = "2.11.2"
 splashscreen = "1.2.0"
 
+# OCR & camera (P4) -- ADR-0021.
+# mlkitText is the BUNDLED recognizer: the model ships inside the APK, which is
+# what makes recognition work with no network and no Play Services. Measured at
+# +12.35 MB on the arm64 release split, almost all of it one native library.
+# It also merges android.permission.INTERNET, from Google's telemetry uploader
+# rather than from any model download -- accepted, Law 6 amended, and pinned in
+# :app's EXPECTED_MERGED_PERMISSIONS so a SECOND unexpected permission still
+# fails the build.
+mlkitText = "16.0.1"
+camerax = "1.5.0"
+
 # Persistence & crypto
 room = "2.8.4"
 sqlcipher = "4.17.0"
@@ -68,6 +79,13 @@ benchmark = "1.4.1"
 [libraries]
 # ── Toolchain ─────────────────────────────────────────────────────────────
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
+
+androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+androidx-camera-compose = { group = "androidx.camera", name = "camera-compose", version.ref = "camerax" }
 
 # ── AndroidX core ─────────────────────────────────────────────────────────
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

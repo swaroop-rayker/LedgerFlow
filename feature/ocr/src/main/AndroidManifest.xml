@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Receipt OCR (SPEC.md §5.3, ADR-0021).
+
+  CAMERA is the second permission this app has ever asked for by choice, and
+  unlike RECEIVE_SMS it is not flavour-restricted: §5.3's capture path is in
+  both flavours, because OCR is one of the two ingest sources playSafe ships.
+  So it lives in src/main and merges into both, and `restrictedPermissionCheck`
+  pins it here rather than treating its presence as a surprise.
+
+  **Runtime, and genuinely optional.** `uses-feature required="false"` is the
+  load-bearing half: a device with no camera must still install and still be
+  able to import a receipt from the gallery or a PDF via SAF, which §5.3 lists
+  as first-class inputs alongside capture. Declaring the feature as required
+  would silently remove the app from those devices' store listings and, for a
+  sideload, offer no signal at all.
+
+  No INTERNET here. ML Kit merges it from `transport-backend-cct` and that is
+  recorded in :app's EXPECTED_MERGED_PERMISSIONS with its reason; it is
+  deliberately not restated in a source manifest, because writing it here would
+  read as this module asking for the network, which it does not.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+</manifest>

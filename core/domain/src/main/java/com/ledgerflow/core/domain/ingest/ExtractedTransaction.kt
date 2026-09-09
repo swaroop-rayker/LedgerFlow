@@ -1,6 +1,7 @@
 package com.ledgerflow.core.domain.ingest
 
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.LineItemKind
 import com.ledgerflow.core.model.Money
 
 /**
@@ -87,6 +88,22 @@ public data class ExtractedTransaction(
     val occurredAt: Long? = null,
     val availableBalance: Money? = null,
     val confidence: Double = 0.0,
+    /**
+     * The bill's lines, when the source produced any. P4, ADR-0022.
+     *
+     * Empty for every SMS and every notification, permanently and correctly: a
+     * bank message carries one amount and there is nothing to itemise. Only OCR
+     * fills this.
+     *
+     * **This is where an itemised candidate lives, instead of a
+     * `pending_line_item` table.** ADR-0022 declines to build that table: v8's
+     * `review_draft_json` already carries the user's *corrected* lines, nothing
+     * queries pending lines relationally, and item-grain analytics reads
+     * `line_item` after approval. So the machine's reading rides here, the
+     * human's corrections ride there, and `effective` merges them exactly as it
+     * already does for the scalar fields.
+     */
+    val lines: List<ExtractedLineItem> = emptyList(),
 ) {
 
     /**
@@ -99,3 +116,40 @@ public data class ExtractedTransaction(
     public val isReviewable: Boolean
         get() = amount != null && direction != ExtractedDirection.UNKNOWN
 }
+
+/**
+ * One line a receipt appears to hold, as the extractor read it (SPEC.md §5.3).
+ *
+ * **Everything except [name] and [kind] is nullable, and that is the design** —
+ * the same reasoning as [ExtractedTransaction]'s. A receipt line is *more*
+ * partial than a bank-SMS field, not less: OCR routinely reads a name with no
+ * price (the price wrapped to the next line), a price with no name (the name
+ * was too faint), or a quantity it cannot attach to either. A type that could
+ * not represent those would force the pipeline to drop exactly the lines the
+ * review screen most needs to show, which is §5.1's never-silently-drop rule
+ * applied one grain down.
+ *
+ * [name] is not nullable because a line with no text is not a line — it is a
+ * region the recogniser found nothing in, and the pipeline discards it before
+ * this type exists.
+ *
+ * **No `entryId`, no `position` as a database identity, no normalised name.**
+ * This is a reading, not a row. Normalisation happens at approval, where
+ * `ItemNameNormalizer` runs and the real `line_item` is written by
+ * `ApproveTransactionUseCase` — Law 1's single writer, unchanged.
+ *
+ * @param quantityMilli 1.000 = 1000, matching `line_item.quantity_milli`, so
+ *   half a kilo is representable without a `Double` anywhere on the path.
+ * @param confidence how sure the extractor is of *this line*, independent of
+ *   the bill's overall confidence. A score, not money — Law 3 bans `Double` for
+ *   an amount, not for a probability. It is what lets the review screen sort
+ *   the user's attention to the lines most likely to be wrong.
+ */
+public data class ExtractedLineItem(
+    val name: String,
+    val kind: LineItemKind = LineItemKind.ITEM,
+    val quantityMilli: Long? = null,
+    val unitPrice: Money? = null,
+    val total: Money? = null,
+    val confidence: Double = 0.0,
+)
