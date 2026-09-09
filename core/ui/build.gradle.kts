@@ -1,10 +1,38 @@
 plugins {
     id("ledgerflow.android.library")
     id("ledgerflow.android.compose")
+    // §12's screenshot gate. `LfLineItemEditor` is the component §5.3's receipt
+    // review is built on and it had no golden at any font scale -- the harness
+    // lived only in :core:designsystem, which this module depends on and which
+    // therefore cannot see it. A composite that renders a whole editable row is
+    // exactly the shape BUG5 and BUG9 break, so it is the wrong thing to have
+    // outside the gate.
+    alias(libs.plugins.roborazzi)
 }
 
 android {
     namespace = "com.ledgerflow.core.ui"
+
+    testOptions.unitTests {
+        // Robolectric needs the merged resources and the manifest; without this
+        // every composition fails at inflate time rather than at an assertion,
+        // which reads like a broken test rather than a missing setting.
+        isIncludeAndroidResources = true
+
+        // Forwarded, not hardcoded -- see the identical block in
+        // :core:designsystem for why. Robolectric's fork does not inherit the
+        // daemon's truststore, and on this dev box an intercepting proxy makes
+        // its platform-jar download fail where Gradle's own resolution
+        // succeeds. Absent on a stock runner, where this loop does nothing.
+        all { test ->
+            listOf(
+                "javax.net.ssl.trustStore",
+                "javax.net.ssl.trustStorePassword",
+            ).forEach { key ->
+                System.getProperty(key)?.let { test.systemProperty(key, it) }
+            }
+        }
+    }
 }
 
 dependencies {
@@ -19,4 +47,13 @@ dependencies {
 
     testImplementation(libs.junit4)
     testImplementation(libs.truth)
+
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.rule)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.compose.ui.test.manifest)
 }
