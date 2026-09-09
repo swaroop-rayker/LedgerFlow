@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.compose.CameraXViewfinder
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.SurfaceRequest
+import androidx.camera.viewfinder.core.ImplementationMode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -205,7 +206,29 @@ private fun CameraPane(
         contentAlignment = Alignment.Center,
     ) {
         surfaceRequest?.let { request ->
-            CameraXViewfinder(surfaceRequest = request, modifier = Modifier.fillMaxWidth())
+            CameraXViewfinder(
+                surfaceRequest = request,
+                modifier = Modifier.fillMaxWidth(),
+                // EMBEDDED (TextureView), not the default EXTERNAL (SurfaceView).
+                //
+                // **This screen scrolls, and a SurfaceView inside a scrolling
+                // container renders black.** Its buffer is composited by the
+                // system in window coordinates rather than drawn into the view
+                // hierarchy, so it does not follow a scroll offset or a parent's
+                // clip -- and the failure is silent, because the camera is
+                // perfectly healthy underneath it.
+                //
+                // Diagnosed from logcat rather than guessed: with the preview
+                // black on screen the device was logging
+                // `[W_9_Preview] ... ServicePREVIEW2 ... 4080x3060 -> 1440x1080`
+                // with the frame counter climbing at ~50fps. Frames were
+                // flowing the whole time; only the compositing was wrong.
+                //
+                // EMBEDDED costs a copy per frame against EXTERNAL's zero-copy
+                // path. For a viewfinder the user points at a receipt for a
+                // second or two that is not a trade worth taking the bug for.
+                implementationMode = ImplementationMode.EMBEDDED,
+            )
         } ?: Text(
             text = "Starting the camera…",
             style = LfTheme.typography.bodyM,
