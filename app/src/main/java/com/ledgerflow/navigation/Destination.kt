@@ -67,6 +67,15 @@ public sealed interface Destination {
     public data object Inbox : Destination
 
     /**
+     * Receipt capture (§5.3), reached from the centre action's dial.
+     *
+     * Beside manual entry rather than behind a Settings row: it is one of the
+     * four ways an entry begins, and §9.3 puts those on the centre action.
+     */
+    @Serializable
+    public data object ScanReceipt : Destination
+
+    /**
      * §5.2's permission explainer, reached from More and from the Dashboard
      * health banner.
      *

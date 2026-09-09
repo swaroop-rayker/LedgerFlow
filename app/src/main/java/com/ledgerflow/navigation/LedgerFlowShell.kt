@@ -51,6 +51,8 @@ import com.ledgerflow.feature.dashboard.DashboardRoute
 import com.ledgerflow.feature.entry.EntryScreen
 import com.ledgerflow.feature.entry.EntryViewModel
 import com.ledgerflow.feature.export.ExportRoute
+import com.ledgerflow.feature.ocr.capture.OcrCaptureScreen
+import com.ledgerflow.feature.ocr.capture.OcrCaptureViewModel
 import com.ledgerflow.feature.inbox.InboxScreen
 import com.ledgerflow.feature.inbox.InboxViewModel
 import com.ledgerflow.feature.inbox.ReviewScreen
@@ -114,6 +116,10 @@ internal fun LedgerFlowShell(
                 dialOpen = false
                 navController.navigate(Destination.Inbox)
             },
+            onScanReceipt = {
+                dialOpen = false
+                navController.navigate(Destination.ScanReceipt)
+            },
         )
     }
 
@@ -173,6 +179,7 @@ private fun LedgerFlowNavHost(
     ) {
         tabDestinations(navController)
         fullScreenDestinations(navController)
+        captureAndReviewDestinations(navController)
     }
 }
 
@@ -280,6 +287,55 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
     }
 }
 
+
+/**
+ * The capture-to-approval path (§5.1, §5.2, §5.3).
+ *
+ * Split out of [fullScreenDestinations] rather than suppressed when that
+ * function crossed detekt's length threshold: these four are one route, not an
+ * arbitrary half of a list. A message or a receipt arrives, it becomes a
+ * candidate, the candidate is reviewed, and only then does
+ * `ApproveTransactionUseCase` write anything (Law 1). `NotificationAccess`
+ * belongs with them because it is where that route is repaired when the system
+ * has stopped honouring the listener grant.
+ */
+private fun NavGraphBuilder.captureAndReviewDestinations(navController: NavHostController) {
+    composable<Destination.NotificationAccess> {
+        NotificationAccessRoute(
+            onDone = navController::popBackStack,
+            doneLabel = "Done",
+        )
+    }
+    composable<Destination.ScanReceipt> {
+        val viewModel: OcrCaptureViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        OcrCaptureScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onBack = navController::popBackStack,
+        )
+    }
+    composable<Destination.Inbox> {
+        val viewModel: InboxViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        InboxScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onReview = { pendingId -> navController.navigate(Destination.InboxReview(pendingId)) },
+        )
+    }
+    composable<Destination.InboxReview> {
+        val viewModel: ReviewViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        ReviewScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onDone = { navController.popBackStack() },
+            onBack = { navController.popBackStack() },
+        )
+    }
+}
+
 /**
  * The ones that hide the bottom bar.
  *
@@ -321,31 +377,6 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
     // system Settings page in another task, and a bottom bar under that is an
     // invitation to navigate away mid-grant and never come back to the
     // confirmation.
-    composable<Destination.NotificationAccess> {
-        NotificationAccessRoute(
-            onDone = navController::popBackStack,
-            doneLabel = "Done",
-        )
-    }
-    composable<Destination.Inbox> {
-        val viewModel: InboxViewModel = hiltViewModel()
-        val state by viewModel.state.collectAsStateWithLifecycle()
-        InboxScreen(
-            state = state,
-            onEvent = viewModel::onEvent,
-            onReview = { pendingId -> navController.navigate(Destination.InboxReview(pendingId)) },
-        )
-    }
-    composable<Destination.InboxReview> {
-        val viewModel: ReviewViewModel = hiltViewModel()
-        val state by viewModel.state.collectAsStateWithLifecycle()
-        ReviewScreen(
-            state = state,
-            onEvent = viewModel::onEvent,
-            onDone = { navController.popBackStack() },
-            onBack = { navController.popBackStack() },
-        )
-    }
 }
 
 /**
@@ -367,6 +398,7 @@ private fun CentreActionDial(
     onDismiss: () -> Unit,
     onManualEntry: () -> Unit,
     onInbox: () -> Unit,
+    onScanReceipt: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = LfTheme.colors.surfaceRaised) {
         Column(
@@ -379,6 +411,12 @@ private fun CentreActionDial(
                 ),
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         ) {
+            LfButton(
+                text = "Scan a receipt",
+                onClick = onScanReceipt,
+                style = LfButtonStyle.Outlined,
+                modifier = Modifier.fillMaxWidth(),
+            )
             LfButton(
                 text = "Manual entry",
                 onClick = onManualEntry,
@@ -450,6 +488,7 @@ private val Destination.label: String
         Destination.DeletedEntries -> "Deleted"
         Destination.Inbox -> "Inbox"
         is Destination.InboxReview -> "Review"
+        Destination.ScanReceipt -> "Scan"
         Destination.NotificationAccess -> "Notifications"
     }
 
