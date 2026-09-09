@@ -3,11 +3,15 @@ package com.ledgerflow.feature.ocr.recognition
 import android.graphics.Bitmap
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
+import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
@@ -30,9 +34,40 @@ public data class RecognizedElement(
     val top: Float,
     val right: Float,
     val bottom: Float,
+    /** Which script model read this run. Kept for [RecognizedPage.merge]. */
+    val script: RecognitionScript = RecognitionScript.LATIN,
 ) {
     /** Vertical middle — the value §5.3's line clustering bands on. */
     public val centerY: Float get() = (top + bottom) / 2f
+
+    internal val area: Float get() = (right - left) * (bottom - top)
+
+    /** Intersection over union with [other]. 0 when they do not overlap. */
+    internal fun overlapWith(other: RecognizedElement): Float {
+        val width = minOf(right, other.right) - maxOf(left, other.left)
+        val height = minOf(bottom, other.bottom) - maxOf(top, other.top)
+        if (width <= 0f || height <= 0f) return 0f
+        val intersection = width * height
+        val union = area + other.area - intersection
+        return if (union <= 0f) 0f else intersection / union
+    }
+}
+
+/**
+ * The script models this app bundles.
+ *
+ * **ML Kit's models are per SCRIPT, not per language**, which is the fact that
+ * decides what "add Hindi" can mean. Devanagari is one model covering Hindi,
+ * Marathi, Nepali, Sanskrit and Konkani; there is no `text-recognition-hindi`
+ * artifact and asking for one resolves to nothing.
+ *
+ * ML Kit ships exactly five: Latin, Chinese, Devanagari, Japanese, Korean.
+ * **Kannada and Malayalam have no model and cannot be added** — probed against
+ * dl.google.com, not assumed. See ADR-0021.
+ */
+public enum class RecognitionScript {
+    LATIN,
+    DEVANAGARI,
 }
 
 /** Everything the recognizer saw, in no particular order. */
@@ -40,6 +75,59 @@ public data class RecognizedPage(
     val elements: List<RecognizedElement>,
 ) {
     public val isEmpty: Boolean get() = elements.isEmpty()
+
+    public companion object {
+
+        /**
+         * How much two boxes must overlap to be treated as the same run.
+         *
+         * Both script models read Latin digits, so on an ordinary receipt they
+         * return the *same* boxes with the *same* text. 0.6 is deliberately
+         * loose: the two models place a box around the same glyphs a few pixels
+         * apart, and a strict threshold would keep both copies and double every
+         * amount on the page — which is the failure this whole function exists
+         * to prevent, and one that would look like a receipt costing twice what
+         * it did.
+         */
+        private const val SAME_RUN_OVERLAP = 0.6f
+
+        /**
+         * Combines two script passes over the same image into one page.
+         *
+         * **This is arithmetic over geometry, so it is unit-tested off-device**
+         * — which is the property [ReceiptTextRecognizer] returning
+         * [RecognizedElement] rather than ML Kit's own types exists to give.
+         *
+         * Three cases, and the middle one is the interesting one:
+         *
+         * - **No overlap** — the Devanagari pass read a run the Latin pass could
+         *   not see at all. Kept; this is the entire point of the second pass.
+         * - **Overlapping, same text** — both models read the same Latin digits.
+         *   One copy kept, [RecognitionScript.LATIN]'s, because that model is
+         *   the one specialised for it.
+         * - **Overlapping, different text** — the same region read two ways. The
+         *   *longer* reading wins, on the reasoning that a model which resolved
+         *   more glyphs in the same box saw more of what was there. It is a
+         *   heuristic and it is the one thing here a corpus should confirm.
+         */
+        public fun merge(primary: RecognizedPage, secondary: RecognizedPage): RecognizedPage {
+            val merged = primary.elements.toMutableList()
+
+            secondary.elements.forEach { candidate ->
+                val twinIndex = merged.indexOfFirst { existing ->
+                    existing.overlapWith(candidate) >= SAME_RUN_OVERLAP
+                }
+                when {
+                    twinIndex < 0 -> merged += candidate
+                    candidate.text.length > merged[twinIndex].text.length ->
+                        merged[twinIndex] = candidate
+                    // else: the existing reading is at least as complete. Keep it.
+                }
+            }
+
+            return RecognizedPage(merged)
+        }
+    }
 }
 
 /**
@@ -66,12 +154,14 @@ public data class RecognizedPage(
  * closed-source, ships native code, and drags in a telemetry uploader. One file
  * importing it is one file to review when it is upgraded.
  *
- * ## Latin only, for now
+ * ## Two scripts, one page
  *
- * `TextRecognizerOptions.DEFAULT_OPTIONS` is the bundled Latin model. Adding
- * Devanagari costs +0.61 MB (measured, ADR-0021), so the decision is not about
- * size: §12's corpus diversity floor asks for a Devanagari-bearing receipt, and
- * that fixture is what should decide it rather than a guess made in advance.
+ * Latin and Devanagari, on the owner's instruction. ML Kit's models are per
+ * **script**, so Devanagari is what "Hindi" means here and it covers Marathi,
+ * Nepali, Sanskrit and Konkani with the same artifact. **Kannada and Malayalam
+ * have no ML Kit model at all** — probed, not assumed — so they are not
+ * supported and no amount of configuration here changes that. ADR-0021 records
+ * what the alternatives would cost.
  */
 public interface ReceiptTextRecognizer {
 
@@ -103,13 +193,49 @@ public interface ReceiptTextRecognizer {
 @Singleton
 public class MlKitReceiptTextRecognizer @Inject constructor() : ReceiptTextRecognizer {
 
-    private val client by lazy {
+    private val latin by lazy {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     }
 
-    override suspend fun recognize(bitmap: Bitmap): RecognizedPage {
+    private val devanagari by lazy {
+        TextRecognition.getClient(DevanagariTextRecognizerOptions.Builder().build())
+    }
+
+    /**
+     * Both scripts, **concurrently**.
+     *
+     * §11 budgets a single receipt page at 2.5 s. Running the two passes in
+     * sequence would make the wall-clock cost their sum; `async` makes it
+     * roughly their max, since ML Kit's work is native and off this thread
+     * either way. That is the difference between a second script costing
+     * ~nothing and costing another whole budget.
+     *
+     * **§11's 2.5 s has never been measured**, and this is now the single thing
+     * most likely to breach it. The measurement belongs with the first real
+     * receipt, on the device, not here.
+     *
+     * If it does breach: the cheap fix is to make the Devanagari pass
+     * conditional rather than to drop it — run Latin, and only run Devanagari
+     * when the Latin pass resolved little. That is deliberately *not* done
+     * pre-emptively, because "resolved little" is a threshold and a threshold
+     * chosen without a corpus is a guess that will look like a measurement.
+     */
+    override suspend fun recognize(bitmap: Bitmap): RecognizedPage = coroutineScope {
         val image = InputImage.fromBitmap(bitmap, 0)
 
+        val latinPass = async { read(latin, image, RecognitionScript.LATIN) }
+        val devanagariPass = async { read(devanagari, image, RecognitionScript.DEVANAGARI) }
+
+        // Latin is `primary`: where both models read the same run, its reading
+        // is kept, because it is the model specialised for that script.
+        RecognizedPage.merge(latinPass.await(), devanagariPass.await())
+    }
+
+    private suspend fun read(
+        client: TextRecognizer,
+        image: InputImage,
+        script: RecognitionScript,
+    ): RecognizedPage {
         val text = suspendCancellableCoroutine { continuation ->
             client.process(image)
                 .addOnSuccessListener { result -> continuation.resume(result) }
@@ -131,6 +257,7 @@ public class MlKitReceiptTextRecognizer @Inject constructor() : ReceiptTextRecog
                     top = box.top.toFloat(),
                     right = box.right.toFloat(),
                     bottom = box.bottom.toFloat(),
+                    script = script,
                 )
             }
             .toList()

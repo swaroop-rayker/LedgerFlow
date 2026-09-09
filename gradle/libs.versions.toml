@@ -81,6 +81,12 @@ benchmark = "1.4.1"
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
+# Devanagari, which is the SCRIPT -- ML Kit models are per script, not per
+# language, so this one artifact covers Hindi, Marathi, Nepali, Sanskrit and
+# Konkani. There is no `text-recognition-hindi`; it was probed and does not
+# exist. +0.61 MB measured, because it reuses Latin's native pipeline and adds
+# only .tflite assets.
+mlkit-text-recognition-devanagari = { group = "com.google.mlkit", name = "text-recognition-devanagari", version.ref = "mlkitText" }
 
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }

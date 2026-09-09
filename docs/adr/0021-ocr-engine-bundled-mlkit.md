@@ -41,6 +41,57 @@ roughly 4×.
 adds only `.tflite` assets. §16 Q2 assumed ~2 MB; the real figure is 0.61 MB,
 which makes the language question a corpus question rather than a budget one.
 
+### Amendment, on the owner's instruction: which scripts are actually possible
+
+Asked at P4 to add "Devanagari + Kannada + Hindi + Malayalam". Probed directly
+against `dl.google.com` rather than assumed, at `16.0.1`:
+
+| requested | artifact | result |
+|---|---|---|
+| Devanagari | `text-recognition-devanagari` | **resolves** — added |
+| Hindi | `text-recognition-hindi` | **does not exist** |
+| Kannada | `text-recognition-kannada` | **does not exist** |
+| Malayalam | `text-recognition-malayalam` | **does not exist** |
+
+**ML Kit's models are per *script*, not per language.** That single fact
+resolves half the request and blocks the other half.
+
+*Hindi is written in Devanagari*, so the Devanagari model **is** Hindi support —
+and Marathi, Nepali, Sanskrit and Konkani along with it, from the same 0.61 MB.
+There is no separate artifact to add and nothing missing.
+
+**Kannada and Malayalam each have their own script, and ML Kit has no model for
+either.** The complete set it ships is Latin, Chinese, Devanagari, Japanese and
+Korean. This is a hard capability limit, not a configuration or budget one.
+
+What that leaves, none of which is taken here:
+
+- **A second engine for those two scripts.** Tesseract has `kan` and `mal`
+  traineddata. It would reopen this ADR, add a native library on top of the
+  10.55 MB already spent, and is materially worse on thermal receipts — which is
+  the substrate that matters. A two-engine pipeline also doubles the surface the
+  corpus has to characterise.
+- **A cloud OCR API.** Rejected outright: it violates Law 6's *substantive* half,
+  which this ADR was careful to leave intact. The permission is a side effect of
+  a dependency; sending a user's receipt to a server would be the thing itself.
+- **Wait for ML Kit.** Costs nothing and may never arrive.
+
+**How much this matters is an empirical question the corpus answers.** Indian
+retail receipts — including in Karnataka and Kerala — overwhelmingly print the
+item block and the amounts in Latin script and Latin digits; regional script,
+where it appears, is usually the shop name in the header. Since §12's gate
+measures **item** recall, the practical cost may be near zero. It may not be.
+`SPEC.md` §12's diversity floor should therefore gain a Kannada-bearing and a
+Malayalam-bearing receipt, not because they can be recognised but because they
+are what would show whether anything important is being lost.
+
+**Both scripts run on every page, concurrently.** Sequential passes would make
+the wall-clock cost their sum against §11's unmeasured 2.5 s budget; `async`
+makes it roughly their max. Both models read Latin digits, so their outputs are
+merged with an overlap rule (`RecognizedPage.merge`) — without it every amount
+on an ordinary receipt would appear twice, which reads as a bill costing double
+and is unit-tested off-device precisely because it is that consequential.
+
 ### The finding that was not being looked for
 
 Bundled ML Kit **merges `android.permission.INTERNET`** into the release

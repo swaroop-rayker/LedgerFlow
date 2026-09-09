@@ -20,10 +20,17 @@ dependencies {
     // what keeps "recognition is local" a build-enforced property rather than a
     // claim about a dependency we do not control.
     //
-    // Devanagari is deliberately NOT here yet. It is +0.61 MB, so the decision
-    // is not a budget one -- §12's corpus diversity floor requires a
-    // Devanagari-bearing receipt, and that fixture is what should trigger it.
     implementation(libs.mlkit.text.recognition)
+
+    // Devanagari, on the owner's instruction. ML Kit's models are per SCRIPT,
+    // not per language, so this single artifact is what "Hindi" means here --
+    // and it covers Marathi, Nepali, Sanskrit and Konkani at the same time.
+    //
+    // ML Kit ships exactly five script models: Latin, Chinese, Devanagari,
+    // Japanese and Korean. **Kannada and Malayalam do not exist**, probed
+    // directly against dl.google.com rather than assumed. Neither does
+    // `text-recognition-hindi`, for the reason above. See ADR-0021's amendment.
+    implementation(libs.mlkit.text.recognition.devanagari)
 
     // ── Camera (SPEC.md §5.3) ────────────────────────────────────────────────
     // camera-core + camera2 is the capture stack; camera-lifecycle binds it to

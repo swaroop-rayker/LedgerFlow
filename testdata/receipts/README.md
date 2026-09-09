@@ -140,8 +140,14 @@ A corpus of thirty receipts from one supermarket is one receipt tested thirty
 times. Before the gate can be called met it must span: thermal POS (including a
 faded one), an A4 GST invoice, a handwritten kirana slip, a curled or crumpled
 sheet, poor light, `₹` and `Rs.` and `INR` as currency markers, **at least one
-Devanagari-bearing bill** (which is what decides §16 Q2 on evidence rather than
-guesswork), a long roll with 40+ lines, and one PDF.
+Devanagari-bearing bill**, a long roll with 40+ lines, and one PDF.
+
+Also **one Kannada and one Malayalam** receipt. ML Kit has no model for either
+script (ADR-0021), so those two are not there to be recognised — they are there
+to measure what that costs. Indian receipts print items and amounts in Latin
+almost universally, so the honest expectation is that item recall on them is no
+worse than the rest of the corpus. If it is worse, that is the evidence a second
+engine would need, and without them nobody would ever have it.
 
 Plus negatives: a photograph that is **not** a receipt must extract nothing
 rather than hallucinate a bill — the image analogue of the SMS corpus's
