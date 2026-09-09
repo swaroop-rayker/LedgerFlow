@@ -4,7 +4,9 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.ledgerflow.core.database.dao.AppMetaDao
+import com.ledgerflow.core.database.dao.AttachmentDao
 import com.ledgerflow.core.database.dao.BudgetDao
+import com.ledgerflow.core.database.dao.ItemCategoryMemoryDao
 import com.ledgerflow.core.database.dao.CategoryDao
 import com.ledgerflow.core.database.dao.CategoryGroupDao
 import com.ledgerflow.core.database.dao.DailyRollupDao
@@ -21,7 +23,9 @@ import com.ledgerflow.core.database.dao.PendingTransactionDao
 import com.ledgerflow.core.database.dao.SenderAllowlistDao
 import com.ledgerflow.core.database.dao.SmsRawDao
 import com.ledgerflow.core.database.entity.AppMetaEntity
+import com.ledgerflow.core.database.entity.AttachmentEntity
 import com.ledgerflow.core.database.entity.BudgetEntity
+import com.ledgerflow.core.database.entity.ItemCategoryMemoryEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.database.entity.CategoryGroupEntity
 import com.ledgerflow.core.database.entity.CategoryGroupMemberEntity
@@ -76,6 +80,9 @@ import com.ledgerflow.core.database.entity.SmsRawEntity
         // v9 (SPEC.md §5.6, §5.7, §6.1) — analytics and budgets.
         BudgetEntity::class,
         DailyRollupEntity::class,
+        // v11 (SPEC.md §5.3, §6.1; ADR-0023) — OCR's two tables.
+        AttachmentEntity::class,
+        ItemCategoryMemoryEntity::class,
     ],
     views = [
         DebitEntryView::class,
@@ -116,6 +123,11 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun budgetDao(): BudgetDao
 
     public abstract fun dailyRollupDao(): DailyRollupDao
+
+    // v11 — OCR (SPEC.md §5.3). Declared with the schema; first written at P4.
+    public abstract fun attachmentDao(): AttachmentDao
+
+    public abstract fun itemCategoryMemoryDao(): ItemCategoryMemoryDao
 
     public companion object {
         /**
@@ -165,8 +177,16 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * `app_meta` so the state dies with the budget. Additive; every existing
          * row defaults to 0, which reads as "nothing announced yet" and is the
          * honest value for a budget that predates alerting. See `MIGRATION_9_10`.
+         *
+         * v11 adds `attachment` and `item_category_memory` — P4's two tables
+         * (ADR-0023, SPEC.md §5.3). Purely additive: two `CREATE TABLE`s and
+         * three `CREATE INDEX`es, nothing existing read or rewritten.
+         * `pending_line_item` is deliberately **not** here — ADR-0022 declines
+         * to build it, because v8's `review_draft_json` already carries itemised
+         * lines and OCR's extraction rides the versioned `extracted_json`. See
+         * `MIGRATION_10_11`.
          */
-        public const val VERSION: Int = 10
+        public const val VERSION: Int = 11
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

@@ -11,15 +11,18 @@ import com.ledgerflow.core.crypto.UnlockResult
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.lfbk.LfbkFailure
+import com.ledgerflow.core.database.backup.BackupPayload
 import com.ledgerflow.core.database.backup.BackupResult
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
 import com.ledgerflow.core.database.backup.RestoreResult
 import com.ledgerflow.core.database.entity.AppMetaEntity
+import com.ledgerflow.core.database.entity.AttachmentEntity
 import com.ledgerflow.core.database.entity.BudgetEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.database.entity.CategoryGroupEntity
 import com.ledgerflow.core.database.entity.CategoryGroupMemberEntity
 import com.ledgerflow.core.database.entity.DraftEntryEntity
+import com.ledgerflow.core.database.entity.ItemCategoryMemoryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
@@ -345,6 +348,47 @@ class BackupRestoreRoundTripTest {
                 ),
             ),
         )
+        // v11 (ADR-0023). Metadata only -- the image bytes are not in a .lfbk,
+        // so what has to survive here is the row that says which file belongs
+        // to which entry and what it should hash to.
+        //
+        // Two rows because they differ in the column that matters: one attached
+        // to an entry, one not. An attachment exists before its entry does --
+        // OCR writes the image, approval creates the entry -- so a restore that
+        // dropped the unattached row would lose exactly the receipt the user
+        // had captured but not yet reviewed.
+        database.attachmentDao().insertAll(
+            listOf(
+                AttachmentEntity(
+                    id = "att-linked", entryId = "entry-debit",
+                    filePath = "att-linked.jpg", mime = "image/jpeg",
+                    sha256 = "a1b2c3", bytes = 248_120L, createdAt = 1_759_000_000_100L,
+                ),
+                AttachmentEntity(
+                    id = "att-pending", entryId = null,
+                    filePath = "att-pending.jpg", mime = "image/jpeg",
+                    sha256 = "d4e5f6", bytes = 251_900L, createdAt = 1_759_000_000_200L,
+                ),
+            ),
+        )
+        // The `''` sentinel row is deliberate: it is the one whose restore
+        // would break silently if the mapper "helpfully" turned it back into a
+        // null, since SQLite then treats the key as distinct and the memory
+        // stops merging.
+        database.itemCategoryMemoryDao().insertAll(
+            listOf(
+                ItemCategoryMemoryEntity(
+                    merchantId = "merchant-kirana", normalizedItem = "rice 5kg",
+                    categoryId = "cat-groceries", subcategoryId = "cat-rice",
+                    hitCount = 4,
+                ),
+                ItemCategoryMemoryEntity(
+                    merchantId = "", normalizedItem = "milk 500ml",
+                    categoryId = "cat-groceries", subcategoryId = null,
+                    hitCount = 1,
+                ),
+            ),
+        )
     }
 
     /** Includes foreign-currency fields so the FX columns are covered too. */
@@ -387,6 +431,8 @@ class BackupRestoreRoundTripTest {
         val parserRules: List<ParserRuleEntity>,
         val pendingTransactions: List<PendingTransactionEntity>,
         val budgets: List<BudgetEntity>,
+        val attachments: List<AttachmentEntity>,
+        val itemCategoryMemory: List<ItemCategoryMemoryEntity>,
     ) {
         /**
          * Every table, as lists, for the vacuity guard below.
@@ -425,6 +471,8 @@ class BackupRestoreRoundTripTest {
             parserRules = db.parserRuleDao().all(),
             pendingTransactions = db.pendingTransactionDao().all(),
             budgets = db.budgetDao().all(),
+            attachments = db.attachmentDao().all(),
+            itemCategoryMemory = db.itemCategoryMemoryDao().all(),
         )
     }
 
@@ -440,6 +488,29 @@ class BackupRestoreRoundTripTest {
      * fix -- a guard whose green means nothing -- and it is worth one extra
      * assertion to make it impossible rather than merely unlikely.
      */
+    /**
+     * **[Snapshot] cannot lag the payload.**
+     *
+     * [tables] reflects over [Snapshot], so a table added to the schema and to
+     * `BackupPayload` but forgotten here is simply not compared -- the
+     * round-trip below stays green while saying nothing about it, and
+     * [seedEveryTable_leavesNoTableEmpty] cannot see it either because it also
+     * only walks [Snapshot]. That is the defect this file's own KDoc warns
+     * about, one enumeration further out, and v11 walked straight into it: the
+     * two new tables were invisible here until this assertion was added.
+     *
+     * `+ 1` because [Snapshot] splits `ledger_entry` into `debits` and
+     * `credits` -- two lists, one table, per ADR-0002's read views.
+     */
+    @Test
+    fun snapshotHasOneListPerPayloadTable() {
+        val payloadTables = BackupPayload::class.java.declaredFields
+            .count { List::class.java.isAssignableFrom(it.type) }
+        val snapshotTables = snapshot(database).tables().size
+
+        assertThat(snapshotTables).isEqualTo(payloadTables + 1)
+    }
+
     @Test
     fun seedEveryTable_leavesNoTableEmpty() = runBlocking {
         seedEveryTable()

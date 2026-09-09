@@ -156,6 +156,11 @@ public class DatabaseBackupManager(
      * `LedgerSingleWriterTest` guards -- that permit is about
      * [BackupPayload]-driven *inserts*, which stay confined to [restore].
      */
+    // One line per table in a single BackupPayload(...) expression, so this
+    // grows by one line whenever the schema does. Breaking it into helpers
+    // would hide which tables are covered behind a call graph -- and "which
+    // tables are covered" is the question Q13 was about.
+    @Suppress("LongMethod")
     public suspend fun export(): BackupPayload = BackupPayload(
         schemaVersion = LedgerFlowDatabase.VERSION,
         createdAt = System.currentTimeMillis(),
@@ -227,6 +232,12 @@ public class DatabaseBackupManager(
         // the feature ships. `daily_rollup` is absent on purpose -- derived,
         // and rebuilt on restore (ADR-0006).
         budgets = database.budgetDao().all().map(::toBudgetRow),
+        // Schema v11 (ADR-0023). Metadata only -- the image bytes travel beside
+        // the .lfbk, not inside it, so what is captured here is the row that
+        // says which file belongs to which entry and what it should hash to.
+        attachments = database.attachmentDao().all().map(::toAttachmentRow),
+        itemCategoryMemory = database.itemCategoryMemoryDao().all()
+            .map(::toItemCategoryMemoryRow),
     )
 
     /**
@@ -313,6 +324,13 @@ public class DatabaseBackupManager(
         // QUARTERLY is a wrong number on the Dashboard with nothing to trace
         // it to, which is worse than a budget the user notices is missing.
         database.budgetDao().insertAll(payload.budgets.mapNotNull(::toBudget))
+        // v11. After `ledger_entry`, because `attachment.entry_id` is a real
+        // foreign key and this restore runs with `PRAGMA foreign_keys = ON`.
+        // A row whose entry is missing would abort the transaction rather than
+        // land orphaned, which is the behaviour wanted.
+        database.attachmentDao().insertAll(payload.attachments.map(::toAttachment))
+        database.itemCategoryMemoryDao()
+            .insertAll(payload.itemCategoryMemory.map(::toItemCategoryMemory))
         // `daily_rollup` is derived and deliberately absent from the payload
         // (ADR-0006), so it is rebuilt here rather than restored. A restored
         // install must open onto correct analytics, not onto empty charts

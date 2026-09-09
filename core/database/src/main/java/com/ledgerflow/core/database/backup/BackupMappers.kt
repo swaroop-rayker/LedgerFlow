@@ -1,7 +1,15 @@
+// One mapper pair per table, and there are twenty tables. Splitting this
+// file to satisfy a count would put a table's two directions in two places,
+// which is the thing most likely to let them drift apart -- exactly the
+// defect ExportCoversEveryTableTest exists to catch.
+@file:Suppress("TooManyFunctions")
+
 package com.ledgerflow.core.database.backup
 
+import com.ledgerflow.core.database.entity.AttachmentEntity
 import com.ledgerflow.core.database.entity.BudgetEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
+import com.ledgerflow.core.database.entity.ItemCategoryMemoryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
@@ -259,4 +267,53 @@ internal fun toBudgetRow(row: BudgetEntity) = BudgetRow(
     deletedAt = row.deletedAt,
     lastAlertedThreshold = row.lastAlertedThreshold,
     alertPeriodStart = row.alertPeriodStart,
+)
+
+// ── Schema v11 — OCR (SPEC.md §5.3, ADR-0023) ────────────────────────────────
+
+/**
+ * Metadata only. The image bytes are not in the payload — see [AttachmentRow].
+ */
+internal fun toAttachmentRow(row: AttachmentEntity) = AttachmentRow(
+    id = row.id,
+    entryId = row.entryId,
+    filePath = row.filePath,
+    mime = row.mime,
+    sha256 = row.sha256,
+    bytes = row.bytes,
+    createdAt = row.createdAt,
+)
+
+internal fun toAttachment(row: AttachmentRow) = AttachmentEntity(
+    id = row.id,
+    entryId = row.entryId,
+    filePath = row.filePath,
+    mime = row.mime,
+    sha256 = row.sha256,
+    bytes = row.bytes,
+    createdAt = row.createdAt,
+)
+
+internal fun toItemCategoryMemoryRow(row: ItemCategoryMemoryEntity) = ItemCategoryMemoryRow(
+    merchantId = row.merchantId,
+    normalizedItem = row.normalizedItem,
+    categoryId = row.categoryId,
+    subcategoryId = row.subcategoryId,
+    hitCount = row.hitCount,
+)
+
+/**
+ * `merchantId` is carried through verbatim, `''` included.
+ *
+ * Mapping the sentinel back to null on restore would produce rows the
+ * suggestion lookup can never match again — SQLite treats NULLs as distinct
+ * inside the composite key, so they would also stop merging. The sentinel is
+ * the value, not a rendering of one.
+ */
+internal fun toItemCategoryMemory(row: ItemCategoryMemoryRow) = ItemCategoryMemoryEntity(
+    merchantId = row.merchantId,
+    normalizedItem = row.normalizedItem,
+    categoryId = row.categoryId,
+    subcategoryId = row.subcategoryId,
+    hitCount = row.hitCount,
 )

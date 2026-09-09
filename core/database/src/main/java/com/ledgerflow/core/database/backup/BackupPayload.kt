@@ -74,6 +74,28 @@ public data class BackupPayload(
     // Defaulted to empty for the reason the v2 and v6 blocks above are: a
     // `.lfbk` a user already holds must still parse after they update.
     val budgets: List<BudgetRow> = emptyList(),
+
+    // -- Schema v11 -- OCR (SPEC.md 5.3, ADR-0023) ----------------------------
+    //
+    // `attachment` carries METADATA ONLY. The image bytes are not in a .lfbk
+    // and never will be: the container is one GCM blob over this JSON, and
+    // 5.9's nightly backup verifies by decrypting and re-parsing what it wrote,
+    // so images inside it would mean rewriting and re-verifying the whole set
+    // every night for data that did not change. They travel instead as
+    // individually phrase-sealed files BESIDE the .lfbk in the user's SAF
+    // backup tree (ADR-0023), written once each.
+    //
+    // The consequence is a restore state the app must handle rather than hide:
+    // rows present, files absent, when someone moves the .lfbk on its own. It
+    // reports the count it could not find.
+    val attachments: List<AttachmentRow> = emptyList(),
+
+    // Learned suggestions. Rebuildable in principle -- every row came from a
+    // filing that is itself in `line_item` -- but not rebuilt by anything, and
+    // it is the difference between a restored install that already knows the
+    // user's shopping and one that has to be retaught. Cheap: one short row per
+    // distinct (merchant, item).
+    val itemCategoryMemory: List<ItemCategoryMemoryRow> = emptyList(),
 ) {
     /** Total rows, for the post-restore equality assertion and diagnostics. */
     public val rowCount: Int
@@ -82,8 +104,50 @@ public data class BackupPayload(
             drafts.size + merchantAliases.size + categoryGroups.size +
             categoryGroupMembers.size + smsRaw.size + notificationsRaw.size +
             packageAllowlist.size + senderAllowlist.size + parserRules.size +
-            pendingTransactions.size + budgets.size
+            pendingTransactions.size + budgets.size +
+            attachments.size + itemCategoryMemory.size
 }
+
+/**
+ * Receipt-image metadata (SPEC.md §5.3, §6.1; ADR-0023). Schema v11.
+ *
+ * **[filePath] is relative to `filesDir/attachments/`.** That is what makes
+ * this row portable at all: an absolute path would resolve on the device that
+ * wrote it and nowhere else, so a restore would return rows pointing into
+ * another install's private directory.
+ *
+ * [sha256] is over the plaintext and [bytes] is the plaintext length; the
+ * sealed file on disk is larger by a nonce and a tag. Both describe the image,
+ * not its container, so they still match after a restore re-seals it under a
+ * different key.
+ */
+@Serializable
+public data class AttachmentRow(
+    val id: String,
+    val entryId: String?,
+    val filePath: String,
+    val mime: String,
+    val sha256: String,
+    val bytes: Long,
+    val createdAt: Long,
+)
+
+/**
+ * One learned `(merchant, item) -> category` suggestion (SPEC.md §5.3). v11.
+ *
+ * [merchantId] is `''` for "no merchant", never null — the sentinel rule
+ * `daily_rollup` uses, because SQLite treats NULLs as distinct inside a
+ * composite key. A restore that mapped it back to null would produce rows the
+ * suggestion lookup can never match again.
+ */
+@Serializable
+public data class ItemCategoryMemoryRow(
+    val merchantId: String,
+    val normalizedItem: String,
+    val categoryId: String,
+    val subcategoryId: String?,
+    val hitCount: Int,
+)
 
 @Serializable
 public data class AppMetaRow(val key: String, val value: String)

@@ -966,9 +966,21 @@ merchant(id TEXT PK, canonical_name TEXT NOT NULL, normalized_key TEXT NOT NULL 
 merchant_alias(id TEXT PK, merchant_id TEXT NOT NULL, alias TEXT NOT NULL,
                normalized_alias TEXT NOT NULL, UNIQUE(normalized_alias))
 
-item_category_memory(merchant_id TEXT, normalized_item TEXT, category_id TEXT,
+-- Lands at P4 in schema v11 -- §5.3's "category memory".
+item_category_memory(merchant_id TEXT NOT NULL,   -- '' = no merchant. Room needs a
+                                                  -- non-null PK column, and SQLite
+                                                  -- treats NULLs as distinct inside a
+                                                  -- composite key, so a nullable one
+                                                  -- would never accumulate a 2nd hit.
+                                                  -- daily_rollup's sentinel rule (§6.1.1).
+                     normalized_item TEXT NOT NULL, category_id TEXT NOT NULL,
                      subcategory_id TEXT, hit_count INTEGER NOT NULL DEFAULT 1,
                      PRIMARY KEY(merchant_id, normalized_item))
+INDEX(category_id)
+-- No foreign keys, like daily_rollup: merchant_id carries a sentinel that
+-- matches no merchant.id, and a hard-deleted category (ADR-0016) would cascade
+-- away suggestions that are cheap to keep. A dangling id resolves to nothing,
+-- which is the correct outcome.
 
 payment_method(id TEXT PK, type TEXT NOT NULL, label TEXT NOT NULL,
                issuer TEXT NULL, last4 TEXT NULL, color_argb INTEGER,

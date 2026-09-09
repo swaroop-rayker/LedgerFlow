@@ -29,6 +29,10 @@ internal data class CsvDocument(
  * story, the other is what a human reads. The decimal is assembled by integer
  * arithmetic (Law 3) -- see [CsvWriter.decimal].
  */
+// One document builder per table, twenty tables. Each one states that
+// table's CSV shape in a single place, which is what makes a column
+// addition a one-file change and reviewable as one.
+@Suppress("TooManyFunctions")
 internal object CsvTables {
 
     /**
@@ -62,6 +66,69 @@ internal object CsvTables {
         parserRules(payload),
         pendingTransactions(payload),
         budgets(payload),
+        attachments(payload),
+        itemCategoryMemory(payload),
+    )
+
+    /**
+     * Receipt-image metadata (SPEC.md §5.3; ADR-0023). Schema v11.
+     *
+     * **Metadata only, and the CSV is where that is most visible.** The images
+     * are not in this zip and not in the `.lfbk`; they travel beside the
+     * backup, phrase-sealed, one file each. `file_path` is relative to
+     * `filesDir/attachments/`, so a reader matching this CSV against the backup
+     * folder joins on the file name and not on a path that means anything on
+     * their machine.
+     *
+     * `bytes` is the plaintext length, so it will not match the size of the
+     * sealed file on disk — that one is larger by a nonce and a tag.
+     */
+    private fun attachments(payload: BackupPayload) = CsvDocument(
+        fileName = "attachment.csv",
+        header = listOf(
+            "id", "entry_id", "file_path", "mime", "sha256", "bytes",
+            "created_at", "created_at_iso",
+        ),
+        rows = payload.attachments.map { row ->
+            listOf(
+                row.id,
+                row.entryId,
+                row.filePath,
+                row.mime,
+                row.sha256,
+                row.bytes.toString(),
+                row.createdAt.toString(),
+                CsvWriter.timestamp(row.createdAt),
+            )
+        },
+    )
+
+    /**
+     * Learned category suggestions (SPEC.md §5.3). Schema v11.
+     *
+     * `merchant_id` is written verbatim, `''` included — it means "no
+     * merchant", and an empty field here is that value rather than a null.
+     * ADR-0017 keeps null and empty distinguishable in this export precisely so
+     * the difference survives, and this is the column where it carries meaning.
+     *
+     * `hit_count` is a count, not money: no `_minor` twin, no decimal beside
+     * it.
+     */
+    private fun itemCategoryMemory(payload: BackupPayload) = CsvDocument(
+        fileName = "item_category_memory.csv",
+        header = listOf(
+            "merchant_id", "normalized_item", "category_id", "subcategory_id",
+            "hit_count",
+        ),
+        rows = payload.itemCategoryMemory.map { row ->
+            listOf(
+                row.merchantId,
+                row.normalizedItem,
+                row.categoryId,
+                row.subcategoryId,
+                row.hitCount.toString(),
+            )
+        },
     )
 
     private fun appMeta(payload: BackupPayload) = CsvDocument(
