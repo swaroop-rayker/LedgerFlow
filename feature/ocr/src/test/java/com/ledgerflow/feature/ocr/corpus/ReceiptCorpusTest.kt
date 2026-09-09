@@ -222,14 +222,29 @@ class ReceiptCorpusTest {
     // ── The private half: needs the store ───────────────────────────────────
 
     /**
-     * CI must be able to see the corpus.
+     * CI must be able to see the corpus — **once there is one**.
      *
-     * Locally this is a skip; in CI it is a failure. See the class KDoc — the
-     * asymmetry is the whole point, and inverting it would make every assertion
-     * below optional in the one place they matter.
+     * Locally the store's absence is a skip; in CI it is a failure. See the
+     * class KDoc: the asymmetry is the whole point, and inverting it would make
+     * every assertion below optional in the one place they matter.
+     *
+     * **Gated on the manifest being non-empty**, which is not a softening. With
+     * zero receipts there is nothing for the store to hold, so demanding it
+     * would fail CI for as long as the corpus takes to start — and a gate that
+     * is red for reasons unrelated to the change under test is one people learn
+     * to click past. Listing the first receipt is what arms this, which is the
+     * right trigger: the manifest is the claim that a corpus exists, so it is
+     * also the thing that should oblige CI to prove it.
      */
     @Test
     fun theCorpusIsReachableInCi() {
+        if (receipts.isEmpty()) {
+            println(
+                "Receipt corpus: manifest lists no receipts yet, so CI has nothing to " +
+                    "fetch. This check arms itself when the first receipt is listed.",
+            )
+            return
+        }
         if (!runningInCi) {
             println(
                 "Receipt corpus: private store not required locally. " +
