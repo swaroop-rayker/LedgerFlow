@@ -76,13 +76,33 @@ public fun LfChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(spacing.sm),
     ) {
+        // BUG9. `CLAUDE.md` §5's rule is stated for "buttons/chips" and only
+        // `LfButton` implemented it, so chips wrapped mid-word for two phases --
+        // live in the budget period selector, the analytics range chips and the
+        // Recovery screen's twenty-four words. Found while mocking §5.3's review
+        // row, where a category chip beside a quantity rendered "Groceries" as
+        // "Gr / oc / eri / es" at font scale 2.0.
+        //
+        // No ellipsis, deliberately, matching `LfButton`: a clipped label is not
+        // an improvement on a wrapped one. `softWrap = false` makes the chip
+        // measure at its natural width, so a container too narrow for it must
+        // wrap the whole CONTROL -- which is what `LfActionRow`'s `FlowRow`
+        // exists to do -- rather than breaking the word.
         leading?.let {
-            Text(text = it, style = LfTheme.typography.label, color = colors.textTertiary)
+            Text(
+                text = it,
+                style = LfTheme.typography.label,
+                color = colors.textTertiary,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
         Text(
             text = label,
             style = LfTheme.typography.bodyM,
             color = palette.content,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

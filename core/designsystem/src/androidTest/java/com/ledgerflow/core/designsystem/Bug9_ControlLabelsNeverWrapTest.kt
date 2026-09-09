@@ -13,6 +13,8 @@ import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfChip
+import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import org.junit.Rule
 import org.junit.Test
@@ -157,4 +159,88 @@ class Bug9_ControlLabelsNeverWrapTest {
         /** Roughly a phone-width card's inner width, where the bug appeared. */
         private const val NARROW_CARD = 280
     }
+
+    // ── Chips (BUG9's unfixed half) ─────────────────────────────────────────
+
+    /**
+     * A chip label in a container too narrow for it stays one line.
+     *
+     * The exact shape found while mocking the receipt review row: a category
+     * chip sharing a row with a quantity, at font scale 2.0, on a narrow
+     * screen. Before `LfChip` carried `softWrap = false` this rendered
+     * "Groceries" over four lines.
+     */
+    @Test
+    fun aChipLabelInANarrowContainerStaysOnOneLine() {
+        composeRule.setContent {
+            LfTheme {
+                Box(modifier = Modifier.width(CHIP_SQUEEZE.dp)) {
+                    LfChip(label = "Groceries", style = LfChipStyle.Assist)
+                }
+            }
+        }
+
+        val layout = layoutOf("Groceries")
+
+        assertThat(layout.lineCount).isEqualTo(1)
+    }
+
+    /**
+     * At its natural width a chip label is neither wrapped nor clipped.
+     *
+     * **The companion to the test above, and the pair has to be read together.**
+     * Squeezed, the chip measures at its natural width and *overflows its
+     * container* — that is what `softWrap = false` buys, and it is the
+     * container's job (an `LfActionRow`'s `FlowRow`) to move the whole control
+     * rather than let the word break. So a squeezed chip legitimately reports
+     * fewer visible characters, and asserting otherwise would be asserting that
+     * the fix had not worked.
+     *
+     * An earlier revision of this test did exactly that and failed against a
+     * correct build — the same trap the class KDoc records for
+     * `hasVisualOverflow`. Character survival is a question about natural width,
+     * and this is where it is asked.
+     */
+    @Test
+    fun aChipAtItsNaturalWidthIsNeitherWrappedNorClipped() {
+        composeRule.setContent {
+            LfTheme {
+                Box(modifier = Modifier.width(CHIP_ROOMY.dp)) {
+                    LfChip(label = "Uncategorised", style = LfChipStyle.Warning)
+                }
+            }
+        }
+
+        val layout = layoutOf("Uncategorised")
+
+        assertThat(layout.lineCount).isEqualTo(1)
+        assertThat(layout.getLineEnd(0, visibleEnd = true)).isEqualTo("Uncategorised".length)
+    }
+
+    /**
+     * A selectable chip behaves the same.
+     *
+     * The period chips in the budget editor take an `onClick`, and that branch
+     * of `LfChip` is a different call path — ADR-0021's neighbour, §16 Q21,
+     * already found one property that held for label chips and not for
+     * selectable ones.
+     */
+    @Test
+    fun aSelectableChipLabelAlsoStaysOnOneLine() {
+        composeRule.setContent {
+            LfTheme {
+                Box(modifier = Modifier.width(CHIP_SQUEEZE.dp)) {
+                    LfChip(label = "Quarterly", style = LfChipStyle.Selected, onClick = {})
+                }
+            }
+        }
+
+        assertThat(layoutOf("Quarterly").lineCount).isEqualTo(1)
+    }
 }
+
+/** Narrow enough that a chip label must either wrap, clip, or overflow. */
+private const val CHIP_SQUEEZE = 72
+
+/** Wide enough for any label here to sit at its natural width. */
+private const val CHIP_ROOMY = 320
