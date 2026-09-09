@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -208,7 +209,27 @@ private fun CameraPane(
         surfaceRequest?.let { request ->
             CameraXViewfinder(
                 surfaceRequest = request,
-                modifier = Modifier.fillMaxWidth(),
+                // **A DEFINITE height, and that is the whole point.**
+                //
+                // This screen is a Column with verticalScroll, so a child is
+                // measured with maxHeight = Infinity. The viewfinder derives its
+                // scale transform from the size it was measured at, and against
+                // an unbounded dimension that transform comes out degenerate --
+                // it magnifies a sliver of the texture across the whole view, so
+                // the preview reads as one flat colour that changes with what
+                // the camera points at. Reported exactly that way: brown near a
+                // table, grey face down, "like a colour sensor, not a camera".
+                //
+                // aspectRatio derives the height from the width, so the
+                // measurement is bounded whatever the parent does. 3:4 portrait
+                // because a receipt is tall.
+                //
+                // The stream was never the problem. Logcat throughout:
+                // `Preview: StreamSpec{resolution=1440x1080}` and
+                // `Camera3-Device: Creating new stream 0: 1440 x 1080`.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(RECEIPT_PREVIEW_ASPECT),
                 // EMBEDDED (TextureView), not the default EXTERNAL (SurfaceView).
                 //
                 // **This screen scrolls, and a SurfaceView inside a scrolling
@@ -343,6 +364,9 @@ private fun ImportRow(enabled: Boolean, onGallery: () -> Unit, onDocument: () ->
         }
     }
 }
+
+/** Portrait, because a receipt is taller than it is wide. */
+private const val RECEIPT_PREVIEW_ASPECT = 3f / 4f
 
 /** Images and PDFs. §5.3 names both as first-class inputs. */
 private val IMPORT_MIME_TYPES = arrayOf("image/*", "application/pdf")
