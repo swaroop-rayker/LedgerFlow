@@ -9,9 +9,14 @@ to find is now the one between **B and C** — a bill is read and nothing is yet
 written down.
 
 **Status**
-- Branch `s12-testing-matrix-font-cta`, 97 commits ahead of `main`, no PR, **nothing pushed**
+- Merged to `main` from `s12-testing-matrix-font-cta` (fast-forward, history
+  kept). **No commit count here on purpose** — the previous revision of this
+  line carried one and it was wrong within the hour.
 - Schema **v11** (`attachment`, `item_category_memory` — ADR-0023, ADR-0022)
-- `preMergeCheck` green on both flavours
+- `preMergeCheck` green on both flavours; the instrumented suite green on the
+  physical device — 93 tests, the full v1→v11 migration chain,
+  `PreMigrationGuard`, and `BackupRestoreRoundTripTest` including
+  `backup_wipe_restoreFromPhraseAlone_reproducesEveryRowExactly`
 - Receipt corpus: machinery in place, **zero fixtures**
 - **Sections A and B are built; step 18 is fixed. C is next** (steps 13–15),
   plus the two loose ends in E.
