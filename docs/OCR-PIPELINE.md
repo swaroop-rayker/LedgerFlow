@@ -20,10 +20,11 @@ created.
   `backup_wipe_restoreFromPhraseAlone_reproducesEveryRowExactly`) and
   `:core:data` 307 tests (the attachment store and the OCR dedupe among them)
 - Receipt corpus: machinery in place, **zero fixtures**
-- **Sections A, B and C are built; step 18 is fixed.** A receipt now reaches
-  the Inbox as a candidate. What is left is E's two loose ends (link the
-  attachment to the approved entry; record the filing into
-  `item_category_memory`) and the cross-cutting items below.
+- **A receipt reaches the ledger.** Sections A–E are built apart from step 27
+  (category memory). Verified end to end on the device: scan → extract →
+  seal → candidate → review shows the lines → approve.
+- Settings has ADR-0023's "Receipts — N images, M MB" with a `Warning`-gated
+  bulk delete, which is currently the only way to remove an image.
 
 ---
 
@@ -258,7 +259,7 @@ to one and the total is kept.
 
 ---
 
-## E. Approval — built; two loose ends
+## E. Approval — built; **step 27 is the only one left**
 
 | # | Step | Status |
 |---|---|---|
@@ -266,20 +267,30 @@ to one and the total is kept.
 | 23 | `ApprovalRequest` already carries `lineItems: List<NewLineItem>` | **built** |
 | 24 | Remainder written as `UNALLOCATED` so the parts always sum to the whole | **built** |
 | 25 | Writes `ledger_entry` + `line_item`, updates rollups at line grain (ADR-0018) | **built** |
-| 26 | **Loose end:** set `attachment.entry_id` on the newly created entry | |
-| 27 | **Loose end:** record the filing into `item_category_memory` so the next bill suggests it | |
+| 26 | Sets `attachment.entry_id` on the newly created entry | **built** — in `markApproved`'s transaction |
+| 27 | Records the filing into `item_category_memory` so the next bill suggests it | **not built** |
 
----
+Step 26's link is attempted **unconditionally** and that is not a source
+check: `raw_ref_id` holds an attachment id for a receipt and a raw row's id
+for a message, the `UPDATE` matches by primary key, and for a message it
+affects nothing. `approvingAMessageCandidate_linksNothing` pins that.
+
+Step 27 is a suggestion mechanism, not a filing one — `item_category_memory`
+exists (v11) with its DAO's upsert already written, and nothing calls
+`record`. It is the last thing between a second bill from the same shop and
+categories pre-filled from the first.
 
 ## Cross-cutting, still open
 
-- **Attachment images beside the `.lfbk`** (ADR-0023). Metadata already travels
-  in the backup; the phrase-sealed image file does not. Restore must report the
-  count it could not find.
-- **Purge must unlink attachment files.** `ON DELETE CASCADE` takes the row and
-  leaves the bytes; nothing else enumerates that directory, so a missed file is
-  leaked permanently. Documented as an obligation on `AttachmentDao`, not yet
-  honoured by `PurgeDeletedEntriesUseCase`.
+- **Attachment images beside the `.lfbk`** (ADR-0023) — **the biggest one
+  left.** Metadata already travels in the backup; the phrase-sealed image file
+  does not, so a restore today returns rows and no images. The honest-
+  degradation half exists (a missing file reads as null rather than crashing)
+  but nothing reports the count.
+- ~~**Purge must unlink attachment files.**~~ **Done.** Both purge statements
+  read the paths before the delete and unlink after it succeeds, and
+  `AttachmentLifecycleInstrumentedTest` covers the dangerous direction too:
+  a purge that matches no rows must destroy nothing.
 - **Corpus: zero fixtures.** Structure, guards, manifest task and the CI check
   are all in; the private store does not exist yet. **The extractor now
   exists, so the window below has closed** — every fixture written from here
