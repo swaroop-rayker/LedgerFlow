@@ -52,23 +52,46 @@ public enum class CameraPermission {
 }
 
 /**
- * What the recogniser found, in the vocabulary this screen shows.
+ * What the recogniser read and what the extractor made of it (§5.3).
  *
- * **Deliberately not the extraction.** §5.3's pipeline — line reconstruction,
- * column inference, classification, reconciliation — does not exist yet, and
- * this screen must not pretend it does. What it can honestly report is that the
- * image was read and how much text came back, which is exactly what proves the
- * capture path works end to end on a real device.
+ * **Read-only, and nothing behind it is saved.** Steps 13 to 15 — encrypting
+ * the image, cross-source dedupe, writing `pending_transaction` — do not exist
+ * yet, so a capture is still a read that leaves no trace and Law 1 is not in
+ * reach. The screen says so in as many words rather than implying a candidate
+ * was filed.
+ *
+ * The extraction is here because it is the only way to check steps 6–12
+ * against real paper. Every one of them is unit-tested off-device against
+ * hand-laid geometry, which proves the arithmetic and proves nothing about
+ * whether a thermal printer agrees with it.
  *
  * @param elementCount recognised runs, the unit `RecognizedPage` deals in.
- * @param preview the first few runs joined, so the user can see it read *their*
- *   receipt rather than trusting a number.
+ * @param rawPreview the first few runs joined. Kept, and shown when the
+ *   extractor found no bill, because "90 runs and no items" is a different
+ *   report from "the image was unreadable" and the raw text is what tells them
+ *   apart.
+ * @param balance §5.3's reconciliation as a sentence, or null when there was
+ *   no total to reconcile against — which is not the same as failing to.
  */
 @Immutable
 public data class RecognitionSummary(
     val elementCount: Int,
-    val preview: String,
+    val rawPreview: String,
     val sourceLabel: String,
+    val merchant: String? = null,
+    val totalText: String? = null,
+    val items: List<ExtractedItemRow> = emptyList(),
+    val balance: String? = null,
+) {
+    /** True when the pipeline produced something that resembles a bill. */
+    public val isBill: Boolean get() = items.isNotEmpty() || totalText != null
+}
+
+/** One extracted line, already formatted. The screen does no arithmetic. */
+@Immutable
+public data class ExtractedItemRow(
+    val name: String,
+    val amountText: String,
 )
 
 /** Everything the screen asks the ViewModel to do. */

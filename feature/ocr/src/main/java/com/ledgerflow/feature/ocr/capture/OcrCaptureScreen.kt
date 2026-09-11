@@ -12,6 +12,7 @@ import androidx.camera.viewfinder.core.ImplementationMode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -294,26 +295,51 @@ private fun Bitmap.uprighted(degrees: Int): Bitmap {
     return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
 }
 
+/**
+ * What was read, and what §5.3's pipeline made of it.
+ *
+ * **The caption stays honest.** Steps 13 to 15 do not exist, so nothing here
+ * has been saved and the card says so rather than letting a bill on screen
+ * imply a candidate in the Inbox.
+ *
+ * The raw run preview is kept for the case where no bill was found, because
+ * "90 runs and no items" and "the image was unreadable" are different reports
+ * and the raw text is the only thing that tells them apart on a real device.
+ */
 @Composable
 private fun ResultCard(summary: RecognitionSummary, onEvent: (OcrCaptureEvent) -> Unit) {
     LfCard {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
             Text(
-                text = "${summary.elementCount} text runs · ${summary.sourceLabel}",
+                text = summary.merchant
+                    ?: "${summary.elementCount} text runs · ${summary.sourceLabel}",
                 style = LfTheme.typography.bodyL,
                 color = LfTheme.colors.textPrimary,
             )
             Text(
-                // The honest caption. Nothing has been parsed into a bill yet.
-                text = "Read on this device. Line items are not extracted yet.",
+                text = buildString {
+                    if (summary.isBill) {
+                        append("${summary.items.size} items")
+                        summary.totalText?.let { append(" · $it") }
+                        summary.balance?.let { append(" · $it") }
+                        append(" · ")
+                    }
+                    append("${summary.elementCount} runs · nothing saved yet")
+                },
                 style = LfTheme.typography.label,
                 color = LfTheme.colors.textSecondary,
             )
-            Text(
-                text = summary.preview,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
-            )
+
+            if (summary.isBill) {
+                summary.items.forEach { item -> ExtractedItemLine(item) }
+            } else {
+                Text(
+                    text = summary.rawPreview,
+                    style = LfTheme.typography.bodyM,
+                    color = LfTheme.colors.textSecondary,
+                )
+            }
+
             LfActionRow(alignment = LfActionAlignment.End) {
                 LfButton(
                     text = "Clear",
@@ -322,6 +348,35 @@ private fun ResultCard(summary: RecognitionSummary, onEvent: (OcrCaptureEvent) -
                 )
             }
         }
+    }
+}
+
+/**
+ * One extracted line: name on the left, amount on the right.
+ *
+ * The name takes the slack and wraps; the amount never does. At font scale 2.0
+ * a long item name costs a second line, which is the BUG9 rule — degrade by
+ * wrapping, never by clipping — and an amount that ellipsised would be the
+ * one value on the row nobody can reconstruct.
+ */
+@Composable
+private fun ExtractedItemLine(item: ExtractedItemRow) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = item.name,
+            modifier = Modifier.weight(1f),
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.textPrimary,
+        )
+        Text(
+            text = item.amountText,
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.textSecondary,
+        )
     }
 }
 
@@ -396,8 +451,18 @@ private fun OcrCaptureResultPreview() {
                 cameraPermission = CameraPermission.Denied,
                 result = RecognitionSummary(
                     elementCount = 47,
-                    preview = "LOCAL KIRANA RICE 5KG 420.00 TOMATO 20.00 TOTAL 473.00",
+                    rawPreview = "LOCAL KIRANA RICE 5KG 420.00 TOMATO 20.00 TOTAL 473.00",
                     sourceLabel = "Imported",
+                    merchant = "LOCAL KIRANA",
+                    totalText = "₹473.00",
+                    items = listOf(
+                        ExtractedItemRow("RICE 5KG", "₹420.00"),
+                        // A long name, deliberately: this is the row that has
+                        // to wrap rather than clip at font scale 2.0 (BUG9).
+                        ExtractedItemRow("TOMATO LOCAL GRADE A 1KG", "₹20.00"),
+                        ExtractedItemRow("TOOR DAL 1KG", "₹33.00"),
+                    ),
+                    balance = "Balanced",
                 ),
             ),
             onEvent = {},
