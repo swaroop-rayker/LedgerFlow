@@ -50,7 +50,43 @@ public interface AttachmentRepository {
      * every surface that draws an attachment has to handle their absence.
      */
     public suspend fun read(attachmentId: String): ByteArray?
+
+    /**
+     * How much space receipt images take (ADR-0023).
+     *
+     * The ADR declines a timed purge — D-09's 90-day rule exists because a raw
+     * message body is the most sensitive text the app holds *and* rides inside
+     * a `.lfbk` that can leave the device, and neither clause transfers to an
+     * image. Growth is made **visible** instead, so the user can decide with
+     * the number in front of them.
+     *
+     * Measured from the files on disk rather than summed from `attachment
+     * .bytes`, which records the *plaintext* length: what the user wants to
+     * know is what is occupying their phone, and that is the sealed size.
+     */
+    public suspend fun usage(): AttachmentUsage
+
+    /**
+     * Deletes every stored image. Irreversible.
+     *
+     * **Rows and files, in that order, and the entries survive.** An
+     * `attachment` row exists to say an image is there; with the image gone
+     * the row would be a promise the app cannot keep, and every surface that
+     * draws one would have to distinguish "no receipt" from "receipt we lost".
+     * The `ledger_entry` it belonged to is untouched — deleting a photograph
+     * is not deleting a purchase.
+     *
+     * @return how many images were removed.
+     */
+    public suspend fun deleteAll(): Int
 }
+
+/** What the Settings row reports. */
+public data class AttachmentUsage(
+    val count: Int,
+    /** Bytes on disk, sealed — what the phone is actually giving up. */
+    val bytes: Long,
+)
 
 /** What became of one attempt to store an image. */
 public sealed interface AttachmentOutcome {

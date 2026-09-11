@@ -12,6 +12,7 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
+import com.ledgerflow.core.data.ingest.AttachmentFiles
 import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
@@ -286,6 +287,14 @@ class Bug6_DraftSurvivesProcessDeathTest {
         private val clock = Clock.System
 
         val storage = DefaultStorageMaintenance(vault, Dispatchers.IO)
+
+        /**
+         * Only the purge unlinks files, and this suite never purges — so this
+         * exists to satisfy the constructor rather than to be exercised.
+         */
+        val attachmentFiles = AttachmentFiles(
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext,
+        )
         val categories = DefaultCategoryRepository(vault, ids, clock, storage, Dispatchers.IO)
         private val drafts = DefaultDraftRepository(vault, ids, clock, Dispatchers.IO)
 
@@ -313,11 +322,11 @@ class Bug6_DraftSurvivesProcessDeathTest {
 
         fun entryViewModel() = EntryViewModel(
             approveTransaction = ApproveTransactionUseCase(
-                DefaultLedgerRepository(vault, ids, clock, Dispatchers.IO),
+                DefaultLedgerRepository(vault, ids, clock, attachmentFiles, Dispatchers.IO),
                 NoOpBudgetAlertTrigger,
             ),
             drafts = DefaultDraftRepository(vault, ids, clock, Dispatchers.IO),
-            ledgerRepository = DefaultLedgerRepository(vault, ids, clock, Dispatchers.IO),
+            ledgerRepository = DefaultLedgerRepository(vault, ids, clock, attachmentFiles, Dispatchers.IO),
             categories = categories,
             merchants = DefaultMerchantRepository(vault, ids, clock, storage, Dispatchers.IO),
             paymentMethods = DefaultPaymentMethodRepository(vault, ids, clock, storage, Dispatchers.IO),

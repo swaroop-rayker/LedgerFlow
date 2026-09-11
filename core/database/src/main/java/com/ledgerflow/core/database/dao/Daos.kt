@@ -658,6 +658,22 @@ public interface LedgerEntryDao {
     @Query("DELETE FROM ledger_entry WHERE ledger = :ledger AND deleted_at IS NOT NULL")
     public suspend fun purgeDeletedEntries(ledger: LedgerType): Int
 
+    /**
+     * The ids a purge is about to destroy, read **before** it runs.
+     *
+     * Exists so the caller can collect the attachments those entries own
+     * while the rows still exist. `ON DELETE CASCADE` takes the `attachment`
+     * rows and leaves the bytes, and nothing else in the app enumerates that
+     * directory — so a file whose row is gone is leaked permanently
+     * (`AttachmentDao`'s stated obligation).
+     *
+     * Binds `:ledger` like every other statement naming this table (Law 2,
+     * ADR-0002), and the same `deleted_at IS NOT NULL` predicate the purge
+     * itself binds, so the two cannot disagree about which rows are in scope.
+     */
+    @Query("SELECT id FROM ledger_entry WHERE ledger = :ledger AND deleted_at IS NOT NULL")
+    public suspend fun deletedEntryIds(ledger: LedgerType): List<String>
+
     @Query("SELECT * FROM ledger_entry WHERE ledger = :ledger ORDER BY id")
     public suspend fun allForLedger(ledger: LedgerType): List<LedgerEntryEntity>
 

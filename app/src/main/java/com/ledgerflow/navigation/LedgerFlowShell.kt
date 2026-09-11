@@ -283,6 +283,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             onExport = { navController.navigate(Destination.Export) },
             onDeletedEntries = { navController.navigate(Destination.DeletedEntries) },
             onNotificationAccess = { navController.navigate(Destination.NotificationAccess) },
+            onEvent = viewModel::onEvent,
         )
     }
 }

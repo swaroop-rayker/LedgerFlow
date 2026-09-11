@@ -1,5 +1,6 @@
 package com.ledgerflow.core.data.inbox
 
+import androidx.room.withTransaction
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.data.ingest.ExtractedTransactionJson
@@ -193,11 +194,42 @@ public class DefaultPendingRepository @Inject constructor(
         }.getOrDefault(0)
     }
 
+    /**
+     * Resolves the candidate, **and attaches its image to the entry** (step 26).
+     *
+     * One transaction, for the reason every other paired write here is:
+     * `pending_transaction` moving to `APPROVED` and the image finding its
+     * entry are one fact about one approval, and a process death between them
+     * would leave a receipt permanently orphaned from the row it belongs to —
+     * invisible, because nothing else enumerates that directory.
+     *
+     * **The link is attempted unconditionally, and that is not a source
+     * check.** `raw_ref_id` holds an `attachment.id` for a receipt and a raw
+     * row's id for a message; the `UPDATE` matches by primary key, so for a
+     * message it affects no rows and costs one indexed lookup. Asking "was
+     * this OCR?" first would be exactly the `if (source == …)` CLAUDE.md §0
+     * forbids outside an adapter — and it is the same shape the verdict write
+     * already uses when it updates both raw tables without asking which holds
+     * the row.
+     */
     override suspend fun markApproved(id: String, entryId: String): Boolean = withContext(io) {
         val database = openVault() ?: return@withContext false
         runCatching {
-            database.pendingTransactionDao()
-                .markApproved(id, entryId, clock.nowMillis()) > 0
+            database.withTransaction {
+                val row = database.pendingTransactionDao().byId(id)
+                val approved = database.pendingTransactionDao()
+                    .markApproved(id, entryId, clock.nowMillis()) > 0
+
+                // Only when the candidate actually moved. A second approval of
+                // an already-resolved row must not re-point an image that a
+                // different entry may already own.
+                if (approved) {
+                    row?.rawRefId?.let { ref ->
+                        database.attachmentDao().linkToEntry(ref, entryId)
+                    }
+                }
+                approved
+            }
         }.getOrDefault(false)
     }
 

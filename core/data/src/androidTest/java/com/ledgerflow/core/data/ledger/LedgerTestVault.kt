@@ -9,6 +9,8 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.data.analytics.DefaultRollupRepository
+import com.ledgerflow.core.data.inbox.DefaultPendingRepository
+import com.ledgerflow.core.data.ingest.AttachmentFiles
 import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
@@ -17,6 +19,9 @@ import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
+import com.ledgerflow.core.database.entity.PendingTransactionEntity
+import com.ledgerflow.core.model.EntrySource
+import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.domain.vault.VaultInitRequest
 import java.io.File
 import java.security.KeyStore
@@ -87,6 +92,14 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
     lateinit var attachments: DefaultAttachmentRepository
         private set
 
+    /** Where those images live, for assertions about the files themselves. */
+    lateinit var attachmentFiles: AttachmentFiles
+        private set
+
+    /** The Inbox's write side, for step 26's link-on-approval. */
+    lateinit var pending: DefaultPendingRepository
+        private set
+
     /** The open handle, for tests asserting on rows this module's ports hide. */
     val database: LedgerFlowDatabase get() = session.requireDatabase()
 
@@ -104,10 +117,12 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
         categories = DefaultCategoryRepository(session, ids, clock, storage, Dispatchers.IO)
         merchants = DefaultMerchantRepository(session, ids, clock, storage, Dispatchers.IO)
         paymentMethods = DefaultPaymentMethodRepository(session, ids, clock, storage, Dispatchers.IO)
-        ledger = DefaultLedgerRepository(session, ids, clock, Dispatchers.IO)
+        attachmentFiles = AttachmentFiles(context)
+        ledger = DefaultLedgerRepository(session, ids, clock, attachmentFiles, Dispatchers.IO)
         drafts = DefaultDraftRepository(session, ids, clock, Dispatchers.IO)
         rollups = DefaultRollupRepository(session, clock, Dispatchers.IO)
-        attachments = DefaultAttachmentRepository(context, session, clock, ids, Dispatchers.IO)
+        attachments = DefaultAttachmentRepository(attachmentFiles, session, clock, ids, Dispatchers.IO)
+        pending = DefaultPendingRepository(session, clock, Dispatchers.IO)
     }
 
     fun close() {
@@ -125,6 +140,34 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
         runCatching {
             KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(keystoreAlias)
         }
+    }
+
+    /**
+     * A `pending_transaction` row, written straight to the DAO.
+     *
+     * The ingest path is `:core:data`'s own and is exercised elsewhere; what
+     * this suite needs is simply a candidate whose `raw_ref_id` it chose, so
+     * that approving it can be observed to link — or not link — an image.
+     */
+    suspend fun seedPendingCandidate(rawRefId: String): String {
+        val id = ids.generate()
+        session.requireDatabase().pendingTransactionDao().insert(
+            PendingTransactionEntity(
+                id = id,
+                source = EntrySource.OCR,
+                dedupeKey = "seed-$id",
+                suppressedById = null,
+                rawRefId = rawRefId,
+                extractedJson = "{}",
+                confidence = 0.7,
+                status = PendingStatus.PENDING,
+                needsManualFill = false,
+                createdAt = now,
+                reviewedAt = null,
+                approvedEntryId = null,
+            ),
+        )
+        return id
     }
 
     companion object {

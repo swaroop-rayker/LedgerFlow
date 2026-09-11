@@ -9,6 +9,7 @@ import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.time.LocalDates
+import com.ledgerflow.core.data.ingest.AttachmentFiles
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.entity.AppMetaEntity
@@ -56,6 +57,8 @@ public class DefaultLedgerRepository @Inject constructor(
     private val session: VaultSession,
     private val ids: Uuid7Generator,
     private val clock: Clock,
+    /** For the purge's unlink only — see [purgeDeletedEntries]. */
+    private val attachments: AttachmentFiles,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : LedgerRepository {
 
@@ -187,11 +190,24 @@ public class DefaultLedgerRepository @Inject constructor(
      * dangerous one for analytics. It is not; [restoreEntry] is.
      */
     override suspend fun purgeDeletedEntry(ledger: LedgerType, id: String): Int = withContext(io) {
-        session.requireDatabase().ledgerEntryDao().purgeDeletedEntry(ledger, id)
+        val database = session.requireDatabase()
+        // Collected before the delete. See [unlinkAttachments].
+        val doomed = database.attachmentDao().pathsForEntry(listOf(id))
+        val purged = database.ledgerEntryDao().purgeDeletedEntry(ledger, id)
+        // Only if the row actually went: the statement binds `deleted_at IS
+        // NOT NULL` and `:ledger`, so it legitimately affects nothing, and
+        // unlinking then would destroy the image of a live entry.
+        if (purged > 0) attachments.delete(doomed)
+        purged
     }
 
     override suspend fun purgeDeletedEntries(ledger: LedgerType): Int = withContext(io) {
-        session.requireDatabase().ledgerEntryDao().purgeDeletedEntries(ledger)
+        val database = session.requireDatabase()
+        val ids = database.ledgerEntryDao().deletedEntryIds(ledger)
+        val doomed = if (ids.isEmpty()) emptyList() else database.attachmentDao().pathsForEntry(ids)
+        val purged = database.ledgerEntryDao().purgeDeletedEntries(ledger)
+        if (purged > 0) attachments.delete(doomed)
+        purged
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

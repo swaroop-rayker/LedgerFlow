@@ -16,6 +16,9 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.domain.ingest.AttachmentUsage
+import com.ledgerflow.core.designsystem.component.LfDialog
+import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
@@ -35,8 +38,13 @@ public fun MoreScreen(
     onExport: () -> Unit,
     onDeletedEntries: () -> Unit,
     onNotificationAccess: () -> Unit,
+    onEvent: (MoreEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (state.confirmingReceiptDelete) {
+        DeleteReceiptsDialog(state = state, onEvent = onEvent)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -92,6 +100,16 @@ public fun MoreScreen(
                 subtitle = deletedSubtitle(state),
                 onClick = onDeletedEntries,
             )
+            // ADR-0023 declines a timed purge and makes growth visible
+            // instead. Always present and always enabled, for the same reason
+            // the bin's row is: a control that appears only when there is
+            // something in it is indistinguishable from one that was never
+            // built.
+            MoreRow(
+                title = "Receipts",
+                subtitle = receiptsSubtitle(state),
+                onClick = { onEvent(MoreEvent.ReceiptDeleteRequested) },
+            )
         }
     }
 }
@@ -109,6 +127,78 @@ internal fun deletedSubtitle(state: MoreUiState): String = when {
     state.deletedCount == 1 -> "1 entry kept here. Restore it or erase it for good."
     else -> "${state.deletedCount} entries kept here. Restore them or erase them for good."
 }
+
+/**
+ * The mis-tap guard on deleting every receipt image (ADR-0023).
+ *
+ * Three things it has to do, each decided by the bin's erase first:
+ *
+ * - **Name the count**, because a dialog that only asks "are you sure?" is one
+ *   people learn to tap through.
+ * - **Say it cannot be undone**, in those words.
+ * - **Tell the user to export rather than offering to back up.** The app
+ *   cannot back these up for them: the `.lfbk` is phrase-derived (ADR-0011)
+ *   and the app never holds the 24 words. Offering would be a promise it
+ *   cannot keep — the same rule the purge dialog and the pre-migration
+ *   snapshot already follow (ADR-0019).
+ *
+ * And one thing specific to this dialog: it says the **entries survive**.
+ * Deleting a photograph is not deleting a purchase, and a user who thought
+ * otherwise would never tap it — or would tap it and be horrified.
+ */
+@Composable
+private fun DeleteReceiptsDialog(state: MoreUiState, onEvent: (MoreEvent) -> Unit) {
+    val count = state.receipts.count
+    LfDialog(
+        title = if (count == 1) "Delete 1 receipt image?" else "Delete $count receipt images?",
+        body = "This frees ${formatSize(state.receipts.bytes)} and cannot be undone. " +
+            "Your entries and their amounts are untouched — only the photographs go. " +
+            "Export first if you want to keep them.",
+        confirmText = "Delete",
+        // Warning emphasis also stops an outside tap from standing in for an
+        // answer, which on an irreversible action would defeat the point.
+        emphasis = LfDialogEmphasis.Warning,
+        onConfirm = { onEvent(MoreEvent.ReceiptDeleteConfirmed) },
+        onDismiss = { onEvent(MoreEvent.ReceiptDeleteDismissed) },
+    )
+}
+
+/**
+ * What the receipts row says about itself (ADR-0023).
+ *
+ * The number is the point: the ADR's answer to unbounded growth is to show it
+ * rather than to delete on a timer, so a subtitle that omitted the size would
+ * be the decision without its substance.
+ *
+ * The zero case explains what receipts *are* rather than merely saying none —
+ * that is the state a user reading Settings to learn what the app does will
+ * normally find, and "0 images" teaches them nothing.
+ */
+internal fun receiptsSubtitle(state: MoreUiState): String = when {
+    !state.isLoaded -> "Images kept with your scanned receipts"
+    state.receipts.count == 0 ->
+        "No images yet. Receipts you scan are kept here, encrypted."
+    state.receipts.count == 1 -> "1 image, ${formatSize(state.receipts.bytes)}. Tap to delete."
+    else ->
+        "${state.receipts.count} images, ${formatSize(state.receipts.bytes)}. Tap to delete."
+}
+
+/**
+ * A size a person reads, rounded down to whole units.
+ *
+ * Binary units against decimal labels is the usual muddle; this uses 1000 and
+ * says kB/MB, matching what Android's own storage screens show, so the two do
+ * not disagree in front of the user.
+ */
+internal fun formatSize(bytes: Long): String = when {
+    bytes >= BYTES_PER_MB -> "${bytes / BYTES_PER_MB} MB"
+    bytes >= BYTES_PER_KB -> "${bytes / BYTES_PER_KB} kB"
+    else -> "$bytes bytes"
+}
+
+/** Decimal, not binary — see [formatSize]. */
+private const val BYTES_PER_KB = 1_000L
+private const val BYTES_PER_MB = 1_000_000L
 
 /**
  * What the notification row says about itself (SPEC.md §5.2).
@@ -170,12 +260,17 @@ private fun MoreRow(title: String, subtitle: String, onClick: () -> Unit) {
 private fun MorePreview() {
     LfTheme {
         MoreScreen(
-            state = MoreUiState(deletedCount = 3, isLoaded = true),
+            state = MoreUiState(
+                deletedCount = 3,
+                isLoaded = true,
+                receipts = AttachmentUsage(count = 12, bytes = 3_400_000L),
+            ),
             onCategories = {},
             onBudgets = {},
             onExport = {},
             onDeletedEntries = {},
             onNotificationAccess = {},
+            onEvent = {},
         )
     }
 }
@@ -194,6 +289,7 @@ private fun MoreEmptyBinPreview() {
             onExport = {},
             onDeletedEntries = {},
             onNotificationAccess = {},
+            onEvent = {},
         )
     }
 }

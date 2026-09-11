@@ -3,6 +3,8 @@ package com.ledgerflow.feature.settings
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.ingest.AttachmentRepository
+import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
@@ -15,6 +17,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+/** Everything the More tab asks its ViewModel to do. */
+public sealed interface MoreEvent {
+
+    /** Opens the confirmation. Does not delete anything by itself. */
+    public data object ReceiptDeleteRequested : MoreEvent
+
+    /** Irreversible (ADR-0023). */
+    public data object ReceiptDeleteConfirmed : MoreEvent
+
+    public data object ReceiptDeleteDismissed : MoreEvent
+}
 
 /**
  * The More tab's state (SPEC.md §9.3).
@@ -47,6 +61,18 @@ public data class MoreUiState(
     val isLoaded: Boolean = false,
 
     /**
+     * Receipt images on disk (ADR-0023).
+     *
+     * The ADR declines a timed purge and makes growth **visible** instead, so
+     * this row is the whole of that decision's user-facing half — and, until
+     * a viewer exists, the only way to remove an image at all.
+     */
+    val receipts: AttachmentUsage = AttachmentUsage(count = 0, bytes = 0L),
+
+    /** True while the irreversible confirmation is up. */
+    val confirmingReceiptDelete: Boolean = false,
+
+    /**
      * Whether notification capture is working (SPEC.md §5.2).
      *
      * The row it drives is the standing route to the permission explainer, and
@@ -65,6 +91,7 @@ public data class MoreUiState(
 public class MoreViewModel @Inject constructor(
     ledger: LedgerRepository,
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
+    private val attachments: AttachmentRepository,
 ) : ViewModel() {
 
     /**
@@ -85,15 +112,30 @@ public class MoreViewModel @Inject constructor(
      * spanning the two books is the shape ADR-0002 removes, and a screen adding
      * two numbers together is not the same thing as a database doing it.
      */
+    /**
+     * Receipt storage, polled rather than observed.
+     *
+     * It is a measurement of the *filesystem*, not a query, so there is no
+     * `Flow` to collect — and it changes only when the user scans or deletes,
+     * both of which already pass through [refresh] or [onEvent].
+     */
+    private val receipts = MutableStateFlow(AttachmentUsage(count = 0, bytes = 0L))
+
+    private val confirmingDelete = MutableStateFlow(false)
+
     public val state: StateFlow<MoreUiState> = combine(
         ledger.observeDeletedCount(LedgerType.DEBIT),
         ledger.observeDeletedCount(LedgerType.CREDIT),
         captureHealth,
-    ) { debits, credits, health ->
+        receipts,
+        confirmingDelete,
+    ) { debits, credits, health, images, confirming ->
         MoreUiState(
             deletedCount = debits + credits,
             isLoaded = true,
             captureHealth = health,
+            receipts = images,
+            confirmingReceiptDelete = confirming,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), MoreUiState())
 
@@ -103,7 +145,30 @@ public class MoreViewModel @Inject constructor(
 
     /** §5.2's resume poll. Called from the screen, for the reason its route explains. */
     public fun refresh() {
-        viewModelScope.launch { captureHealth.value = getCaptureHealth() }
+        viewModelScope.launch {
+            captureHealth.value = getCaptureHealth()
+            receipts.value = attachments.usage()
+        }
+    }
+
+    public fun onEvent(event: MoreEvent) {
+        when (event) {
+            // The row opens the confirmation rather than doing anything, even
+            // at zero: a destructive control that is sometimes inert teaches
+            // people to tap it without reading.
+            MoreEvent.ReceiptDeleteRequested -> confirmingDelete.value = true
+
+            MoreEvent.ReceiptDeleteDismissed -> confirmingDelete.value = false
+
+            MoreEvent.ReceiptDeleteConfirmed -> viewModelScope.launch {
+                attachments.deleteAll()
+                confirmingDelete.value = false
+                // Re-measured rather than assumed to be zero: a failed unlink
+                // must show as a file still there, not as a clean slate the
+                // app merely hoped for.
+                receipts.value = attachments.usage()
+            }
+        }
     }
 
     private companion object {

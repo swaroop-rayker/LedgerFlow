@@ -1,6 +1,5 @@
 package com.ledgerflow.core.data.ingest
 
-import android.content.Context
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
@@ -9,7 +8,7 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.AttachmentEntity
 import com.ledgerflow.core.domain.ingest.AttachmentOutcome
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import java.io.File
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -60,7 +59,7 @@ import kotlinx.coroutines.withContext
  */
 @Singleton
 public class DefaultAttachmentRepository @Inject constructor(
-    @param:ApplicationContext private val context: Context,
+    private val files: AttachmentFiles,
     private val session: VaultSession,
     private val clock: Clock,
     private val ids: Uuid7Generator,
@@ -126,7 +125,7 @@ public class DefaultAttachmentRepository @Inject constructor(
 
         try {
             val row = database.attachmentDao().byId(attachmentId) ?: return@withContext null
-            val file = File(attachmentsDir(), row.filePath)
+            val file = files.resolve(row.filePath)
             if (!file.isFile) {
                 // ADR-0023's honest-degradation case: a restore from a `.lfbk`
                 // moved without its sibling images leaves rows whose files are
@@ -150,6 +149,30 @@ public class DefaultAttachmentRepository @Inject constructor(
         }
     }
 
+    override suspend fun usage(): AttachmentUsage = withContext(io) {
+        val present = files.all()
+        AttachmentUsage(count = present.size, bytes = present.sumOf { it.length() })
+    }
+
+    /**
+     * Everything, rows first.
+     *
+     * **Rows before files**, which is the opposite order from the purge and
+     * deliberately so. There the database is the record and a file outliving
+     * its row by a crash is recoverable garbage; here the *user asked for the
+     * images to be gone*, and a row outliving its file would leave every
+     * surface drawing a receipt it cannot load. Interrupted halfway, this
+     * leaves orphaned files that the next run of the same action removes —
+     * `files.all()` enumerates the directory rather than the table.
+     */
+    override suspend fun deleteAll(): Int = withContext(io) {
+        val database = session.openForBackgroundWork() ?: return@withContext 0
+        runCatching {
+            database.attachmentDao().all().forEach { database.attachmentDao().deleteById(it.id) }
+            files.all().count { it.delete() }
+        }.getOrDefault(0)
+    }
+
     /**
      * `.tmp` → fsync → rename, and the row only after.
      *
@@ -166,7 +189,7 @@ public class DefaultAttachmentRepository @Inject constructor(
      * paid on every scan.
      */
     private fun writeAtomically(relativePath: String, sealed: AesGcm.Sealed): Boolean = try {
-        val directory = attachmentsDir().apply { mkdirs() }
+        val directory = files.directory().apply { mkdirs() }
         val target = File(directory, relativePath)
         val temp = File(directory, "$relativePath$TEMP_SUFFIX")
 
@@ -188,22 +211,12 @@ public class DefaultAttachmentRepository @Inject constructor(
         false
     }
 
-    /** `filesDir/attachments/`. Law 5: internal storage, never `cacheDir`. */
-    private fun attachmentsDir(): File = File(context.filesDir, DIRECTORY)
-
     private fun sha256(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        const val DIRECTORY = "attachments"
-
-        /**
-         * Not `.jpg` or `.png`: the bytes are ciphertext, and naming a sealed
-         * file after the plaintext's format invites something — a gallery
-         * scanner, a future contributor — to try to decode it.
-         */
-        const val EXTENSION = ".lfa"
+        val EXTENSION = ".${AttachmentFiles.EXTENSION}"
 
         const val TEMP_SUFFIX = ".tmp"
     }
