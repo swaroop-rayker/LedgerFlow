@@ -612,11 +612,60 @@ Bitmap → preprocess (deskew, grayscale, adaptive threshold, downscale to ≤16
        → merchant detection from top-3 header lines → fuzzy match against `merchant` table
        → totals detection via keyword set {TOTAL, GRAND TOTAL, NET AMOUNT, AMOUNT PAYABLE, बिल राशि}
        → reconciliation: |Σ(items) + Σ(tax) − Σ(discount) − total| ≤ max(₹1, 0.5% of total)
-       → produce PendingTransaction + List<PendingLineItem>
+       → produce ExtractedTransaction with `lines` (ADR-0022 — no `pending_line_item`)
 ```
+
+**Built, and the decisions the one-liners above leave open.** Steps 6–12 ship
+as `:feature:ocr`'s `extraction` package; each is arithmetic over
+`RecognizedElement` and therefore a JVM test rather than a device one.
+
+- **The line-reconstruction and column thresholds are derived from the page,
+  not constants.** Rows band within 0.6 of the page's *median* glyph height,
+  because adjacent printed lines are at least 1.2 heights apart; cells split
+  at gaps wider than 1.0, because a word gap is 0.3–0.5 and a column gutter is
+  several. Median rather than mean, or an outsized shop name sets the
+  tolerance for the whole bill.
+- **A quantity and a unit price are read only when `unit × quantity`
+  reproduces the printed line total exactly.** No tolerance: a row laid out
+  `NAME MRP RATE AMOUNT` would otherwise acquire a confidently wrong quantity.
+  When the arithmetic does not close, the amount survives and the description
+  is dropped — the amount is the line.
+- **Totals detection takes the LAST keyword match**, because a bill computes
+  downward: `SUB TOTAL`, tax, `ROUND OFF`, `GRAND TOTAL`, and on a restaurant
+  bill `TOTAL` before service charge and `NET AMOUNT` after it. `SUBTOTAL` is
+  never a candidate. **No total found is a null amount, not a guess** — taking
+  the largest number on the page would be a confident wrong total on any bill
+  printing an MRP column.
+- **A receipt is a `DEBIT` unless it says otherwise.** The review screen only
+  offers a book control when the direction is unread, so asking on every
+  receipt would be one extra tap per bill for a case that is a fraction of a
+  percent. A refund, a credit note, or a negative total returns `UNKNOWN`
+  instead — those are where a silent `DEBIT` would be both wrong and
+  uncorrectable.
+- **Merchant detection is by type size, not position.** A shop prints its name
+  larger than its address, and plenty of slips print the address first. This
+  is what the bounding boxes on `RecognizedElement` are carried through the
+  whole pipeline for.
+- **No date detection.** §5.3's pipeline does not specify one and none is
+  built; the review screen falls back to the capture time, so a receipt
+  photographed days later needs its date corrected. Recorded as a known gap
+  rather than an oversight.
 
 **Review screen (the important part):**
 - Editable table: item name, qty, unit price, line total, category, subcategory.
+- **The table is seeded from `extracted_json` as well as from
+  `review_draft_json`.** A candidate's lines come from the extraction until the
+  user edits them, at which point the draft wins. Both `lines` and `itemised`
+  are seeded together: the approval path emits no line items while `itemised`
+  is false, so seeding one without the other gives a receipt a form that looks
+  single-item and an approval that silently drops every line it read.
+- **Only `ITEM` lines reach the editor.** `line_item` rows written from the
+  review screen are all `ITEM`, so a seeded `TAX` row would commit tax as a
+  purchase and item-grain analytics (ADR-0018) would count it as shopping. Tax
+  and discount stay in `extracted_json` and fall into the `UNALLOCATED`
+  remainder below, which is the same rule §5.4 already applies to a partially
+  itemised bill. An editor that understands `kind` would change this and
+  nothing else.
 - Reconciliation banner: green ✅ if balanced, amber ⚠️ with the delta if not — **user can still save an unbalanced bill**; the delta is stored as an `UNALLOCATED` synthetic line item so totals never silently drift.
 - Bulk actions: select-many → assign category; "apply last category for this merchant".
 - **Category memory:** `(merchantId, normalizedItemName) → categoryId` learned mapping table auto-suggests on future bills.
