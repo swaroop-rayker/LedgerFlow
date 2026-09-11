@@ -64,12 +64,22 @@ class ReceiptLineClassifierTest {
         assertThat(kinds[2]).isEqualTo(ReceiptLineKind.TOTAL)
     }
 
-    /** `TOTAL SAVINGS` contains `TOTAL` and means the opposite of one. */
+    /**
+     * `TOTAL SAVINGS` contains `TOTAL` and is not one.
+     *
+     * **This used to assert DISCOUNT and that was wrong**, found on a real
+     * Food Bazaar bill. A savings line sums discounts the per-item prices
+     * already reflect, so treating it as a line of the bill subtracts them a
+     * second time — the bill came out short by exactly the printed saving.
+     * It is informational, and the assertion is now the property that
+     * actually matters: it is neither the total nor a part.
+     */
     @Test
-    fun totalSavings_isADiscount() {
+    fun totalSavings_isNeitherTheTotalNorAPart() {
         val kinds = classify("TOMATO" to true, "TOTAL SAVINGS" to true)
 
-        assertThat(kinds[1]).isEqualTo(ReceiptLineKind.DISCOUNT)
+        assertThat(kinds[1]).isNotEqualTo(ReceiptLineKind.TOTAL)
+        assertThat(kinds[1]).isNotEqualTo(ReceiptLineKind.DISCOUNT)
     }
 
     /**

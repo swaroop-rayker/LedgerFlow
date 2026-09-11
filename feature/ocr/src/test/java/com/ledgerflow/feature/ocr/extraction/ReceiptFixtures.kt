@@ -124,4 +124,53 @@ internal object ReceiptFixtures {
         row(14, LEFT to "CHANGE", amount("5.54")),
         row(15, LEFT to "THANK YOU VISIT AGAIN"),
     )
+
+    /**
+     * An Indian **GST tax invoice**, in the shape a real one has.
+     *
+     * The names and amounts are invented; the *structure* is copied from a
+     * real Food Bazaar receipt, and the structure is the whole point — it
+     * broke three separate assumptions the synthetic bill above never
+     * tested:
+     *
+     * - **`S GST` / `C GST` rows under every item**, not once at the bottom.
+     *   The old rule closed the item block at the first tax row, which on
+     *   that receipt lost five of the six products.
+     * - **`HSN : 2005   UOM : Pcs`** under each item, which parses as ₹20.05
+     *   and was becoming a line item.
+     * - **`TOTAL SAVING: 75.00`** at the foot, which matched the TOTAL
+     *   keyword and — last match winning — replaced a ₹1,075.46 bill total
+     *   with ₹75.00.
+     *
+     * And the arithmetic is **tax-inclusive**: the four item NET AMTs sum to
+     * the printed total on their own, with the GST rows restating tax that is
+     * already inside them.
+     *
+     * ```
+     * items 70.00 + 55.00 + 174.00 + 315.00 = 614.00 == TOTAL 614.00
+     * gst rows          5.34 + 4.19 + 13.27 = 22.80   (inside the prices)
+     * ```
+     */
+    fun gstTaxInvoice(): RecognizedPage = page(
+        row(0, LEFT to "VALUE MART RETAIL LTD", glyph = GLYPH * 1.4f),
+        row(1, LEFT to "42 STATION ROAD BENGALURU 560001"),
+        row(2, LEFT to "GST TIN 29AADCB1093N1ZE"),
+        row(3, LEFT to "ITEM DESC", QUANTITY_X to "QTY", amount("NET AMT")),
+        row(4, LEFT to "CRISPS 95G", QUANTITY_X to "2", amount("70.00")),
+        row(5, LEFT to "HSN :", QUANTITY_X to "2005", RATE_X to "UOM : Pcs"),
+        row(6, LEFT to "S GST 9%", RATE_X to "59.32", amount("5.34")),
+        row(7, LEFT to "C GST 9%", RATE_X to "59.32", amount("5.34")),
+        row(8, LEFT to "CRISPS 177G", QUANTITY_X to "1", amount("55.00")),
+        row(9, LEFT to "HSN :", QUANTITY_X to "2005", RATE_X to "UOM : Pcs"),
+        row(10, LEFT to "S GST 9%", RATE_X to "46.62", amount("4.19")),
+        row(11, LEFT to "SHOWERGEL 250ML", QUANTITY_X to "1", amount("174.00")),
+        row(12, LEFT to "HSN :", QUANTITY_X to "3401", RATE_X to "UOM : Pcs"),
+        row(13, LEFT to "S GST 9%", RATE_X to "147.46", amount("13.27")),
+        row(14, LEFT to "CLEANER JASMINE 2L", QUANTITY_X to "1", amount("315.00")),
+        row(15, LEFT to "SUBTOTAL", amount("614.00")),
+        row(16, LEFT to "TOTAL", amount("614.00")),
+        row(17, LEFT to "SBI", amount("614.00")),
+        row(18, LEFT to "PIECES PURCHASED: 5 DISC ITEMS:", amount("0")),
+        row(19, LEFT to "TOTAL SAVING:", amount("75.00")),
+    )
 }

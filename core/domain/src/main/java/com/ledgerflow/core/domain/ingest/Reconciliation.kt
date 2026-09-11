@@ -30,6 +30,25 @@ import kotlin.math.absoluteValue
  * difference becomes an `UNALLOCATED` line at approval so the parts still sum
  * to the whole. This type reports; it never blocks.
  *
+ * ## Tax may be *inside* the prices, and the bill does not say which
+ *
+ * §5.3's formula adds tax to the items. That is right for a bill that prints
+ * a net subtotal and then adds GST — and **wrong for an Indian GST tax
+ * invoice**, where the per-item NET AMT already contains the tax and the
+ * `S GST 9% / C GST 9%` rows under each item are a *breakdown* of what is
+ * already there. Found on a real Food Bazaar receipt: six items summing to
+ * ₹1,075.46, exactly the printed total, with ₹171.36 of GST rows that an
+ * additive reading would have added on top.
+ *
+ * Nothing on the paper distinguishes the two formats in words, so the
+ * arithmetic decides: **both readings are computed and the one that closes
+ * wins.** That is the same self-validating principle `ReceiptColumns` uses
+ * for `unit x quantity` — a reading that reproduces a number the extractor
+ * did not itself produce has checked itself.
+ *
+ * When neither closes, the *additive* delta is reported, because it is the
+ * formula §5.3 states and the figure a user checking by hand will arrive at.
+ *
  * ## The arithmetic is integers throughout (Law 3)
  *
  * `0.5% of total` is `total × 5 / 1000` in `Long`, truncated. Truncation makes
@@ -90,16 +109,23 @@ public sealed interface Reconciliation {
         public fun of(lines: List<ExtractedLineItem>, total: Money?): Reconciliation {
             if (total == null) return NotPossible
 
-            val parts = Money.sum(
-                lines.filter { it.kind in COUNTED }.mapNotNull { it.total },
-            )
-            val delta = parts - total
+            val base = Money.sum(lines.filter { it.kind in BASE }.mapNotNull { it.total })
+            val tax = Money.sum(lines.filter { it.kind == LineItemKind.TAX }.mapNotNull { it.total })
             val tolerance = toleranceFor(total)
 
-            return if (delta.minor.absoluteValue <= tolerance.minor) {
-                Balanced(delta)
-            } else {
-                Unbalanced(delta, tolerance)
+            // The spec's literal formula: tax is added to the item prices.
+            val additive = (base + tax) - total
+            // The same bill read as tax-INCLUSIVE: the tax rows restate what
+            // is already inside the prices rather than adding to them.
+            val inclusive = base - total
+
+            return when {
+                additive.minor.absoluteValue <= tolerance.minor -> Balanced(additive)
+                inclusive.minor.absoluteValue <= tolerance.minor -> Balanced(inclusive)
+                // Neither closes. Report the *additive* delta, because that is
+                // §5.3's stated formula and the number a reader will check by
+                // hand.
+                else -> Unbalanced(additive, tolerance)
             }
         }
 
@@ -115,6 +141,11 @@ public sealed interface Reconciliation {
             ),
         )
 
-        private val COUNTED = setOf(LineItemKind.ITEM, LineItemKind.TAX, LineItemKind.DISCOUNT)
+        /**
+         * The parts that are always additive: purchases and discounts.
+         *
+         * `TAX` is deliberately absent and handled separately — see [of].
+         */
+        private val BASE = setOf(LineItemKind.ITEM, LineItemKind.DISCOUNT)
     }
 }

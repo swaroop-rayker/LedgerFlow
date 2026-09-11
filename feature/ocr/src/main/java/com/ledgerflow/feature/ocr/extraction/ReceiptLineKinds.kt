@@ -67,9 +67,15 @@ internal object ReceiptKeywords {
         "SERVICE TAX", "SERVICE CHARGE", "SERV CHRG", "TAX", "कर",
     )
 
+    /**
+     * A discount **charged on this bill**, as a line of it.
+     *
+     * Note what left this list: `SAVING` and `YOU SAVED` moved to [ADMIN].
+     * See the note there — a saving is a report of what was *not* charged,
+     * and subtracting it again double-counts.
+     */
     val DISCOUNT = listOf(
-        "DISCOUNT", "DISC.", "DISC", "TOTAL SAVINGS", "SAVINGS", "YOU SAVED",
-        "PROMO", "COUPON", "REBATE", "OFFER", "छूट",
+        "DISCOUNT", "DISC.", "DISC", "PROMO", "COUPON", "REBATE", "OFFER", "छूट",
     )
 
     /**
@@ -95,6 +101,23 @@ internal object ReceiptKeywords {
      */
     val ADMIN = listOf(
         "GSTIN", "GST NO", "FSSAI", "TIN", "CIN", "PAN",
+        // A GST invoice prints an HSN/SAC classification code and a unit of
+        // measure under every item. `HSN : 2005` parses as ₹20.05 and is
+        // not shopping.
+        "HSN", "SAC", "UOM",
+        // **A saving is a report, not a charge**, and both halves of that
+        // matter. `TOTAL SAVING: 75.00` on a real Food Bazaar bill contains
+        // the word TOTAL, so left to the keyword sets it became the bill
+        // total -- ₹75.00 in place of ₹1,075.46. Moved to DISCOUNT it
+        // stopped being the total and started being subtracted from the
+        // parts, which is just as wrong: the per-item discounts it sums were
+        // already applied in each NET AMT, so taking it off again removes
+        // them twice.
+        //
+        // It belongs here, with the identifiers: informational, never a line
+        // of the bill. A discount genuinely charged as its own line still
+        // says DISCOUNT, DISC or OFFER.
+        "TOTAL SAVING", "YOU SAVED", "SAVINGS", "SAVING",
         "INVOICE", "BILL NO", "BILL NUMBER", "RECEIPT NO", "ORDER NO", "TOKEN",
         "DATE", "TIME", "CASHIER", "COUNTER", "TERMINAL", "TILL", "OPERATOR",
         "PHONE", "TEL", "MOBILE", "CUSTOMER", "MEMBER ID", "LOYALTY", "POINTS",
@@ -135,29 +158,57 @@ internal object ReceiptLineClassifier {
      */
     fun classify(rows: List<ClassifiableRow>): List<ReceiptLineKind> {
         val firstPriced = rows.indexOfFirst { it.hasAmount && !it.isAdministrative }
-        // The totals block starts at the FIRST subtotal/total/tax row, so that
-        // everything below it is read as summary and tender rather than as
-        // more shopping. Taken from the first because some bills print TOTAL,
-        // then the tax breakdown, then GRAND TOTAL.
-        val firstSummary = rows.indexOfFirst { it.summaryKind() != null }
+        // **The totals block begins at a SUBTOTAL or TOTAL row, never at a
+        // TAX one**, and getting that wrong cost five items out of six on the
+        // first real GST invoice this met.
+        //
+        // The original rule took the first row of *any* summary kind, on the
+        // assumption that tax appears once, in a block at the bottom. An
+        // Indian GST tax invoice does not work that way: it prints
+        // `S GST 9% / C GST 9%` under **every single item**. So the first
+        // item's own tax rows closed the item block at line 12 of 30, and
+        // every product below was read as tender.
+        //
+        // A tax row is therefore a per-line annotation that may appear
+        // anywhere, and only a stated subtotal or total marks the end of the
+        // shopping. Bills that do print tax once, at the bottom, are
+        // unaffected: their tax rows are still classified TAX by keyword,
+        // which is positional-independent.
+        val firstSummary = rows.indexOfFirst { it.summaryKind().endsTheItemBlock() }
 
         return rows.mapIndexed { index, row ->
-            val summary = row.summaryKind()
-            when {
-                summary != null -> summary
-                firstPriced < 0 || index < firstPriced -> ReceiptLineKind.HEADER
-                row.isAdministrative -> if (firstSummary >= 0 && index >= firstSummary) {
-                    ReceiptLineKind.FOOTER
-                } else {
-                    ReceiptLineKind.NOISE
-                }
-                // Below the summary block, a priced row is tender or a
-                // pleasantry, never shopping.
-                firstSummary >= 0 && index > firstSummary -> ReceiptLineKind.FOOTER
-                !row.hasAmount -> ReceiptLineKind.NOISE
-                row.name.isBlank() -> ReceiptLineKind.NOISE
-                else -> ReceiptLineKind.ITEM
-            }
+            row.summaryKind() ?: row.placeByPosition(index, firstPriced, firstSummary)
+        }
+    }
+
+    /**
+     * Only a stated subtotal or total closes the shopping.
+     *
+     * A `TAX` row does not, and that is the whole of the GST-invoice fix: an
+     * Indian tax invoice prints `S GST 9% / C GST 9%` under **every item**, so
+     * treating the first tax row as the start of the totals block closed the
+     * item list four lines into a thirty-line bill and lost five of six
+     * products.
+     */
+    private fun ReceiptLineKind?.endsTheItemBlock(): Boolean =
+        this == ReceiptLineKind.SUBTOTAL || this == ReceiptLineKind.TOTAL
+
+    /** Where a row sits, for the rows their own text does not classify. */
+    private fun ClassifiableRow.placeByPosition(
+        index: Int,
+        firstPriced: Int,
+        firstSummary: Int,
+    ): ReceiptLineKind {
+        val belowSummary = firstSummary >= 0 && index >= firstSummary
+        return when {
+            firstPriced < 0 || index < firstPriced -> ReceiptLineKind.HEADER
+            isAdministrative ->
+                if (belowSummary) ReceiptLineKind.FOOTER else ReceiptLineKind.NOISE
+            // Below the summary block, a priced row is tender or a
+            // pleasantry, never shopping.
+            firstSummary in 0..<index -> ReceiptLineKind.FOOTER
+            !hasAmount || name.isBlank() -> ReceiptLineKind.NOISE
+            else -> ReceiptLineKind.ITEM
         }
     }
 
