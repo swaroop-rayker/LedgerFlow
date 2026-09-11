@@ -55,7 +55,7 @@ public data class OcrCaptureUiState(
      * was given*; a picture the user took of the wrong thing is not one, and
      * an Inbox row for it is work rather than safety.
      */
-    public val canSave: Boolean get() = result?.isBill == true && !saving
+    public val canSave: Boolean get() = result?.isBill == true && !saving && saved == null
 }
 
 /**

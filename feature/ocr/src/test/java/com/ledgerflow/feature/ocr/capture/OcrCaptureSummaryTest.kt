@@ -111,6 +111,53 @@ class OcrCaptureSummaryTest {
         assertThat(summary.rawPreview).contains("PLEASE")
     }
 
+    /**
+     * The Save control is offered only while there is something to save.
+     *
+     * Found on the device: after a successful save the card still offered
+     * "Save to Inbox" *and* the caption still read "nothing saved yet",
+     * underneath a card saying it had been saved. A preview cannot catch that
+     * — it has no "after" state to render — so the state machine is pinned
+     * here instead.
+     */
+    @Test
+    fun aSavedCapture_offersNoSecondSave() {
+        val state = OcrCaptureUiState(
+            result = summaryFor(ReceiptFixtures.ordinaryBill()),
+            saved = "Saved to your Inbox for review.",
+        )
+
+        assertThat(state.canSave).isFalse()
+    }
+
+    @Test
+    fun anUnsavedBill_canBeSaved() {
+        val state = OcrCaptureUiState(result = summaryFor(ReceiptFixtures.ordinaryBill()))
+
+        assertThat(state.canSave).isTrue()
+    }
+
+    /** A page that is not a bill is never offered to the Inbox. */
+    @Test
+    fun aPageThatIsNotABill_cannotBeSaved() {
+        val notAReceipt = ReceiptFixtures.page(
+            ReceiptFixtures.row(0, ReceiptFixtures.LEFT to "PLEASE KEEP OFF THE GRASS"),
+        )
+
+        assertThat(OcrCaptureUiState(result = summaryFor(notAReceipt)).canSave).isFalse()
+    }
+
+    /** Nothing can be saved while a save is in flight. */
+    @Test
+    fun aSaveInFlight_blocksASecondOne() {
+        val state = OcrCaptureUiState(
+            result = summaryFor(ReceiptFixtures.ordinaryBill()),
+            saving = true,
+        )
+
+        assertThat(state.canSave).isFalse()
+    }
+
     @Test
     fun anEmptyPage_saysSoRatherThanShowingNothing() {
         val summary = summaryFor(RecognizedPage(emptyList()))

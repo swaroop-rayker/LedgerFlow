@@ -112,7 +112,14 @@ public fun OcrCaptureScreen(
 
             Viewfinder(state = state, onEvent = onEvent)
 
-            state.result?.let { ResultCard(it, canSave = state.canSave, onEvent = onEvent) }
+            state.result?.let {
+                ResultCard(
+                    summary = it,
+                    canSave = state.canSave,
+                    saved = state.saved != null,
+                    onEvent = onEvent,
+                )
+            }
             state.failure?.let { FailureCard(it) }
             // An inline card rather than a snackbar, matching FailureCard
             // above: the user is scanning a stack, and "the last one landed"
@@ -314,6 +321,7 @@ private fun Bitmap.uprighted(degrees: Int): Bitmap {
 private fun ResultCard(
     summary: RecognitionSummary,
     canSave: Boolean,
+    saved: Boolean,
     onEvent: (OcrCaptureEvent) -> Unit,
 ) {
     LfCard {
@@ -332,7 +340,14 @@ private fun ResultCard(
                         summary.balance?.let { append(" · $it") }
                         append(" · ")
                     }
-                    append("${summary.elementCount} runs · nothing saved yet")
+                    append("${summary.elementCount} runs")
+                    // **Only while it is still true.** Saying "nothing saved
+                    // yet" underneath a card that reads "Saved to your Inbox"
+                    // is the screen contradicting itself, and the user has no
+                    // way to tell which half to believe. Caught on the device
+                    // rather than in a preview, because a preview has no
+                    // "after" state to render.
+                    if (!saved) append(" · nothing saved yet")
                 },
                 style = LfTheme.typography.label,
                 color = LfTheme.colors.textSecondary,
@@ -357,7 +372,7 @@ private fun ResultCard(
                     style = LfButtonStyle.Inline,
                     onClick = { onEvent(OcrCaptureEvent.Dismissed) },
                 )
-                if (summary.isBill) {
+                if (summary.isBill && !saved) {
                     LfButton(
                         text = "Save to Inbox",
                         style = LfButtonStyle.Inline,
