@@ -112,8 +112,12 @@ public fun OcrCaptureScreen(
 
             Viewfinder(state = state, onEvent = onEvent)
 
-            state.result?.let { ResultCard(it, onEvent) }
+            state.result?.let { ResultCard(it, canSave = state.canSave, onEvent = onEvent) }
             state.failure?.let { FailureCard(it) }
+            // An inline card rather than a snackbar, matching FailureCard
+            // above: the user is scanning a stack, and "the last one landed"
+            // is worth keeping on screen while they line up the next.
+            state.saved?.let { SavedCard(it) }
 
             ImportRow(
                 enabled = state.canImport,
@@ -307,7 +311,11 @@ private fun Bitmap.uprighted(degrees: Int): Bitmap {
  * and the raw text is the only thing that tells them apart on a real device.
  */
 @Composable
-private fun ResultCard(summary: RecognitionSummary, onEvent: (OcrCaptureEvent) -> Unit) {
+private fun ResultCard(
+    summary: RecognitionSummary,
+    canSave: Boolean,
+    onEvent: (OcrCaptureEvent) -> Unit,
+) {
     LfCard {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
             Text(
@@ -340,12 +348,23 @@ private fun ResultCard(summary: RecognitionSummary, onEvent: (OcrCaptureEvent) -
                 )
             }
 
+            // Two actions, so LfActionRow rather than a Row (BUG9): the
+            // container wraps whole controls at font scale 2.0 and the labels
+            // never do. Inline, because these sit inside a card.
             LfActionRow(alignment = LfActionAlignment.End) {
                 LfButton(
                     text = "Clear",
                     style = LfButtonStyle.Inline,
                     onClick = { onEvent(OcrCaptureEvent.Dismissed) },
                 )
+                if (summary.isBill) {
+                    LfButton(
+                        text = "Save to Inbox",
+                        style = LfButtonStyle.Inline,
+                        enabled = canSave,
+                        onClick = { onEvent(OcrCaptureEvent.SaveRequested) },
+                    )
+                }
             }
         }
     }
@@ -374,6 +393,17 @@ private fun ExtractedItemLine(item: ExtractedItemRow) {
         )
         Text(
             text = item.amountText,
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.textSecondary,
+        )
+    }
+}
+
+@Composable
+private fun SavedCard(message: String) {
+    LfCard {
+        Text(
+            text = message,
             style = LfTheme.typography.bodyM,
             color = LfTheme.colors.textSecondary,
         )

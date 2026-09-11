@@ -4,22 +4,26 @@ Where P4 actually stands. `SPEC.md` §5.3 is the specification; this is the
 build order and the honest status of each step.
 
 Written when capture worked on real hardware and extraction had not been
-started; updated when extraction landed. The boundary a new session most needs
-to find is now the one between **B and C** — a bill is read and nothing is yet
-written down.
+started; updated as each section landed. The boundary a new session most needs
+to find is now **inside E** — a receipt becomes a candidate and the user can
+approve it, and the approval does not yet link the image to the entry it
+created.
 
 **Status**
 - Merged to `main` from `s12-testing-matrix-font-cta` (fast-forward, history
   kept). **No commit count here on purpose** — the previous revision of this
   line carried one and it was wrong within the hour.
 - Schema **v11** (`attachment`, `item_category_memory` — ADR-0023, ADR-0022)
-- `preMergeCheck` green on both flavours; the instrumented suite green on the
-  physical device — 93 tests, the full v1→v11 migration chain,
-  `PreMigrationGuard`, and `BackupRestoreRoundTripTest` including
-  `backup_wipe_restoreFromPhraseAlone_reproducesEveryRowExactly`
+- `preMergeCheck` green on both flavours; the instrumented suites green on
+  the physical device — `:core:database` 93 tests (the full v1→v11 migration
+  chain, `PreMigrationGuard`, and `BackupRestoreRoundTripTest` including
+  `backup_wipe_restoreFromPhraseAlone_reproducesEveryRowExactly`) and
+  `:core:data` 307 tests (the attachment store and the OCR dedupe among them)
 - Receipt corpus: machinery in place, **zero fixtures**
-- **Sections A and B are built; step 18 is fixed. C is next** (steps 13–15),
-  plus the two loose ends in E.
+- **Sections A, B and C are built; step 18 is fixed.** A receipt now reaches
+  the Inbox as a candidate. What is left is E's two loose ends (link the
+  attachment to the approved entry; record the filing into
+  `item_category_memory`) and the cross-cutting items below.
 
 ---
 
@@ -156,18 +160,70 @@ about thermal paper — which is the substrate the gate is actually about.
 - **§11's 2.5 s budget is still unmeasured.** Extraction itself is
   microseconds; the two concurrent script passes remain the thing at risk.
 
-## C. Becoming a candidate — nothing built; schema is ready
+## C. Becoming a candidate — **built**
 
-| # | Step | Status |
+| # | Step | Where |
 |---|---|---|
-| 13 | Encrypt the image under the DEK → `filesDir/attachments/`, write the `attachment` row | table exists (v11); **no code** |
-| 14 | **Cross-source dedupe** (§3.1) — a receipt and the bank SMS for the same payment must yield **one** candidate | **no code**; easy to forget and it is a stated rule |
-| 15 | Write `pending_transaction`: `source = OCR`, `raw_ref_id = attachment.id`, `extracted_json` carrying the lines | **no code**; `DefaultRawIngestRepository` is the pattern to follow |
+| 13 | Seal the image under a DEK-derived key → `filesDir/attachments/`, write the `attachment` row | `DefaultAttachmentRepository` |
+| 14 | **Cross-source dedupe** (§3.1) — a receipt and the bank SMS for one payment yield **one** candidate | `PendingCandidateWriter` |
+| 15 | Write `pending_transaction`: `source = OCR`, `raw_ref_id = attachment.id`, `extracted_json` carrying the lines | `RawIngestRepository.recordOcrCandidate` |
 
-`attachment.file_path` is **relative** to `filesDir/attachments/` and `sha256` is
-over the **plaintext** — both load-bearing, both documented on the entity.
+### Step 14 was already built, and that is the interesting part
 
----
+Nothing OCR-specific was written for it. `DuplicateMatcher` has never had a
+source check — deliberately, and §0's source-agnostic rule is why — so routing
+the receipt's candidate through **the same insert a bank SMS uses** made
+cross-source dedupe cover it by construction.
+
+What that cost was a refactor rather than a feature: the insert-with-dedupe
+moved out of `DefaultRawIngestRepository` into `PendingCandidateWriter`, which
+both entry points now call. Reimplementing it for receipts would have passed
+every test written against it and still produced two rows on a device, because
+§3.1's whole point is that one payment can now be observed **three** ways.
+
+The two callers differ in exactly one parameter, and it is structural rather
+than a source check: a message capture left a row in `sms_raw` or
+`notification_raw` that wants a `parse_status`; a receipt did not.
+`recordOcrCandidate_leavesRawRowsUntouched` pins that a receipt stamps neither
+table — a write that silently affects zero rows being the shape §7 keeps
+warning about.
+
+### The key the image is sealed with is *not* the DEK
+
+ADR-0023 said "under the DEK" and nothing retains the DEK after unlock —
+`VaultSession` destroys it the moment SQLCipher has it, and SQLCipher's copy is
+protected by `cipher_memory_security` in a way a JVM-heap copy would not be.
+The ADR is **amended**: `HKDF(dek, info = "ledgerflow-attachment-local-v1")`,
+retained for the database handle's lifetime and zeroed on close. A heap
+compromise now yields the receipts and not the ledger. Owner's decision; the
+reasoning and the two alternatives are in ADR-0023.
+
+### Three facts about the stored file
+
+- **`file_path` is relative** to `filesDir/attachments/`. Absolute would be a
+  BUG1/BUG2 with a long fuse — it resolves on the machine that wrote it and
+  nowhere else, and the symptom is a receipt that vanished rather than an error.
+- **`sha256` is over the plaintext**, so the same receipt scanned twice stores
+  once and the second scan reaches step 15 with the first one's id — coming
+  back `AlreadyPending` instead of producing a twin.
+- **The write is `.tmp` → fsync → rename**, §7's backup-writer discipline. It
+  does *not* decrypt-and-verify before the rename, and that difference is
+  deliberate: a `.lfbk` is the user's last copy, a receipt image has the entry
+  beside it and a phrase-sealed copy in the backup tree.
+
+### Still open in C
+
+- **Nothing writes the backup copy yet.** ADR-0023's phrase-sealed image
+  beside the `.lfbk` is specified and unbuilt, so today a restore returns rows
+  and no images. The honest-degradation path exists — a missing file reads as
+  null rather than crashing — but the count is not yet reported anywhere.
+- **The purge still does not unlink.** `ON DELETE CASCADE` takes the
+  `attachment` row and leaves the bytes, and nothing else enumerates that
+  directory. `AttachmentDao.pathsForEntry` exists for exactly this and
+  `PurgeDeletedEntriesUseCase` does not call it yet.
+- **No Settings surface.** ADR-0023 promises "Receipts — N images, M MB" with
+  a manual bulk delete, which is also the only way a user could remove an
+  image today.
 
 ## D. Review — mostly built, with one specific gap
 
@@ -264,10 +320,11 @@ passes by doing nothing.
 
 ## Shortest path to a receipt reaching the ledger
 
-**Steps 13–15.** 6–12 and 18 are done; everything after 15 already worked,
-because once the row exists an OCR candidate is just a candidate. What is left
-is the attachment write, cross-source dedupe, and the `pending_transaction`
-row — and per `CLAUDE.md` §7's Danger Zone, whatever writes them opens the
-vault itself or it lies: a background caller gets a throw from
-`requireDatabase()`, the throw lands in a `runCatching`, and the action
-reports success having done nothing (BUG13).
+**There is no longer a gap in the path.** A receipt reaches the ledger today:
+capture, extract, seal, dedupe, candidate, review, approve.
+
+What remains is quality rather than reachability — steps 26 and 27, the
+backup copy, and the purge's unlink. The one with teeth is **26**: until
+approval sets `attachment.entry_id`, every image stays unlinked, which means
+the entry has no receipt to show and the purge has nothing to find when it
+eventually learns to unlink.

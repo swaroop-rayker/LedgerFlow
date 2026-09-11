@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.data.di.VaultDatabaseName
+import com.ledgerflow.core.crypto.AttachmentKey
 import com.ledgerflow.core.crypto.Dek
 import com.ledgerflow.core.crypto.DekManager
 import com.ledgerflow.core.crypto.UnlockFailure
@@ -92,6 +93,22 @@ public class VaultSession @Inject constructor(
     private var database: LedgerFlowDatabase? = null
 
     /**
+     * The key that seals `filesDir/attachments/` (ADR-0023, amended).
+     *
+     * **Derived from the DEK, and not the DEK** — see `AttachmentKey`. The DEK
+     * itself is destroyed as soon as SQLCipher has it, and keeping a second
+     * copy of the database key in swappable JVM heap to seal images would have
+     * given up `PRAGMA cipher_memory_security`'s protection for the lifetime of
+     * the process. A derived purpose costs one HKDF and means a heap compromise
+     * yields the user's receipts rather than their ledger.
+     *
+     * Its lifetime is the database's exactly: derived where the handle is
+     * accepted, zeroed where the handle is released.
+     */
+    @Volatile
+    private var attachmentKey: ByteArray? = null
+
+    /**
      * The open database, for repositories in this module.
      *
      * `internal` deliberately: a feature module reaching for a DAO would route
@@ -101,6 +118,20 @@ public class VaultSession @Inject constructor(
     internal fun requireDatabase(): LedgerFlowDatabase = requireNotNull(database) {
         "Vault is locked; no database is open. Callers must observe VaultState first."
     }
+
+    /**
+     * The attachment-sealing key, or null when the vault is not open.
+     *
+     * Null rather than throwing, unlike [requireDatabase]: an attachment store
+     * asked to write while the vault is shut must decline and say so, and §7's
+     * BUG13 lesson is that a throw on a background path lands in a
+     * `runCatching` and comes back as a clean success that did nothing. A null
+     * the caller has to handle cannot do that.
+     *
+     * A defensive copy, so a caller that zeroes its own buffer after use — the
+     * correct thing to do with key material — cannot blank the session's.
+     */
+    internal fun attachmentKeyOrNull(): ByteArray? = attachmentKey?.copyOf()
 
     /**
      * The open database, opening it first if nothing else has (SPEC.md §5.1).
@@ -167,6 +198,11 @@ public class VaultSession @Inject constructor(
         mutex.withLock {
             withContext(io) { database?.close() }
             database = null
+            // Zeroed rather than merely dropped: a released reference leaves
+            // the bytes in the heap until GC gets round to it, and this is key
+            // material.
+            attachmentKey?.fill(0)
+            attachmentKey = null
             _state.value = VaultState.Initializing
         }
     }
@@ -300,6 +336,10 @@ public class VaultSession @Inject constructor(
             CanaryResult.Valid -> {
                 database = opened
                 registerWalCheckpoint(opened)
+                // **Before `destroy`, necessarily.** The DEK is zeroed on the
+                // next line and is not retained anywhere else, so this is the
+                // only moment the attachment key can be derived at all.
+                attachmentKey = AttachmentKey.local(dek)
                 dek.destroy()
                 VaultOutcome.Unlocked
             }

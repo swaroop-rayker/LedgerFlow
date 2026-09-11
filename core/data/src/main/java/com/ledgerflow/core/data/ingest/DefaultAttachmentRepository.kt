@@ -1,0 +1,210 @@
+package com.ledgerflow.core.data.ingest
+
+import android.content.Context
+import com.ledgerflow.core.common.di.IoDispatcher
+import com.ledgerflow.core.common.id.Uuid7Generator
+import com.ledgerflow.core.common.time.Clock
+import com.ledgerflow.core.crypto.AesGcm
+import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.database.entity.AttachmentEntity
+import com.ledgerflow.core.domain.ingest.AttachmentOutcome
+import com.ledgerflow.core.domain.ingest.AttachmentRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import java.security.MessageDigest
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
+
+/**
+ * Receipt images on disk (SPEC.md §5.3, §7.1; ADR-0023). Schema v11.
+ *
+ * ## Where, and under what
+ *
+ * `filesDir/attachments/`, AES-256-GCM. **Never `cacheDir`** — Law 5, and
+ * `bannedApiCheck` enforces it; `cacheDir` is for decoded-image scratch and
+ * the system may delete it at any moment, which for the only copy of a receipt
+ * would be silent loss. Never external storage.
+ *
+ * The key is `AttachmentKey.local`, derived from the DEK rather than being it
+ * (ADR-0023 as amended) — see `VaultSession.attachmentKeyOrNull`.
+ *
+ * ## The file layout, and the two things that are load-bearing
+ *
+ * **The stored path is relative.** `filesDir` differs across a reinstall and
+ * across a restore onto another device, so an absolute path would resolve on
+ * the machine that wrote it and nowhere else — and the symptom is a receipt
+ * that vanished rather than an error. `AttachmentPathIsRelativeTest` asserts
+ * it; this class is the only writer, so it is the only place it can go wrong.
+ *
+ * **`sha256` is over the plaintext.** Computed before sealing. It is what
+ * makes storing the same receipt twice return the first one: a hash of
+ * ciphertext under a fresh nonce is different every time and dedupes nothing.
+ *
+ * ## The nonce lives in the file, in front of the ciphertext
+ *
+ * 12 bytes of nonce then the GCM ciphertext-with-tag. No header beyond that,
+ * and deliberately no AAD: §5.9 requires the `.lfbk` header to be AAD because
+ * that header steers the *restore path* and an attacker who could edit it
+ * could redirect what happens to the file. Here there is no header to steer
+ * anything with — the row in the database says what the file is — so there is
+ * nothing to authenticate that the tag does not already cover.
+ *
+ * ## Writes are atomic
+ *
+ * `.tmp` → write → fsync → rename, the discipline §7 already requires of the
+ * backup writer. A process death mid-write otherwise leaves a truncated file
+ * that authenticates as damaged, and the row would point at it. The rename is
+ * the commit point, and the row is written only after it succeeds.
+ */
+@Singleton
+public class DefaultAttachmentRepository @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val session: VaultSession,
+    private val clock: Clock,
+    private val ids: Uuid7Generator,
+    @param:IoDispatcher private val io: CoroutineDispatcher,
+) : AttachmentRepository {
+
+    override suspend fun store(bytes: ByteArray, mime: String): AttachmentOutcome =
+        withContext(io) {
+            // Opened here rather than required, for §5.3's sake as much as
+            // §5.1's: nothing guarantees an Activity is alive by the time a
+            // capture finishes being processed.
+            val database = session.openForBackgroundWork()
+                ?: return@withContext AttachmentOutcome.VaultClosed
+            val key = session.attachmentKeyOrNull()
+                ?: return@withContext AttachmentOutcome.VaultClosed
+
+            try {
+                val digest = sha256(bytes)
+                val dao = database.attachmentDao()
+
+                // Content-addressed idempotency. A user who scans the same
+                // receipt twice gets one image and one row, and the caller is
+                // told which so it can say so rather than quietly producing a
+                // second candidate.
+                dao.bySha256(digest)?.let {
+                    return@withContext AttachmentOutcome.AlreadyStored(it.id)
+                }
+
+                val id = ids.generate()
+                val relativePath = "$id$EXTENSION"
+                val sealed = AesGcm.encrypt(key = key, plaintext = bytes)
+
+                if (!writeAtomically(relativePath, sealed)) {
+                    return@withContext AttachmentOutcome.WriteFailed
+                }
+
+                dao.insert(
+                    AttachmentEntity(
+                        id = id,
+                        // Null until approval: the image exists before the
+                        // entry does, which is why the FK is nullable.
+                        entryId = null,
+                        filePath = relativePath,
+                        mime = mime,
+                        sha256 = digest,
+                        // Plaintext length. The file on disk is larger by the
+                        // nonce and the tag.
+                        bytes = bytes.size.toLong(),
+                        createdAt = clock.nowMillis(),
+                    ),
+                )
+                AttachmentOutcome.Stored(id)
+            } finally {
+                // The session handed out a copy; blank it rather than waiting
+                // for GC.
+                key.fill(0)
+            }
+        }
+
+    override suspend fun read(attachmentId: String): ByteArray? = withContext(io) {
+        val database = session.openForBackgroundWork() ?: return@withContext null
+        val key = session.attachmentKeyOrNull() ?: return@withContext null
+
+        try {
+            val row = database.attachmentDao().byId(attachmentId) ?: return@withContext null
+            val file = File(attachmentsDir(), row.filePath)
+            if (!file.isFile) {
+                // ADR-0023's honest-degradation case: a restore from a `.lfbk`
+                // moved without its sibling images leaves rows whose files are
+                // absent. Null, not a crash and not an empty image.
+                return@withContext null
+            }
+
+            val raw = file.readBytes()
+            if (raw.size <= AesGcm.NONCE_LENGTH) return@withContext null
+            AesGcm.decrypt(
+                key = key,
+                sealed = AesGcm.Sealed(
+                    nonce = raw.copyOfRange(0, AesGcm.NONCE_LENGTH),
+                    ciphertext = raw.copyOfRange(AesGcm.NONCE_LENGTH, raw.size),
+                ),
+            )
+        } catch (_: java.io.IOException) {
+            null
+        } finally {
+            key.fill(0)
+        }
+    }
+
+    /**
+     * `.tmp` → fsync → rename, and the row only after.
+     *
+     * The same discipline §7 requires of the backup writer, for the same
+     * reason: without the rename as a commit point, a process death mid-write
+     * leaves a truncated file that a row already points at, and the failure
+     * surfaces much later as an image that will not authenticate.
+     *
+     * Unlike the backup writer this does **not** decrypt-and-verify before the
+     * rename. That rule exists because a `.lfbk` is the user's last copy and an
+     * unverified one is not a backup; a receipt image has the ledger entry
+     * beside it and a phrase-sealed copy in the backup tree, so reading every
+     * image back through GCM on the capture path would buy little for a cost
+     * paid on every scan.
+     */
+    private fun writeAtomically(relativePath: String, sealed: AesGcm.Sealed): Boolean = try {
+        val directory = attachmentsDir().apply { mkdirs() }
+        val target = File(directory, relativePath)
+        val temp = File(directory, "$relativePath$TEMP_SUFFIX")
+
+        java.io.FileOutputStream(temp).use { stream ->
+            stream.write(sealed.nonce)
+            stream.write(sealed.ciphertext)
+            stream.flush()
+            // The bytes, and the directory entry that names them.
+            stream.fd.sync()
+        }
+
+        if (temp.renameTo(target)) {
+            true
+        } else {
+            temp.delete()
+            false
+        }
+    } catch (_: java.io.IOException) {
+        false
+    }
+
+    /** `filesDir/attachments/`. Law 5: internal storage, never `cacheDir`. */
+    private fun attachmentsDir(): File = File(context.filesDir, DIRECTORY)
+
+    private fun sha256(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+
+    private companion object {
+        const val DIRECTORY = "attachments"
+
+        /**
+         * Not `.jpg` or `.png`: the bytes are ciphertext, and naming a sealed
+         * file after the plaintext's format invites something — a gallery
+         * scanner, a future contributor — to try to decode it.
+         */
+        const val EXTENSION = ".lfa"
+
+        const val TEMP_SUFFIX = ".tmp"
+    }
+}

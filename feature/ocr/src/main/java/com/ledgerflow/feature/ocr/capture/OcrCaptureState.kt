@@ -19,6 +19,16 @@ public data class OcrCaptureUiState(
     val cameraPermission: CameraPermission = CameraPermission.Unknown,
     /** True between the shutter and a result. The shutter is disabled meanwhile. */
     val reading: Boolean = false,
+    /** True between "Save to Inbox" and the row landing. */
+    val saving: Boolean = false,
+    /**
+     * What happened to the last save, as a sentence for the user.
+     *
+     * Held rather than fired as an event because the capture screen stays
+     * open: a user scanning a stack of receipts wants to see that the last one
+     * landed while pointing the camera at the next.
+     */
+    val saved: String? = null,
     val result: RecognitionSummary? = null,
     /**
      * Why the last attempt produced nothing.
@@ -34,7 +44,18 @@ public data class OcrCaptureUiState(
         get() = cameraPermission == CameraPermission.Granted && !reading
 
     /** Importing never needs the camera, which is the point of offering it. */
-    public val canImport: Boolean get() = !reading
+    public val canImport: Boolean get() = !reading && !saving
+
+    /**
+     * A bill can be filed; a page of text cannot.
+     *
+     * Gated on [RecognitionSummary.isBill] rather than on "something was
+     * recognised", so a photograph of a menu does not offer to become a
+     * candidate. §5.1's never-drop rule is about *financial messages the app
+     * was given*; a picture the user took of the wrong thing is not one, and
+     * an Inbox row for it is work rather than safety.
+     */
+    public val canSave: Boolean get() = result?.isBill == true && !saving
 }
 
 /**
@@ -111,4 +132,14 @@ public sealed interface OcrCaptureEvent {
 
     /** Clears the last result so the viewfinder is usable again. */
     public data object Dismissed : OcrCaptureEvent
+
+    /**
+     * Files the bill as a candidate (§5.3, steps 13–15).
+     *
+     * **Not an approval.** It seals the image, writes the `attachment` row and
+     * inserts a `pending_transaction` at `PENDING`; Law 1's single writer is
+     * untouched and nothing reaches `ledger_entry` until the user taps approve
+     * in the Inbox.
+     */
+    public data object SaveRequested : OcrCaptureEvent
 }

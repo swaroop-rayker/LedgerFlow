@@ -83,11 +83,15 @@ class RawIngestRepositoryInstrumentedTest {
         )
         session.initialize(VaultInitRequest(Bip39.generate(SecureRandom()), "INR"))
 
+        val ids = Uuid7Generator(SecureRandom())
         repository = DefaultRawIngestRepository(
             context = context,
             session = session,
             clock = Clock { now },
-            ids = Uuid7Generator(SecureRandom()),
+            ids = ids,
+            // The real writer, not a stand-in: the dedupe under test lives in
+            // it now, and it is shared with the OCR path below.
+            candidateWriter = PendingCandidateWriter(Clock { now }, ids),
             io = Dispatchers.IO,
         )
     }
@@ -744,6 +748,127 @@ class RawIngestRepositoryInstrumentedTest {
         // ...and the winner's does not.
         assertThat(database.smsRawDao().byId(smsRaw)?.parseStatus)
             .isEqualTo(RawParseStatus.PARSED)
+    }
+
+    /**
+     * **The same rule with a third source** (P4, step 14).
+     *
+     * A UPI payment fires a bank SMS, and the user then photographs the paper
+     * receipt for the same purchase. One row to review, and the loser still
+     * there to look at — exactly as for SMS against notification.
+     *
+     * What this really pins is that the OCR write goes through the *same
+     * insert*. A separate dedupe for receipts would pass any test written
+     * against it and still produce two rows here.
+     */
+    @Test
+    fun Dedupe_ReceiptAgainstSms_ProducesOnePending() = runBlocking {
+        val smsRaw = captureOneSms()
+
+        val first = repository.recordParseOutcome(smsRaw, "hdfc-upi-sent", candidate())
+        // A receipt: a merchant and no account, and less confident than a
+        // bank's own message about the same payment.
+        val second = repository.recordOcrCandidate(
+            "attachment-1",
+            candidate(
+                source = EntrySource.OCR,
+                confidence = 0.7,
+                accountLast4 = null,
+                merchantRaw = "COFFEE HOUSE",
+            ),
+        )
+
+        assertThat(first).isInstanceOf(PendingWriteOutcome.Created::class.java)
+        assertThat(second).isInstanceOf(PendingWriteOutcome.Suppressed::class.java)
+
+        assertThat(liveCandidates()).hasSize(1)
+        assertThat(liveCandidates().single().source).isEqualTo(EntrySource.SMS)
+
+        val database = session.requireDatabase()
+        // Retained and visible, never discarded (§3.1).
+        assertThat(database.pendingTransactionDao().count()).isEqualTo(2)
+        val suppressed = (second as PendingWriteOutcome.Suppressed)
+        assertThat(database.pendingTransactionDao().byId(suppressed.pendingId)?.suppressedById)
+            .isEqualTo((first as PendingWriteOutcome.Created).pendingId)
+    }
+
+    /**
+     * A receipt photographed before the bank's SMS arrives.
+     *
+     * At least as common as the other order — the user scans at the counter.
+     * §3.1 keeps the higher-confidence extraction, so the SMS supersedes.
+     */
+    @Test
+    fun recordOcrCandidate_thenTheBankSms_isSuperseded() = runBlocking {
+        val ocr = repository.recordOcrCandidate(
+            "attachment-1",
+            candidate(source = EntrySource.OCR, confidence = 0.7, accountLast4 = null),
+        )
+        val smsRaw = captureOneSms()
+        val sms = repository.recordParseOutcome(smsRaw, "hdfc-upi-sent", candidate())
+
+        assertThat(ocr).isInstanceOf(PendingWriteOutcome.Created::class.java)
+        val winner = (sms as PendingWriteOutcome.Created)
+        assertThat(winner.supersededPendingId)
+            .isEqualTo((ocr as PendingWriteOutcome.Created).pendingId)
+        assertThat(liveCandidates().single().source).isEqualTo(EntrySource.SMS)
+    }
+
+    /**
+     * **The OCR path stamps no raw verdict**, because a receipt left no raw row.
+     *
+     * The id used here is deliberately a real `sms_raw` id rather than an
+     * attachment's. That is not a situation the app can produce — ids are
+     * UUIDv7 and the two tables never share one — and it is the only way to
+     * observe the guard directly: if `recordOcrCandidate` stamped
+     * `parse_status` the way `recordParseOutcome` does, this row would move
+     * off `CAPTURED`. A write that silently touches the wrong table is the
+     * shape of bug §7 keeps warning about, and this is the assertion that
+     * would catch it.
+     */
+    @Test
+    fun recordOcrCandidate_leavesRawRowsUntouched() = runBlocking {
+        val smsRaw = captureOneSms()
+
+        repository.recordOcrCandidate(
+            smsRaw,
+            candidate(source = EntrySource.OCR, confidence = 0.7),
+        )
+
+        assertThat(session.requireDatabase().smsRawDao().byId(smsRaw)?.parseStatus)
+            .isEqualTo(RawParseStatus.CAPTURED)
+    }
+
+    /**
+     * The same receipt scanned twice is one candidate.
+     *
+     * The attachment store is content-addressed on the plaintext SHA-256, so
+     * a second scan of one bill arrives here with the id the first one used —
+     * which is the same idempotency `raw_ref_id` already gives a message.
+     */
+    @Test
+    fun recordOcrCandidate_runTwice_createsOnlyOnePendingRow() = runBlocking {
+        val first = repository.recordOcrCandidate("attachment-1", candidate(source = EntrySource.OCR))
+        val second = repository.recordOcrCandidate("attachment-1", candidate(source = EntrySource.OCR))
+
+        assertThat(first).isInstanceOf(PendingWriteOutcome.Created::class.java)
+        assertThat(second).isInstanceOf(PendingWriteOutcome.AlreadyPending::class.java)
+        assertThat(session.requireDatabase().pendingTransactionDao().count()).isEqualTo(1)
+    }
+
+    /**
+     * `raw_ref_id` points at the attachment, which is step 15's stated link.
+     */
+    @Test
+    fun recordOcrCandidate_linksThePendingRowToTheAttachment() = runBlocking {
+        val created = repository.recordOcrCandidate(
+            "attachment-1",
+            candidate(source = EntrySource.OCR),
+        ) as PendingWriteOutcome.Created
+
+        val row = session.requireDatabase().pendingTransactionDao().byId(created.pendingId)
+        assertThat(row?.rawRefId).isEqualTo("attachment-1")
+        assertThat(row?.source).isEqualTo(EntrySource.OCR)
     }
 
     /**

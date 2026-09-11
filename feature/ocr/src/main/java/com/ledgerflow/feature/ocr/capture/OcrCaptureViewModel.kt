@@ -6,9 +6,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.domain.ingest.AttachmentOutcome
+import com.ledgerflow.core.domain.ingest.AttachmentRepository
+import com.ledgerflow.core.domain.ingest.DedupeKey
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
+import com.ledgerflow.core.domain.ingest.PendingCandidate
+import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
+import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ingest.Reconciliation
 import com.ledgerflow.core.domain.ledger.LedgerRepository
+import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LineItemKind
 import com.ledgerflow.feature.ocr.extraction.ReceiptExtractor
 import com.ledgerflow.feature.ocr.recognition.ReceiptTextRecognizer
@@ -57,6 +64,8 @@ public class OcrCaptureViewModel @Inject constructor(
     private val recognizer: ReceiptTextRecognizer,
     private val images: ReceiptImageLoader,
     private val ledgerRepository: LedgerRepository,
+    private val attachments: AttachmentRepository,
+    private val ingest: RawIngestRepository,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -72,6 +81,22 @@ public class OcrCaptureViewModel @Inject constructor(
      * too large.
      */
     private var currency: String = DEFAULT_CURRENCY
+
+    /**
+     * The bytes the recogniser actually read, and the extraction it produced.
+     *
+     * **Held so that Save seals the same image the reading came from.**
+     * Re-encoding from the viewfinder at save time would store a frame the
+     * pipeline never saw, and ADR-0023's stated reason for keeping the
+     * downscaled copy — that "why did OCR read this wrong" stays answerable —
+     * would quietly stop being true.
+     *
+     * Cleared on `Dismissed` and after a successful save, so a second tap
+     * cannot file the previous receipt again.
+     */
+    private var lastRead: ReadResult? = null
+
+    private data class ReadResult(val png: ByteArray, val extracted: ExtractedTransaction)
 
     init {
         viewModelScope.launch { currency = ledgerRepository.baseCurrency() ?: DEFAULT_CURRENCY }
@@ -105,9 +130,12 @@ public class OcrCaptureViewModel @Inject constructor(
                 it.copy(reading = false, failure = event.reason)
             }
 
-            OcrCaptureEvent.Dismissed -> internalState.update {
-                it.copy(result = null, failure = null)
+            OcrCaptureEvent.Dismissed -> {
+                lastRead = null
+                internalState.update { it.copy(result = null, failure = null, saved = null) }
             }
+
+            OcrCaptureEvent.SaveRequested -> save()
         }
     }
 
@@ -146,20 +174,26 @@ public class OcrCaptureViewModel @Inject constructor(
                     // the main thread after it: StrictMode has penaltyDeath in
                     // debug and there is no reason to find out where the line
                     // is on a 60-line supermarket roll.
-                    page to ReceiptExtractor.extract(page, currency)
+                    val extracted = ReceiptExtractor.extract(page, currency)
+                    // Encoded here, on IO, and held: this is the image the
+                    // recogniser read, which is the one ADR-0023 says to keep.
+                    Triple(page, extracted, images.encode(bitmap))
                 }
             }
 
             internalState.update { current ->
                 outcome.fold(
-                    onSuccess = { (page, extracted) ->
+                    onSuccess = { (page, extracted, png) ->
+                        lastRead = ReadResult(png, extracted)
                         current.copy(
                             reading = false,
                             result = summaryOf(page, extracted, sourceLabel, currency),
                             failure = null,
+                            saved = null,
                         )
                     },
                     onFailure = {
+                        lastRead = null
                         current.copy(
                             reading = false,
                             result = null,
@@ -175,12 +209,95 @@ public class OcrCaptureViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Steps 13 to 15: the image, the row, the candidate (§5.3).
+     *
+     * **Three writes and not one of them reaches the ledger.** The image is
+     * sealed into `filesDir/attachments/`, an `attachment` row records it, and
+     * a `pending_transaction` at `PENDING` points at that row through
+     * `raw_ref_id`. Law 1 is untouched: `ApproveTransactionUseCase` is still
+     * the only thing that writes `ledger_entry`, and it runs when the user
+     * taps approve in the Inbox.
+     *
+     * **§3.1's cross-source dedupe comes for free**, because the candidate goes
+     * through the same insert a bank SMS does. A UPI payment that fired an SMS
+     * minutes ago and is now photographed produces one row, not two — the
+     * loser is suppressed and stays visible under the Inbox's "Suppressed"
+     * filter rather than being discarded.
+     *
+     * Ordered image-then-row deliberately. A sealed file with no row is
+     * garbage that a later sweep can find by name; a row pointing at a file
+     * that was never written is a receipt that appears to exist and cannot be
+     * opened, which is the failure ADR-0023 asks every drawing surface to
+     * handle and there is no reason to manufacture it here.
+     */
+    private fun save() {
+        val read = lastRead ?: return
+        internalState.update { it.copy(saving = true, saved = null) }
+
+        viewModelScope.launch {
+            val stored = attachments.store(read.png, MIME_PNG)
+            val attachmentId = when (stored) {
+                is AttachmentOutcome.Stored -> stored.attachmentId
+                // The same receipt, scanned twice. The id is the first one's,
+                // so the candidate write below sees a `raw_ref_id` it already
+                // holds and answers AlreadyPending rather than making a twin.
+                is AttachmentOutcome.AlreadyStored -> stored.attachmentId
+                AttachmentOutcome.VaultClosed -> return@launch finishSave(
+                    "The vault is locked. Open LedgerFlow and try again.",
+                )
+                AttachmentOutcome.WriteFailed -> return@launch finishSave(
+                    "That receipt could not be saved. Check your free space.",
+                )
+            }
+
+            val candidate = PendingCandidate(
+                source = EntrySource.OCR,
+                extracted = read.extracted,
+                // The same key a bank SMS computes, which is what lets the two
+                // land in one bucket (§3.1).
+                dedupeKey = DedupeKey.compute(read.extracted, attachmentId),
+            )
+
+            val outcome = ingest.recordOcrCandidate(attachmentId, candidate)
+            finishSave(
+                message = when (outcome) {
+                    is PendingWriteOutcome.Created ->
+                        "Saved to your Inbox for review."
+
+                    // Retained and visible, never discarded (§3.1) -- so the
+                    // message says where it went rather than implying loss.
+                    is PendingWriteOutcome.Suppressed ->
+                        "Looks like a duplicate. It is in the Inbox under Suppressed."
+
+                    is PendingWriteOutcome.AlreadyPending ->
+                        "You have already scanned this receipt. It is in your Inbox."
+
+                    is PendingWriteOutcome.Failed ->
+                        "That receipt could not be saved. ${outcome.reason}"
+                },
+                // A failed write keeps the read, so the user can tap Save
+                // again without pointing the camera at the bill a second time.
+                // Every other outcome is terminal for this capture.
+                clearRead = outcome !is PendingWriteOutcome.Failed,
+            )
+        }
+    }
+
+    private fun finishSave(message: String, clearRead: Boolean = true) {
+        if (clearRead) lastRead = null
+        internalState.update { it.copy(saving = false, saved = message) }
+    }
+
     private companion object {
         const val SOURCE_CAMERA = "Camera"
         const val SOURCE_FILE = "Imported"
 
         /** Until `app_meta` answers. Onboarding guarantees a real one exists. */
         const val DEFAULT_CURRENCY = "INR"
+
+        /** What `ReceiptImageLoader.encode` produces. */
+        const val MIME_PNG = "image/png"
     }
 }
 

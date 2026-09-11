@@ -9,6 +9,7 @@ import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.data.analytics.DefaultRollupRepository
+import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
 import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
@@ -82,6 +83,13 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
     lateinit var storage: DefaultStorageMaintenance
         private set
 
+    /** Receipt images (ADR-0023). P4. */
+    lateinit var attachments: DefaultAttachmentRepository
+        private set
+
+    /** The open handle, for tests asserting on rows this module's ports hide. */
+    val database: LedgerFlowDatabase get() = session.requireDatabase()
+
     suspend fun open() {
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
@@ -99,10 +107,15 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
         ledger = DefaultLedgerRepository(session, ids, clock, Dispatchers.IO)
         drafts = DefaultDraftRepository(session, ids, clock, Dispatchers.IO)
         rollups = DefaultRollupRepository(session, clock, Dispatchers.IO)
+        attachments = DefaultAttachmentRepository(context, session, clock, ids, Dispatchers.IO)
     }
 
     fun close() {
         runCatching { session.requireDatabase().close() }
+        // The images this suite sealed. Left behind they accumulate across
+        // runs and the next class's "how many files are there" assertions
+        // would count them.
+        File(context.filesDir, "attachments").deleteRecursively()
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
         context.deleteDatabase(TEST_DATABASE)

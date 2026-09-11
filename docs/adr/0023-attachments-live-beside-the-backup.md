@@ -116,6 +116,64 @@ Instead the growth is made **visible**: Settings shows "Receipts — N images,
 M MB" with a manual bulk delete behind the `Warning` treatment the bin's erase
 uses. The user's call, with the number in front of them.
 
+### Amendment (P4, implementation): the local seal uses a key *derived from* the DEK
+
+This ADR says attachment files are sealed "under the DEK", restating §7.1.
+Building it surfaced something nobody had checked: **nothing retains the DEK
+after unlock.** `VaultSession` hands it to `LedgerFlowDatabaseFactory` and
+calls `dek.destroy()` on the next line, and SQLCipher's own copy lives behind
+`PRAGMA cipher_memory_security = ON`, which keeps it out of swappable memory.
+
+Honouring the wording literally therefore meant one of three things, and none
+of them is what the wording implies:
+
+| | |
+|---|---|
+| **Retain the `Dek`** | A *second* copy of the database key in the JVM heap for the whole process lifetime, with none of `cipher_memory_security`'s protection. Least code, worst blast radius. |
+| **Re-unwrap per write** | A Keystore round-trip per attachment. No long-lived copy, but a new failure mode when the Keystore wrap is absent. |
+| **Derive a distinct purpose** | `HKDF(dek, info = "ledgerflow-attachment-local-v1")`, retained instead of the DEK. |
+
+**Decided: derive.** `AttachmentKey.local`, held by `VaultSession` for exactly
+the database handle's lifetime and zeroed on `close()`.
+
+The reasoning is this ADR's own, applied to the local copy instead of the
+backup one. Above, for the phrase-derived backup seal, it argues that deriving
+"introduces no new key material class and no third wrap… it derives a *new
+purpose* from the existing seed with a distinct `info` string", and that §5.9's
+"`info` strings are versioned; changing one is a breaking format change" means
+**adding one is not changing one**. All of that holds here. ADR-0011's ban is
+on adding a wrap to the DEK *path*; this adds none, and there is still exactly
+one DEK wrapped by exactly two factors.
+
+What it buys over the literal reading is worth the paragraph: **a heap
+compromise yields the user's receipt images and not their ledger.** The
+literal reading would have handed over both.
+
+Three implementation notes, all load-bearing:
+
+- **The derivation is deterministic and unsalted.** An image sealed today has
+  to open tomorrow, so the key must be a pure function of the DEK; a random
+  salt would be a bug wearing the costume of an improvement, and a per-install
+  salt is one more thing to store, back up and lose. RFC 5869 §3.1 says an
+  extract salt is unnecessary when the IKM is already uniformly random, which
+  a DEK is. Per-*file* uniqueness is `AesGcm`'s nonce, which it generates
+  itself and offers no way to supply.
+- **It lives in its own file, not in `KeyDerivation`.** That file is pinned
+  byte-for-byte by `KeyDerivationGoldenVectorTest` because every `.lfbk` ever
+  written depends on it. This key protects files on one device, and its golden
+  vector is correspondingly *re-recordable in principle* — changing it orphans
+  local images that the phrase-sealed backup copy can still restore, where
+  changing `KeyDerivation` orphans every backup that has ever existed. Two
+  different change rules should not share a file.
+- **The committed vector was verified against an independent RFC 5869
+  implementation**, not recorded from this code's own output. A vector copied
+  out of the thing it tests proves only that the code agrees with itself.
+
+**Unchanged:** the backup copy. It is still phrase-derived, still sealed with
+`info = "lfbk-attachment-v1"`, still written *beside* the `.lfbk` rather than
+inside it. The two seals are deliberately named apart so that nobody later
+assumes one file opens with the other's key.
+
 ## Consequences
 
 **What this makes easy.** A phrase-only restore that returns images as well as
@@ -160,5 +218,15 @@ for transfer, which would reopen Option B with a different justification.
   images and assert the surfaces report the count rather than crashing or
   showing a blank. The honest-degradation promise, tested.
 - **`AttachmentPathIsRelativeTest`** — no stored `file_path` is absolute.
+  Shipped as `AttachmentStoreInstrumentedTest.theStoredPath_isRelative`, with
+  the rest of the store's properties beside it: the bytes on disk are not the
+  plaintext, the file is in `filesDir` and not `cacheDir`, the same image
+  twice stores once, a missing file reads as null rather than crashing, a
+  tampered file does not authenticate, and no `.tmp` survives. Proven
+  non-vacuous by mutation — writing plaintext instead of sealing turns exactly
+  two of them red.
+- **`AttachmentKeyTest`** — the derivation above: deterministic in the DEK,
+  distinct from the DEK itself and from every phrase-derived purpose, and
+  matching a vector computed outside this codebase.
 - **`bannedApiCheck`** already enforces Law 5's `cacheDir` ban, which covers the
   "decoded-image scratch only" rule this feature is most likely to strain.

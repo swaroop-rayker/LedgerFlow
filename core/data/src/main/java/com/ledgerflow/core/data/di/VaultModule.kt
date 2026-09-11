@@ -33,8 +33,10 @@ import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.StorageMaintenance
 import com.ledgerflow.core.domain.vault.VaultRepository
 import com.ledgerflow.core.data.inbox.DefaultPendingRepository
+import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
 import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
 import com.ledgerflow.core.domain.inbox.PendingRepository
+import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import dagger.Binds
 import dagger.Module
@@ -202,6 +204,18 @@ public interface IngestModule {
 
     @Binds
     public fun rawIngestRepository(impl: DefaultRawIngestRepository): RawIngestRepository
+
+    /**
+     * Receipt images on disk (ADR-0023).
+     *
+     * Its own port rather than a method on [rawIngestRepository]: the capture
+     * pipeline's write port is reached from a receiver with ten seconds to
+     * live, and this one seals a megabyte and fsyncs it. Same module, opposite
+     * constraints, and a screen that wants to draw a receipt should not
+     * acquire the SMS triage surface to do it.
+     */
+    @Binds
+    public fun attachmentRepository(impl: DefaultAttachmentRepository): AttachmentRepository
 
     /**
      * The Inbox's read side (P2-6).

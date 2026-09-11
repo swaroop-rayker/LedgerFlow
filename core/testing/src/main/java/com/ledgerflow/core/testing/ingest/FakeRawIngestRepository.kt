@@ -84,7 +84,7 @@ public class FakeRawIngestRepository(
      */
     public fun candidateIdFor(rawId: String): String = "pending-$rawId"
 
-    /** Set to make the next [recordParseOutcome] fail, as a locked vault would. */
+    /** Set to make the next candidate write fail, as a locked vault would. */
     public var failPendingWrites: Boolean = false
 
     private val seenHashes = mutableSetOf<String>()
@@ -161,12 +161,36 @@ public class FakeRawIngestRepository(
         rawId: String,
         ruleId: String?,
         candidate: PendingCandidate,
+    ): PendingWriteOutcome = insertCandidate(rawId, candidate) {
+        parseOutcomes += Triple(rawId, ruleId, ruleId != null)
+    }
+
+    /**
+     * A receipt's candidate (§5.3, step 15).
+     *
+     * **Through the same [insertCandidate] production shares**, which is the
+     * whole point of the fake mirroring the real class's structure here: a
+     * test asserting that a receipt and a bank SMS for one payment produce one
+     * candidate has to exercise the same rule the database would.
+     *
+     * No `parseOutcomes` entry, because there is no raw row to carry a
+     * verdict — the same structural difference the real implementation has.
+     */
+    override suspend fun recordOcrCandidate(
+        attachmentId: String,
+        candidate: PendingCandidate,
+    ): PendingWriteOutcome = insertCandidate(attachmentId, candidate) { }
+
+    private inline fun insertCandidate(
+        refId: String,
+        candidate: PendingCandidate,
+        recordVerdict: () -> Unit,
     ): PendingWriteOutcome {
         if (failPendingWrites) return PendingWriteOutcome.Failed("fake refused")
 
-        pending[rawId]?.let { return PendingWriteOutcome.AlreadyPending(candidateIdFor(rawId)) }
+        pending[refId]?.let { return PendingWriteOutcome.AlreadyPending(candidateIdFor(refId)) }
 
-        parseOutcomes += Triple(rawId, ruleId, ruleId != null)
+        recordVerdict()
 
         // §3.1's dedupe, through the same DuplicateMatcher production uses.
         // Reimplementing the rule here is the trap: the fake would then agree
@@ -178,7 +202,7 @@ public class FakeRawIngestRepository(
         // dedupe the fake reports is a dedupe the database would also make.
         val winner = pending.entries
             .filter { (otherRaw, other) ->
-                otherRaw != rawId &&
+                otherRaw != refId &&
                     suppressedBy[otherRaw] == null &&
                     !DedupeKey.isUnkeyed(candidate.dedupeKey) &&
                     other.dedupeKey == candidate.dedupeKey &&
@@ -186,20 +210,20 @@ public class FakeRawIngestRepository(
             }
             .maxByOrNull { it.value.confidence }
 
-        pending[rawId] = candidate
+        pending[refId] = candidate
 
         return when {
-            winner == null -> PendingWriteOutcome.Created(candidateIdFor(rawId))
+            winner == null -> PendingWriteOutcome.Created(candidateIdFor(refId))
 
             winner.value.confidence >= candidate.confidence -> {
-                suppressedBy[rawId] = candidateIdFor(winner.key)
-                PendingWriteOutcome.Suppressed(candidateIdFor(rawId), candidateIdFor(winner.key))
+                suppressedBy[refId] = candidateIdFor(winner.key)
+                PendingWriteOutcome.Suppressed(candidateIdFor(refId), candidateIdFor(winner.key))
             }
 
             else -> {
-                suppressedBy[winner.key] = candidateIdFor(rawId)
+                suppressedBy[winner.key] = candidateIdFor(refId)
                 PendingWriteOutcome.Created(
-                    pendingId = candidateIdFor(rawId),
+                    pendingId = candidateIdFor(refId),
                     supersededPendingId = candidateIdFor(winner.key),
                 )
             }

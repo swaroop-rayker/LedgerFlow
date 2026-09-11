@@ -186,4 +186,33 @@ public interface RawIngestRepository {
         ruleId: String?,
         candidate: PendingCandidate,
     ): PendingWriteOutcome
+
+    /**
+     * A candidate read off a receipt image (SPEC.md §5.3). P4, step 15.
+     *
+     * The sibling of [recordParseOutcome], and deliberately a sibling rather
+     * than a second implementation: **both go through the same insert and the
+     * same §3.1 dedupe.** A UPI payment can now fire a bank SMS, a payment-app
+     * notification *and* a photographed receipt, and the one thing that must
+     * not happen is three candidates for one payment. Sharing the write is
+     * what makes cross-source dedupe cover OCR without a line of OCR-specific
+     * dedupe code — and without the `if (source == OCR)` CLAUDE.md §0 forbids.
+     *
+     * The two differ in exactly one respect, and it is structural rather than
+     * a matter of source: a message capture left a row in `sms_raw` or
+     * `notification_raw` that wants a `parse_status`, and a receipt did not.
+     * `pending_transaction.raw_ref_id` therefore points at
+     * [attachmentId] — the `attachment` row whose sealed file holds the image
+     * the extraction was read from (ADR-0023).
+     *
+     * That link is also the idempotency key, exactly as `rawId` is for a
+     * message: storing the same image twice returns the same attachment id
+     * (content-addressed on the plaintext SHA-256), so a second scan of one
+     * receipt reaches here with the id the first one used and comes back
+     * [PendingWriteOutcome.AlreadyPending] rather than producing a twin.
+     */
+    public suspend fun recordOcrCandidate(
+        attachmentId: String,
+        candidate: PendingCandidate,
+    ): PendingWriteOutcome
 }

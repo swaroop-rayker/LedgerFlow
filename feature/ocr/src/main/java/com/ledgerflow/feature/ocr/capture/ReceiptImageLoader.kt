@@ -177,9 +177,33 @@ public class ReceiptImageLoader @Inject constructor(
         )
     }
 
+    /**
+     * The bitmap as bytes, for storage (ADR-0023).
+     *
+     * **PNG, not JPEG, and lossless is the point.** The stored image is the
+     * one the recogniser read, kept so that "why did OCR misread this line"
+     * stays answerable later. Re-encoding through a lossy codec would mean the
+     * bytes on disk are *not* the bytes that were recognised, and the
+     * artefacts a JPEG adds to thin thermal-printer strokes are exactly the
+     * kind that change what a recogniser sees.
+     *
+     * It is already downscaled to [MAX_LONG_EDGE], which is where the ~15x
+     * saving ADR-0023 counted on comes from; PNG on top of that is a receipt
+     * of a few hundred KB rather than a few MB.
+     */
+    public fun encode(bitmap: Bitmap): ByteArray =
+        java.io.ByteArrayOutputStream().use { out ->
+            // `quality` is ignored for PNG; the parameter is not optional.
+            bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY_IGNORED, out)
+            out.toByteArray()
+        }
+
     public companion object {
         /** §5.3's cap. Also the size ADR-0023 stores as the attachment. */
         public const val MAX_LONG_EDGE: Int = 1600
+
+        /** PNG is lossless; `compress` takes the argument and ignores it. */
+        private const val PNG_QUALITY_IGNORED = 100
 
         /**
          * Never enlarge a small PDF past this.
