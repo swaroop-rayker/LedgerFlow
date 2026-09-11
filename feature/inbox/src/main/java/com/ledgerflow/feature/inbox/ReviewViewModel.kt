@@ -472,6 +472,9 @@ public class ReviewViewModel @Inject constructor(
      */
     private fun PendingTransaction.toUiState(previous: ReviewUiState): ReviewUiState {
         val book = extracted.direction.toLedgerOrNull()
+        // The bill's own lines, when the source produced any (ADR-0022). Empty
+        // for every SMS and every notification, permanently and correctly.
+        val extractedLines = extracted.lines.toReviewLines(currency) { ids.generate() }
         return previous.copy(
             loading = false,
             missing = false,
@@ -490,6 +493,12 @@ public class ReviewViewModel @Inject constructor(
             merchantId = previous.merchants
                 .firstOrNull { it.normalizedKey == extracted.merchantRaw?.let(MerchantNormalizer::normalize) }
                 ?.id,
+            // **Both, or the lines are held and never shown.** `newLineItems`
+            // returns nothing while `itemised` is false, so seeding the lines
+            // alone would give a receipt a form that looks single-item and an
+            // approval that silently drops every line it extracted.
+            itemised = extractedLines.isNotEmpty(),
+            lines = extractedLines,
             needsManualFill = needsManualFill,
             sourceLabel = when (source) {
                 EntrySource.SMS -> "From an SMS"
