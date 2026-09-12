@@ -173,4 +173,51 @@ internal object ReceiptFixtures {
         row(18, LEFT to "PIECES PURCHASED: 5 DISC ITEMS:", amount("0")),
         row(19, LEFT to "TOTAL SAVING:", amount("75.00")),
     )
+
+    /**
+     * The same page, photographed crooked.
+     *
+     * Shears every run's vertical position by `slope * centerX` — the model of
+     * a page rotated by a small angle, which is what a hand-held capture
+     * produces. A shear rather than a true rotation because ML Kit returns
+     * **axis-aligned** bounding boxes: a rotated glyph comes back as an
+     * upright box whose centre has moved, which is precisely a shear of the
+     * centres.
+     *
+     * The boxes keep their width and height, so a test can assert that the
+     * *same* rows come out of the crooked page as out of the straight one —
+     * which is the property the whole skew correction exists to give.
+     */
+    fun sheared(page: RecognizedPage, slope: Float): RecognizedPage = RecognizedPage(
+        page.elements.map { element ->
+            val shift = slope * element.centerX
+            element.copy(top = element.top + shift, bottom = element.bottom + shift)
+        },
+    )
+
+    /**
+     * The same page on a curled roll.
+     *
+     * A quadratic sag about the page's horizontal midpoint: rows bow downward
+     * toward both edges, which is what a thermal roll lying on a table does.
+     * [depth] is the sag at the edges in pixels.
+     *
+     * Deliberately *not* something the linear skew correction can undo — it
+     * exists to measure the residual that correction leaves behind.
+     */
+    fun curled(page: RecognizedPage, depth: Float): RecognizedPage {
+        val centres = page.elements.map { it.centerX }
+        val mid = (centres.minOrNull() ?: 0f).let { lo ->
+            val hi = centres.maxOrNull() ?: 0f
+            (lo + hi) / 2f
+        }
+        val halfWidth = ((centres.maxOrNull() ?: 1f) - mid).coerceAtLeast(1f)
+        return RecognizedPage(
+            page.elements.map { element ->
+                val offset = (element.centerX - mid) / halfWidth
+                val shift = depth * offset * offset
+                element.copy(top = element.top + shift, bottom = element.bottom + shift)
+            },
+        )
+    }
 }

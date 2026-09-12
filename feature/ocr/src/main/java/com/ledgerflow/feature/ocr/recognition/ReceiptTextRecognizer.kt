@@ -40,6 +40,32 @@ public data class RecognizedElement(
     /** Vertical middle — the value §5.3's line clustering bands on. */
     public val centerY: Float get() = (top + bottom) / 2f
 
+    /**
+     * Horizontal middle.
+     *
+     * Needed by skew estimation: a photographed page's rows slope, so where a
+     * run sits vertically depends on how far along the row it is, and the
+     * correction is a function of x.
+     */
+    public val centerX: Float get() = (left + right) / 2f
+
+    /** Box height. Zero-height boxes are filtered before they reach geometry. */
+    internal val height: Float get() = bottom - top
+
+    /**
+     * How much of the shorter box's height these two share vertically, 0..1.
+     *
+     * The test for "are these on the same printed line", and deliberately a
+     * *ratio* rather than a distance: a header glyph and a body glyph on one
+     * row differ in height by 3x, and any absolute tolerance is wrong for one
+     * of them.
+     */
+    internal fun verticalOverlapWith(other: RecognizedElement): Float {
+        val shared = minOf(bottom, other.bottom) - maxOf(top, other.top)
+        val shorter = minOf(height, other.height)
+        return if (shorter <= 0f) 0f else (shared / shorter).coerceIn(0f, 1f)
+    }
+
     internal val area: Float get() = (right - left) * (bottom - top)
 
     /** Intersection over union with [other]. 0 when they do not overlap. */

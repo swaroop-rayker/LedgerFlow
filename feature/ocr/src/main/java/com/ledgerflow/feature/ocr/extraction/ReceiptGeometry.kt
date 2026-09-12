@@ -60,48 +60,170 @@ internal object ReceiptGeometry {
     private const val COLUMN_GAP_FRACTION = 1.0f
 
     /**
+     * How far apart two runs may sit and still vote on the page's skew.
+     *
+     * Three glyph heights is comfortably wider than a word gap (0.3–0.5) and
+     * comfortably narrower than a column gutter, which is what it has to
+     * separate: a pair straddling the gutter between an item name and its
+     * price would measure the *row's* slope over a long lever arm, which is
+     * exactly the measurement that is unreliable when the row might be curved.
+     */
+    private const val SKEW_NEIGHBOUR_GAP_FRACTION = 3.0f
+
+    /** Two runs must share this much height to count as one printed line. */
+    private const val MIN_SKEW_PAIR_OVERLAP = 0.5f
+
+    /**
+     * Below this many pairs the estimate is noise, and zero is the safer
+     * answer — an unrotated page read as rotated is worse than a rotated page
+     * read as flat, because the correction then invents drift that is not
+     * there.
+     */
+    private const val MIN_SKEW_PAIRS = 4
+
+    /**
+     * A last bound on a degenerate estimate.
+     *
+     * **It rarely fires, and knowing why is the useful part.**
+     * [MIN_SKEW_PAIR_OVERLAP] bites first: two runs on one printed line are
+     * offset vertically by `slope x dx`, so requiring them to still share half
+     * their height caps what is *measurable* at roughly 10° for body text —
+     * measured, not reasoned about. Past that no pair qualifies and the
+     * estimator honestly returns nothing rather than a wrong number.
+     *
+     * This bound exists for the case that survives anyway: large print, where
+     * tall boxes keep overlapping at a slope no receipt should have. A page
+     * that steep wants retaking, and correcting it would move rows further
+     * than leaving it alone.
+     */
+    private const val MAX_SKEW_SLOPE = 0.36f
+
+    /**
      * The page's rows, top to bottom, each ordered left to right.
      *
-     * Greedy banding over runs sorted by vertical centre, with the band's own
-     * running mean as the reference. The mean rather than the first member's
-     * centre because a row is a dozen runs and its first one may be a tall
-     * capital; the mean is what the rest of the row agrees on.
+     * ## Skew is corrected first, and that is the whole change
      *
-     * **Known limit: skew.** A page photographed at an angle has rows that
-     * slope, and a slope carrying a row's right-hand end more than the
-     * tolerance below its left-hand end will split that row in two. §5.3 lists
-     * deskew as a preprocessing step and `ReceiptImageLoader` does not
-     * implement one; a handheld capture of a flat bill is well inside the
-     * tolerance, a photograph of a curled roll may not be. This is stated
-     * rather than guessed at, and it is one of the things the corpus's "curled
-     * or crumpled sheet" fixture exists to measure.
+     * The original version banded on raw `centerY`, which assumes rows are
+     * **horizontal**. A receipt photographed by hand is rotated by a few
+     * degrees, so a row's right-hand end sits lower than its left-hand end —
+     * and on a wide bill the drift across the page exceeds the band tolerance
+     * long before it reaches the amount column. The row splits, the amount
+     * lands in a row of its own, and the item loses its price.
+     *
+     * §5.3 lists deskew as an image preprocessing step and nothing implements
+     * one. It does not need one: the rotation is recoverable from the
+     * recognised boxes themselves, which is cheaper than touching pixels,
+     * needs no dependency, and stays JVM-testable — the property the
+     * recognizer wrapper exists to protect.
+     *
+     * So [estimateSkew] reads the dominant text slope off the page and the
+     * banding runs on `centerY - slope * centerX`: the coordinate a run
+     * *would* have had if the page were square. Nothing is rewritten; the
+     * elements keep their real positions for [cells] and for step 9.
+     *
+     * ## What this does not fix
+     *
+     * **Rotation past about 10°.** Measured, not assumed: the estimator pairs
+     * runs that still overlap vertically, and on body text that stops being
+     * true somewhere around 10°. Beyond it no pair qualifies, [estimateSkew]
+     * returns zero, and the page is banded as though it were square — which
+     * is the honest failure, not a silent wrong answer. A capture guide in the
+     * viewfinder is the fix for that range, not more arithmetic here.
+     *
+     * **Curl.** A thermal roll bends, so its rows are curves rather than
+     * straight lines, and one slope cannot describe a curve. Correcting the
+     * dominant linear term leaves a residual that the band tolerance absorbs
+     * while it stays small — which for a roll flattened on a table it does,
+     * and for one photographed mid-curl it may not. That is the corpus's
+     * "curled or crumpled sheet" fixture to measure, not this comment to
+     * guess.
+     *
+     * **Perspective.** A page shot at an angle has rows that also *converge*.
+     * Undoing that needs a four-point warp, which needs the page's corners,
+     * which needs image processing this deliberately avoids.
      */
     fun rows(page: RecognizedPage): List<ReceiptRow> {
-        val elements = page.elements.filter { it.text.isNotBlank() }
+        val elements = page.elements.filter { it.text.isNotBlank() && it.height > 0f }
         if (elements.isEmpty()) return emptyList()
 
         val scale = medianHeight(elements)
         val tolerance = scale * ROW_BAND_FRACTION
+        val slope = estimateSkew(elements, scale)
 
         val bands = mutableListOf<MutableList<RecognizedElement>>()
         val centres = mutableListOf<Float>()
 
-        elements.sortedBy { it.centerY }.forEach { element ->
+        elements.sortedBy { it.squaredY(slope) }.forEach { element ->
             val last = bands.lastOrNull()
             val bandCentre = centres.lastOrNull()
-            if (last != null && bandCentre != null && element.centerY - bandCentre <= tolerance) {
+            if (last != null && bandCentre != null &&
+                element.squaredY(slope) - bandCentre <= tolerance
+            ) {
                 last += element
                 // The running mean, recomputed rather than nudged: a band that
                 // gained a tall header glyph should re-centre on what it now
                 // holds, not on the order it arrived in.
-                centres[centres.lastIndex] = last.sumOf { it.centerY.toDouble() }.toFloat() / last.size
+                centres[centres.lastIndex] =
+                    last.sumOf { it.squaredY(slope).toDouble() }.toFloat() / last.size
             } else {
                 bands += mutableListOf(element)
-                centres += element.centerY
+                centres += element.squaredY(slope)
             }
         }
 
         return bands.map { band -> ReceiptRow(band.sortedBy { it.left }) }
+    }
+
+    /** Where a run would sit vertically if the page were square. */
+    private fun RecognizedElement.squaredY(slope: Float): Float = centerY - slope * centerX
+
+    /**
+     * The page's dominant text slope, in y-per-x.
+     *
+     * **Measured from the runs, never assumed.** Each pair of horizontally
+     * adjacent runs that plainly share a printed line — they overlap
+     * vertically and sit within a word-gap of each other — contributes one
+     * slope, and the answer is their **median**.
+     *
+     * The median rather than a mean, and adjacent pairs rather than row
+     * endpoints, because both choices are about robustness on exactly the
+     * input this exists for: a messy photograph produces spurious runs from
+     * background texture, and a receipt has wide column gutters that no pair
+     * should be allowed to straddle. A mean would be dragged by a handful of
+     * junk pairs; endpoints would measure the gutter instead of the text.
+     *
+     * Returns zero when there is not enough evidence — fewer than
+     * [MIN_SKEW_PAIRS] usable pairs — because a page with almost no adjacent
+     * text is one where a slope estimate is a guess, and guessing a rotation
+     * is worse than assuming none.
+     */
+    fun estimateSkew(elements: List<RecognizedElement>, scale: Float): Float {
+        val byLeft = elements.sortedBy { it.left }
+        val neighbourGap = scale * SKEW_NEIGHBOUR_GAP_FRACTION
+        val slopes = mutableListOf<Float>()
+
+        byLeft.forEachIndexed { index, left ->
+            // The nearest qualifying neighbour only — a run votes once.
+            byLeft.asSequence()
+                .drop(index + 1)
+                // Sorted by `left`, so once the gap is too wide it stays too
+                // wide; `takeWhile` ends the scan rather than walking the page.
+                .takeWhile { right -> right.left - left.right <= neighbourGap }
+                .firstOrNull { right ->
+                    right.centerX > left.centerX &&
+                        left.verticalOverlapWith(right) >= MIN_SKEW_PAIR_OVERLAP
+                }
+                ?.let { right ->
+                    slopes += (right.centerY - left.centerY) / (right.centerX - left.centerX)
+                }
+        }
+
+        if (slopes.size < MIN_SKEW_PAIRS) return 0f
+        val median = slopes.sorted()[slopes.size / 2]
+        // A receipt photographed past this is not a skew problem, it is a
+        // retake. Clamping stops a pathological estimate making things worse
+        // than leaving the page alone would.
+        return median.coerceIn(-MAX_SKEW_SLOPE, MAX_SKEW_SLOPE)
     }
 
     /**
