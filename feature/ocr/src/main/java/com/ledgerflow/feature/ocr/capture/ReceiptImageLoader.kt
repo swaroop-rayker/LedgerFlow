@@ -2,6 +2,9 @@ package com.ledgerflow.feature.ocr.capture
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.annotation.RequiresApi
+import android.os.Build
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ImageDecoder
@@ -89,7 +92,61 @@ public class ReceiptImageLoader @Inject constructor(
         }.getOrDefault(false)
     }
 
-    private fun decodeImage(uri: Uri): Bitmap {
+    /**
+     * Decodes an image, downsampling to [MAX_RECOGNITION_EDGE] as it goes.
+     *
+     * **Two paths, because `ImageDecoder` is API 28 and `minSdk` is 26.**
+     * Without the split this crashes on Android 8.0 and 8.1 the moment a user
+     * imports a photo — `NoClassDefFoundError`, from a line that reads as
+     * perfectly ordinary. Android Lint says so; nothing was listening, because
+     * `preMergeCheck` runs lint on `:app` alone and never on a library module.
+     *
+     * Downsampling during the decode rather than after it is the point of
+     * both paths: a full-resolution receipt photo is tens of megabytes as
+     * `ARGB_8888`, and decoding it only to shrink it is how a capture screen
+     * meets `OutOfMemoryError` on the devices least able to spare the memory.
+     */
+    private fun decodeImage(uri: Uri): Bitmap =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            decodeWithImageDecoder(uri)
+        } else {
+            decodeWithBitmapFactory(uri)
+        }
+
+    /**
+     * The pre-API-28 path.
+     *
+     * `inSampleSize` only halves, so the result lands somewhere between the
+     * cap and half of it; [cap] finishes the job exactly. Two passes over the
+     * file — bounds, then pixels — which is what `inJustDecodeBounds` is for.
+     */
+    private fun decodeWithBitmapFactory(uri: Uri): Bitmap {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, bounds)
+        } ?: error("Could not open the chosen file.")
+
+        val longEdge = maxOf(bounds.outWidth, bounds.outHeight)
+        check(longEdge > 0) { "That file is not an image." }
+
+        var sample = 1
+        while (longEdge / (sample * 2) >= MAX_RECOGNITION_EDGE) sample *= 2
+
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            // ML Kit needs readable pixels, the same requirement the other
+            // path sets ALLOCATOR_SOFTWARE for.
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val decoded = context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, options)
+        } ?: error("That image could not be decoded.")
+
+        return cap(decoded, MAX_RECOGNITION_EDGE)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.P)
+    private fun decodeWithImageDecoder(uri: Uri): Bitmap {
         val source = ImageDecoder.createSource(context.contentResolver, uri)
         return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
             // ARGB_8888 rather than the default hardware bitmap: ML Kit needs

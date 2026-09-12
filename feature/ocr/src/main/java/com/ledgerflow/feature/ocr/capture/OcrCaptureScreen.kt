@@ -39,6 +39,7 @@ import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfCaptureGuide
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
@@ -262,12 +263,20 @@ private fun CameraPane(
                 // second or two that is not a trade worth taking the bug for.
                 implementationMode = ImplementationMode.EMBEDDED,
             )
+            // Drawn over the preview, at the same measured size.
+            LfCaptureGuide(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(RECEIPT_PREVIEW_ASPECT),
+            )
         } ?: Text(
             text = "Starting the camera…",
             style = LfTheme.typography.bodyM,
             color = LfTheme.colors.textSecondary,
         )
     }
+
+    if (surfaceRequest != null) CaptureHint()
 
     LfActionRow(alignment = LfActionAlignment.Start) {
         LfButton(
@@ -297,6 +306,26 @@ private fun CameraPane(
             },
         )
     }
+}
+
+/**
+ * What the guide is asking for, in words.
+ *
+ * Both halves earn their place. **"Fill the guide"** is about resolution: a
+ * bill occupying a third of the frame gets a third of the pixels, and glyph
+ * height is what decides whether a thermal line is readable at all.
+ * **"Square to the bill"** is about skew, which the extractor can undo to
+ * about 10° and no further.
+ *
+ * One sentence, because a viewfinder is not where anybody reads instructions.
+ */
+@Composable
+private fun CaptureHint() {
+    Text(
+        text = "Fill the guide. Hold the phone square to the bill.",
+        style = LfTheme.typography.label,
+        color = LfTheme.colors.textSecondary,
+    )
 }
 
 /** Turns a sensor frame the right way up. A no-op at 0°, which is the common case. */
