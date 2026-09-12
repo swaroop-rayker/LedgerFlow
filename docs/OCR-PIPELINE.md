@@ -148,18 +148,47 @@ the amounts do not clip (BUG9).
 material, it must never be added to the corpus, and it says nothing whatever
 about thermal paper — which is the substrate the gate is actually about.
 
+### The photograph, not just the arithmetic
+
+Four changes came out of the owner's first real receipt, in the order they
+were worth doing:
+
+1. **Skew is corrected before banding.** `estimateSkew` reads the page's
+   dominant text slope off the recognised boxes — the median of slopes between
+   adjacent runs that plainly share a line — and rows band on
+   `centerY - slope * centerX`. §5.3 asks for image deskew; this does it in
+   arithmetic, so it needs no dependency and stays JVM-testable. **Working
+   range measured at about 10°**: past that two runs on one line stop
+   overlapping, no pair qualifies, and the estimator returns zero rather than
+   a wrong number.
+2. **Recognition runs at 2560, storage stays at 1600.** Recognition used to
+   run on the stored size, which left a 42-character thermal line at ~12 px on
+   a phone photo. **§11's 2.5 s budget is measured for the first time**:
+   656 ms at 1600, 711 ms at 2560 — 2.5× the pixels for 8% more time.
+3. **A capture guide** in the viewfinder (`LfCaptureGuide`, in
+   `:core:designsystem` so it inherits the screenshot gate). Improving the
+   input beats correcting it, and it keeps captures inside the range skew
+   correction can fix.
+4. **Runs with neither a letter nor a digit are dropped.** The real receipt
+   was shot on woven cloth and returned 195 runs for ~60 lines; measured, that
+   surplus polluted item names and dragged the page scale from 20 px to 9.
+
 ### Still open in B
 
 - **No date detection.** §5.3's pipeline does not list one and the review
   screen falls back to the capture time, so a receipt photographed days later
-  lands on the wrong day until the user corrects it.
-- **No fuzzy merchant match.** Step 9 emits `merchantRaw`, which is that
-  field's contract. §5.5's Jaro-Winkler ≥ 0.88 suggestion is a review-time
-  surface and needs the merchant table — and the same metric is what §12's
-  recall grading needs for item names, so it is one implementation serving two
-  callers.
-- **§11's 2.5 s budget is still unmeasured.** Extraction itself is
-  microseconds; the two concurrent script passes remain the thing at risk.
+  lands on the wrong day until corrected.
+- **No fuzzy keyword matching.** OCR read `GST` as `6ST` on the real bill, and
+  keyword matching is exact substring, so the row fell through as an item.
+  §12 already accepts Jaro-Winkler for item *names*; the same argument applies
+  to keywords. This is the largest known remaining source of wrong lines.
+- **Perspective.** A page shot at an angle also converges, and undoing that
+  needs a four-point warp — corners, and therefore image processing. The
+  capture guide is the answer taken instead.
+- **Merchant selection on a real header.** `FOOD BAZAAR` did not win merchant
+  detection on the owner's receipt and the cause is undiagnosed; the garbled
+  `MALLNDRAPURAM` token is ML Kit's own, since every join in this pipeline
+  uses a space. Needs the image.
 
 ## C. Becoming a candidate — **built**
 
