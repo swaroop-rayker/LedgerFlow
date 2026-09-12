@@ -124,6 +124,29 @@ reason `ReceiptTextRecognizer` returns its own type.
   screen has to recompute it on every keystroke and features may not depend on
   features. Nothing about it is persisted: it is a pure function of the lines
   and the total, both already in `extracted_json`.
+- **Keyword matching is exact substring first, then one glyph's worth of
+  doubt.** OCR read `S GST 9%` as `S 6ST 9%` on the owner's bill and the row
+  fell through as an item — one of the two "items" that reached the Inbox on a
+  six-item receipt. `ReceiptKeywords.matches` now falls back to a
+  word-boundary-anchored Jaro-Winkler window (`:core:domain`'s `JaroWinkler`,
+  one implementation for this, §5.5's merchant suggestion and §12's recall
+  grading). **The threshold is §5.5's own 0.88, unchanged**, and the fix that
+  made the case reachable was a *longer keyword* — the TAX set now lists the
+  spaced `S GST` / `C GST` forms an Indian invoice actually prints, so the
+  comparison is five characters (0.8933) rather than three (0.7778).
+  Two further clauses are load-bearing and were each chosen from a measured
+  false-positive count over ~75 real Indian retail item names: **equal length**
+  (without it `REFINED` matches `REFUND` at 0.8944, and `REFUND` decides the
+  direction of the whole receipt) and **at most one differing character**
+  (without it `CASHEWS` matches `CASHIER` at 0.8857). All three together admit
+  zero new wrong lines; any two of them admit between 1 and 12.
+- **A short keyword stays exact, and 0.88 is what makes it so.** No single
+  substitution can reach 0.88 below four characters — the worst case at three is
+  0.8222 — so there is no length constant to maintain. Which is necessary
+  rather than tidy: at three characters the score ranks a *different word*
+  above the real misread (`GET`/`GST` = 0.80, `6ST`/`GST` = 0.7778), and a
+  one-substitution rule with no threshold admits `TEA` as `TEL`, `TIL` as
+  `TIN`, `BAT` as `VAT` and `CURD` as `CARD`.
 - **`NotPossible` is not `Unbalanced`.** A bill whose total could not be read
   has not failed a check. Reporting a delta against zero would state the sum
   of the items as a discrepancy — specific, believable, and wrong.
@@ -178,10 +201,6 @@ were worth doing:
 - **No date detection.** §5.3's pipeline does not list one and the review
   screen falls back to the capture time, so a receipt photographed days later
   lands on the wrong day until corrected.
-- **No fuzzy keyword matching.** OCR read `GST` as `6ST` on the real bill, and
-  keyword matching is exact substring, so the row fell through as an item.
-  §12 already accepts Jaro-Winkler for item *names*; the same argument applies
-  to keywords. This is the largest known remaining source of wrong lines.
 - **Perspective.** A page shot at an angle also converges, and undoing that
   needs a four-point warp — corners, and therefore image processing. The
   capture guide is the answer taken instead.

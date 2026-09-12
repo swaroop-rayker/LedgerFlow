@@ -228,11 +228,25 @@ the capture. A sleep/wake cycle fixed it.
 
 ## 8. Outstanding, in priority order
 
-1. **Fuzzy keyword matching.** OCR read `GST` as `6ST`; keyword matching is
-   exact substring, so the row fell through as an item. §12 already accepts
-   Jaro-Winkler for item *names*. **Largest known remaining source of wrong
-   lines.**
-2. **Close the lint hole** (§6), including the `:core:crypto` one.
+1. ~~**Fuzzy keyword matching.**~~ **Done.** `:core:domain`'s `JaroWinkler`
+   (one implementation for this, §5.5's merchant suggestion and §12's recall
+   grading), applied to `ReceiptKeywords.matches` as a word-boundary window
+   behind the unchanged exact-substring layer. **Threshold is §5.5's own 0.88** —
+   the fix was a longer keyword, the spaced `S GST` an invoice actually prints,
+   which makes the comparison five characters (0.8933) rather than three
+   (0.7778). Equal length and ≤ 1 differing character are the other two
+   clauses, both picked from a measured false-positive count; a flat 0.88 would
+   have matched `REFINED` as `REFUND` and reversed a bill's direction.
+   Twelve-mutation sweep, all non-vacuous — and it caught one vacuous test of
+   mine before it landed (nothing covered the exact-substring layer, since the
+   fuzzy one scores a whole-word keyword at 1.0).
+2. ~~**Close the lint hole**~~ **Done**, including `:core:crypto`. Eight error
+   sites across five modules, three of which §6's table did not list because
+   lint aborts at the first failure per module. Two were real defects: §5.7's
+   budget alerts could not post below API 33, and two `:feature:ingest` posts
+   were not behind any grant check. CI was never blind here — it runs
+   `lintSmsFullDebug` *unqualified*, so the hole was local-only, in the task
+   `CLAUDE.md` §12 calls the definition of done.
 3. **The corpus fixture needs its image.** The hand transcription is staged at
    `../LedgerFlow-receipts/pending/food-bazaar-gst-thermal.json`, written before
    any fix was made for that receipt. Drop the photograph beside it, move both

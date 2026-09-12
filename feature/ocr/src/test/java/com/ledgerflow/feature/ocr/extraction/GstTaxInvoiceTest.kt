@@ -219,4 +219,70 @@ class GstTaxInvoiceTest {
     fun theMerchant_isTheShopName() {
         assertThat(extracted.merchantRaw).isEqualTo("VALUE MART RETAIL LTD")
     }
+
+    /**
+     * **The same bill with one glyph misread comes out identical.**
+     *
+     * ML Kit returned `S 6ST 9%` for `S GST 9%` on the owner's real receipt.
+     * Exact substring missed the TAX keyword, the row fell through as a line
+     * item, and it was one of the two "items" that reached the Inbox on a
+     * six-item bill.
+     *
+     * This is the sharpest end-to-end check available, and it is sharp because
+     * of the reconciliation rather than the item list: the four NET AMTs sum to
+     * the printed total exactly, so a tax row mistaken for an item adds ₹5.34
+     * of shopping that is not there and the bill stops closing. A rule that
+     * merely *found* the keyword without placing it correctly would pass the
+     * item assertion and fail this one.
+     */
+    @Test
+    fun aMisreadGstGlyph_changesNothingAboutTheBill() {
+        val misread = ReceiptExtractor.extract(
+            ReceiptFixtures.misread(ReceiptFixtures.gstTaxInvoice(), from = "GST", to = "6ST"),
+        )
+
+        assertThat(misread.lines.filter { it.kind == LineItemKind.ITEM }.map { it.name })
+            .containsExactly("CRISPS 95G", "CRISPS 177G", "SHOWERGEL 250ML", "CLEANER JASMINE 2L")
+            .inOrder()
+        assertThat(misread.amount).isEqualTo(Money(61_400L))
+
+        val verdict = Reconciliation.of(misread.lines, misread.amount)
+        assertThat(verdict).isInstanceOf(Reconciliation.Balanced::class.java)
+        assertThat(verdict.delta).isEqualTo(Money.ZERO)
+
+        // The tax rows are still read, not merely excluded from the items.
+        assertThat(misread.lines.filter { it.kind == LineItemKind.TAX }.map { it.total })
+            .containsExactly(Money(534L), Money(534L), Money(419L), Money(1_327L))
+    }
+
+    /**
+     * The misread page differs from the clean one **only** in that glyph.
+     *
+     * Asserted because the fixture is a transformation: if `misread` ever
+     * stopped matching anything, the test above would quietly become a second
+     * copy of the clean-page tests and assert nothing new. A mutation sweep
+     * found four tests in this state last session.
+     */
+    @Test
+    fun theMisreadFixture_actuallyContainsTheMisreadGlyph() {
+        val misread = ReceiptFixtures.misread(
+            ReceiptFixtures.gstTaxInvoice(),
+            from = "GST",
+            to = "6ST",
+        )
+        val clean = ReceiptFixtures.gstTaxInvoice()
+
+        // Counted against the clean page rather than hardcoded: the invoice
+        // prints `GST` as its own run on the four per-item tax rows AND inside
+        // the `GST TIN` header, so a literal here would be a number to keep in
+        // step with the fixture rather than an assertion about it.
+        val occurrences = clean.elements.count { it.text == "GST" }
+        assertThat(occurrences).isAtLeast(4)
+        assertThat(misread.elements.count { it.text == "6ST" }).isEqualTo(occurrences)
+        assertThat(misread.elements.none { it.text == "GST" }).isTrue()
+        // Same element count, same boxes: only the text moved.
+        assertThat(misread.elements).hasSize(clean.elements.size)
+        assertThat(misread.elements.map { it.left to it.top })
+            .isEqualTo(clean.elements.map { it.left to it.top })
+    }
 }

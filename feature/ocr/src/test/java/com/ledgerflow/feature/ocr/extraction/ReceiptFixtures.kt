@@ -175,6 +175,26 @@ internal object ReceiptFixtures {
     )
 
     /**
+     * The same page as the recogniser actually read it: one glyph wrong.
+     *
+     * On the owner's real Food Bazaar invoice ML Kit returned `S 6ST 9%` for
+     * `S GST 9%`. Expressed as a **transformation** of an existing page rather
+     * than a second hand-laid one, so the two cannot drift apart and the only
+     * difference between them is the misread character — which is the whole
+     * claim a fuzzy-matching test needs to make. The replacement is
+     * length-preserving, so every bounding box is untouched too, and nothing
+     * about the geometry can be what makes the test pass.
+     */
+    fun misread(page: RecognizedPage, from: String, to: String): RecognizedPage {
+        require(from.length == to.length) {
+            "A substituted glyph preserves length; '$from' -> '$to' would move every box after it."
+        }
+        return RecognizedPage(
+            page.elements.map { if (it.text == from) it.copy(text = to) else it },
+        )
+    }
+
+    /**
      * The same page, photographed crooked.
      *
      * Shears every run's vertical position by `slope * centerX` — the model of

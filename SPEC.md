@@ -611,6 +611,8 @@ Bitmap → preprocess (deskew, grayscale, adaptive threshold, downscale to ≤16
        → classify each line: HEADER | ITEM | TAX | DISCOUNT | SUBTOTAL | TOTAL | FOOTER | NOISE
        → merchant detection from top-3 header lines → fuzzy match against `merchant` table
        → totals detection via keyword set {TOTAL, GRAND TOTAL, NET AMOUNT, AMOUNT PAYABLE, बिल राशि}
+         (keywords match exact-substring first, then Jaro-Winkler >= 0.88 on a same-length
+          word window differing in <= 1 character -- see below)
        → reconciliation: |Σ(items) + Σ(tax) − Σ(discount) − total| ≤ max(₹1, 0.5% of total)
        → produce ExtractedTransaction with `lines` (ADR-0022 — no `pending_line_item`)
 ```
@@ -630,6 +632,37 @@ as `:feature:ocr`'s `extraction` package; each is arithmetic over
   `NAME MRP RATE AMOUNT` would otherwise acquire a confidently wrong quantity.
   When the arithmetic does not close, the amount survives and the description
   is dropped — the amount is the line.
+- **Keyword matching is exact substring first, then one glyph's worth of
+  doubt.** §12 already concedes a Jaro-Winkler tolerance on item *names*
+  because OCR legitimately reads `TOMATO 1KG` as `TOMAT0 1KG`; keywords are
+  words too, and a real invoice's `S GST 9%` came back from ML Kit as
+  `S 6ST 9%`, missed the TAX set, and reached the Inbox as a line item. So
+  `ReceiptKeywords.matches` tries exact substring **unchanged and first** — the
+  three ordering traps below are properties of which set matches first, and the
+  fuzzy layer may only ever *add* a match — then a word-boundary-anchored
+  window at **§5.5's own 0.88**, with no threshold of its own.
+  `:core:domain`'s `JaroWinkler` is the single implementation behind that
+  number, §5.5's merchant suggestion and §12's recall grading.
+
+  Two further clauses, each chosen from a **measured** false-positive count over
+  real Indian retail item names rather than from taste: the window must be the
+  **same length** as the keyword, because a substituted glyph preserves length
+  while a dropped one does not (`REFINED` otherwise matches `REFUND` at 0.8944 —
+  and `REFUND` decides the direction of the whole receipt, so a bottle of
+  refined oil would turn a purchase into income); and it must differ in **at
+  most one position**, because two wrong glyphs on one short word is a different
+  word, not a misread (`CASHEWS` otherwise matches `CASHIER` at 0.8857 on a
+  four-character prefix bonus). All three clauses admit zero new wrong lines;
+  any two admit between one and twelve.
+
+  **The recall fix was a longer keyword, not a looser threshold.** The TAX set
+  lists the spaced `S GST` / `C GST` forms an Indian invoice prints, so the
+  comparison is five characters (0.8933) rather than three (0.7778). Short
+  keywords stay exact-only for free, because no single substitution reaches 0.88
+  below four characters — and must, because at three characters the score ranks
+  a genuinely different word *above* the real misread (`GET`/`GST` scores 0.80,
+  `6ST`/`GST` scores 0.7778). **Money never acquires a tolerance:**
+  `ReceiptNumbers` stays integer-only and exact, and gets no glyph correction.
 - **Totals detection takes the LAST keyword match**, because a bill computes
   downward: `SUB TOTAL`, tax, `ROUND OFF`, `GRAND TOTAL`, and on a restaurant
   bill `TOTAL` before service charge and `NET AMOUNT` after it. `SUBTOTAL` is
@@ -719,7 +752,7 @@ Supports both ledgers (segmented control DEBIT | CREDIT at the top). Supports mu
 - **The empty book has two messages, and they are not interchangeable.** A user who has never saved an expense sees one; a user whose entries all predate the 30-day window sees another that names the window and says the older ones are still there. Both render zero rows, and showing the first to the second user is telling them their data is gone. The signal is `LedgerRepository.observeHasEntries(ledger)`, an unbounded `SELECT EXISTS` per book.
 - **Categories:** two levels (category → subcategory), user-creatable, editable, soft-deletable (re-assign flow required before delete). **Hiding a category takes its subcategories with it**, stamped with one shared `deleted_at`, and restoring it brings the branch back the shape it left in. It previously *reparented* them — to the re-assign target, or with no target to no parent at all, which promoted them to top-level categories the user never created (BUG12). Cosmetic while a delete was one-way; load-bearing now that there is a restore, because a branch that goes out in pieces comes back in pieces. Icon + color per category. System seed set ships pre-populated, all editable **and deletable** — `is_system` records where a row came from, it does not confer protection. (Reading it as a permission is what removed Delete from every seeded card, since every seeded row has `is_system = 1`; a taxonomy the user cannot prune is not theirs.)
 - **Category groups:** many-to-many grouping over categories for analytics rollups (e.g. group "Essentials" = Groceries + Utilities + Rent). **The tables ship in schema v2 at P1; the group CRUD *UI* is deferred to P3.** Their only consumer is analytics rollups (§5.6), so building the management screen at P1 would ship a surface with no observable effect for two phases. Carrying the tables early is nearly free and saves a second migration; carrying the UI early is not.
-- **Merchants:** canonical merchant + alias table. SMS `merchantRaw` and OCR headers normalize (uppercase, strip punctuation/legal suffixes/store codes) then fuzzy-match (Jaro-Winkler ≥ 0.88) against aliases. Unmatched → a new merchant is **created** via `createOrGet` rather than the entry being refused (§5.1); the fuzzy match is a merge *suggestion* at review time, not a gate. The user can merge merchants later, which is the cheap correction — a wrong auto-merge is the expensive one, which is why the threshold only ever suggests.
+- **Merchants:** canonical merchant + alias table. SMS `merchantRaw` and OCR headers normalize (uppercase, strip punctuation/legal suffixes/store codes) then fuzzy-match (Jaro-Winkler ≥ 0.88, `JaroWinkler.MERCHANT_THRESHOLD` in `:core:domain` — one implementation, three callers, so the number cannot drift between them) against aliases. Unmatched → a new merchant is **created** via `createOrGet` rather than the entry being refused (§5.1); the fuzzy match is a merge *suggestion* at review time, not a gate. The user can merge merchants later, which is the cheap correction — a wrong auto-merge is the expensive one, which is why the threshold only ever suggests.
 - **The taxonomy list is the screen's scrolling surface**, so the chrome around it stays lean. The pinned Add bar pads `xs` top and bottom: `LfScaffold` already insets it for the navigation bar (§8/BUG5), and a second full inset below the button spends list height on space the system bar was already reserving. `xs` is the floor rather than a taste call — measured on device, the button's bottom edge plus that padding plus the 48dp navigation-bar inset land exactly on the top of the navigation bar, so **the Add button cannot be pushed lower without rendering under the system bar**. Further list height has to come from the header instead, which is why the three header bands (title, section control, ledger control) are separated by `sm`/`xs` rather than `md`: on a screen whose header is three stacked bands, each step of the gap scale is charged to the list several times over.
 - The card shape below is one instance of the visual rules in **CLAUDE.md §5, "Visual design philosophy"**, which is where those constraints live in full.
 - **All three sections share one card shape** (`TaxonomyCard`): a hairline-bordered row on `surfaceRaised`, name first, actions beneath in an `LfActionRow` of `LfButtonStyle.Inline` buttons. Categories were compacted first and merchants and payment methods kept `LfCard` with `Outlined` pills, which left one screen reading as two designs and spent roughly twice the vertical space per row on lists whose only job is letting the user scan what they have. `Inline` is also what fits Rename / Merge / Hide on a single line — as pills the third wrapped to a row of its own. The border carries the shape rather than elevation: at this size elevation reads as a shadow smear, and the border is what keeps the category tree's nesting rail legible against the card edge. At font scale 2.0 the actions still wrap, but as whole controls, never broken labels (§8/BUG9).
@@ -1544,7 +1577,9 @@ recall" is not yet a criterion, and the ways it fails are specific:
   recorded as `kind = ITEM` — never what the extractor found. A denominator
   derived from the output measures nothing.
 - **A hit needs the name to match *and* `total_minor` to be exact.** Names
-  compare after `ItemNameNormalizer` with a Jaro-Winkler threshold, because OCR
+  compare after `ItemNameNormalizer` with a Jaro-Winkler threshold
+  (`:core:domain`'s `JaroWinkler`, the same implementation §5.3's keyword
+  matching and §5.5's merchant suggestion use), because OCR
   legitimately reads `TOMATO 1KG` as `TOMAT0 1KG`. Money does not get a
   tolerance: Law 3's spirit is that a money value is right or it is wrong, and a
   tolerance is how a corpus flatters itself.

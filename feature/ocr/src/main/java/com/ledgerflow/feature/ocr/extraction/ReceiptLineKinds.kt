@@ -1,5 +1,7 @@
 package com.ledgerflow.feature.ocr.extraction
 
+import com.ledgerflow.core.domain.text.JaroWinkler
+
 /**
  * Step 8 of §5.3: what each reconstructed row *is*.
  *
@@ -62,8 +64,27 @@ internal object ReceiptKeywords {
         "GROSS AMOUNT", "GROSS TOTAL", "उप योग",
     )
 
+    /**
+     * The spaced forms are not duplicates of the glued ones, and they are what
+     * made the owner's real invoice readable.
+     *
+     * An Indian GST invoice prints `S GST 9%` and `C GST 9%` — with the space —
+     * under every item, and ML Kit read one of them as `S 6ST 9%`. Exact
+     * substring missed, the row fell through as a line item, and it was one of
+     * the two "items" that reached the Inbox on a six-item bill.
+     *
+     * Listing the spaced form is what lets [matches]' fuzzy branch see the case
+     * at all: `S 6ST` against `S GST` is a five-character comparison scoring
+     * 0.8933, comfortably over §5.5's 0.88, while `6ST` against the bare `GST`
+     * is a three-character one scoring 0.7778 — below the threshold, and below
+     * what `GET` scores against `GST`. **The fix is a longer keyword, not a
+     * looser threshold**, which is the only version of it that does not also
+     * admit `BAT` as VAT.
+     */
     val TAX = listOf(
-        "CGST", "SGST", "IGST", "UTGST", "GST", "VAT", "CESS",
+        "CGST", "SGST", "IGST", "UTGST",
+        "S GST", "C GST", "I GST", "UT GST",
+        "GST", "VAT", "CESS",
         "SERVICE TAX", "SERVICE CHARGE", "SERV CHRG", "TAX", "कर",
     )
 
@@ -129,9 +150,117 @@ internal object ReceiptKeywords {
     /** Words that mean the amount is coming back to the customer. */
     val REFUND = listOf("REFUND", "CREDIT NOTE", "RETURN", "REVERSAL")
 
-    /** Substring match on already-uppercased text. */
-    fun matches(text: String, keywords: List<String>): Boolean =
-        keywords.any { text.contains(it) }
+    /**
+     * Does [text] — **already uppercased by the caller** — carry one of
+     * [keywords]?
+     *
+     * Two layers, in this order, and the order is not cosmetic.
+     *
+     * **1. Exact substring, exactly as before.** Every match this function made
+     * before fuzzy matching existed, it still makes. That is deliberate: the
+     * three ordering traps this object's KDoc describes (`SUB TOTAL`,
+     * `TOTAL SAVING`, `TOTAL QTY`) are all properties of *which set matches
+     * first*, and a rewritten first layer would have put every one of them back
+     * in play. The fuzzy layer can only ever **add** a match.
+     *
+     * **2. One glyph's worth of doubt, at a word boundary.** §12 already
+     * concedes the principle for item names — "OCR legitimately reads
+     * `TOMATO 1KG` as `TOMAT0 1KG`" — and keywords are words too. A token
+     * window matches a keyword when all three of these hold:
+     *
+     * - **the same length**, because a substituted glyph preserves length while
+     *   an inserted or dropped character does not. Dropping this clause is what
+     *   makes `REFINED` match `REFUND` (0.8944) — and `REFUND` decides the
+     *   direction of the whole receipt, so a bottle of refined oil would turn a
+     *   purchase into a credit. It also gives `TIL` ~ `TILL`, `PAD` ~ `PAID`,
+     *   `CHANA` ~ `CHANGE` and `CASHEW` ~ `CASHIER`: eight wrong lines measured
+     *   over a vocabulary of real Indian retail item names.
+     * - **at most one differing position**, because two wrong glyphs on one
+     *   short word is not a misread, it is a different word. Dropping this
+     *   clause admits `CASHEWS` ~ `CASHIER` (0.8857), which three substitutions
+     *   and a four-character prefix bonus carry over the threshold.
+     * - **[JaroWinkler.MERCHANT_THRESHOLD]**, §5.5's own 0.88 and not a number
+     *   invented here. Dropping it admits twelve more, all on three-character
+     *   keywords: `TEA` ~ `TEL`, `TIL` ~ `TIN`, `CAN` ~ `PAN`, `PEN` ~ `PAN`,
+     *   `BAT` ~ `VAT`, `MAT` ~ `VAT`, `CURD` ~ `CARD`. **The threshold is the
+     *   length floor**, which is why there is no length constant here: no
+     *   single substitution can reach 0.88 below four characters (the worst case
+     *   at three is 0.8222), so short keywords stay exact-only for free rather
+     *   than by a rule someone has to maintain.
+     *
+     * All three clauses together admit **zero** new wrong lines over that
+     * vocabulary and still catch `S 6ST` ~ `S GST`. A transposition is
+     * deliberately not admitted: a glyph recogniser substitutes characters it
+     * misreads, it does not swap adjacent ones — that is a typing failure, not
+     * an OCR one.
+     */
+    fun matches(text: String, keywords: List<String>): Boolean {
+        if (keywords.any { text.contains(it) }) return true
+        val words = words(text)
+        return words.isNotEmpty() && keywords.any { fuzzyMatches(words, it) }
+    }
+
+    /**
+     * One keyword against every same-shaped window of a row's words.
+     *
+     * A multi-word keyword takes a window of that many consecutive words, so
+     * `S GST` is compared against `S 6ST` and not against either half alone.
+     */
+    private fun fuzzyMatches(words: List<String>, keyword: String): Boolean {
+        val target = KEYWORD_WORDS[keyword] ?: words(keyword)
+        if (target.isEmpty()) return false
+        val joined = target.joinToString(" ")
+
+        return (0..words.size - target.size).any { start ->
+            isOneGlyphOff(words.subList(start, start + target.size).joinToString(" "), joined)
+        }
+    }
+
+    /**
+     * The three clauses, cheapest first — and `&&` short-circuits, so the
+     * length test is what stops [differingPositions] from being handed strings
+     * it cannot compare.
+     */
+    private fun isOneGlyphOff(window: String, keyword: String): Boolean =
+        window.length == keyword.length &&
+            differingPositions(window, keyword) <= 1 &&
+            JaroWinkler.similarity(window, keyword) >= JaroWinkler.MERCHANT_THRESHOLD
+
+    /** Callers guarantee equal lengths; this counts glyphs, not edits. */
+    private fun differingPositions(a: String, b: String): Int =
+        a.indices.count { a[it] != b[it] }
+
+    /**
+     * A row's words, for window matching.
+     *
+     * Splits on whitespace and **ASCII** punctuation only. Restricting the
+     * class to ASCII is what keeps Devanagari intact: `राशि` is a consonant
+     * followed by a combining matra, and a "not a letter or digit" split would
+     * discard the matras and leave `रश` — so the two Devanagari entries in
+     * these sets would quietly stop behaving like the Latin ones. `₹` survives
+     * for the same reason and costs nothing, since no keyword contains a digit.
+     *
+     * It is also what makes `ROUND-OFF` and `SUB-TOTAL` reach the keywords
+     * `ROUND OFF` and `SUB TOTAL` as windows, and `TOTAL QTY:` reach
+     * `TOTAL QTY`.
+     */
+    private fun words(text: String): List<String> =
+        text.split(SEPARATORS).filter { it.isNotEmpty() }
+
+    private val SEPARATORS = Regex("""[\s\p{Punct}]+""")
+
+    /**
+     * Every keyword's words, split once at class-init rather than per row.
+     *
+     * `matches` is called with each of these sets for every row of every
+     * receipt, so re-splitting ~90 constant strings each time would be ~12,000
+     * pointless splits per bill. A caller passing an ad-hoc list — the tests do
+     * — falls through to [words] and still works.
+     */
+    private val KEYWORD_WORDS: Map<String, List<String>> =
+        (TOTAL + SUBTOTAL + TAX + DISCOUNT + TENDER + ADMIN + REFUND)
+            .distinct()
+            .associateWith { words(it) }
 }
 
 /**
