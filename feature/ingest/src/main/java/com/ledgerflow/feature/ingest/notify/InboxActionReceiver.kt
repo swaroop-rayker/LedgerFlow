@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.ledgerflow.core.common.di.IoDispatcher
+import com.ledgerflow.core.common.notify.NotificationPostPolicy
 import com.ledgerflow.core.domain.inbox.InboxNotifier
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
@@ -125,7 +126,16 @@ internal class InboxActionReceiver : BroadcastReceiver() {
      * This is the much smaller case the owner is owed immediately: they tapped a
      * button a moment ago and are still holding the phone.
      */
+    @Suppress("MissingPermission") // NotificationPostPolicy; see its note.
     private fun postFailure(context: Context, pendingId: String, title: String, text: String) {
+        // This posted unchecked until S13. It does not crash without the grant --
+        // the platform drops the post silently -- which is precisely the problem:
+        // the branch whose whole job is to tell the user their tap did not land
+        // would itself have failed to land, and said nothing about it.
+        if (!NotificationPostPolicy.isPermitted(context)) {
+            Log.w(TAG, "Cannot post the failure notification: notifications are not permitted.")
+            return
+        }
         runCatching {
             val notification = NotificationCompat.Builder(
                 context,

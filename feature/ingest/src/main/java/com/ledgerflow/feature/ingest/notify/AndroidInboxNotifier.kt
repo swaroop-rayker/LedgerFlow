@@ -1,17 +1,14 @@
 package com.ledgerflow.feature.ingest.notify
 
-import android.Manifest
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
+import com.ledgerflow.core.common.notify.NotificationPostPolicy
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.inbox.InboxNotifier
 import com.ledgerflow.core.domain.inbox.PendingTransaction
@@ -51,11 +48,15 @@ internal class AndroidInboxNotifier @Inject constructor(
     private val ledgerRepository: LedgerRepository,
 ) : InboxNotifier {
 
+    // The grant IS checked, by NotificationPostPolicy -- which also explains
+    // why lint cannot see it: POST_NOTIFICATIONS is declared in :app, and a
+    // library module's lint reads only its own manifest (D-04).
+    @Suppress("MissingPermission")
     override suspend fun notifyCandidate(pendingId: String) {
         // Posting is best-effort by design. The candidate is already on disk and
         // the Inbox shows it regardless -- a withheld POST_NOTIFICATIONS grant
         // must never become a reason the pipeline reports a failure.
-        if (!canPost()) return
+        if (!NotificationPostPolicy.isPermitted(context)) return
 
         val candidate = getPending(pendingId) ?: return
         // §3.1: a suppressed duplicate is retained and visible, never announced.
@@ -78,31 +79,6 @@ internal class AndroidInboxNotifier @Inject constructor(
             NotificationManagerCompat.from(context).cancel(id)
             updateGroupSummary(removed = id)
         }.onFailure { Log.w(TAG, "Could not cancel the inbox notification.", it) }
-    }
-
-    /**
-     * The grant, checked rather than assumed.
-     *
-     * **The API-level guard is not defensive noise; without it this method
-     * returns false on every device below 33.** `POST_NOTIFICATIONS` became a
-     * runtime permission in Tiramisu. On an older platform it is a string the
-     * permission manager has never heard of, so `checkSelfPermission` answers
-     * `DENIED` no matter what the manifest says — and `minSdk` here is 26. The
-     * notification would simply never post on a third of the supported range,
-     * silently, on the one path whose entire job is to stop things happening
-     * silently.
-     *
-     * `areNotificationsEnabled` catches the other half — the app or the channel
-     * muted in system settings — which is not a permission at all and applies at
-     * every API level.
-     */
-    private fun canPost(): Boolean {
-        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS,
-            ) == PackageManager.PERMISSION_GRANTED
-        return granted && NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
     private suspend fun buildCandidate(candidate: PendingTransaction): android.app.Notification {
@@ -170,11 +146,16 @@ internal class AndroidInboxNotifier @Inject constructor(
      * just posted or cancelled into the set makes the arithmetic depend on what
      * we know rather than on what the system server has caught up with.
      */
+    @Suppress("MissingPermission") // NotificationPostPolicy; see its note.
     private fun updateGroupSummary(added: Int? = null, removed: Int? = null) {
         val manager = NotificationManagerCompat.from(context)
         val posted = (activeCandidateIds() + setOfNotNull(added) - setOfNotNull(removed)).size
 
-        if (posted > InboxNotifications.GROUP_THRESHOLD) {
+        // Checked here as well as in notifyCandidate, because cancelCandidate
+        // reaches this method without passing that check. Falling through to the
+        // cancel branch is the right answer when we may not post: nothing of ours
+        // can be in the shade, so there is no summary to keep.
+        if (posted > InboxNotifications.GROUP_THRESHOLD && NotificationPostPolicy.isPermitted(context)) {
             val summary = NotificationCompat.Builder(context, InboxNotifications.CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_lf_inbox_notification)
                 .setContentTitle("$posted payments to review")

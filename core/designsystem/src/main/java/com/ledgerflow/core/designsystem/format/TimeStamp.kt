@@ -2,8 +2,8 @@ package com.ledgerflow.core.designsystem.format
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import com.ledgerflow.core.common.time.OccurredAt
 import java.time.Instant
 import java.time.ZoneId
@@ -23,13 +23,25 @@ import java.util.Locale
  * **12- or 24-hour follows the device**, not the locale and not a constant.
  * `DateFormat.is24HourFormat` is the user's own setting, and it is the only
  * thing that makes a clock look native on someone else's phone.
+ *
+ * **The locale comes from `LocalLocale`, which is a composition local, and not
+ * from `Locale.getDefault()`, which is a process-wide field.** This was
+ * `LocalConfiguration.current.locales[0] ?: Locale.getDefault()`, and the
+ * fallback was the problem: `Locale.getDefault()` reads no observable state, so
+ * a composable that resolves through it keeps rendering the old locale's month
+ * names and am/pm markers until something else happens to recompose it. That
+ * the fallback only fires on an empty `LocaleList` is not a defence — it is a
+ * non-observable read on a path nothing proves is unreachable, and the app's
+ * per-app locale (API 33+) is exactly the setting that changes underneath it.
+ * `LocalLocale.current.platformLocale` is non-null as well as observable, so the
+ * fallback disappears rather than being fixed.
  */
 public object TimeStamp {
 
     /** `4:12 pm`, or `d MMM, 4:12 pm` with [withDate]. */
     @Composable
     public fun of(occurredAt: Long, withDate: Boolean): String {
-        val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+        val locale = LocalLocale.current.platformLocale
         val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
         return remember(occurredAt, locale, is24Hour, withDate) {
             format(occurredAt, locale, is24Hour, withDate)
@@ -54,7 +66,7 @@ public object TimeStamp {
      */
     @Composable
     public fun ofCapture(occurredAt: Long, capturedAt: Long, withDate: Boolean): String {
-        val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+        val locale = LocalLocale.current.platformLocale
         val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
         return remember(occurredAt, capturedAt, locale, is24Hour, withDate) {
             format(

@@ -289,7 +289,36 @@ tasks.register("preMergeCheck") {
         ":app:mergedPermissionCheckPlaySafeRelease",
     )
     dependsOn(":app:assembleSmsFullDebug", ":app:assemblePlaySafeDebug")
-    dependsOn(":app:lintSmsFullDebug", ":app:lintPlaySafeDebug")
+
+    // **Android Lint on EVERY module, both flavours** -- S13 §6.
+    //
+    // This read `dependsOn(":app:lintSmsFullDebug", ":app:lintPlaySafeDebug")`,
+    // which meant a lint *error* anywhere in a library module could never fail
+    // the gate. It was not hypothetical: running lint across every module found
+    // eight error sites in five of them, including `NewApi` in `:core:crypto`
+    // and `MissingPermission` on three notification posts, two of which were
+    // genuinely unchecked. §5.7's budget alerts could not post below API 33 at
+    // all, and nothing in CI had any way to say so. `:app`'s own lint sees
+    // almost nothing, because `:app` contains no business logic by design
+    // (CLAUDE.md §3) -- so the one module in the gate was the one with the
+    // least to check. This is the sixth gate in this repository found to be
+    // silently doing nothing; `ReceiptCorpusTest`'s KDoc lists the other five.
+    //
+    // Filtered by task existence rather than listed, for the reason the
+    // Roborazzi block below gives: `:core:model` is a pure-Kotlin JVM module
+    // with no Android variants and therefore no `lint<Flavour>Debug`, and
+    // `dependsOn` on a task that does not exist fails configuration rather than
+    // being skipped. Resolved inside this task's configuration block, which
+    // runs when the task is realised -- by which point every subproject has
+    // been evaluated.
+    dependsOn(
+        verifiableModules.flatMap { path ->
+            val module = subprojects.single { it.path == path }
+            listOf("lintSmsFullDebug", "lintPlaySafeDebug")
+                .filter { module.tasks.findByName(it) != null }
+                .map { "$path:$it" }
+        },
+    )
 
     // Instrumented tests are COMPILED here even though they cannot be run --
     // they need a device, and that is the CI `instrumented` job's business.

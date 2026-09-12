@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.testTag
@@ -98,7 +99,12 @@ class LfFontAxisTest {
     private fun WithoutWeightAdjustment(content: @Composable () -> Unit) {
         val context = LocalContext.current
         val unadjusted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val configuration = Configuration(context.resources.configuration)
+            // `LocalConfiguration.current`, not `context.resources.configuration`:
+            // a LocalContext read is not invalidated when the Configuration
+            // changes, so a font-scale or locale change mid-test would leave
+            // this resolver built from the Configuration as it was at first
+            // composition -- and the assertion is a measured pixel width.
+            val configuration = Configuration(LocalConfiguration.current)
             configuration.fontWeightAdjustment = 0
             context.createConfigurationContext(configuration)
         } else {

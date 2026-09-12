@@ -24,7 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -48,7 +48,6 @@ import com.ledgerflow.core.model.PaymentMethod
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * Category, merchant and payment-method management (SPEC.md §5.5).
@@ -613,10 +612,17 @@ private fun HiddenCard(item: HiddenTaxonomy, onEvent: (CategoriesEvent) -> Unit)
  * `internal` to `:feature:ledger` -- features never depend on features
  * (CLAUDE.md §3). Six lines duplicated is the cheaper side of that rule than a
  * formatter promoted to `:core:ui` for two callers that format different things.
+ *
+ * The locale is read from `LocalLocale`, for the reason set out on
+ * [com.ledgerflow.core.designsystem.format.TimeStamp]: `Locale.getDefault()` is
+ * a process-wide field, not observable state, so a composable resolving through
+ * it keeps printing the old locale's month abbreviation until something
+ * unrelated recomposes it. `LocalLocale.current.platformLocale` is observable
+ * and non-null, which also removes the fallback this line used to need.
  */
 @Composable
 private fun hiddenStamp(millis: Long): String {
-    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    val locale = LocalLocale.current.platformLocale
     return remember(millis, locale) {
         DateTimeFormatter.ofPattern(HIDDEN_DATE_PATTERN, locale)
             .withZone(ZoneId.systemDefault())

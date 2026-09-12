@@ -178,6 +178,18 @@ jobs:
             :app:mergedPermissionCheckPlaySafeRelease \
             --stacktrace
 
+      # UNQUALIFIED task names, and that is load-bearing: `lintSmsFullDebug`
+      # with no `:module:` prefix runs in every project that has the task, so
+      # this job has always covered all 22 Android modules. Do NOT "tidy" it
+      # into `:app:lintSmsFullDebug` -- `:app` holds no business logic by
+      # design (CLAUDE.md §3), so it is the module with the least to check.
+      #
+      # `preMergeCheck` was the half that WAS narrowed to `:app`, which is the
+      # worse direction to get wrong: it is the task CLAUDE.md §12 tells you to
+      # run before declaring a change done, so eight real lint errors across
+      # five library modules passed every local gate and were waiting to fail
+      # here on the first push (S13 §6). Fixed in the root build file; both
+      # halves now say the same thing, which is the whole point of that task.
       - run: ./gradlew detekt lintSmsFullDebug lintPlaySafeDebug --stacktrace
 
       - uses: actions/upload-artifact@v4

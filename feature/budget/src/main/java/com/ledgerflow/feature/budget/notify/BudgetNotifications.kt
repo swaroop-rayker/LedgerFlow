@@ -1,13 +1,11 @@
 package com.ledgerflow.feature.budget.notify
 
-import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
+import com.ledgerflow.core.common.notify.NotificationPostPolicy
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.usecase.BudgetAlert
 
@@ -43,14 +41,19 @@ public object BudgetNotifications {
     }
 
     /**
-     * Posts one alert. Silently does nothing without the runtime permission.
+     * Posts one alert. Silently does nothing when the app may not post.
      *
-     * Checked rather than assumed: on API 33+ `POST_NOTIFICATIONS` is a runtime
-     * grant the user may have refused, and `notify` throws `SecurityException`
-     * without it. A budget alert is not worth crashing a background worker for.
+     * Checked rather than assumed, through
+     * [com.ledgerflow.core.common.notify.NotificationPostPolicy] — which is
+     * shared with `:feature:ingest` because the local copy this used to hold
+     * had **lost the API-level guard**, so no budget alert could post below API
+     * 33 at all. The platform drops an ungranted post rather than throwing, so
+     * nothing reported it: an alert that never appears and never fails is
+     * indistinguishable from a budget that was never crossed.
      */
+    @Suppress("MissingPermission") // NotificationPostPolicy is the check; see its note.
     public fun post(context: Context, alert: BudgetAlert, currency: String) {
-        if (!canPost(context)) return
+        if (!NotificationPostPolicy.isPermitted(context)) return
 
         val name = alert.progress.categoryName
         val spent = MoneyFormat.symbolised(alert.progress.spent.minor, currency)
@@ -77,10 +80,6 @@ public object BudgetNotifications {
                 .notify(alert.progress.budget.id.hashCode(), notification)
         }
     }
-
-    private fun canPost(context: Context): Boolean =
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
 
     private const val FULL = 100
 }

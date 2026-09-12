@@ -42,13 +42,36 @@ public class AndroidKeystoreKek(
         generate(strongBox = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
         true
     }.recoverCatching { error ->
-        if (error is StrongBoxUnavailableException) {
+        if (error.isStrongBoxUnavailable()) {
             generate(strongBox = false)
             true
         } else {
             throw error
         }
     }.getOrDefault(false)
+
+    /**
+     * The retry test, with the API level it needs.
+     *
+     * `StrongBoxUnavailableException` arrived in API 28 and `minSdk` here is 26,
+     * so on 26/27 the bare `is` check was a reference to a class the platform
+     * does not have. **Nothing on the happy path ever reached it** —
+     * [recoverCatching] below is `fold(onSuccess = …, onFailure = …)`, so the
+     * predicate is evaluated only once [generate] has already thrown — and the
+     * value [create] returns is the same either way, because the other branch
+     * rethrows. What it cost was the *cause*: a genuine `KeyStoreException` or
+     * `ProviderException` from a keystore that could not generate a key came
+     * back from that `instanceof` as a class-resolution failure instead, and
+     * `DekManager` then discards it. The one thing this file must never do
+     * quietly is lose the reason a key could not be made.
+     *
+     * `&&` short-circuits, so below 28 the `instanceof` is never executed at
+     * all; at 28 and above the guard is always true and the behaviour is
+     * unchanged. Caught by `:core:crypto:lintSmsFullDebug`, which `preMergeCheck`
+     * did not run until S13 — it depended on `:app`'s lint alone.
+     */
+    private fun Throwable.isStrongBoxUnavailable(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && this is StrongBoxUnavailableException
 
     override fun seal(plaintext: ByteArray, aad: ByteArray): AesGcm.Sealed? {
         val key = loadKey() ?: return null
