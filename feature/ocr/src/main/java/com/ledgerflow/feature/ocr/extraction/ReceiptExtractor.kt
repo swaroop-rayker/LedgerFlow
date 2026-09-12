@@ -56,7 +56,18 @@ internal object ReceiptExtractor {
         val rows = ReceiptGeometry.rows(page)
         if (rows.isEmpty()) return ExtractedTransaction(confidence = 0.0)
 
-        val scale = ReceiptGeometry.medianHeight(page.elements)
+        // The *filtered* runs, not the raw page, so the whole pipeline works
+        // from one scale rather than two.
+        //
+        // **No test distinguishes this, and the reason is worth recording.**
+        // Speckle only ever drags the median *down*, so the raw-page scale
+        // gives a narrower column gutter — and a narrow gutter splits a name
+        // into cells that `ReceiptColumns.read` rejoins with a space. The
+        // dangerous direction is a gutter too *wide*, which swallows the
+        // amount into the name, and noise cannot cause that. Kept because one
+        // scale is right and two is a latent disagreement, not because a
+        // failing case was found.
+        val scale = ReceiptGeometry.medianHeight(ReceiptGeometry.contentElements(page))
         val readings = rows.map { row ->
             ReceiptColumns.read(ReceiptGeometry.cells(row, scale), currency)
         }

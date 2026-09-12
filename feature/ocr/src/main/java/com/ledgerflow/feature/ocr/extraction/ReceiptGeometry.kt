@@ -143,7 +143,7 @@ internal object ReceiptGeometry {
      * which needs image processing this deliberately avoids.
      */
     fun rows(page: RecognizedPage): List<ReceiptRow> {
-        val elements = page.elements.filter { it.text.isNotBlank() && it.height > 0f }
+        val elements = contentElements(page)
         if (elements.isEmpty()) return emptyList()
 
         val scale = medianHeight(elements)
@@ -173,6 +173,29 @@ internal object ReceiptGeometry {
 
         return bands.map { band -> ReceiptRow(band.sortedBy { it.left }) }
     }
+
+    /**
+     * Whether a run could contribute a name or an amount.
+     *
+     * **A receipt is rarely photographed on a clean surface**, and a recogniser
+     * pointed at woven cloth finds "text" in the weave: the real bill in the
+     * corpus store came back with 195 runs for about 60 printed lines. Measured
+     * rather than assumed, that surplus costs two things — item names acquire
+     * leading specks (`· ~ TOMATO 1KG`), and once the specks outnumber the
+     * print they take the page scale with them.
+     *
+     * The rule needs no threshold: a run with neither a letter nor a digit
+     * cannot be part of a name and cannot be an amount. That removes weave
+     * speckle and the `-----` rules receipts are full of, and it is
+     * Unicode-aware, so Devanagari counts as letters.
+     *
+     * What it costs: a lone currency symbol in its own cell is dropped, so a
+     * bill that prints `₹` detached from its figure loses the currency marker.
+     * `amount_minor` is always base currency (D-02) and the symbol is a hint,
+     * so that is the cheap side of the trade.
+     */
+    fun contentElements(page: RecognizedPage): List<RecognizedElement> =
+        page.elements.filter { it.height > 0f && it.text.any(Char::isLetterOrDigit) }
 
     /** Where a run would sit vertically if the page were square. */
     private fun RecognizedElement.squaredY(slope: Float): Float = centerY - slope * centerX
@@ -259,17 +282,35 @@ internal object ReceiptGeometry {
     }
 
     /**
-     * The page's scale, as the median run height.
+     * The page's scale, as the median height of the runs that carry content.
      *
      * Median and not mean: a receipt's header is often printed at two or three
      * times the body size, and a handful of tall runs would drag a mean far
      * enough to make the body's rows merge.
+     *
+     * **Callers must pass [contentElements], not the raw page.** A median
+     * counts runs, so it holds only while real print outnumbers noise — and on
+     * a textured background it does not. Measured: sixty rows of weave speckle
+     * against fifty words of receipt moved the scale from 20 px to 9, which
+     * then widens every row band and every column gutter by the same factor.
+     *
+     * Area weighting was tried instead and traded the fault rather than fixing
+     * it: weighting by ink makes a 3x header dominate a short bill, which is
+     * the failure `aLargeHeader_doesNotSetThePageScale` exists to prevent.
+     * Dropping the speckle before counting keeps both properties.
+     *
+     * **The residual risk is stated rather than engineered against:** noise
+     * that the recogniser reads as letters or digits survives the filter and
+     * would still move a count median if it dominated. Whether that happens on
+     * real paper is a corpus question, and tuning for it without one is how a
+     * threshold gets chosen to fit an imagined page.
      */
     fun medianHeight(elements: List<RecognizedElement>): Float {
-        val heights = elements.map { it.bottom - it.top }.filter { it > 0f }.sorted()
+        val heights = elements.map { it.height }.filter { it > 0f }.sorted()
         if (heights.isEmpty()) return 1f
         return heights[heights.size / 2]
     }
+
 }
 
 /**
