@@ -99,9 +99,11 @@ public class ReceiptImageLoader @Inject constructor(
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             decoder.isMutableRequired = false
 
+            // **[MAX_RECOGNITION_EDGE], not [MAX_LONG_EDGE].** What is decoded
+            // is what ML Kit reads; the smaller cap is for what is *stored*.
             val longEdge = maxOf(info.size.width, info.size.height)
-            if (longEdge > MAX_LONG_EDGE) {
-                val scale = MAX_LONG_EDGE.toFloat() / longEdge
+            if (longEdge > MAX_RECOGNITION_EDGE) {
+                val scale = MAX_RECOGNITION_EDGE.toFloat() / longEdge
                 decoder.setTargetSize(
                     (info.size.width * scale).roundToInt().coerceAtLeast(1),
                     (info.size.height * scale).roundToInt().coerceAtLeast(1),
@@ -132,7 +134,8 @@ public class ReceiptImageLoader @Inject constructor(
                     // equivalent for a receipt-sized page without hardcoding a
                     // DPI that would be wrong for A4.
                     val longEdge = maxOf(page.width, page.height)
-                    val scale = (MAX_LONG_EDGE.toFloat() / longEdge).coerceAtMost(MAX_PDF_SCALE)
+                    val scale =
+                        (MAX_RECOGNITION_EDGE.toFloat() / longEdge).coerceAtMost(MAX_PDF_SCALE)
                     val bitmap = Bitmap.createBitmap(
                         (page.width * scale).roundToInt().coerceAtLeast(1),
                         (page.height * scale).roundToInt().coerceAtLeast(1),
@@ -157,18 +160,33 @@ public class ReceiptImageLoader @Inject constructor(
     }
 
     /**
-     * Downscales a bitmap already in memory — the camera path.
+     * Caps a bitmap at [MAX_RECOGNITION_EDGE] — the camera path's input.
      *
-     * `ImageCapture` hands back a frame at the sensor's resolution, so the same
-     * cap has to be applied here as to a decoded file, or the two inputs would
-     * reach the recogniser at wildly different sizes and produce results that
-     * cannot be compared against one corpus.
+     * `ImageCapture` hands back a frame at the sensor's resolution, which on a
+     * modern phone is far past anything ML Kit gains from and well into
+     * out-of-memory territory once the recogniser takes its own copy.
+     *
+     * The same cap as a decoded file gets, so camera and import reach the
+     * recogniser at comparable sizes and can be measured against one corpus.
      */
-    public fun downscale(bitmap: Bitmap): Bitmap {
-        val longEdge = maxOf(bitmap.width, bitmap.height)
-        if (longEdge <= MAX_LONG_EDGE) return bitmap
+    public fun forRecognition(bitmap: Bitmap): Bitmap = cap(bitmap, MAX_RECOGNITION_EDGE)
 
-        val scale = MAX_LONG_EDGE.toFloat() / longEdge
+    /**
+     * Caps a bitmap at [MAX_LONG_EDGE] — what is kept on disk (ADR-0023).
+     *
+     * Deliberately smaller than what was recognised. The stored copy exists so
+     * a later "why did OCR read this wrong" is answerable and so a restore can
+     * show the user their receipt; neither needs the resolution the recogniser
+     * wanted, and ADR-0023's ~15x storage saving is the whole reason the cap
+     * exists.
+     */
+    public fun downscale(bitmap: Bitmap): Bitmap = cap(bitmap, MAX_LONG_EDGE)
+
+    private fun cap(bitmap: Bitmap, edge: Int): Bitmap {
+        val longEdge = maxOf(bitmap.width, bitmap.height)
+        if (longEdge <= edge) return bitmap
+
+        val scale = edge.toFloat() / longEdge
         return Bitmap.createScaledBitmap(
             bitmap,
             (bitmap.width * scale).roundToInt().coerceAtLeast(1),
@@ -200,7 +218,36 @@ public class ReceiptImageLoader @Inject constructor(
 
     public companion object {
         /** §5.3's cap. Also the size ADR-0023 stores as the attachment. */
+        /**
+         * The cap on what is **stored** (ADR-0023, §5.3).
+         *
+         * ~250 KB per receipt instead of ~4 MB, and readable by a human,
+         * which is all the stored copy has to be.
+         */
         public const val MAX_LONG_EDGE: Int = 1600
+
+        /**
+         * The cap on what is **recognised**, and it is deliberately larger.
+         *
+         * Recognition used to run on the stored size, and the arithmetic says
+         * that was costing accuracy on exactly the text the §12 gate measures:
+         * a phone photo at 3000x4000 capped to 1600 leaves a receipt occupying
+         * perhaps 700 px of width, so a 42-character thermal line lands at
+         * roughly 12-14 px of glyph height — at or under where ML Kit becomes
+         * reliable.
+         *
+         * 2560 restores about 20 px on the same shot at ~2.5x the pixels of
+         * 1600. The ceiling is memory rather than quality: ARGB_8888 at this
+         * size is ~20 MB before ML Kit takes its own copy, and `ImageCapture`
+         * would otherwise hand over a full sensor frame several times larger.
+         *
+         * **The number is reasoned, not yet measured against paper.** Wall
+         * clock against §11's 2.5 s budget is measurable on the device and is;
+         * whether the extra pixels actually raise item recall needs a real
+         * photograph in the corpus, and until one exists this is an argument
+         * rather than a result.
+         */
+        public const val MAX_RECOGNITION_EDGE: Int = 2560
 
         /** PNG is lossless; `compress` takes the argument and ignores it. */
         private const val PNG_QUALITY_IGNORED = 100

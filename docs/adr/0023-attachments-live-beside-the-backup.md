@@ -96,14 +96,30 @@ implies a durability it does not have.
 
 ### Retention — Q5 answered
 
-**Store only the ≤1600px image the recogniser actually read; keep it forever; no
+**Store a ≤1600px copy of the frame the recogniser read; keep it forever; no
 timed purge.**
 
-§5.3 already downscales to ≤1600px long edge for recognition. Storing that
-rather than the camera's original is a ~15× reduction (~4 MB → ~250 KB) *and* it
-is the honest record: it is the image the pipeline saw, so a later "why did OCR
-read this wrong" question is answerable. Store the downscaled **colour** frame,
-not the deskewed/thresholded one, which is unreadable to a human.
+Storing that rather than the camera's original is a ~15× reduction (~4 MB →
+~250 KB), and it stays a faithful record of what the pipeline saw — so a later
+"why did OCR read this wrong" question is answerable. Store the downscaled
+**colour** frame, not a thresholded one, which is unreadable to a human.
+
+**Amended (P4): recognised large, stored small.** This clause originally said
+"the ≤1600px image the recogniser actually read", because recognition ran on
+the stored size. It no longer does. Capping the *decode* at the storage size
+was costing glyph height on exactly the text §12's recall gate measures — a
+phone photo at 3000×4000 squeezed to 1600 leaves a 42-character thermal line
+at roughly 12 px, at or under where ML Kit is reliable. Recognition now runs at
+`MAX_RECOGNITION_EDGE` (2560) and what is kept is a downscaled copy of that
+same frame.
+
+Measured on the device rather than assumed: 672×1600 took **656 ms** and
+1075×2560 took **711 ms**, against §11's 2.5 s budget — 2.5× the pixels for 8%
+more time. That budget had never been measured before; `RecognitionBudgetTest`
+now does it and prints the figure.
+
+The storage saving is unchanged, and so is the record's honesty: the stored
+copy is the same frame, downscaled, rather than a different capture.
 
 **No auto-purge.** D-09's 90-day rule exists because a raw message body is the
 most sensitive text the app holds *and it rides inside a `.lfbk` that can leave

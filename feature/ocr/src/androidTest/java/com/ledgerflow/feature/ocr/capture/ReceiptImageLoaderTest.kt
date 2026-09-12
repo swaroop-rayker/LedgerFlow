@@ -102,16 +102,48 @@ class ReceiptImageLoaderTest {
         return file
     }
 
-    // ── The downscale ───────────────────────────────────────────────────────
+    // ── Two caps: one for reading, a smaller one for keeping ────────────────
 
+    /**
+     * What is decoded is what the recogniser reads, so it takes the **larger**
+     * cap.
+     *
+     * This asserted `MAX_LONG_EDGE` until recognition and storage were split.
+     * Capping the decode at the storage size was costing glyph height on
+     * exactly the text §12's recall gate measures — a phone photo at 3000x4000
+     * squeezed to 1600 leaves a thermal line at roughly 12 px.
+     */
     @Test
-    fun anOversizedImage_isCappedAtTheSpecifiedLongEdge() {
+    fun anOversizedImage_isDecodedAtTheRecognitionCap() {
         val file = writePng("big.png", width = 4000, height = 3000, text = "TOTAL 473.00")
 
         val bitmap = loader.load(file.toUri())
 
         assertThat(maxOf(bitmap.width, bitmap.height))
+            .isAtMost(ReceiptImageLoader.MAX_RECOGNITION_EDGE)
+        // And genuinely larger than what will be stored, or the split is
+        // machinery with no effect.
+        assertThat(maxOf(bitmap.width, bitmap.height))
+            .isGreaterThan(ReceiptImageLoader.MAX_LONG_EDGE)
+    }
+
+    /**
+     * The stored copy is the smaller one (ADR-0023).
+     *
+     * The ~15x saving the ADR counted on is this cap; storing what was
+     * recognised instead would quietly give it up.
+     */
+    @Test
+    fun theStoredCopy_isCappedSmallerThanWhatWasRead() {
+        val file = writePng("big.png", width = 4000, height = 3000, text = "TOTAL 473.00")
+
+        val read = loader.load(file.toUri())
+        val stored = loader.downscale(read)
+
+        assertThat(maxOf(stored.width, stored.height))
             .isAtMost(ReceiptImageLoader.MAX_LONG_EDGE)
+        assertThat(maxOf(stored.width, stored.height))
+            .isLessThan(maxOf(read.width, read.height))
     }
 
     /** And the aspect ratio survives, or the geometry §5.3 reads is distorted. */
@@ -136,9 +168,28 @@ class ReceiptImageLoaderTest {
         assertThat(bitmap.height).isEqualTo(600)
     }
 
-    /** The camera path takes the same cap, or the two inputs are not comparable. */
+    /**
+     * The camera path takes the same recognition cap as an imported file.
+     *
+     * `ImageCapture` hands back a full sensor frame — far past anything ML Kit
+     * gains from, and into out-of-memory territory once the recogniser takes
+     * its own copy. If the two inputs reached the recogniser at different
+     * sizes their results could not be measured against one corpus.
+     */
     @Test
-    fun downscale_appliesTheSameCapToAnInMemoryFrame() {
+    fun forRecognition_appliesTheRecognitionCapToAnInMemoryFrame() {
+        val frame = Bitmap.createBitmap(4000, 3000, Bitmap.Config.ARGB_8888)
+
+        val result = loader.forRecognition(frame)
+
+        assertThat(maxOf(result.width, result.height))
+            .isAtMost(ReceiptImageLoader.MAX_RECOGNITION_EDGE)
+        assertThat(maxOf(result.width, result.height))
+            .isGreaterThan(ReceiptImageLoader.MAX_LONG_EDGE)
+    }
+
+    @Test
+    fun downscale_appliesTheStorageCapToAnInMemoryFrame() {
         val frame = Bitmap.createBitmap(4000, 3000, Bitmap.Config.ARGB_8888)
 
         val result = loader.downscale(frame)

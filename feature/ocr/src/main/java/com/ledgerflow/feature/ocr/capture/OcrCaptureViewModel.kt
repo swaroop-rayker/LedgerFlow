@@ -115,7 +115,7 @@ public class OcrCaptureViewModel @Inject constructor(
             }
 
             is OcrCaptureEvent.FrameCaptured -> read(SOURCE_CAMERA) {
-                images.downscale(event.bitmap)
+                images.forRecognition(event.bitmap)
             }
 
             is OcrCaptureEvent.FileChosen -> {
@@ -175,9 +175,12 @@ public class OcrCaptureViewModel @Inject constructor(
                     // debug and there is no reason to find out where the line
                     // is on a 60-line supermarket roll.
                     val extracted = ReceiptExtractor.extract(page, currency)
-                    // Encoded here, on IO, and held: this is the image the
-                    // recogniser read, which is the one ADR-0023 says to keep.
-                    Triple(page, extracted, images.encode(bitmap))
+                    // **Recognised large, stored small** (ADR-0023 as amended).
+                    // The recogniser gets every pixel it can use; what is kept
+                    // is a downscaled copy of that same frame, which is what
+                    // makes a receipt ~250 KB instead of a few MB. Both happen
+                    // here, on IO, so the main thread never sees a bitmap.
+                    Triple(page, extracted, images.encode(images.downscale(bitmap)))
                 }
             }
 
