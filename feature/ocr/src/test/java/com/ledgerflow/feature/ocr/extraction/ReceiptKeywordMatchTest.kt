@@ -17,8 +17,10 @@ import org.junit.Test
  *
  * Every near-miss here is a real Indian retail item name, and every one of them
  * was **measured** as a false positive under a weaker rule rather than imagined:
- * the sweep behind this file compared four candidate rules over a vocabulary of
- * ~75 such names, and the three-clause rule is the only one that admitted zero.
+ * the sweeps behind this file compared candidate rules over 116 item rows, 40 of
+ * them carrying digits, and the shipped rule — fold confusable digits, then
+ * equal length, at most one differing position, and a 0.89 score — is the one
+ * that admitted zero while still catching every misread the device produced.
  */
 class ReceiptKeywordMatchTest {
 
@@ -165,14 +167,81 @@ class ReceiptKeywordMatchTest {
             .isLessThan(JaroWinkler.MERCHANT_THRESHOLD)
     }
 
+    // ─── Glyph folding: the half the device found ───────────────────────────
+
     /**
-     * The bare three-character `GST` stays exact-only, which is the same fact
-     * from the other side: the recall case above works because the TAX set
-     * lists `S GST`, not because 0.88 was bent.
+     * **The glued form, which the device showed and the JVM fixtures could
+     * not.** Real ML Kit returned `C6ST` / `S6ST` for three of four `S GST`
+     * rows on one page. Unfolded, `S6ST` against `SGST` scores 0.8500 — the
+     * same as `CURD`/`CARD` — so no threshold could admit it. Folded, the two
+     * strings are identical.
      */
     @Test
-    fun matches_aMisreadBareGst_doesNotMatch() {
-        assertThat(ReceiptKeywords.matches("6ST 9% 5.34", ReceiptKeywords.TAX)).isFalse()
+    fun matches_aGluedMisreadGstRow_isTax() {
+        assertThat(ReceiptKeywords.matches("S6ST 9% 4.19", ReceiptKeywords.TAX)).isTrue()
+        assertThat(ReceiptKeywords.matches("C6ST 9% 5.34", ReceiptKeywords.TAX)).isTrue()
+        // A bare misread GST now folds onto the keyword exactly, where before
+        // folding it was unreachable (0.7778) and correctly refused.
+        assertThat(ReceiptKeywords.matches("6ST 9% 5.34", ReceiptKeywords.TAX)).isTrue()
+
+        assertThat(JaroWinkler.similarity("S6ST", "SGST"))
+            .isWithin(1e-4)
+            .of(JaroWinkler.similarity("CURD", "CARD"))
+    }
+
+    /** The same table, on the other keyword sets a misread digit reaches. */
+    @Test
+    fun matches_confusableDigitsInOtherKeywords_fold() {
+        assertThat(ReceiptKeywords.matches("CA5H 500.00", ReceiptKeywords.TENDER)).isTrue()
+        assertThat(ReceiptKeywords.matches("DI5COUNT 50.00", ReceiptKeywords.DISCOUNT)).isTrue()
+        assertThat(ReceiptKeywords.matches("SUBT0TAL 709.00", ReceiptKeywords.SUBTOTAL)).isTrue()
+        assertThat(ReceiptKeywords.matches("T0TAL 614.00", ReceiptKeywords.TOTAL)).isTrue()
+    }
+
+    /**
+     * **Folding cannot bring a real word closer to a keyword with no
+     * confusable characters**, which is the whole safety argument: `PAN`,
+     * `TEL`, `VAT` and `CARD` contain none of 0/1/2/5/6/8's twins, so `CURD`,
+     * `TEA` and `BAT` are exactly as far from them folded as unfolded.
+     *
+     * And digit-heavy item rows — the input folding actually rewrites — acquire
+     * nothing. Measured over 40 of them; these are the ones whose folded words
+     * land nearest a keyword.
+     */
+    @Test
+    fun matches_foldingDoesNotReachIntoItemRows() {
+        listOf(
+            "CURD 400G 45.00" to ReceiptKeywords.TENDER,
+            "TEA 250G 120.00" to ReceiptKeywords.ADMIN,
+            "BAT CRICKET 899.00" to ReceiptKeywords.TAX,
+            "CRISPS 95G 70.00" to ReceiptKeywords.TAX,
+            "HSN 2005 UOM PCS" to ReceiptKeywords.TOTAL,
+            "EGGS 6PC 48.00" to ReceiptKeywords.TENDER,
+            "5 STAR CHOCOLATE 10.00" to ReceiptKeywords.ADMIN,
+            "CASHEWS W240 450.00" to ReceiptKeywords.ADMIN,
+        ).forEach { (row, keywords) ->
+            assertThat(ReceiptKeywords.matches(row, keywords)).isFalse()
+        }
+    }
+
+    // ─── Precision: the keyword threshold ───────────────────────────────────
+
+    /**
+     * **A false positive the first version of this shipped.** At §5.5's 0.88,
+     * `CASE` against `CASH` — four characters, one substitution in the last
+     * position — scores 0.8833 and passes, so a phone case or a soap case was
+     * read as a tender row and dropped from the bill. The keyword threshold is
+     * 0.89 because it has to sit above exactly that number.
+     */
+    @Test
+    fun matches_aPhoneCase_isNotCash() {
+        assertThat(ReceiptKeywords.matches("PHONE CASE 12N 299.00", ReceiptKeywords.TENDER))
+            .isFalse()
+        assertThat(ReceiptKeywords.matches("SOAP CASE 49.00", ReceiptKeywords.TENDER)).isFalse()
+
+        val score = JaroWinkler.similarity("CASE", "CASH")
+        assertThat(score).isAtLeast(JaroWinkler.MERCHANT_THRESHOLD)
+        assertThat(score).isLessThan(0.89)
     }
 
     // ─── The ordering traps, from the matcher's side ────────────────────────

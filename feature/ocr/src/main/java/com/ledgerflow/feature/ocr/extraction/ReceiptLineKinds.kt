@@ -73,13 +73,21 @@ internal object ReceiptKeywords {
      * substring missed, the row fell through as a line item, and it was one of
      * the two "items" that reached the Inbox on a six-item bill.
      *
-     * Listing the spaced form is what lets [matches]' fuzzy branch see the case
-     * at all: `S 6ST` against `S GST` is a five-character comparison scoring
-     * 0.8933, comfortably over §5.5's 0.88, while `6ST` against the bare `GST`
-     * is a three-character one scoring 0.7778 — below the threshold, and below
-     * what `GET` scores against `GST`. **The fix is a longer keyword, not a
-     * looser threshold**, which is the only version of it that does not also
-     * admit `BAT` as VAT.
+     * **Neither entry is redundant, because ML Kit does both things.** Measured
+     * on the device against a page printing `S GST 9%` four times, it returned
+     * `S | 6ST | 9%` once and glued the label three times as `C6ST` / `S6ST`:
+     *
+     * - the **separated** form needs the spaced keyword. `S 6ST` against
+     *   `S GST` is a five-character window; against the bare three-character
+     *   `GST` it is not reachable at all, and must not be — `6ST`/`GST` scores
+     *   0.7778, which is *below* what `GET` scores against `GST` (0.80).
+     * - the **glued** form needs [foldConfusableGlyphs]. `S6ST` against `SGST`
+     *   scores 0.8500, and no threshold can admit it: `CURD`/`CARD` scores
+     *   0.8500 to the same four places. Folding makes the two strings
+     *   identical instead, so the match is exact rather than tolerant.
+     *
+     * **In neither case was the answer a looser threshold** — that is the one
+     * version of this that also reads `BAT` as VAT and `CURD` as CARD.
      */
     val TAX = listOf(
         "CGST", "SGST", "IGST", "UTGST",
@@ -166,30 +174,29 @@ internal object ReceiptKeywords {
      * **2. One glyph's worth of doubt, at a word boundary.** §12 already
      * concedes the principle for item names — "OCR legitimately reads
      * `TOMATO 1KG` as `TOMAT0 1KG`" — and keywords are words too. A token
-     * window matches a keyword when all three of these hold:
+     * window matches a keyword when all of these hold, measured on both sides
+     * after [foldConfusableGlyphs]:
      *
      * - **the same length**, because a substituted glyph preserves length while
      *   an inserted or dropped character does not. Dropping this clause is what
      *   makes `REFINED` match `REFUND` (0.8944) — and `REFUND` decides the
      *   direction of the whole receipt, so a bottle of refined oil would turn a
      *   purchase into a credit. It also gives `TIL` ~ `TILL`, `PAD` ~ `PAID`,
-     *   `CHANA` ~ `CHANGE` and `CASHEW` ~ `CASHIER`: eight wrong lines measured
-     *   over a vocabulary of real Indian retail item names.
-     * - **at most one differing position**, because two wrong glyphs on one
-     *   short word is not a misread, it is a different word. Dropping this
-     *   clause admits `CASHEWS` ~ `CASHIER` (0.8857), which three substitutions
-     *   and a four-character prefix bonus carry over the threshold.
-     * - **[JaroWinkler.MERCHANT_THRESHOLD]**, §5.5's own 0.88 and not a number
-     *   invented here. Dropping it admits twelve more, all on three-character
-     *   keywords: `TEA` ~ `TEL`, `TIL` ~ `TIN`, `CAN` ~ `PAN`, `PEN` ~ `PAN`,
-     *   `BAT` ~ `VAT`, `MAT` ~ `VAT`, `CURD` ~ `CARD`. **The threshold is the
-     *   length floor**, which is why there is no length constant here: no
-     *   single substitution can reach 0.88 below four characters (the worst case
-     *   at three is 0.8222), so short keywords stay exact-only for free rather
-     *   than by a rule someone has to maintain.
+     *   `CHANA` ~ `CHANGE`, `CASHEW` ~ `CASHIER` and `BILL NO` ~ `BILL AMOUNT`:
+     *   **ten** wrong lines measured over real Indian retail item names.
+     * - **at most one differing position** — currently subsumed by the
+     *   threshold, kept as a structural floor. See [isOneGlyphOff].
+     * - **[KEYWORD_THRESHOLD]**, which is 0.89 and derived rather than chosen:
+     *   see its own note. Dropping it admits **fourteen** more, almost all on
+     *   three-character keywords: `TEA` ~ `TEL`, `TIL` ~ `TIN`, `CAN` ~ `PAN`,
+     *   `PEN` ~ `PAN`, `BAT` ~ `VAT`, `MAT` ~ `VAT`, `CURD` ~ `CARD`,
+     *   `CASE` ~ `CASH`. **The threshold is the length floor**, which is why
+     *   there is no length constant here: no single substitution can reach it
+     *   below five characters, so short keywords match only after folding makes
+     *   them identical, never on a score.
      *
-     * All three clauses together admit **zero** new wrong lines over that
-     * vocabulary and still catch `S 6ST` ~ `S GST`. A transposition is
+     * Together they admit **zero** new wrong lines over that vocabulary while
+     * catching every misread form the device produced. A transposition is
      * deliberately not admitted: a glyph recogniser substitutes characters it
      * misreads, it does not swap adjacent ones — that is a typing failure, not
      * an OCR one.
@@ -217,14 +224,73 @@ internal object ReceiptKeywords {
     }
 
     /**
-     * The three clauses, cheapest first — and `&&` short-circuits, so the
-     * length test is what stops [differingPositions] from being handed strings
-     * it cannot compare.
+     * The clauses, cheapest first — and `&&` short-circuits, so the length
+     * test is what stops [differingPositions] from being handed strings it
+     * cannot compare.
+     *
+     * Both sides are [foldConfusableGlyphs]ed before anything is measured.
+     * Folding is a 1:1 character map, so it never changes a length and the
+     * first clause is unaffected by it.
+     *
+     * **The `<= 1` clause is currently subsumed by the threshold and is kept
+     * anyway.** At [KEYWORD_THRESHOLD] nothing the cap would reject survives
+     * the score either — `CASHEWS`/`CASHIER` is the worst case at 0.8857 — so
+     * it catches nothing the measured vocabulary contains. It stays as a
+     * structural floor that does not depend on a float: one glyph's worth of
+     * doubt on a short keyword, whatever the threshold is later set to. Said
+     * out loud rather than left to imply it is load-bearing, which is how the
+     * redundant `%` rejection in `ReceiptNumbers` is handled too.
      */
-    private fun isOneGlyphOff(window: String, keyword: String): Boolean =
-        window.length == keyword.length &&
-            differingPositions(window, keyword) <= 1 &&
-            JaroWinkler.similarity(window, keyword) >= JaroWinkler.MERCHANT_THRESHOLD
+    private fun isOneGlyphOff(window: String, keyword: String): Boolean {
+        val a = foldConfusableGlyphs(window)
+        val b = foldConfusableGlyphs(keyword)
+        return a.length == b.length &&
+            differingPositions(a, b) <= 1 &&
+            JaroWinkler.similarity(a, b) >= KEYWORD_THRESHOLD
+    }
+
+    /**
+     * Digits that OCR reads for letters, folded onto the letter.
+     *
+     * **This is the half of the fix the device found, and the JVM could not.**
+     * Fed a page printing `S GST 9%`, real ML Kit glued the label on three of
+     * four tax rows and returned `C6ST` / `S6ST` rather than `S | 6ST`. A glued
+     * run is a four-character window against the four-character `SGST`, one
+     * position different, scoring **0.8500** — and no threshold can admit it,
+     * because `CURD`/`CARD` scores 0.8500 to the same four places and curd is
+     * not a tender row. The hand-laid JVM fixtures never showed this because
+     * `ReceiptFixtures.row` splits its text on spaces.
+     *
+     * Folding solves it structurally instead: `S6ST` and `SGST` become the
+     * **same string**, so the comparison is exact rather than tolerant, and no
+     * tolerance has to be widened to admit it. The same table also earns
+     * `CA5H`, `DI5COUNT`, `SUBT0TAL`, `T0TAL`, `B1LL NO` and `T0KEN` — and
+     * `25OML` for `250ML`, which ML Kit produced unprompted on that same page.
+     *
+     * **Why this is not the glyph correction §12 forbids.** That rule is about
+     * *money*: `ReceiptNumbers` stays integer-only and exact, and a digit there
+     * is never reinterpreted — `4O.00` is still rejected rather than read as
+     * ₹40.00. This table is consulted only when comparing a row's words
+     * against a fixed keyword list, decides only a row's *kind*, and never
+     * touches a value. A keyword is a word, and §12 already concedes that words
+     * compare with a tolerance.
+     *
+     * **Measured, not assumed: it admits nothing.** Over 116 real Indian
+     * retail item rows — deliberately including 40 that carry digits, which is
+     * what folding turns into letters — the folded rule produces **zero** new
+     * wrong lines. The dangerous short keywords are the reason it is safe:
+     * `PAN`, `TEL`, `TIN`, `VAT`, `CARD` and `DATE` contain no confusable
+     * character at all, so folding cannot bring `CURD`, `TEA`, `TIL`, `BAT` or
+     * `DATES` any closer to them than they already were.
+     *
+     * Uppercase only, because every caller uppercases first.
+     */
+    private fun foldConfusableGlyphs(text: String): String {
+        if (text.none { it in CONFUSABLE_DIGITS }) return text
+        return buildString(text.length) {
+            text.forEach { append(CONFUSABLE_GLYPHS[it] ?: it) }
+        }
+    }
 
     /** Callers guarantee equal lengths; this counts glyphs, not edits. */
     private fun differingPositions(a: String, b: String): Int =
@@ -248,6 +314,37 @@ internal object ReceiptKeywords {
         text.split(SEPARATORS).filter { it.isNotEmpty() }
 
     private val SEPARATORS = Regex("""[\s\p{Punct}]+""")
+
+    /**
+     * §5.5's 0.88 is for *merchant* names, and it is too loose here.
+     *
+     * **Derived, not chosen.** A four-character keyword with one substituted
+     * character tops out at **0.8833** (the substitution in the last position,
+     * collecting a three-character prefix bonus), and `CASE`/`CASH` is exactly
+     * that case — so at 0.88 a phone case or a soap case is read as a tender
+     * row and vanishes from the bill. This has to sit above 0.8833; 0.89 is the
+     * next step that does. It also puts `CASHEWS`/`CASHIER` (0.8857) out of
+     * reach, which used to need [differingPositions] to refuse it.
+     *
+     * A separate constant rather than a change to
+     * [JaroWinkler.MERCHANT_THRESHOLD], because that number is specified by
+     * §5.5 for a genuinely different comparison: long shop names, where a
+     * single wrong character is a far smaller share of the evidence. One
+     * algorithm, two thresholds, each stated where it applies.
+     */
+    private const val KEYWORD_THRESHOLD = 0.89
+
+    /** See [foldConfusableGlyphs]. Digit -> the letter OCR mistook it for. */
+    private val CONFUSABLE_GLYPHS = mapOf(
+        '0' to 'O',
+        '1' to 'I',
+        '2' to 'Z',
+        '5' to 'S',
+        '6' to 'G',
+        '8' to 'B',
+    )
+
+    private val CONFUSABLE_DIGITS = CONFUSABLE_GLYPHS.keys
 
     /**
      * Every keyword's words, split once at class-init rather than per row.

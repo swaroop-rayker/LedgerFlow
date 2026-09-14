@@ -11,8 +11,9 @@ package com.ledgerflow.core.domain.text
  *   compares against existing aliases. It is a *suggestion* at review time and
  *   never a gate on committing an entry — a wrong auto-merge is the expensive
  *   correction, a duplicate the cheap one.
- * - **§5.3's receipt keyword matching**, in `ReceiptKeywords`, at the same
- *   threshold under two extra constraints the caller states and justifies.
+ * - **§5.3's receipt keyword matching**, in `ReceiptKeywords`, at its own
+ *   stricter 0.89 and after folding OCR-confusable digits — a caller policy,
+ *   stated and measured there, which is exactly why it is not done here.
  * - **§12's recall grading**, when the receipt corpus arrives: a hit needs the
  *   item name to match after `ItemNameNormalizer`, because OCR legitimately
  *   reads `TOMATO 1KG` as `TOMAT0 1KG`. Money never gets a tolerance.
@@ -33,8 +34,9 @@ public object JaroWinkler {
     /**
      * §5.5's number: `Jaro-Winkler ≥ 0.88`.
      *
-     * Stated once so the three callers cannot drift apart. Raising it is a spec
-     * change, not a tuning knob.
+     * Stated once so the callers that use §5.5's number cannot drift apart.
+     * Raising it is a spec change, not a tuning knob. Keyword matching does not
+     * use it: short keywords need a stricter figure, derived in `ReceiptKeywords`.
      */
     public const val MERCHANT_THRESHOLD: Double = 0.88
 

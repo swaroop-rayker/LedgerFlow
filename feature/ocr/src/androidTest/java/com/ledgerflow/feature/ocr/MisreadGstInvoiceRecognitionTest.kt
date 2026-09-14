@@ -49,23 +49,21 @@ class MisreadGstInvoiceRecognitionTest {
     private val recognizer = MlKitReceiptTextRecognizer()
 
     /**
-     * **The fix fires on real recognition output — for the rows ML Kit keeps
-     * as separate runs.**
+     * **The misread page now reads exactly like the clean one**, on real
+     * recognition output.
      *
-     * On this page the recogniser returned `S | 6ST | 9%` for the first tax
-     * row, so the pipeline's space-joined row text is `S 6ST 9%`, the word
-     * window `S 6ST` compares against the keyword `S GST` at 0.8933, and the
-     * row is TAX instead of a ₹5.34 purchase. That is the whole claim this test
-     * makes, and removing the spaced `S GST` / `C GST` entries from the TAX set
-     * turns it red on the device.
+     * ML Kit returns this page's four tax labels in both shapes: `S | 6ST | 9%`
+     * once, and glued as `C6ST` / `S6ST` three times. The separated form reaches
+     * the spaced keyword `S GST`; the glued form reaches `SGST` only because
+     * `ReceiptKeywords` folds confusable digits first. Before folding this page
+     * gave seven items for four products — three tax rows read as purchases.
      *
-     * **It deliberately does not assert the item count, because three of the
-     * four tax rows on this page are NOT fixed.** See
-     * [theRecogniser_gluesSomeTaxLabels_whichFuzzyMatchingCannotReach] for the
-     * measurement and why.
+     * The reconciliation is the sharp assertion: the four item amounts sum to
+     * the printed total exactly, so any tax row left as an item puts the bill
+     * out by its value.
      */
     @Test
-    fun aMisreadGstRow_keptAsSeparateRuns_isTaxAndNotAnItem() = runBlocking {
+    fun aMisreadGstPage_readsLikeTheCleanOne() = runBlocking {
         // ML Kit loads a ~10 MB native pipeline on first use. Warming it here
         // keeps the failure, if there is one, about the extraction.
         recognizer.recognize(invoice(GST_AS_READ, 640))
@@ -76,45 +74,24 @@ class MisreadGstInvoiceRecognitionTest {
         val bill = ReceiptExtractor.extract(page)
         bill.lines.forEach { println("   ${it.kind}  ${it.name}  ${it.total}") }
 
-        val misreadTaxRows = bill.lines.filter {
-            it.kind == LineItemKind.TAX && it.name.contains(MISREAD_LABEL)
-        }
-        assertThat(misreadTaxRows).isNotEmpty()
-        // ...and it is not also sitting in the item list.
-        assertThat(
-            bill.lines.none { it.kind == LineItemKind.ITEM && it.name == misreadTaxRows.first().name },
-        ).isTrue()
-
-        // The merchant and the total are unaffected either way, and are worth
-        // pinning because they are what the review screen opens with.
+        assertThat(bill.lines.filter { it.kind == LineItemKind.ITEM }).hasSize(EXPECTED_ITEMS)
+        assertThat(bill.lines.count { it.kind == LineItemKind.TAX }).isEqualTo(EXPECTED_TAX_ROWS)
         assertThat(bill.merchantRaw).isEqualTo("VALUE MART RETAIL LTD")
         assertThat(bill.amount).isEqualTo(Money(TOTAL_MINOR))
+
+        val verdict = Reconciliation.of(bill.lines, bill.amount)
+        assertThat(verdict).isInstanceOf(Reconciliation.Balanced::class.java)
+        assertThat(verdict.delta).isEqualTo(Money.ZERO)
     }
 
     /**
-     * **The measured gap, recorded rather than asserted as correct.**
-     *
-     * ML Kit glued the label and the letter on three of this page's four tax
-     * rows — `C6ST`, `S6ST`, `S6ST` — while keeping the fourth as `S | 6ST`.
-     * A glued run is a **four**-character window against the four-character
-     * keyword `SGST`, one position different, which scores **0.8500** and is
-     * refused by the 0.88 threshold. Those rows are still read as line items,
-     * so this page yields seven items where the paper has four.
-     *
-     * **It cannot be fixed by lowering the threshold.** `S6ST`/`SGST` scores
-     * 0.8500 and `CURD`/`CARD` scores 0.8500 — the same number to four places —
-     * so any threshold that admits the glued tax row also makes curd a tender
-     * row and deletes it from the bill. `TIL`/`TILL` (0.9417) and `PAD`/`PAID`
-     * (0.9333) sit even higher. Nothing about string similarity separates them.
-     *
-     * This test asserts only that the gluing **happens**, so that the premise
-     * stays true: if a future ML Kit or a preprocessing change stops gluing,
-     * this goes red and the gap has closed on its own. It does not assert the
-     * seven-item outcome, because pinning a defect as expected is how a defect
-     * stops being one.
+     * **The premise the test above depends on, kept true.** If a future ML Kit
+     * or preprocessing change stops gluing the label, this goes red — and the
+     * glued-form half of the test above has stopped testing anything, which is
+     * worth knowing rather than discovering.
      */
     @Test
-    fun theRecogniser_gluesSomeTaxLabels_whichFuzzyMatchingCannotReach() = runBlocking {
+    fun theRecogniser_gluesSomeTaxLabels() = runBlocking {
         recognizer.recognize(invoice(GST_AS_READ, 640))
 
         val page = recognizer.recognize(invoice(GST_AS_READ, ReceiptImageLoader.MAX_RECOGNITION_EDGE))
@@ -255,6 +232,7 @@ class MisreadGstInvoiceRecognitionTest {
         const val PITCH_RATIO = 1.8f
 
         const val EXPECTED_ITEMS = 4
+        const val EXPECTED_TAX_ROWS = 4
         const val TOTAL_MINOR = 61_400L
 
         /** What ML Kit returned for `GST`. A longer run means it glued a neighbour on. */
