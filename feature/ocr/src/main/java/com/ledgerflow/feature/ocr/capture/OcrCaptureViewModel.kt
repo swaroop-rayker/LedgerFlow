@@ -63,6 +63,7 @@ import kotlinx.coroutines.withContext
 public class OcrCaptureViewModel @Inject constructor(
     private val recognizer: ReceiptTextRecognizer,
     private val images: ReceiptImageLoader,
+    private val pdfText: PdfTextLayer,
     private val ledgerRepository: LedgerRepository,
     private val attachments: AttachmentRepository,
     private val ingest: RawIngestRepository,
@@ -149,7 +150,9 @@ public class OcrCaptureViewModel @Inject constructor(
             } else {
                 SOURCE_FILE
             }
-            read(label) { images.load(uri) }
+            // A digital PDF's own text beats recognising a picture of it; the
+            // image is still rendered, because it is what the attachment stores.
+            read(label, textLayer = { pdfText.read(uri) }) { images.load(uri) }
         }
     }
 
@@ -161,14 +164,18 @@ public class OcrCaptureViewModel @Inject constructor(
      * ceremony — there is exactly one caller and one recovery, which is to say
      * so and let the user try again.
      */
-    private fun read(sourceLabel: String, decode: suspend () -> Bitmap) {
+    private fun read(
+        sourceLabel: String,
+        textLayer: () -> RecognizedPage? = { null },
+        decode: suspend () -> Bitmap,
+    ) {
         internalState.update { it.copy(reading = true, failure = null, result = null) }
 
         viewModelScope.launch {
             val outcome = runCatching {
                 withContext(io) {
                     val bitmap = decode()
-                    val page = recognizer.recognize(bitmap)
+                    val page = textLayer() ?: recognizer.recognize(bitmap)
                     // Extraction is pure arithmetic and runs in microseconds,
                     // but it runs on [io] with the recognition rather than on
                     // the main thread after it: StrictMode has penaltyDeath in

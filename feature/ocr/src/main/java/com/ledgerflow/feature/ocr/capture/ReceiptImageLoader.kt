@@ -190,9 +190,7 @@ public class ReceiptImageLoader @Inject constructor(
                     // to the long-edge cap lands close to §5.3's 300 DPI
                     // equivalent for a receipt-sized page without hardcoding a
                     // DPI that would be wrong for A4.
-                    val longEdge = maxOf(page.width, page.height)
-                    val scale =
-                        (MAX_RECOGNITION_EDGE.toFloat() / longEdge).coerceAtMost(MAX_PDF_SCALE)
+                    val scale = pdfScale(page.width, page.height)
                     val bitmap = Bitmap.createBitmap(
                         (page.width * scale).roundToInt().coerceAtLeast(1),
                         (page.height * scale).roundToInt().coerceAtLeast(1),
@@ -317,6 +315,15 @@ public class ReceiptImageLoader @Inject constructor(
          * blurry upscale that reads worse than the original, not better.
          */
         private const val MAX_PDF_SCALE = 3f
+
+        /**
+         * Points to pixels for a PDF page: its long edge to
+         * [MAX_RECOGNITION_EDGE], never past [MAX_PDF_SCALE]. Shared with
+         * `PdfTextLayer` so text-layer runs sit exactly over the rendered page
+         * that is stored as the attachment.
+         */
+        internal fun pdfScale(pageWidth: Int, pageHeight: Int): Float =
+            (MAX_RECOGNITION_EDGE.toFloat() / maxOf(pageWidth, pageHeight)).coerceAtMost(MAX_PDF_SCALE)
 
         private const val PDF_MIME = "application/pdf"
 
