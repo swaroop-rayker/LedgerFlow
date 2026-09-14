@@ -256,4 +256,23 @@ class ReceiptExtractorTest {
         assertThat(ReceiptExtractor.extract(ordinaryBill()).confidence)
             .isGreaterThan(ReceiptExtractor.extract(broken).confidence)
     }
+
+    /**
+     * A printed `Seller Name:` label is not part of the shop's name.
+     *
+     * Zepto heads its invoice `Seller Name: Geddit Convenience Private Limited`
+     * in the largest type on the page, so height picked the right row and the
+     * label came with it.
+     */
+    @Test
+    fun aSellerNameLabel_isNotPartOfTheMerchant() {
+        val labelled = page(
+            row(0, LEFT to "Seller Name: Geddit Convenience Private Limited", glyph = ReceiptFixtures.GLYPH * 1.5f),
+            row(1, LEFT to "LAYS CHIPS", amount("50.00")),
+            row(2, LEFT to "GRAND TOTAL", amount("50.00")),
+        )
+
+        assertThat(ReceiptExtractor.extract(labelled).merchantRaw)
+            .isEqualTo("Geddit Convenience Private Limited")
+    }
 }

@@ -71,8 +71,29 @@ internal object MerchantHeader {
         // Tallest wins; earliest breaks the tie. `maxByOrNull` already returns
         // the first maximum, so the tie-break is the iteration order and needs
         // no comparator of its own.
-        return candidates.maxByOrNull { it.height }?.text?.trim()
+        return candidates.maxByOrNull { it.height }?.text?.trim()?.withoutSellerLabel()
     }
+
+    /**
+     * Drops a printed label in front of the name.
+     *
+     * Zepto's invoice heads the page `Seller Name: Geddit Convenience Private
+     * Limited`, in the largest type on it, so height correctly picked the row
+     * and the label came along with the shop. §5.5's merchant normalisation
+     * would then key the merchant as `seller name geddit…`, a different shop
+     * from every other bill that names Geddit plainly.
+     *
+     * Only a label **followed by a colon** at the very start: `SELLER` on its
+     * own could be the shop.
+     */
+    private fun String.withoutSellerLabel(): String {
+        val label = SELLER_LABELS.firstOrNull { startsWith(it, ignoreCase = true) } ?: return this
+        return drop(label.length).trim().ifEmpty { this }
+    }
+
+    private val SELLER_LABELS = listOf(
+        "SELLER NAME:", "SELLER:", "SOLD BY:", "SUPPLIER NAME:", "SUPPLIER:", "MERCHANT:",
+    )
 
     private fun ReceiptRow.isPlausibleName(): Boolean {
         val trimmed = text.trim()

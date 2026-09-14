@@ -210,4 +210,35 @@ class ReceiptLineClassifierTest {
                 .isEqualTo(ReceiptLineKind.TOTAL)
         }
     }
+
+    /**
+     * `Invoice Value 195.00` is the bill, although `INVOICE` is an ADMIN word.
+     *
+     * Found on a real Zepto invoice, where it was discarded as an identifier and
+     * the total survived only because `Item Total` printed the same figure a
+     * line above. A delivery fee separates those two figures, so this is
+     * asserted on a bill where they differ — last-wins must pick the invoice
+     * value, not the item total.
+     */
+    @Test
+    fun invoiceValue_isTheTotal_evenThoughInvoiceIsAnAdminWord() {
+        val kinds = ReceiptLineClassifier.classify(
+            listOf(
+                ClassifiableRow("CHIPS 50.00", "CHIPS", hasAmount = true),
+                ClassifiableRow("ITEM TOTAL 50.00", "ITEM TOTAL", hasAmount = true),
+                ClassifiableRow("DELIVERY FEE 25.00", "DELIVERY FEE", hasAmount = true),
+                ClassifiableRow("INVOICE VALUE 75.00", "INVOICE VALUE", hasAmount = true),
+            ),
+        )
+
+        assertThat(kinds[3]).isEqualTo(ReceiptLineKind.TOTAL)
+        // An invoice NUMBER is still an identifier.
+        assertThat(
+            ClassifiableRow("INVOICE NO 4521", "INVOICE NO", hasAmount = true).isAdministrative,
+        ).isTrue()
+        assertThat(
+            ClassifiableRow("TOTAL INVOICE VALUE (IN FIGURE): RS.1776.17", "", hasAmount = true)
+                .isAdministrative,
+        ).isFalse()
+    }
 }

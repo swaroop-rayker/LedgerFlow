@@ -67,6 +67,14 @@ internal object ReceiptColumns {
             .let { if (it < 0) before.size else it }
 
         val name = before.take(nameEnd).joinToString(" ") { it.text }.trim()
+            // A name with no letter in it is not a name. bigbasket's invoice
+            // puts an eight-digit HSN code in the first cell of a row whose
+            // description sits on the line above, and that code came out as
+            // the item's name -- `34022090`, ₹107.48. An HSN code is a
+            // classification, never a product, and an empty name is what lets
+            // the classifier call the row what it is.
+            .takeIf { text -> text.any(Char::isLetter) }
+            .orEmpty()
         val figures = before.drop(nameEnd)
 
         val figuresRead = readQuantityAndUnitPrice(figures, amount, currency)

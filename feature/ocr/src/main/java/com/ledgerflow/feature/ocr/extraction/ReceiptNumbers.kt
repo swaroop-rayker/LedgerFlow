@@ -23,12 +23,14 @@ import com.ledgerflow.core.model.Quantity
  *
  * - a `%` anywhere means a **rate**, not an amount — `CGST 2.5%` must not
  *   contribute 250 paise to a bill
- * - more than [MAX_UNGROUPED_DIGITS] digits with no separator at all is an
- *   identifier, not a price. A ten-digit mobile number would otherwise read as
- *   ₹98,76,543.21, which is both parseable and catastrophic
+ * - more than [MAX_BARE_INTEGER_DIGITS] digits with no point and no grouping is
+ *   an identifier, not a price: a ten-digit mobile number, a GSTIN — and, since
+ *   BUG23, a six-digit PIN code
  * - more than two decimal places is a quantity, a weight or a version string;
  *   INR has two, and a third digit means this token is not a rupee amount
  * - a `/` or `-` *between* digits is a date or a range
+ * - a **comma group that is not a real grouping** — `52,00` — is a misread
+ *   decimal point, and misread punctuation is not reinterpreted (BUG23)
  *
  * **No glyph correction.** `TOMAT0` for `TOMATO` is fixed at name-comparison
  * time by §12's Jaro-Winkler threshold, but `4O.00` is not silently read as
@@ -39,15 +41,31 @@ import com.ledgerflow.core.model.Quantity
 internal object ReceiptNumbers {
 
     /**
-     * The longest run of digits with no grouping separator that can still be
-     * money.
+     * The longest whole part a **quantity** may have.
      *
-     * Seven allows ₹9,999,999 written flat, which is past any retail receipt,
-     * and rejects the ten digits of an Indian mobile number and the fifteen of
-     * a GSTIN. The bound is on *ungrouped* digits only — `1,23,45,678` is
-     * grouped, so it is read as written.
+     * This used to bound bare-integer money as well, at seven digits, which
+     * refused a mobile number but let a six-digit PIN code through as
+     * ₹5,80,020.00. Money now has its own, tighter bound,
+     * [MAX_BARE_INTEGER_DIGITS]; this one is kept for quantities.
      */
     private const val MAX_UNGROUPED_DIGITS = 7
+
+    /**
+     * **BUG23 — the longest integer with no decimal point and no grouping that
+     * can still be money.**
+     *
+     * Zepto's invoice prints its seller address as `Hubli - 580020`. The PIN
+     * code sat in its own cell above the first price, parsed flat as
+     * ₹5,80,020.00, became the first priced row and therefore an ITEM — a line
+     * three thousand times the bill, on a ₹195 purchase. Every Indian PIN code
+     * is six digits.
+     *
+     * A retail amount printed as a bare integer is short: `40`, `285`, a kirana
+     * slip's `1250`. Five digits keeps ₹99,999 written flat and refuses every
+     * PIN code. A larger sum on a real bill carries a decimal point or a
+     * grouping comma, and either one takes it out of this rule.
+     */
+    private const val MAX_BARE_INTEGER_DIGITS = 5
 
     /** What a shop prints in front of an amount. Stripped before parsing. */
     private val CURRENCY_PREFIXES = listOf("₹", "RS.", "RS", "INR")
@@ -58,7 +76,17 @@ internal object ReceiptNumbers {
     /** Currency markers, for [currencyMarkerIn]. */
     private val INR_MARKERS = listOf("₹", "RS.", "RS", "INR")
 
-    private val GROUPED = Regex("""^\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?$""")
+    /**
+     * A grouped amount, **Indian or Western, and nothing in between**.
+     *
+     * The last group before the point is always three digits in both systems:
+     * `1,23,456.78` groups 2-2-3, `1,234,567.00` groups 3-3-3. The old pattern
+     * allowed any mix of two- and three-digit groups in any position, so
+     * `52,00` — Zepto's `52.00` with the point misread as a comma — read as
+     * ₹5,200.00 (BUG23). That is a guess about punctuation, and a guess about
+     * punctuation is a guess about an amount; it is refused, not corrected.
+     */
+    private val GROUPED = Regex("""^\d{1,3}(?:(?:,\d{2})*,\d{3}|(?:,\d{3})+)(?:\.\d{1,2})?$""")
     private val FLAT = Regex("""^\d+(?:\.\d{1,2})?$""")
 
     /**
@@ -91,7 +119,7 @@ internal object ReceiptNumbers {
         val grouped = body.contains(',')
         val point = body.indexOf('.')
         val whole = if (point < 0) body else body.take(point)
-        if (!grouped && point < 0 && whole.length > MAX_UNGROUPED_DIGITS) return false
+        if (!grouped && point < 0 && whole.length > MAX_BARE_INTEGER_DIGITS) return false
 
         return GROUPED.matches(body) || FLAT.matches(body)
     }

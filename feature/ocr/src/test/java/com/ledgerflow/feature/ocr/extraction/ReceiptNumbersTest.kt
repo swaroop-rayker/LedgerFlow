@@ -156,4 +156,39 @@ class ReceiptNumbersTest {
         assertThat(ReceiptNumbers.currencyMarkerIn("TOTAL Rs.694.46")).isEqualTo("INR")
         assertThat(ReceiptNumbers.currencyMarkerIn("TOTAL 694.46")).isNull()
     }
+
+    // ── BUG23: numbers shaped like money that are not ───────────────────────
+
+    /**
+     * **BUG23.** Zepto's seller address ends `Hubli - 580020`; the PIN code
+     * parsed as ₹5,80,020.00 and became an item on a ₹195 bill.
+     */
+    @Test
+    fun bug23_aSixDigitPinCode_isNotMoney() {
+        assertThat(ReceiptNumbers.money("580020")).isNull()
+        assertThat(ReceiptNumbers.money("560078")).isNull()
+        // The boundary: five bare digits are still a flat amount.
+        assertThat(ReceiptNumbers.money("12345")).isEqualTo(Money(1_234_500L))
+        // And a six-digit amount that says what it is still reads.
+        assertThat(ReceiptNumbers.money("177617.00")).isEqualTo(Money(17_761_700L))
+        assertThat(ReceiptNumbers.money("1,77,617")).isEqualTo(Money(17_761_700L))
+    }
+
+    /**
+     * **BUG23.** `52.00` recognised as `52,00` read as ₹5,200.00. The last group
+     * before a point is three digits in both Indian and Western grouping, so a
+     * two-digit tail is misread punctuation — refused, never reinterpreted.
+     */
+    @Test
+    fun bug23_aCommaThatIsAMisreadDecimalPoint_isNotMoney() {
+        assertThat(ReceiptNumbers.money("52,00")).isNull()
+        assertThat(ReceiptNumbers.money("107,48")).isNull()
+        assertThat(ReceiptNumbers.money("Rs.107,48")).isNull()
+        assertThat(ReceiptNumbers.money("1,23")).isNull()
+        // Real groupings, both systems, still read.
+        assertThat(ReceiptNumbers.money("1,23,456.78")).isEqualTo(Money(12_345_678L))
+        assertThat(ReceiptNumbers.money("12,34,567")).isEqualTo(Money(123_456_700L))
+        assertThat(ReceiptNumbers.money("1,234,567.00")).isEqualTo(Money(123_456_700L))
+        assertThat(ReceiptNumbers.money("12,345")).isEqualTo(Money(1_234_500L))
+    }
 }

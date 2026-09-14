@@ -139,4 +139,20 @@ class ReceiptColumnsTest {
     private companion object {
         const val TOLERANCE = 0.01f
     }
+
+    /**
+     * An HSN code in the name cell is not a name.
+     *
+     * bigbasket's A4 invoice puts the description on the line above and the
+     * eight-digit HSN code first on the priced line, and `34022090` came out as
+     * the item's name. The amount is kept; the name is empty, which is what
+     * lets the classifier refuse the row as an item rather than file a number.
+     */
+    @Test
+    fun aNameWithNoLetters_isNotAName() {
+        val reading = read(LEFT to "34022090", QUANTITY_X to "1", amount("107.48"))
+
+        assertThat(reading?.name).isEmpty()
+        assertThat(reading?.amount).isEqualTo(Money(10_748L))
+    }
 }

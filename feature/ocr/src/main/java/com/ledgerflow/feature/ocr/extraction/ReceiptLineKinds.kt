@@ -56,8 +56,27 @@ internal object ReceiptKeywords {
      */
     val TOTAL = listOf(
         "GRAND TOTAL", "NET AMOUNT", "AMOUNT PAYABLE", "NET PAYABLE", "AMOUNT DUE",
-        "BILL AMOUNT", "TOTAL AMOUNT", "बिल राशि", "कुल योग", "कुल", "TOTAL",
-    )
+        "BILL AMOUNT", "TOTAL AMOUNT", "बिल राशि", "कुल योग", "कुल",
+    ) + INVOICE_TOTAL + "TOTAL"
+
+    /**
+     * **Totals phrased with the word INVOICE**, which ADMIN would otherwise
+     * claim first.
+     *
+     * The administrative check runs before every keyword set, deliberately,
+     * so that `TOTAL QTY` cannot be the bill. But `INVOICE` is in ADMIN too, so
+     * Zepto's `Invoice Value 195.00` and bigbasket's `Total Invoice value (In
+     * Figure): Rs.1776.17` were both thrown away as identifiers. On Zepto the
+     * total still came out right, by luck — `Item Total` printed the same
+     * figure a line above. Any delivery fee or packaging charge separates the
+     * two, and last-wins would then have reported the item subtotal as the
+     * bill.
+     *
+     * So these phrases are exempted from ADMIN *by name* rather than by moving
+     * `INVOICE` out of it: `INVOICE NO 4521` is still an identifier.
+     */
+    val INVOICE_TOTAL: List<String>
+        get() = listOf("TOTAL INVOICE VALUE", "INVOICE VALUE", "INVOICE AMOUNT", "INVOICE TOTAL")
 
     val SUBTOTAL = listOf(
         "SUB TOTAL", "SUBTOTAL", "SUB-TOTAL", "TAXABLE VALUE", "TAXABLE AMT",
@@ -471,5 +490,6 @@ internal data class ClassifiableRow(
     val hasAmount: Boolean,
 ) {
     val isAdministrative: Boolean
-        get() = ReceiptKeywords.matches(upper, ReceiptKeywords.ADMIN)
+        get() = ReceiptKeywords.matches(upper, ReceiptKeywords.ADMIN) &&
+            !ReceiptKeywords.matches(upper, ReceiptKeywords.INVOICE_TOTAL)
 }
