@@ -90,6 +90,7 @@ reason `ReceiptTextRecognizer` returns its own type.
 | 6 | **Line reconstruction** — y-centroid banding at 0.6x the page's median glyph height | `ReceiptGeometry.rows` |
 | 7a | **Cell segmentation** — split each row at gaps wider than 1.0x that height | `ReceiptGeometry.cells` |
 | 7b | **Column inference** — rightmost amount, leftmost name, `qty x rate` when it closes | `ReceiptColumns` |
+| 7c | **Invoice tables** — a ≥5-column header turns an A4 GST invoice into columns; wrapped names are grouped onto their total-column figure | `ReceiptTable` |
 | 8 | **Line classification** — HEADER / ITEM / TAX / DISCOUNT / SUBTOTAL / TOTAL / FOOTER / NOISE | `ReceiptLineClassifier` |
 | 9 | **Merchant detection** — the tallest plausible header row | `MerchantHeader` |
 | 10 | **Totals detection** — the keyword set; the **last** match wins | `ReceiptExtractor.detectTotal` |
@@ -198,6 +199,10 @@ were worth doing:
 
 ### Still open in B
 
+- **Invoice tables (S13, `ReceiptTable`) do not handle** top-aligned cells, a
+  logo as the merchant name (bigbasket reads `basket`), or any page after the
+  first. On the owner's two PDF invoices on the device: bigbasket 11/11 items
+  exact and balanced, Zepto 4/4 items with one misread amount left blank.
 - **No date detection.** §5.3's pipeline does not list one and the review
   screen falls back to the capture time, so a receipt photographed days later
   lands on the wrong day until corrected.

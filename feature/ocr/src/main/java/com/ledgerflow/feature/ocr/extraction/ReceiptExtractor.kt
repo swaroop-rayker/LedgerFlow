@@ -72,6 +72,14 @@ internal object ReceiptExtractor {
             ReceiptColumns.read(ReceiptGeometry.cells(row, scale), currency)
         }
 
+        // An A4 GST invoice is a table with wrapped cells, and reading it a
+        // line at a time loses every product (ReceiptTable's KDoc). Only a page
+        // with a real multi-column header takes this path; everything else
+        // reads exactly as it did.
+        ReceiptTable.read(rows, scale, currency)?.let { table ->
+            return extractTable(rows, table, currency)
+        }
+
         val kinds = ReceiptLineClassifier.classify(
             rows.mapIndexed { index, row ->
                 ClassifiableRow(
@@ -100,6 +108,76 @@ internal object ReceiptExtractor {
             lines = lines,
         )
     }
+
+    /**
+     * A page [ReceiptTable] recognised: items from the table, the merchant from
+     * above it, the total from below it.
+     */
+    private fun extractTable(
+        rows: List<ReceiptRow>,
+        table: ReceiptTable.Table,
+        currency: String,
+    ): ExtractedTransaction {
+        val lines = table.items.map { item ->
+            ExtractedLineItem(
+                name = item.name,
+                kind = LineItemKind.ITEM,
+                quantityMilli = item.quantity?.milli,
+                unitPrice = null,
+                total = item.amount,
+                confidence = OPEN_LINE_CONFIDENCE,
+            )
+        }
+        val total = rows.drop(table.afterBody).mapNotNull { tableSummaryTotal(it, currency) }.lastOrNull()
+            ?: table.columnTotal
+        val reconciliation = Reconciliation.of(lines, total)
+
+        return ExtractedTransaction(
+            amount = total,
+            currency = detectCurrency(rows),
+            direction = detectDirection(rows, total),
+            merchantRaw = MerchantHeader.detect(rows.take(table.headerFirst)),
+            confidence = confidenceOf(lines, total, reconciliation, emptyList()),
+            lines = lines,
+        )
+    }
+
+    /**
+     * A totals line below an invoice table, and **only the figure to the right
+     * of its own label**.
+     *
+     * bigbasket prints two summary tables side by side — tax on the left,
+     * payments on the right — and they band into shared lines. So
+     * `Total Invoice value (In words): Rs.One Thousand…` shares a line with the
+     * left table's `Rs.32.76`, and the ordinary reading takes the rightmost
+     * figure *anywhere* on the line: last-wins would then have reported the
+     * ₹1,776.17 bill as ₹32.76. A label's figure follows the label.
+     *
+     * A line matching SUBTOTAL, TAX or DISCOUNT first is not a total, in the
+     * same order the classifier uses.
+     */
+    private fun tableSummaryTotal(row: ReceiptRow, currency: String): Money? {
+        if (!isTotalLine(row.text.uppercase())) return null
+        val label = row.elements.firstOrNull { element ->
+            TOTAL_LABEL_WORDS.any { element.text.uppercase().contains(it) }
+        } ?: return null
+        return row.elements
+            .filter { it.left > label.right }
+            .mapNotNull { ReceiptNumbers.money(it.text, currency) }
+            .lastOrNull()
+    }
+
+    /** TOTAL, and not first something the classifier would try earlier. */
+    private fun isTotalLine(upper: String): Boolean {
+        val earlier = listOf(ReceiptKeywords.DISCOUNT, ReceiptKeywords.SUBTOTAL, ReceiptKeywords.TAX)
+        return !ClassifiableRow(upper, name = "", hasAmount = true).isAdministrative &&
+            earlier.none { ReceiptKeywords.matches(upper, it) } &&
+            ReceiptKeywords.matches(upper, ReceiptKeywords.TOTAL)
+    }
+
+    private val TOTAL_LABEL_WORDS = listOf(
+        "TOTAL", "INVOICE", "GRAND", "NET", "BILL", "AMOUNT", "PAYABLE", "कुल", "राशि",
+    )
 
     /**
      * Step 10: **the LAST totals row wins.**

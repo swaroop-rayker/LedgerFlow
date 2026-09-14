@@ -679,6 +679,25 @@ as `:feature:ocr`'s `extraction` package; each is arithmetic over
   larger than its address, and plenty of slips print the address first. This
   is what the bounding boxes on `RecognizedElement` are carried through the
   whole pipeline for.
+- **An A4 GST invoice is read as a table** (`ReceiptTable`). Quick-commerce
+  invoices (Zepto, bigbasket) print each description *wrapped* over several
+  lines beside vertically centred figures, or split above and below them, so a
+  printed line is not a bill line and the line-by-line reading found no items
+  on either. A page whose header names **at least five columns**, a description
+  column and a total column is read column-wise instead: each value in the total
+  column is one item, and the description column's lines are assigned to items
+  by the split that centres each group on its figure. Only `ITEM` lines come out
+  of a table — tax and discount are columns there, already inside each total. A
+  line with an item's markers (serial, quantity or HSN code) whose total does
+  not read as money is kept with **no amount**, so the names stay on the right
+  products and the bill reports unbalanced by exactly the missing figure. A
+  totals line below the table takes only the figure to the right of its own
+  label, because side-by-side summary tables band into shared lines. Thermal
+  slips never reach this path. Measured on the owner's two invoices on the
+  device: bigbasket 11/11 items with every amount exact and the bill balanced;
+  Zepto 4/4 items with one amount left for the user (a misread `52,00`).
+  **Not handled:** top-aligned table cells, merchant selection when the shop's
+  name is a logo (bigbasket reads `basket`), and pages after the first.
 - **No date detection.** §5.3's pipeline does not specify one and none is
   built; the review screen falls back to the capture time, so a receipt
   photographed days later needs its date corrected. Recorded as a known gap
