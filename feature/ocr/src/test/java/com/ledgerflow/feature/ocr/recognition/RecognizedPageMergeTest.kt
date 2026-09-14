@@ -129,7 +129,7 @@ class RecognizedPageMergeTest {
     @Test
     fun boxesThatOnlyTouch_areNotTheSameRun() {
         val latin = page(element("A", 0f, 0f, 100f, 100f))
-        val devanagari = page(element("B", 100f, 0f, 200f, 100f, RecognitionScript.DEVANAGARI))
+        val devanagari = page(element("ब", 100f, 0f, 200f, 100f, RecognitionScript.DEVANAGARI))
 
         assertThat(RecognizedPage.merge(latin, devanagari).elements).hasSize(2)
     }
@@ -145,7 +145,7 @@ class RecognizedPageMergeTest {
         val latin = page(element("MILK", 40f, 100f, 200f, 132f))
         // Shares only the bottom sliver -- roughly 0.1 IoU.
         val devanagari = page(
-            element("BREAD", 40f, 128f, 200f, 160f, RecognitionScript.DEVANAGARI),
+            element("ब्रेड", 40f, 128f, 200f, 160f, RecognitionScript.DEVANAGARI),
         )
 
         assertThat(RecognizedPage.merge(latin, devanagari).elements).hasSize(2)
@@ -193,5 +193,60 @@ class RecognizedPageMergeTest {
         assertThat(merged.elements.count { it.text == "473.00" }).isEqualTo(1)
         assertThat(merged.elements.count { it.text == "420.00" }).isEqualTo(1)
         assertThat(merged.elements.map { it.text }).contains("किराना स्टोर")
+    }
+
+    // ─── BUG22: the second model's digit lookalikes ─────────────────────────
+
+    /**
+     * **BUG22, as the device produced it.** On a real A4 invoice the Devanagari
+     * model returned `০.০০` (Bengali zeroes) beside the Latin `0.00`, boxed far
+     * enough apart that the overlap rule kept both. The row then read
+     * `০.০০ 0.00`. A run with no Devanagari letter is dropped before it can be
+     * merged at all.
+     */
+    @Test
+    fun bug22_aDigitLookalikeFromTheDevanagariPass_isNotMerged() {
+        val latin = page(element("0.00", 300f, 100f, 360f, 130f))
+        val devanagari = page(
+            // Shifted enough to fall under SAME_RUN_OVERLAP -- the real failure.
+            element("০.০০", 280f, 104f, 336f, 136f, RecognitionScript.DEVANAGARI),
+            element("२", 40f, 100f, 60f, 130f, RecognitionScript.DEVANAGARI),
+            element("৪.20", 500f, 100f, 560f, 130f, RecognitionScript.DEVANAGARI),
+        )
+
+        val merged = RecognizedPage.merge(latin, devanagari)
+
+        assertThat(merged.elements.map { it.text }).containsExactly("0.00")
+    }
+
+    /**
+     * And it cannot *replace* a Latin reading by being longer either — the
+     * other door the lookalikes came through.
+     */
+    @Test
+    fun bug22_aLongerLookalike_doesNotReplaceTheLatinReading() {
+        val latin = page(element("0.14", 300f, 100f, 360f, 130f))
+        val devanagari = page(
+            element("0 01८ 14", 301f, 101f, 361f, 131f, RecognitionScript.DEVANAGARI),
+        )
+
+        assertThat(RecognizedPage.merge(latin, devanagari).elements.single().text)
+            .isEqualTo("0.14")
+    }
+
+    /**
+     * Devanagari digits alone are figures, not words, so they do not qualify;
+     * a Devanagari word with a figure in it does.
+     */
+    @Test
+    fun bug22_devanagariWordsStillQualify_andDevanagariDigitsAloneDoNot() {
+        val devanagari = page(
+            element("५००", 40f, 40f, 100f, 70f, RecognitionScript.DEVANAGARI),
+            element("चावल ५किलो", 40f, 100f, 260f, 130f, RecognitionScript.DEVANAGARI),
+        )
+
+        val merged = RecognizedPage.merge(RecognizedPage(emptyList()), devanagari)
+
+        assertThat(merged.elements.map { it.text }).containsExactly("चावल ५किलो")
     }
 }

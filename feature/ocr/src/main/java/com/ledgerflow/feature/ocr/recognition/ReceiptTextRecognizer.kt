@@ -139,7 +139,10 @@ public data class RecognizedPage(
         public fun merge(primary: RecognizedPage, secondary: RecognizedPage): RecognizedPage {
             val merged = primary.elements.toMutableList()
 
-            secondary.elements.forEach { candidate ->
+            // BUG22: a secondary run with no Devanagari letter in it contributes
+            // nothing the primary pass lacks except digit lookalikes. See
+            // [carriesDevanagari].
+            secondary.elements.filter { it.isWorthMerging() }.forEach { candidate ->
                 val twinIndex = merged.indexOfFirst { existing ->
                     existing.overlapWith(candidate) >= SAME_RUN_OVERLAP
                 }
@@ -153,6 +156,40 @@ public data class RecognizedPage(
 
             return RecognizedPage(merged)
         }
+
+        /**
+         * **BUG22 — the Devanagari model's digits are not digits.** Run over a
+         * crisp A4 invoice on the device, it returned Bengali and Devanagari
+         * lookalikes for Latin figures — `০.০০` for `0.00`, `২` and `२` for
+         * `2`, `৪.20` for `8.20` — in boxes a few pixels off the Latin model's.
+         * Where the overlap cleared [SAME_RUN_OVERLAP] the equal-length tie
+         * kept Latin; where it did not, both survived and rows read
+         * `০.০০ 0.00` and `0 01८ 14`, which is garbage in exactly the columns
+         * the extractor reads money from.
+         *
+         * The second pass exists for one reason — words the Latin model cannot
+         * read — and a run with no Devanagari letter or vowel sign in it is not
+         * one of those. Devanagari *digits* do not qualify either: `ReceiptNumbers`
+         * reads ASCII figures only, so a Devanagari-digit run could only ever
+         * sit beside the Latin reading as noise. What this gives up is a Latin
+         * or numeric run the Latin pass missed entirely and the Devanagari pass
+         * caught; on a Latin figure that is the Latin model's own job, and the
+         * trade is a stray missed glyph against a duplicated amount column.
+         */
+        internal fun RecognizedElement.carriesDevanagari(): Boolean =
+            text.any { it in DEVANAGARI_BLOCK && it !in DEVANAGARI_DIGITS_AND_DANDAS }
+
+        /**
+         * Scoped to runs the Devanagari pass *produced*, so [merge] stays a
+         * general combine for any other page it is handed.
+         */
+        private fun RecognizedElement.isWorthMerging(): Boolean =
+            script != RecognitionScript.DEVANAGARI || carriesDevanagari()
+
+        private val DEVANAGARI_BLOCK = 'ऀ'..'ॿ'
+
+        /** `।` `॥` and `०`–`९`: punctuation and figures, not words. */
+        private val DEVANAGARI_DIGITS_AND_DANDAS = '।'..'९'
     }
 }
 
