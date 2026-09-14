@@ -32,6 +32,13 @@ dependencies {
     // `text-recognition-hindi`, for the reason above. See ADR-0021's amendment.
     implementation(libs.mlkit.text.recognition.devanagari)
 
+    // ── Perspective correction (ADR-0024) ────────────────────────────────────
+    // OpenCV's official Android AAR, core + imgproc used. Finds a photographed
+    // page's four corners and warps it square before recognition -- the
+    // four-point warp OCR-PIPELINE.md section B recorded as the open item.
+    // Native, arm64 split measured in ADR-0024; budget raised there.
+    implementation(libs.opencv)
+
     // ── Camera (SPEC.md §5.3) ────────────────────────────────────────────────
     // camera-core + camera2 is the capture stack; camera-lifecycle binds it to
     // the composable's lifecycle so a backgrounded app releases the sensor;

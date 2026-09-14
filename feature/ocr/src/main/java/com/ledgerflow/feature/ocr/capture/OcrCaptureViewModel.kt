@@ -64,6 +64,7 @@ public class OcrCaptureViewModel @Inject constructor(
     private val recognizer: ReceiptTextRecognizer,
     private val images: ReceiptImageLoader,
     private val pdfText: PdfTextLayer,
+    private val corrector: ReceiptImageCorrector,
     private val ledgerRepository: LedgerRepository,
     private val attachments: AttachmentRepository,
     private val ingest: RawIngestRepository,
@@ -115,8 +116,10 @@ public class OcrCaptureViewModel @Inject constructor(
                 )
             }
 
+            // Capped first, then corrected: the warp is cheaper on the size the
+            // recogniser will read anyway, and never enlarges the image.
             is OcrCaptureEvent.FrameCaptured -> read(SOURCE_CAMERA) {
-                images.forRecognition(event.bitmap)
+                corrector.correct(images.forRecognition(event.bitmap))
             }
 
             is OcrCaptureEvent.FileChosen -> {
@@ -152,7 +155,12 @@ public class OcrCaptureViewModel @Inject constructor(
             }
             // A digital PDF's own text beats recognising a picture of it; the
             // image is still rendered, because it is what the attachment stores.
-            read(label, textLayer = { pdfText.read(uri) }) { images.load(uri) }
+            // A photo from the gallery is corrected like a camera frame; a
+            // rendered PDF page is already square and is left alone.
+            val pdf = withContext(io) { runCatching { images.isPdf(uri) }.getOrDefault(false) }
+            read(label, textLayer = { if (pdf) pdfText.read(uri) else null }) {
+                images.load(uri).let { if (pdf) it else corrector.correct(it) }
+            }
         }
     }
 

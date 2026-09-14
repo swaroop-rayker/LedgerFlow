@@ -1,5 +1,7 @@
 package com.ledgerflow.feature.ocr.di
 
+import com.ledgerflow.feature.ocr.capture.OpenCvPageCorrector
+import com.ledgerflow.feature.ocr.capture.ReceiptImageCorrector
 import com.ledgerflow.feature.ocr.recognition.MlKitReceiptTextRecognizer
 import com.ledgerflow.feature.ocr.recognition.ReceiptTextRecognizer
 import dagger.Binds
@@ -31,4 +33,11 @@ public abstract class OcrModule {
     internal abstract fun bindReceiptTextRecognizer(
         recognizer: MlKitReceiptTextRecognizer,
     ): ReceiptTextRecognizer
+
+    /** ADR-0024's seam: OpenCV's page warp, reversible here in one line. */
+    @Binds
+    @Singleton
+    internal abstract fun bindReceiptImageCorrector(
+        corrector: OpenCvPageCorrector,
+    ): ReceiptImageCorrector
 }

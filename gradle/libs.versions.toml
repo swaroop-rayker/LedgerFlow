@@ -47,6 +47,8 @@ splashscreen = "1.2.0"
 # :app's EXPECTED_MERGED_PERMISSIONS so a SECOND unexpected permission still
 # fails the build.
 mlkitText = "16.0.1"
+# OpenCV, for camera-capture perspective correction only (ADR-0024).
+opencv = "4.14.0"
 camerax = "1.5.0"
 
 # Persistence & crypto
@@ -81,6 +83,7 @@ benchmark = "1.4.1"
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
+opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 # Devanagari, which is the SCRIPT -- ML Kit models are per script, not per
 # language, so this one artifact covers Hindi, Marathi, Nepali, Sanskrit and
 # Konkani. There is no `text-recognition-hindi`; it was probed and does not

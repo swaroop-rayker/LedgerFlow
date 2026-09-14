@@ -335,7 +335,11 @@ jobs:
       - name: APK size budget (SPEC.md §11 — arm64 release split)
         run: |
           set -euo pipefail
-          LIMIT=$((25 * 1024 * 1024))
+          # 50 MiB since ADR-0024: OpenCV's native library measured the arm64
+          # release split at 42.94 MiB (18.18 before). Moved on that
+          # measurement, with ~7 MiB of headroom -- not a round number chosen
+          # to make a failure go away.
+          LIMIT=$((50 * 1024 * 1024))
 
           # Anchored on `release`, on the arm64 split's own filename, and rooted
           # at app/ -- all three matter. The previous glob was
@@ -362,7 +366,7 @@ jobs:
             printf '%s -> %s KiB
 ' "$f" "$((SIZE / 1024))"
             if [ "$SIZE" -gt "$LIMIT" ]; then
-              echo "::error::$f exceeds the 25 MB budget (SPEC.md §11)."
+              echo "::error::$f exceeds the 50 MB budget (SPEC.md §11, ADR-0024)."
               FAIL=1
             fi
           done

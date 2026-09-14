@@ -1523,10 +1523,10 @@ Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — ach
 | Analytics screen (5Y range) | ≤ 300 ms to rendered chart | Instrumented timing test |
 | SMS → notification latency | ≤ 1.5 s | Instrumented |
 | OCR (single receipt page) | ≤ 2.5 s | Instrumented |
-| APK size (arm64 release split) | ≤ 25 MB | CI check — builds the split and fails if it finds none |
+| APK size (arm64 release split) | ≤ 50 MB | CI check — builds the split and fails if it finds none |
 | Memory (steady state) | ≤ 150 MB PSS | Macrobenchmark |
 
-**The budget was re-validated at P4 and moved from 15 MB to 25 MB — ADR-0021.**
+**The budget moved again in S13, from 25 MB to 50 MB — ADR-0024**: OpenCV's native library for photographed-page perspective correction measured the split at 42.94 MiB (18.18 before), after the owner chose to add it. **The budget was re-validated at P4 and moved from 15 MB to 25 MB — ADR-0021.**
 The original 15 MB was never measured, because until P4 the build could not
 produce the artefact it names (§16 Q18). Measured on the dev box, arm64-v8a
 release split, R8 and resource shrinking on:
@@ -1699,6 +1699,7 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | 0021 | OCR engine: bundled ML Kit vs unbundled, and what the APK budget really is | ✅ **Accepted** — **bundled**, measured at **+12.35 MB** (arm64 release split 4.82 → 17.17 MB; Devanagari +0.61). Budget moves 15 → **25 MB**. Bundled ML Kit merges `INTERNET` from Google's telemetry uploader; the owner accepted it rather than strip it, so **Law 6 is amended** — recognition stays on-device *structurally* because the model is in the APK. Amends ADR-0010 (§5.3, §11, §16 Q2/Q10/Q18, `CLAUDE.md` §2 Law 6) |
 | 0022 | What shape is `pending_line_item`? | ✅ **Accepted** — **it is not built**. v8's `review_draft_json` already carries itemised lines and OCR's extraction rides the versioned `extracted_json`; nothing queries pending lines relationally, and a table would force a migration, a `BackupPayload` list and a CSV writer for a structure with no reader. Closes Q7 and corrects §13's P4 row (§5.3, §6.1, §13) |
 | 0023 | Where do receipt images live, and do they go in a `.lfbk`? | ✅ **Accepted** — DEK-sealed in `filesDir/attachments/` (§7.1 unchanged), and phrase-sealed **beside** the `.lfbk` in the existing SAF backup *tree*, never inside the container — §5.9's nightly verify-by-decrypt would otherwise rewrite every image every night. Store the ≤1600px frame the recogniser read; keep forever, no timed purge; make the size visible. Closes Q5 (§5.3, §5.9, §6.1, §7.1) |
+| 0024 | OpenCV for photographed-page perspective correction, and the APK budget | ✅ **Accepted** — **added**, `org.opencv:opencv:4.14.0`, used only by `OpenCvPageCorrector` (four-point warp before recognition; refuses rather than guesses). Measured on the device: four angles that read 0–3 items or no total uncorrected all read exactly once warped, in 18–33 ms. Arm64 release split **18.18 → 42.94 MiB**; libraries 16 KB-aligned, no permissions merged. **Budget 25 → 50 MB.** A core+imgproc-only build is the recorded next reduction (§5.3, §11, §15.4) |
 
 **ADR-0003 is not reopened.** The kickoff listed it as a blocking decision, but §14 has it Accepted and §7.2 specifies it. The *design* — multi-wrapped DEK, phrase-primary — is settled and stays settled. What was genuinely open is the **library and implementation** choice underneath it, which is a different decision with different trade-offs (binary size, native dependencies, maintenance status) and therefore gets its own record: **ADR-0010**. Amending an accepted ADR to smuggle in a new decision is how decision logs stop being trustworthy.
 
@@ -1758,7 +1759,7 @@ Two workflows: `ci.yml` (every PR + push to `main`) and `release.yml` (tag-trigg
 | `screenshot` | ubuntu | ✅ | Roborazzi/Paparazzi diffs — **BUG5**. JVM-only, no emulator needed. |
 | `instrumented` | ubuntu + KVM emulator, matrix API **26 / 36** | ✅ | **Migration chain (BUG8)**, **backup→wipe→restore round-trip (BUG4)**, draft-survives-process-death (BUG6), approval-transaction integrity, cross-source dedupe |
 | `compose-stability` | ubuntu | ⚠️ warn | New unstable params in hot composables |
-| `assemble` | ubuntu | ✅ | Both flavours build; APK size budget (≤25 MB, arm64 **release** split, built with `-Pledgerflow.abiSplits`) |
+| `assemble` | ubuntu | ✅ | Both flavours build; APK size budget (≤50 MB since ADR-0024, arm64 **release** split, built with `-Pledgerflow.abiSplits`) |
 | `benchmark` | **self-hosted (your Win11 box + phone)** | manual / nightly | Startup, scroll jank, baseline profile. **Emulator numbers are noise — this must run on real hardware.** |
 
 **Why `instrumented` is non-negotiable:** the migration test and the backup round-trip are the only automated things standing between you and BUG4/BUG8. If emulator jobs get flaky and someone marks them `continue-on-error`, the entire durability guarantee in §7 becomes decorative.

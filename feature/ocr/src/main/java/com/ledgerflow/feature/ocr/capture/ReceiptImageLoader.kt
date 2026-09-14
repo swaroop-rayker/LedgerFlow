@@ -78,7 +78,7 @@ public class ReceiptImageLoader @Inject constructor(
      * `%PDF-` is the format's magic number and is required to be at the start of
      * the file, so this is the format's own answer rather than a guess.
      */
-    private fun isPdf(uri: Uri): Boolean {
+    internal fun isPdf(uri: Uri): Boolean {
         val type = context.contentResolver.getType(uri).orEmpty()
         if (type == PDF_MIME || type.endsWith("/pdf")) return true
         if (type.startsWith("image/")) return false

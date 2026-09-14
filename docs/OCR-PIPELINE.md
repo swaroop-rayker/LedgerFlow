@@ -206,9 +206,11 @@ were worth doing:
 - **No date detection.** §5.3's pipeline does not list one and the review
   screen falls back to the capture time, so a receipt photographed days later
   lands on the wrong day until corrected.
-- **Perspective.** A page shot at an angle also converges, and undoing that
-  needs a four-point warp — corners, and therefore image processing. The
-  capture guide is the answer taken instead.
+- ~~**Perspective.**~~ **Built in S13 with OpenCV (ADR-0024):**
+  `OpenCvPageCorrector` finds the page outline and warps it square before
+  recognition, for camera frames and imported photos. Measured on synthetic
+  pages; whether real thermal paper on real surfaces gives a clean outline is
+  the corpus's question.
 - **Merchant selection on a real header.** `FOOD BAZAAR` did not win merchant
   detection on the owner's receipt and the cause is undiagnosed; the garbled
   `MALLNDRAPURAM` token is ML Kit's own, since every join in this pipeline

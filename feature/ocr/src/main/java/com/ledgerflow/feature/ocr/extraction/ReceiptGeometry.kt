@@ -139,8 +139,9 @@ internal object ReceiptGeometry {
      * guess.
      *
      * **Perspective.** A page shot at an angle has rows that also *converge*.
-     * Undoing that needs a four-point warp, which needs the page's corners,
-     * which needs image processing this deliberately avoids.
+     * Undoing that needs a four-point warp, which needs the page's corners —
+     * image processing, done before recognition by `OpenCvPageCorrector`
+     * (ADR-0024) rather than here in arithmetic.
      */
     fun rows(page: RecognizedPage): List<ReceiptRow> {
         val elements = contentElements(page)
