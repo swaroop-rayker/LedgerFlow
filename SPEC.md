@@ -740,7 +740,7 @@ as `:feature:ocr`'s `extraction` package; each is arithmetic over
   nothing else.
 - Reconciliation banner: green ✅ if balanced, amber ⚠️ with the delta if not — **user can still save an unbalanced bill**; the delta is stored as an `UNALLOCATED` synthetic line item so totals never silently drift.
 - Bulk actions: select-many → assign category; "apply last category for this merchant".
-- **Category memory:** `(merchantId, normalizedItemName) → categoryId` learned mapping table auto-suggests on future bills.
+- **Category memory:** `(merchantId, normalizedItemName) → categoryId` learned mapping table auto-suggests on future bills. **Recording is built; suggesting is not.** Every approval — any source, since this is below the adapters — records each `ITEM` line inside the approval's own transaction, so a refused approval teaches nothing. A line with no category of its own records the **entry's** category and subcategory (on a single-category bill that is the filing of each item; a wrong lesson is corrected by the upsert replacing the category on the next differing filing, keeping the count). The two levels never mix: a line with its own category keeps its own subcategory. No category anywhere records nothing, `TAX`/`DISCOUNT`/`UNALLOCATED` are never recorded, an entry with no merchant records under the `''` key, and a name `ItemNameNormalizer` reduces to nothing is skipped — which today includes every Devanagari item name, since the normaliser keeps `a-z0-9` only.
 - One `ledger_entry` (parent, = bill total, merchant-level) + N `line_item` children. Analytics can roll up at either grain.
 - Original image stored encrypted in app-internal storage, linked as an `attachment`.
 

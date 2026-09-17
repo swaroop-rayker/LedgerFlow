@@ -20,9 +20,10 @@ created.
   `backup_wipe_restoreFromPhraseAlone_reproducesEveryRowExactly`) and
   `:core:data` 307 tests (the attachment store and the OCR dedupe among them)
 - Receipt corpus: machinery in place, **zero fixtures**
-- **A receipt reaches the ledger.** Sections A–E are built apart from step 27
-  (category memory). Verified end to end on the device: scan → extract →
-  seal → candidate → review shows the lines → approve.
+- **A receipt reaches the ledger.** Sections A–E are built, step 27's
+  category memory included; its read side (step 20) is not. Verified end to
+  end on the device: scan → extract → seal → candidate → review shows the
+  lines → approve.
 - Settings has ADR-0023's "Receipts — N images, M MB" with a `Warning`-gated
   bulk delete, which is currently the only way to remove an image.
 
@@ -326,7 +327,7 @@ to one and the total is kept.
 
 ---
 
-## E. Approval — built; **step 27 is the only one left**
+## E. Approval — **built**
 
 | # | Step | Status |
 |---|---|---|
@@ -335,17 +336,34 @@ to one and the total is kept.
 | 24 | Remainder written as `UNALLOCATED` so the parts always sum to the whole | **built** |
 | 25 | Writes `ledger_entry` + `line_item`, updates rollups at line grain (ADR-0018) | **built** |
 | 26 | Sets `attachment.entry_id` on the newly created entry | **built** — in `markApproved`'s transaction |
-| 27 | Records the filing into `item_category_memory` so the next bill suggests it | **not built** |
+| 27 | Records the filing into `item_category_memory` so the next bill suggests it | **built** — in `approve`'s transaction |
 
 Step 26's link is attempted **unconditionally** and that is not a source
 check: `raw_ref_id` holds an attachment id for a receipt and a raw row's id
 for a message, the `UPDATE` matches by primary key, and for a message it
 affects nothing. `approvingAMessageCandidate_linksNothing` pins that.
 
-Step 27 is a suggestion mechanism, not a filing one — `item_category_memory`
-exists (v11) with its DAO's upsert already written, and nothing calls
-`record`. It is the last thing between a second bill from the same shop and
-categories pre-filled from the first.
+Step 27 is a suggestion mechanism, not a filing one. `DefaultLedgerRepository`
+records every approved `ITEM` line inside the approval's own transaction, from
+the rows it just inserted, so a refused approval teaches nothing and the memory
+cannot describe a filing that did not happen. Three rules, each pinned by
+`ItemCategoryMemoryRecordingTest` and each reverted once on the device to watch
+it go red:
+
+- **A line with no category of its own records the entry's**, subcategory
+  included (owner's decision): on a single-category bill that *is* the filing
+  of each item, and the upsert's replace-on-change corrects a wrong lesson. The
+  two levels never mix — a line with its own category keeps its own
+  subcategory.
+- **Only `ITEM` lines, and only with a category somewhere.** Tax and the
+  `UNALLOCATED` remainder are not products; itemising is not filing.
+- **A name that normalises to nothing is skipped.** `ItemNameNormalizer` keeps
+  `a-z0-9`, so a Devanagari item name is empty and would otherwise pool every
+  such item at a merchant under one key. **So the memory cannot learn a
+  Devanagari item name yet** — a normaliser question, not a recording one.
+
+Every source records, manual itemised entries included (§0). **Nothing reads it
+yet**: step 20's suggestion in the review screen is the other half.
 
 ## Cross-cutting, still open
 
@@ -401,8 +419,8 @@ passes by doing nothing.
 **There is no longer a gap in the path.** A receipt reaches the ledger today:
 capture, extract, seal, dedupe, candidate, review, approve.
 
-What remains is quality rather than reachability — steps 26 and 27, the
-backup copy, and the purge's unlink. The one with teeth is **26**: until
+What remains is quality rather than reachability — step 20 (reading the
+category memory that step 27 now writes) and the backup copy. The one with teeth is **26**: until
 approval sets `attachment.entry_id`, every image stays unlinked, which means
 the entry has no receipt to show and the purge has nothing to find when it
 eventually learns to unlink.

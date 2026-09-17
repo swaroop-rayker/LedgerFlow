@@ -261,7 +261,56 @@ public class DefaultLedgerRepository @Inject constructor(
         // second approval on the same day repairs whatever the first got wrong
         // instead of adding to it.
         database.dailyRollupDao().recompute(entity.ledger, entity.localDate, entity.localDate)
+        rememberFilings(database, entity, lineItems)
         return LedgerResult.Success(entity.toDomain(lineItems))
+    }
+
+    /**
+     * Step 27 of §5.3: what each line was filed under, so the next bill from
+     * this shop can suggest it (`item_category_memory`).
+     *
+     * **In the approval's own transaction, from the rows just inserted.** The
+     * memory can then never describe a filing that did not happen: a refused
+     * approval returns before this line, and a failed one rolls it back with
+     * the entry. It writes no ledger table, so it opens no door
+     * `LedgerSingleWriterTest` guards; it is a side table beside the rollup,
+     * like the rollup.
+     *
+     * Every source, because it is below the adapters (§0): an itemised manual
+     * entry teaches exactly as a receipt does.
+     *
+     * - **`ITEM` lines only.** Tax, discount and the `UNALLOCATED` remainder
+     *   are not products, and remembering "Unallocated → Groceries" would
+     *   suggest a category for a row the user never names.
+     * - **A line with no category of its own records the entry's** (the
+     *   owner's decision). On a single-category bill the entry's category *is*
+     *   the filing of each item on it; when that lesson is wrong for one item,
+     *   the upsert's replace-on-change is what corrects it. The subcategory
+     *   travels with whichever category was used, never mixed across the two
+     *   levels — a line's subcategory belongs to the line's category.
+     * - **No category at all records nothing**: itemising is not filing.
+     * - **A name that normalises to nothing is skipped.** `ItemNameNormalizer`
+     *   keeps `a-z0-9` only, so a Devanagari name comes out empty, and an
+     *   empty key would pool every such item at a merchant into one suggestion.
+     */
+    private suspend fun rememberFilings(
+        database: LedgerFlowDatabase,
+        entry: LedgerEntryEntity,
+        lineItems: List<LineItemEntity>,
+    ) {
+        val memory = database.itemCategoryMemoryDao()
+        lineItems
+            .filter { it.kind == LineItemKind.ITEM && it.normalizedName.isNotBlank() }
+            .forEach { line ->
+                val categoryId = line.categoryId ?: entry.categoryId ?: return@forEach
+                val subcategoryId = if (line.categoryId != null) line.subcategoryId else entry.subcategoryId
+                memory.record(
+                    merchantId = entry.merchantId ?: NO_MERCHANT_KEY,
+                    normalizedItem = line.normalizedName,
+                    categoryId = categoryId,
+                    subcategoryId = subcategoryId,
+                )
+            }
     }
 
     private fun entityOf(request: ApprovalRequest, baseCurrency: String): LedgerEntryEntity {
@@ -341,6 +390,14 @@ public class DefaultLedgerRepository @Inject constructor(
     private companion object {
         /** Shown verbatim in the line-item editor, so it reads as a sentence. */
         private const val UNALLOCATED_NAME = "Unallocated"
+
+        /**
+         * `item_category_memory.merchant_id` for an entry with no merchant: a
+         * non-null key column, because SQLite treats NULLs in a composite key
+         * as distinct and such a row would never accumulate a second hit
+         * (§6.1, `daily_rollup`'s sentinel rule).
+         */
+        private const val NO_MERCHANT_KEY = ""
 
         /**
          * Rows per page.
