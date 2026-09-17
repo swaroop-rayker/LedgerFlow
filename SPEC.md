@@ -611,8 +611,8 @@ Bitmap → preprocess (deskew, grayscale, adaptive threshold, downscale to ≤16
        → classify each line: HEADER | ITEM | TAX | DISCOUNT | SUBTOTAL | TOTAL | FOOTER | NOISE
        → merchant detection from top-3 header lines → fuzzy match against `merchant` table
        → totals detection via keyword set {TOTAL, GRAND TOTAL, NET AMOUNT, AMOUNT PAYABLE, बिल राशि}
-         (keywords match exact-substring first, then Jaro-Winkler >= 0.88 on a same-length
-          word window differing in <= 1 character -- see below)
+         (keywords match exactly at a word boundary first, then Jaro-Winkler >= 0.89 on a
+          same-length, digit-folded word window differing in <= 1 character -- see below)
        → reconciliation: |Σ(items) + Σ(tax) − Σ(discount) − total| ≤ max(₹1, 0.5% of total)
        → produce ExtractedTransaction with `lines` (ADR-0022 — no `pending_line_item`)
 ```
@@ -637,10 +637,30 @@ as `:feature:ocr`'s `extraction` package; each is arithmetic over
   because OCR legitimately reads `TOMATO 1KG` as `TOMAT0 1KG`; keywords are
   words too, and a real invoice's `S GST 9%` came back from ML Kit as
   `S 6ST 9%`, missed the TAX set, and reached the Inbox as a line item. So
-  `ReceiptKeywords.matches` tries exact substring **unchanged and first** — the
-  three ordering traps below are properties of which set matches first, and the
-  fuzzy layer may only ever *add* a match — then a word-boundary-anchored
-  window at **§5.5's own 0.88**, with no threshold of its own.
+  `ReceiptKeywords.matches` tries an exact match **first** — the three ordering
+  traps below are properties of which set matches first, and the fuzzy layer
+  may only ever *add* a match — then a word-boundary-anchored window. (That
+  window's threshold is 0.89, not §5.5's 0.88: `CASE`/`CASH` scores 0.8833.)
+
+  **The exact match is at a word boundary, not a substring (BUG24).** A
+  keyword is a substring of a great many Indian grocery names — `PANEER`
+  carries `PAN`, `CARDAMOM` carries `CARD`, `CASHEW` carries `CASH`, `DATES`
+  carries `DATE`, `शक्कर` carries `कर` — and each dropped a purchase from the
+  bill. A match must now be flanked by something that is not a letter or a
+  combining mark (so `कुल्फी` does not contain `कुल`), where a **digit counts as
+  a boundary** (so `GSTIN29AAAC…` and `CGST2.5%` still match). A multi-word
+  keyword also matches **glued** (`GRANDTOTAL`, `BILLNO`), because ML Kit glues
+  short labels; and the inflections substring found by accident are listed
+  rather than stemmed (`THANKS`, `RETURNS`, `TENDERED`), since a stem also
+  takes `THANKSGIVING CARD` and `RETURNABLE BOTTLE`. **A tender row must be
+  nothing but a payment line** — tender words, a figure (masked or not), and
+  filler such as `BY` or `VISA` — because no boundary separates `CHANGE MAKER
+  TOY` from `CHANGE 27.00`. Measured over 300 real item lines and 147 label
+  rows: misfiled items 87 → 8, missed labels 5 → 3. The eight that remain are
+  whole-word collisions outside the tender set (`DATE SYRUP`, `MOBILE COVER`,
+  `PAN MASALA`, `RETURN GIFT PACK`), where loosening ADMIN would let `TIME 10.32`
+  become a ₹10.32 purchase; the refund case yields `UNKNOWN` direction, which
+  the review screen asks about rather than guessing.
   `:core:domain`'s `JaroWinkler` is the single implementation behind that
   number, §5.5's merchant suggestion and §12's recall grading.
 
@@ -1421,6 +1441,7 @@ A recovery factor that can never be changed is a recovery factor that stays comp
 | **BUG21** — the "Custom" range chip did nothing | Reported by the owner. `RangeRow` renders `AnalyticsRange.entries`, so Custom sat in the row looking like a seventh range. Tapping it fired `RangeSelected(CUSTOM)`, which set `range = CUSTOM` and cleared the dates — and `currentWindow` then fell through to `endingOn(today, CUSTOM)`, where `CUSTOM.days` is the placeholder **30** that the enum's own KDoc calls a bug to read. The chip appeared selected and silently showed a Month. | **Custom is a question, not a range**, and the handler now says so: `RangeSelected(CUSTOM)` opens the date picker instead of selecting a window, leaving `range` untouched until dates come back. Placed **before** the "same range, do nothing" early return, because tapping Custom while a custom range is already active is how someone changes the dates they picked — an early return there would make the chip dead exactly when it is the selected one. The rule lives in the ViewModel rather than the chip row, so every chip still reports a plain tap. | `AnalyticsRangeSelectionTest`, the first unit test in `:feature:analytics`. Three cases: the tap opens the picker *and* does not move the window; it reopens when Custom is already active, with the chosen dates surviving; and the other six chips still select and reload without opening anything. Reverting the fix reddens the first two and only those. |
 | **BUG22** — the second script model's digit lookalikes reached the money columns | Found on the owner's bigbasket PDF invoice, on the device. ADR-0021 runs the Latin and Devanagari models over every page and `RecognizedPage.merge` keeps a Devanagari run unless it overlaps a Latin one by ≥ 0.6 IoU. The Devanagari model reads Latin figures as Bengali and Devanagari lookalikes — `০.০০` for `0.00`, `২`/`२` for `2`, `৪.20` for `8.20` — boxed a few pixels off, so where the overlap fell short both survived and rows read `০.০০ 0.00` and `0 01८ 14`. Invisible on a hand-laid JVM page and on any page without figures. | A run the Devanagari pass produced is merged only if it carries a Devanagari letter or vowel sign; Devanagari digits and dandas do not qualify, since `ReceiptNumbers` reads ASCII figures only. The second pass exists for words the Latin model cannot read, and a figure is not one. Scoped to `script == DEVANAGARI`, so `merge` remains a general combine. | `RecognizedPageMergeTest.bug22_*` — a shifted lookalike is not merged, a longer lookalike cannot replace the Latin reading, and a Devanagari word with a figure still qualifies. Removing the filter reddens all three; letting Devanagari digits qualify reddens all three; unscoping it reddens `mergingWithAnEmptyPage_changesNothing`. |
 | **BUG23** — a PIN code and a misread decimal point read as money | Found on the owner's Zepto invoice. `ReceiptNumbers` let a bare integer run to seven digits, so the seller address's `580020` parsed as ₹5,80,020.00; it was the first priced row and became an ITEM on a ₹195 bill. Its grouping pattern allowed any mix of two- and three-digit comma groups, so `52,00` — `52.00` with the point misread — read as ₹5,200.00. | A bare integer (no point, no grouping) is money only up to **five** digits, which refuses every six-digit PIN code and keeps ₹99,999 written flat. A grouped amount must be real Indian (…2-2-3) or Western (3-3-3) grouping, whose last group is always three digits, so a two-digit tail is refused. Both are **rejections**; nothing is reinterpreted, so Law 3 and §12's no-tolerance rule on money are untouched. | `ReceiptNumbersTest.bug23_aSixDigitPinCode_isNotMoney` and `bug23_aCommaThatIsAMisreadDecimalPoint_isNotMoney`, each asserting both the refusal and that real amounts at the boundary still read. Reverting either rule reddens its test. |
+| **BUG24** — item names containing a keyword were dropped from the bill | Measured over the S13 keyword vocabulary, then over 300 real item lines. The exact layer of `ReceiptKeywords.matches` was `text.contains(keyword)`, so `PANEER` matched `PAN` (identifier), `CARDAMOM` matched `CARD` and `CASHEW` matched `CASH` (tender), `DATES` matched `DATE`, `PROCESSED CHEESE` matched `CESS` (tax), `RETURNABLE BOTTLE` matched `RETURN` (the whole receipt a refund), and `शक्कर` matched `कर`: **87 of 300** misfiled, two of them lines of the owner's bigbasket invoice (`PLATINA` carries `TIN`). Substring also misread labels: `PHONEPE` as an identifier, `TOTALQTY 14` as the bill's total. A second class no boundary can fix: the keyword as a whole word of the item's name — `CHANGE MAKER TOY`, `TENDER COCONUT`. | (a) An exact match must be flanked by a non-letter, non-combining-mark character; digits are boundaries. (b) Multi-word keywords also match glued. (c) `THANKS`, `THANK YOU`, `INVOICE NO`, `RETURNS`, `TENDERED`, `MASTERCARD` listed, not stemmed. (d) `isTenderRow`: a tender row consists only of tender words (digit-folded), masked or marked figures, and filler. Result 87 → 8 misfiled items, 5 → 3 missed labels over 147; §5.3 lists what remains and why ADMIN is not loosened for it. | `ReceiptKeywordMatchTest.bug24_*` (seven cases: inside a word at each position, Devanagari marks, glued forms, spelled inflections and refused stems, tender words in item names, real payment lines, `PHONEPE`) and `ReceiptLineClassifierTest.bug24_*` (items with a keyword stay items with and without a total; payment lines on a no-total slip stay footer). Mutation-swept: each clause reverted reddens at least one of them. |
 
 ### 8.1 Pre-migration snapshot — operating design
 

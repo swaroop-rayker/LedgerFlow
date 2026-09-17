@@ -141,6 +141,18 @@ reason `ReceiptTextRecognizer` returns its own type.
   direction of the whole receipt) and **at most one differing character**
   (without it `CASHEWS` matches `CASHIER` at 0.8857). All three together admit
   zero new wrong lines; any two of them admit between 1 and 12.
+- **"Exact" means at a word boundary, not substring (BUG24).** Substring
+  misfiled 87 of 300 real item lines — `PANEER`/`PAN`, `CARDAMOM`/`CARD`,
+  `CASHEW`/`CASH`, `DATES`/`DATE`, `शक्कर`/`कर` — and misread `PHONEPE` as a
+  phone number. Now: a match is flanked by a non-letter, non-combining-mark
+  (digits are boundaries, so `GSTIN29…` still matches; marks are not, so
+  `कुल्फी` does not), multi-word keywords also match glued (`GRANDTOTAL`),
+  inflections are listed not stemmed, and **a tender row must be only a
+  payment line** (`CHANGE MAKER TOY` is not one). 87 → 8 misfiled items,
+  5 → 3 missed labels over 147. What remains is whole-word ADMIN collisions
+  (`DATE SYRUP`, `MOBILE COVER`), deliberately left: loosening ADMIN is how
+  `TIME 10.32` becomes a purchase. The sweep scripts measured candidates
+  R0–R7 over that vocabulary before any code changed.
 - **A short keyword stays exact, and 0.88 is what makes it so.** No single
   substitution can reach 0.88 below four characters — the worst case at three is
   0.8222 — so there is no length constant to maintain. Which is necessary

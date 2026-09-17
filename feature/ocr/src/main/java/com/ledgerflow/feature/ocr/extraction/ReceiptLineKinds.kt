@@ -138,6 +138,10 @@ internal object ReceiptKeywords {
     val TENDER = listOf(
         "CASH", "CHANGE", "CARD", "UPI", "PAYTM", "GPAY", "PHONEPE", "TENDER",
         "PAID", "BALANCE", "ROUND OFF", "ROUNDOFF", "ROUND-OFF", "CHANGE DUE",
+        // Spelled out because a keyword now has to end at a word boundary
+        // (BUG24): `TENDERED` no longer contains `TENDER` as a match, and
+        // `MASTERCARD` no longer contains `CARD`.
+        "TENDERED", "MASTERCARD",
     )
 
     /**
@@ -172,10 +176,20 @@ internal object ReceiptKeywords {
         "THANK", "VISIT AGAIN", "WELCOME", "TERMS", "EXCHANGE", "RETURN POLICY",
         "TOTAL QTY", "TOTAL ITEMS", "NO OF ITEMS", "ITEMS:", "QTY:",
         "धन्यवाद",
+        // The inflections a word boundary would otherwise refuse (BUG24).
+        // Listed rather than matched as open stems: a `THANK*` stem also
+        // takes `THANKSGIVING CARD`, and `INVOICE*` takes `INVOICE BOOK`'s
+        // neighbours. `THANK YOU` is here for its glued form `THANKYOU`.
+        "THANKS", "THANK YOU", "INVOICE NO",
     )
 
-    /** Words that mean the amount is coming back to the customer. */
-    val REFUND = listOf("REFUND", "CREDIT NOTE", "RETURN", "REVERSAL")
+    /**
+     * Words that mean the amount is coming back to the customer.
+     *
+     * `RETURNS` is spelled out rather than reached by a `RETURN*` stem, which
+     * would also read a `RETURNABLE BOTTLE` as a refund (BUG24).
+     */
+    val REFUND = listOf("REFUND", "CREDIT NOTE", "RETURN", "RETURNS", "REVERSAL")
 
     /**
      * Does [text] — **already uppercased by the caller** — carry one of
@@ -183,12 +197,18 @@ internal object ReceiptKeywords {
      *
      * Two layers, in this order, and the order is not cosmetic.
      *
-     * **1. Exact substring, exactly as before.** Every match this function made
-     * before fuzzy matching existed, it still makes. That is deliberate: the
-     * three ordering traps this object's KDoc describes (`SUB TOTAL`,
-     * `TOTAL SAVING`, `TOTAL QTY`) are all properties of *which set matches
-     * first*, and a rewritten first layer would have put every one of them back
-     * in play. The fuzzy layer can only ever **add** a match.
+     * **1. Exact, at a word boundary (BUG24).** This layer was a bare
+     * `text.contains(keyword)`, and a keyword is a substring of a great many
+     * real item names: `PANEER` carries `PAN`, `CARDAMOM` carries `CARD`,
+     * `CASHEW` carries `CASH`, `DATES` carries `DATE`, `CINNAMON` carries `CIN`
+     * and `शक्कर` carries `कर`. Each of those dropped a purchase from the bill.
+     * Measured over 300 real item lines, substring misfiled **87**; see
+     * [exactMatches] for the rule and what each of its clauses protects.
+     *
+     * The three ordering traps this object's KDoc describes (`SUB TOTAL`,
+     * `TOTAL SAVING`, `TOTAL QTY`) are untouched, because every keyword in them
+     * is a whole word on the page: the boundary rule only removes matches
+     * *inside* a word. The fuzzy layer can still only ever **add** a match.
      *
      * **2. One glyph's worth of doubt, at a word boundary.** §12 already
      * concedes the principle for item names — "OCR legitimately reads
@@ -221,10 +241,87 @@ internal object ReceiptKeywords {
      * an OCR one.
      */
     fun matches(text: String, keywords: List<String>): Boolean {
-        if (keywords.any { text.contains(it) }) return true
+        if (keywords.any { exactMatches(text, it) }) return true
         val words = words(text)
         return words.isNotEmpty() && keywords.any { fuzzyMatches(words, it) }
     }
+
+    /**
+     * Is [text] a tender row — a payment line and **nothing else**?
+     *
+     * Matching [TENDER] is necessary and no longer sufficient. A boundary rule
+     * cannot help when the keyword is a whole word of the item's own name —
+     * `CHANGE MAKER TOY`, `CASH KARO VOUCHER`, `GREETING CARD`, `TENDER
+     * COCONUT` — and a tender row is dropped from the bill wherever it sits. So
+     * a tender row must consist only of tender words (fuzzily, so `CA5H` still
+     * counts), [TENDER_FILLER], and figures, masked or not (`XXXX1234`,
+     * `RS500`).
+     *
+     * **The trade is measured, not free, and it is lopsided on purpose.** Over
+     * 300 real item lines it removes six whole-word misfilings — the four above,
+     * `TENDERED MEAT` and `THANKSGIVING CARD` — and adds none. Over 147 label
+     * rows it costs one: `HDFC CARD XXXX1234`, because a bank's name is not a
+     * word this list can enumerate. A missed tender row matters only on a slip
+     * that prints no total, since below a total the row is footer by position;
+     * a misfiled item is lost from every bill it appears on.
+     */
+    fun isTenderRow(text: String): Boolean {
+        if (!matches(text, TENDER)) return false
+        return words(text).all { word ->
+            word in TENDER_FILLER ||
+                MASKED_FIGURE.matches(word) ||
+                TENDER_WORDS.any { it == word || isOneGlyphOff(word, it) }
+        }
+    }
+
+    /**
+     * [keyword], or its glued form, bounded on both sides by something that is
+     * not part of a word.
+     *
+     * - **Both edges.** Only the left edge refuses nothing that matters:
+     *   `PANEER`, `CARDAMOM` and `DATES` all *start* with their keyword (65 of
+     *   87 misfilings survive it). Only the right edge leaves `HOTEL` and
+     *   `JAPANESE`.
+     * - **A digit is a boundary.** `GSTIN29AAACT2727Q1ZW` is one run from ML
+     *   Kit more often than not, and `CGST2.5%` is how a text layer glues a
+     *   rate to its label. Counting digits as word characters loses both.
+     * - **A combining mark is part of a word**, not a boundary. Devanagari
+     *   vowel signs and the virama are marks rather than letters, so without
+     *   this `कुल` would still match inside `कुल्फी` and `कर` inside `शक्कर`.
+     * - **The glued form of a multi-word keyword** — `GRANDTOTAL`, `BILLNO`,
+     *   `TOTALQTY`. Real ML Kit glued `C GST` into `C6ST` on the device, and the
+     *   boundary would otherwise refuse what substring used to find by accident.
+     *
+     * The inflections that substring also found by accident (`THANKS`,
+     * `RETURNS`, `TENDERED`) are **spelled out in the sets**, not admitted by a
+     * stem: stems measured one more misfiling than they recovered labels.
+     */
+    private fun exactMatches(text: String, keyword: String): Boolean =
+        (EXACT_FORMS[keyword] ?: exactForms(keyword)).any { form -> occursAsWord(text, form) }
+
+    private fun occursAsWord(text: String, form: String): Boolean {
+        var start = text.indexOf(form)
+        while (start >= 0) {
+            val end = start + form.length
+            val leftClear = start == 0 || !text[start - 1].isWordCharacter()
+            val rightClear = end == text.length || !text[end].isWordCharacter()
+            if (leftClear && rightClear) return true
+            start = text.indexOf(form, start + 1)
+        }
+        return false
+    }
+
+    private fun Char.isWordCharacter(): Boolean =
+        isLetter() ||
+            category == CharCategory.NON_SPACING_MARK ||
+            category == CharCategory.COMBINING_SPACING_MARK
+
+    private fun exactForms(keyword: String): List<String> {
+        val glued = keyword.replace(GLUE_SEPARATORS, "")
+        return if (glued == keyword || glued.isEmpty()) listOf(keyword) else listOf(keyword, glued)
+    }
+
+    private val GLUE_SEPARATORS = Regex("""[\s-]+""")
 
     /**
      * One keyword against every same-shaped window of a row's words.
@@ -377,6 +474,33 @@ internal object ReceiptKeywords {
         (TOTAL + SUBTOTAL + TAX + DISCOUNT + TENDER + ADMIN + REFUND)
             .distinct()
             .associateWith { words(it) }
+
+    /** Every keyword's [exactForms], built once for the same reason. */
+    private val EXACT_FORMS: Map<String, List<String>> =
+        (TOTAL + SUBTOTAL + TAX + DISCOUNT + TENDER + ADMIN + REFUND)
+            .distinct()
+            .associateWith { exactForms(it) }
+
+    /** The words [TENDER]'s keywords are made of, for [isTenderRow]. */
+    private val TENDER_WORDS: Set<String> = TENDER.flatMap { words(it) }.toSet()
+
+    /**
+     * Words a payment line prints around its keyword that are not shopping.
+     *
+     * Card networks are here rather than in [TENDER] so that they never *make*
+     * a row a tender row on their own; they only stop `VISA CARD` or `RUPAY
+     * CARD` being refused as one. None of them can move an item line, and that
+     * is structural rather than measured luck: a filler word only keeps a row
+     * that already matched a tender keyword.
+     */
+    private val TENDER_FILLER: Set<String> = setOf(
+        "BY", "VIA", "MODE", "PAYMENT", "AMOUNT", "RECEIVED", "RETURNED", "DUE",
+        "NO", "NUMBER", "ID", "REF", "RS", "INR",
+        "VISA", "RUPAY", "MAESTRO", "AMEX", "DEBIT", "CREDIT",
+    )
+
+    /** A figure, optionally currency-marked, optionally masked: `614`, `RS500`, `XXXX1234`. */
+    private val MASKED_FIGURE = Regex("""(RS|INR|₹)?[0-9X]+""")
 }
 
 /**
@@ -477,7 +601,7 @@ internal object ReceiptLineClassifier {
             ReceiptKeywords.matches(text, ReceiptKeywords.SUBTOTAL) -> ReceiptLineKind.SUBTOTAL
             ReceiptKeywords.matches(text, ReceiptKeywords.TAX) -> ReceiptLineKind.TAX
             ReceiptKeywords.matches(text, ReceiptKeywords.TOTAL) -> ReceiptLineKind.TOTAL
-            ReceiptKeywords.matches(text, ReceiptKeywords.TENDER) -> ReceiptLineKind.FOOTER
+            ReceiptKeywords.isTenderRow(text) -> ReceiptLineKind.FOOTER
             else -> null
         }
     }

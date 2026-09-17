@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.ocr.extraction
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.domain.text.JaroWinkler
 import org.junit.Test
 
@@ -316,33 +317,161 @@ class ReceiptKeywordMatchTest {
     }
 
     /**
-     * **The exact-substring layer is not redundant, and this is the only test
-     * that says so.**
+     * **The exact layer is not redundant, and this is the only test that says
+     * so.**
      *
      * Added because a mutation sweep deleted that layer outright and **nothing
      * went red** — the fuzzy layer matches a whole-word keyword at 1.0, so it
      * silently covered every case the suite had. What it cannot cover is a
-     * keyword that is a *part* of a word, and those are real:
+     * keyword glued to something else in one run, and those are real:
      *
-     * - `THANK` inside `THANKS`, which is on the foot of most bills. A window
-     *   match refuses it, correctly, because the lengths differ.
      * - `GSTIN` glued to its number, which ML Kit returns as one run more often
      *   than not.
+     * - a rate glued to its tax label, `CGST2.5%`.
+     * - a multi-word keyword glued into one word, `GRANDTOTAL` — the window
+     *   is one word against two.
      *
      * Without this test a later "simplification" to fuzzy-only would compile,
-     * stay green, and quietly stop recognising the entire ADMIN set's
-     * inflections.
+     * stay green, and quietly stop recognising all three.
+     *
+     * (`THANKS` used to be this test's first case, reached by substring. Since
+     * BUG24 it is a keyword of its own, which the fuzzy layer also reaches at
+     * 1.0, so it no longer says anything about the exact layer.)
      */
     @Test
-    fun matches_aKeywordInsideALongerWord_stillMatches() {
-        assertThat(ReceiptKeywords.matches("THANKS FOR SHOPPING", ReceiptKeywords.ADMIN)).isTrue()
+    fun matches_aKeywordGluedIntoOneRun_stillMatches() {
         assertThat(ReceiptKeywords.matches("GSTIN29AAACT2727Q1ZW", ReceiptKeywords.ADMIN)).isTrue()
+        assertThat(ReceiptKeywords.matches("CGST2.5% 17.73", ReceiptKeywords.TAX)).isTrue()
+        assertThat(ReceiptKeywords.matches("GRANDTOTAL 614.00", ReceiptKeywords.TOTAL)).isTrue()
+    }
 
-        // And the fuzzy layer genuinely does not reach them, so the assertion
-        // above is about the exact layer rather than about either.
-        assertThat(JaroWinkler.similarity("THANKS", "THANK"))
-            .isGreaterThan(JaroWinkler.MERCHANT_THRESHOLD)
-        assertThat("THANKS".length).isNotEqualTo("THANK".length)
+    // ─── BUG24: a keyword inside a word is not a match ──────────────────────
+
+    /**
+     * **The bug.** The exact layer was `text.contains(keyword)`, and Indian
+     * grocery names are full of keywords: over 300 real item lines it misfiled
+     * 87. Every row here was one of them — each is shopping, and each was
+     * dropped from the bill as an identifier, a tender row, a tax or a
+     * discount, or turned the receipt into a refund.
+     *
+     * The keyword sits at the **start** of some (`PANEER`), the **end** of
+     * others (`PASTEL`) and the **middle** of the rest (`JAPANESE`), so
+     * both edges of the boundary are exercised.
+     */
+    @Test
+    fun bug24_aKeywordInsideAnItemName_isNotAMatch() {
+        listOf(
+            "PANEER 200G 90.00" to ReceiptKeywords.ADMIN, // PAN
+            "CARDAMOM 50G 120.00" to ReceiptKeywords.TENDER, // CARD
+            "CASHEW 250G 310.00" to ReceiptKeywords.TENDER, // CASH
+            "DATES 500G 180.00" to ReceiptKeywords.ADMIN, // DATE
+            "CINNAMON STICKS 50G 60.00" to ReceiptKeywords.ADMIN, // CIN
+            "SACHET SHAMPOO 10N 20.00" to ReceiptKeywords.ADMIN, // SAC
+            "PASTEL CRAYONS 45.00" to ReceiptKeywords.ADMIN, // TEL, at the end
+            "JAPANESE SOY SAUCE 250.00" to ReceiptKeywords.ADMIN, // PAN, in the middle
+            "PROCESSED CHEESE 200G 110.00" to ReceiptKeywords.TAX, // CESS
+            "DISCOVERY BISCUIT 30.00" to ReceiptKeywords.DISCOUNT, // DISC
+            "RETURNABLE BOTTLE 15.00" to ReceiptKeywords.REFUND, // RETURN
+        ).forEach { (row, keywords) ->
+            assertWithMessage(row).that(ReceiptKeywords.matches(row, keywords)).isFalse()
+        }
+    }
+
+    /**
+     * Three **labels** the substring rule got wrong the same way, which is why
+     * the boundary is a precision fix and a recall fix at once: `PHONEPE`
+     * carries `PHONE`, so a UPI tender row was an identifier.
+     */
+    @Test
+    fun bug24_phonePe_isNotAPhoneNumber() {
+        assertThat(ReceiptKeywords.matches("PHONEPE 614.00", ReceiptKeywords.ADMIN)).isFalse()
+        assertThat(ReceiptKeywords.isTenderRow("PHONEPE 614.00")).isTrue()
+    }
+
+    /**
+     * **A Devanagari vowel sign is part of its word**, and it is a combining
+     * mark rather than a letter — so a boundary on letters alone would still
+     * match `कुल` (total) inside `कुल्फी` (kulfi) and `कर` (tax) inside `शक्कर`
+     * (sugar).
+     */
+    @Test
+    fun bug24_aDevanagariCombiningMark_isPartOfTheWord() {
+        assertThat(ReceiptKeywords.matches("कुल्फी मलाई 60.00", ReceiptKeywords.TOTAL)).isFalse()
+        assertThat(ReceiptKeywords.matches("शक्कर 1KG 48.00", ReceiptKeywords.TAX)).isFalse()
+
+        assertThat(ReceiptKeywords.matches("कुल 500.00", ReceiptKeywords.TOTAL)).isTrue()
+        assertThat(ReceiptKeywords.matches("कर 10.00", ReceiptKeywords.TAX)).isTrue()
+    }
+
+    /**
+     * **A multi-word keyword also matches glued**, because the boundary would
+     * otherwise refuse what substring found by accident — and gluing is what
+     * ML Kit does to a short label (`C GST` came back as `C6ST`). The last two
+     * were wrong under substring too: `TOTALQTY 14` was the bill's total and
+     * `TAXABLEVALUE` was a tax row.
+     */
+    @Test
+    fun bug24_aGluedMultiWordKeyword_matches() {
+        assertThat(ReceiptKeywords.matches("BILLNO 4521", ReceiptKeywords.ADMIN)).isTrue()
+        assertThat(ReceiptKeywords.matches("NETAMOUNT 614.00", ReceiptKeywords.TOTAL)).isTrue()
+        assertThat(ReceiptKeywords.matches("THANKYOU 12", ReceiptKeywords.ADMIN)).isTrue()
+        assertThat(ReceiptKeywords.matches("TOTALQTY 14", ReceiptKeywords.ADMIN)).isTrue()
+        assertThat(ReceiptKeywords.matches("TAXABLEVALUE 600.00", ReceiptKeywords.SUBTOTAL)).isTrue()
+    }
+
+    /**
+     * **The inflections substring used to find, spelled out** — and the stems
+     * that would have found them refused. Each spelled form has a case here,
+     * so deleting any one of them turns this red.
+     */
+    @Test
+    fun bug24_spelledOutInflections_matchAndStemsDoNot() {
+        assertThat(ReceiptKeywords.matches("THANKS FOR SHOPPING", ReceiptKeywords.ADMIN)).isTrue()
+        assertThat(ReceiptKeywords.matches("INVOICENO:4521", ReceiptKeywords.ADMIN)).isTrue()
+        assertThat(ReceiptKeywords.matches("RETURNS 100.00", ReceiptKeywords.REFUND)).isTrue()
+        assertThat(ReceiptKeywords.isTenderRow("AMOUNT TENDERED 500.00")).isTrue()
+        assertThat(ReceiptKeywords.isTenderRow("MASTERCARD XXXX1234 614.00")).isTrue()
+
+        assertThat(ReceiptKeywords.matches("THANKSGIVING CARD 99.00", ReceiptKeywords.ADMIN)).isFalse()
+        assertThat(ReceiptKeywords.matches("RETURNABLE BOTTLE 15.00", ReceiptKeywords.REFUND)).isFalse()
+    }
+
+    /**
+     * **A tender row is a payment line and nothing else.** The boundary cannot
+     * help when the keyword is a whole word of the item's name, so these four
+     * match [ReceiptKeywords.TENDER] and must still not be tender rows.
+     */
+    @Test
+    fun bug24_aTenderWordInsideAnItemsName_isNotATenderRow() {
+        listOf(
+            "CHANGE MAKER TOY 99.00",
+            "CASH KARO VOUCHER 500.00",
+            "GREETING CARD 50.00",
+            "TENDER COCONUT 60.00",
+        ).forEach { row ->
+            assertWithMessage(row).that(ReceiptKeywords.matches(row, ReceiptKeywords.TENDER)).isTrue()
+            assertWithMessage(row).that(ReceiptKeywords.isTenderRow(row)).isFalse()
+        }
+    }
+
+    /**
+     * And the payment lines it must keep. Each exercises one clause: filler
+     * (`BY`, `VISA`, `AMOUNT`), a masked or currency-marked figure
+     * (`XXXX1234`, `RS500`), and a misread tender word (`CA5H`).
+     */
+    @Test
+    fun bug24_aRealPaymentLine_isStillATenderRow() {
+        listOf(
+            "CASH 500.00",
+            "PAID BY UPI 614.00",
+            "VISA CARD XXXX1234 614.00",
+            "CASH RS500.00",
+            "AMOUNT PAID 614.00",
+            "CA5H 500.00",
+            "CHANGE DUE 27.00",
+        ).forEach { row ->
+            assertWithMessage(row).that(ReceiptKeywords.isTenderRow(row)).isTrue()
+        }
     }
 
     /** An empty or amount-only row matches nothing. */

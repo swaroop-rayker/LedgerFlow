@@ -157,6 +157,49 @@ class ReceiptLineClassifierTest {
     }
 
     /**
+     * **BUG24, at the classifier.** Items whose names contain a keyword — as
+     * part of a word or as a whole word — stay items, above a total and with no
+     * total at all. Under substring matching every one of these was dropped
+     * from the bill.
+     */
+    @Test
+    fun bug24_itemsNamedWithAKeyword_areStillItems() {
+        val names = arrayOf(
+            "PANEER 200G" to true,
+            "CARDAMOM GREEN" to true,
+            "DATES 500G" to true,
+            "CHANGE MAKER TOY" to true,
+            "TENDER COCONUT" to true,
+        )
+
+        assertThat(classify(*names, "GRAND TOTAL" to true).dropLast(1))
+            .containsExactlyElementsIn(List(names.size) { ReceiptLineKind.ITEM })
+        assertThat(classify(*names))
+            .containsExactlyElementsIn(List(names.size) { ReceiptLineKind.ITEM })
+    }
+
+    /**
+     * And the payment lines of a slip with no total — where the tender check is
+     * the only thing keeping them out of the items — still are not items.
+     */
+    @Test
+    fun bug24_paymentLinesWithNoTotalAbove_areStillNotItems() {
+        val kinds = classify(
+            "TOMATO" to true,
+            "PAID BY UPI" to true,
+            "VISA CARD XXXX1234" to true,
+            "CASH TENDERED" to true,
+        )
+
+        assertThat(kinds).containsExactly(
+            ReceiptLineKind.ITEM,
+            ReceiptLineKind.FOOTER,
+            ReceiptLineKind.FOOTER,
+            ReceiptLineKind.FOOTER,
+        ).inOrder()
+    }
+
+    /**
      * A short identifier parses as money, and an identifier is never shopping.
      *
      * `BILL NO 4521` would be a ₹45.21 purchase, and worse, it would be the
