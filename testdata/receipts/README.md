@@ -75,6 +75,7 @@ have the corpus treats its absence as an error rather than a pass.
   "merchant": "…",
   "currency": "INR",
   "billTotalMinor": 47300,
+  "date": "2026-09-12",
   "lines": [
     {
       "position": 1,
@@ -94,6 +95,13 @@ have the corpus treats its absence as an error rather than a pass.
 - `kind` is `ITEM | TAX | DISCOUNT | UNALLOCATED`, matching `line_item.kind`.
   **Only `ITEM` lines count toward recall** — a missed tax line is a different
   defect from a missed purchase.
+- `date` is the **bill's** date as printed — the invoice or bill date where
+  the page prints several (an order date, a delivery slot, a payment line) —
+  written as local `YYYY-MM-DD`. Optional: omit it when the receipt prints no
+  date, which is itself a case the extractor must get right by returning none.
+  **Never an expiry, manufacture or "valid till" date.** It is graded exact,
+  per receipt; a date one day out is wrong, because it files the entry under
+  the wrong day.
 - `capture.safeBecause` is **required on every `real` fixture.** It is the
   receipt analogue of the SMS corpus's "what was substituted": since nothing is
   redacted, the fixture has to say why it was safe to keep whole. Writing that
