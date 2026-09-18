@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.onboarding.recovery
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.domain.vault.RecoveryReason
 
@@ -18,38 +19,35 @@ public data class RecoveryUiState(
     /** Why the silent unlock did not work. Drives the explanation at the top. */
     val reason: RecoveryReason = RecoveryReason.KeystoreUnavailable,
 
-    /** Words committed so far, in order. */
-    val words: List<String> = emptyList(),
-
-    /** The word currently being typed. Not yet part of [words]. */
-    val draft: String = "",
-
-    /** Autocomplete candidates for [draft], best-first. */
-    val suggestions: List<String> = emptyList(),
-
-    /** The expected length, from the validator rather than a hardcoded 24. */
-    val requiredWordCount: Int = 0,
+    /**
+     * The words as typed. Shared with "Back up now" through [PhraseEntry], so
+     * the two screens cannot drift apart on how a phrase is entered.
+     */
+    val entry: PhraseEntry = PhraseEntry(),
 
     val isWorking: Boolean = false,
 
     val failure: RecoveryFailure? = null,
 ) {
+    /** Words committed so far, in order. */
+    public val words: List<String> get() = entry.words
+
+    /** The word currently being typed. Not yet part of [words]. */
+    public val draft: String get() = entry.draft
+
+    /** Autocomplete candidates for [draft], best-first. */
+    public val suggestions: List<String> get() = entry.suggestions
+
+    /** The expected length, from the validator rather than a hardcoded 24. */
+    public val requiredWordCount: Int get() = entry.requiredWordCount
+
     /** Enables Recover. Checksum validation happens on submit, not here. */
-    public val isComplete: Boolean
-        get() = words.size == requiredWordCount
+    public val isComplete: Boolean get() = entry.isComplete
 
-    public val remaining: Int
-        get() = (requiredWordCount - words.size).coerceAtLeast(0)
+    public val remaining: Int get() = entry.remaining
 
-    /**
-     * True when the draft is not a prefix of any real word.
-     *
-     * Surfaced as you type rather than at submit: catching "abandom" on the
-     * third keystroke is a very different experience from catching it after all
-     * 24 words are in and the checksum fails.
-     */
-    public val draftIsUnknown: Boolean
-        get() = draft.isNotBlank() && suggestions.isEmpty()
+    /** See [PhraseEntry.draftIsUnknown]. */
+    public val draftIsUnknown: Boolean get() = entry.draftIsUnknown
 }
 
 /** Why an attempt failed, in the vocabulary the screen explains it in. */

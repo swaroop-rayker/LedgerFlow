@@ -3,6 +3,7 @@ package com.ledgerflow.feature.onboarding.recovery
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.usecase.RecoverVaultUseCase
+import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.VaultOutcome
@@ -31,7 +32,7 @@ public class RecoveryViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
-        RecoveryUiState(requiredWordCount = validator.wordCount),
+        RecoveryUiState(entry = PhraseEntry(requiredWordCount = validator.wordCount)),
     )
     public val state: StateFlow<RecoveryUiState> = _state.asStateFlow()
 
@@ -52,76 +53,22 @@ public class RecoveryViewModel @Inject constructor(
     }
 
     /**
-     * A space or newline in the field commits the word.
-     *
-     * Typing a phrase is muscle memory with spaces in it; requiring a tap per
-     * word would make 24 words feel like 48 actions.
+     * Every word event goes through [PhraseEntry], the rules "Back up now"
+     * shares, and any change to the words clears the previous failure: the
+     * message was about words that are no longer what is on screen.
      */
-    private fun onDraftChanged(value: String) {
-        if (value.any { it.isWhitespace() }) {
-            val parts = validator.parse(value)
-            when {
-                parts.isEmpty() -> _state.update { it.copy(draft = "", suggestions = emptyList()) }
-                else -> {
-                    parts.forEach(::commit)
-                    _state.update { it.copy(draft = "", suggestions = emptyList()) }
-                }
-            }
-            return
-        }
+    private fun onDraftChanged(value: String) = updateEntry { it.withDraft(value, validator) }
 
-        val normalized = value.trim().lowercase()
-        _state.update {
-            it.copy(
-                draft = normalized,
-                suggestions = validator.suggestions(normalized),
-                failure = null,
-            )
-        }
-    }
+    private fun commit(word: String) = updateEntry { it.commit(word) }
 
-    private fun commit(word: String) {
-        val normalized = word.trim().lowercase()
-        if (normalized.isEmpty()) return
+    private fun remove(index: Int) = updateEntry { it.remove(index) }
+
+    private fun paste(text: String) = updateEntry { it.paste(text, validator) }
+
+    private fun updateEntry(change: (PhraseEntry) -> PhraseEntry) {
         _state.update { current ->
-            // Silently dropping extra words would make a 25-word paste look like
-            // it worked. Stop accepting instead, and let the count show why.
-            if (current.words.size >= current.requiredWordCount) return@update current
-            current.copy(
-                words = current.words + normalized,
-                draft = "",
-                suggestions = emptyList(),
-                failure = null,
-            )
-        }
-    }
-
-    private fun remove(index: Int) {
-        _state.update { current ->
-            if (index !in current.words.indices) return@update current
-            current.copy(
-                words = current.words.filterIndexed { i, _ -> i != index },
-                failure = null,
-            )
-        }
-    }
-
-    /**
-     * Replaces the whole phrase rather than appending.
-     *
-     * Someone pasting 24 words means "these are the words", and appending them
-     * to a half-typed attempt produces a 30-word phrase and a confusing error.
-     */
-    private fun paste(text: String) {
-        val parsed = validator.parse(text)
-        if (parsed.isEmpty()) return
-        _state.update {
-            it.copy(
-                words = parsed.take(it.requiredWordCount),
-                draft = "",
-                suggestions = emptyList(),
-                failure = null,
-            )
+            val entry = change(current.entry)
+            if (entry == current.entry) current else current.copy(entry = entry, failure = null)
         }
     }
 

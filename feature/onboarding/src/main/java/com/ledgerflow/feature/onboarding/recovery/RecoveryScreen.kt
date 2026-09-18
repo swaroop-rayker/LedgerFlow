@@ -2,11 +2,9 @@ package com.ledgerflow.feature.onboarding.recovery
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -19,14 +17,12 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.designsystem.component.LfChip
-import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfScaffold
-import com.ledgerflow.core.designsystem.component.LfKeyboards
-import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.domain.vault.RecoveryReason
+import com.ledgerflow.core.ui.phrase.LfPhraseEntry
 
 /**
  * The Recovery screen (SPEC.md §7.3 step 2).
@@ -54,22 +50,19 @@ public fun RecoveryScreen(
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
         ) {
             Header(state)
-            EnteredWords(state, onEvent)
 
-            LfTextField(
-                value = state.draft,
-                onValueChange = { onEvent(RecoveryEvent.DraftChanged(it)) },
-                label = "Word ${(state.words.size + 1).coerceAtMost(state.requiredWordCount)}",
-                isError = state.draftIsUnknown,
-                supportingText = when {
-                    state.draftIsUnknown -> "Not a word in the recovery list."
-                    else -> "Type a word, then press space."
-                },
-                // The keyboard must not learn the words (LfKeyboards.RecoveryWord).
-                keyboardOptions = LfKeyboards.RecoveryWord,
+            // Shared with "Back up now", including the keyboard setting that
+            // keeps the words out of the keyboard's dictionary (BUG25).
+            LfPhraseEntry(
+                words = state.words,
+                draft = state.draft,
+                suggestions = state.suggestions,
+                draftIsUnknown = state.draftIsUnknown,
+                requiredWordCount = state.requiredWordCount,
+                onDraftChange = { onEvent(RecoveryEvent.DraftChanged(it)) },
+                onSuggestionTap = { onEvent(RecoveryEvent.WordCommitted(it)) },
+                onWordRemove = { onEvent(RecoveryEvent.WordRemoved(it)) },
             )
-
-            Suggestions(state, onEvent)
 
             state.failure?.let { FailureMessage(it) }
         }
@@ -124,50 +117,6 @@ private fun Header(state: RecoveryUiState) {
             style = LfTheme.typography.bodyM,
             color = LfTheme.colors.textSecondary,
         )
-    }
-}
-
-@Composable
-private fun EnteredWords(state: RecoveryUiState, onEvent: (RecoveryEvent) -> Unit) {
-    if (state.words.isEmpty()) return
-    // A flow layout would be prettier; a column of rows is what survives a 2.0x
-    // font scale without a chip being clipped mid-word (§9.6).
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-        state.words.chunked(WORDS_PER_ROW).forEachIndexed { rowIndex, row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-                row.forEachIndexed { columnIndex, word ->
-                    val position = rowIndex * WORDS_PER_ROW + columnIndex
-                    LfChip(
-                        label = word,
-                        leading = "${position + 1}",
-                        style = LfChipStyle.Selected,
-                        contentDescription = "Word ${position + 1}, $word. Tap to remove.",
-                        onClick = { onEvent(RecoveryEvent.WordRemoved(position)) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Suggestions(state: RecoveryUiState, onEvent: (RecoveryEvent) -> Unit) {
-    if (state.suggestions.isEmpty()) return
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-    ) {
-        items(
-            count = state.suggestions.size,
-            key = { index -> state.suggestions[index] },
-            contentType = { "suggestion" },
-        ) { index ->
-            val word = state.suggestions[index]
-            LfChip(
-                label = word,
-                onClick = { onEvent(RecoveryEvent.WordCommitted(word)) },
-            )
-        }
     }
 }
 
@@ -230,8 +179,6 @@ private fun RecoveryFailure.message(): String = when (this) {
     }
 }
 
-private const val WORDS_PER_ROW = 3
-
 // ── Previews (CLAUDE.md §5) ───────────────────────────────────────────────
 
 @PreviewScreenSizes
@@ -241,7 +188,9 @@ private const val WORDS_PER_ROW = 3
 private fun RecoveryEmptyPreview() {
     LfTheme {
         RecoveryScreen(
-            state = RecoveryUiState(requiredWordCount = 24, draft = "aban", suggestions = listOf("abandon")),
+            state = RecoveryUiState(
+                entry = PhraseEntry(requiredWordCount = 24, draft = "aban", suggestions = listOf("abandon")),
+            ),
             onEvent = {},
         )
     }
@@ -256,8 +205,7 @@ private fun RecoveryPartialPreview() {
         RecoveryScreen(
             state = RecoveryUiState(
                 reason = RecoveryReason.CanaryMismatch,
-                words = List(7) { "abandon" },
-                requiredWordCount = 24,
+                entry = PhraseEntry(words = List(7) { "abandon" }, requiredWordCount = 24),
                 failure = RecoveryFailure.PhraseDidNotMatch,
             ),
             onEvent = {},

@@ -6,34 +6,45 @@ import org.junit.Test
 
 /**
  * **Every text field that receives a recovery-phrase word uses
- * `LfKeyboards.RecoveryWord`.**
+ * `LfKeyboards.RecoveryWord`** (BUG25).
  *
  * A source guard rather than a UI test, deliberately. What the option changes
  * is the `EditorInfo` handed to the keyboard, which no screenshot and no
  * semantics node shows: a field that forgets it renders identically, accepts
  * the same input, and lets Gboard add the user's 24 words to a personal
  * dictionary that may sync off the device. So the property is asserted where
- * it lives — at the call site — for the two screens where the words are typed.
+ * it lives — at the call site.
  *
- * A new screen that takes phrase words must be added to [PHRASE_SCREENS]; the
- * guard cannot know about a file it was never told to read, and says so.
+ * Two shapes are covered. A file that **builds** a phrase field must pass the
+ * option on every one. A screen that takes the phrase through the shared
+ * `LfPhraseEntry` gets the option for free, and must not build a bare field
+ * beside it that would not.
+ *
+ * A new place that takes phrase words must be added to [FIELD_BUILDERS] or
+ * [SHARED_ENTRY_USERS]; the guard cannot know about a file it was never told
+ * to read.
  */
 class Bug25_PhraseFieldsDoNotTeachTheKeyboardTest {
 
     private companion object {
-        val PHRASE_SCREENS = listOf(
-            "OnboardingScreen.kt",
-            "recovery/RecoveryScreen.kt",
+        /** Files that build a phrase field themselves. Each field must pass the option. */
+        val FIELD_BUILDERS = listOf(
+            "feature/onboarding/src/main/java/com/ledgerflow/feature/onboarding/OnboardingScreen.kt",
+            "core/ui/src/main/java/com/ledgerflow/core/ui/phrase/LfPhraseEntry.kt",
         )
-        const val SOURCE_ROOT = "src/main/java/com/ledgerflow/feature/onboarding"
+
+        /** Screens that take the phrase through the shared `LfPhraseEntry`. */
+        val SHARED_ENTRY_USERS = listOf(
+            "feature/onboarding/src/main/java/com/ledgerflow/feature/onboarding/recovery/RecoveryScreen.kt",
+        )
     }
 
-    private fun source(relative: String): String {
-        val moduleDir = generateSequence(File("").absoluteFile) { it.parentFile }
-            .map { dir -> if (File(dir, SOURCE_ROOT).isDirectory) dir else File(dir, "feature/onboarding") }
-            .first { File(it, SOURCE_ROOT).isDirectory }
-        return File(moduleDir, "$SOURCE_ROOT/$relative").readText()
+    private val repositoryRoot: File by lazy {
+        generateSequence(File("").absoluteFile) { it.parentFile }
+            .first { File(it, "settings.gradle.kts").isFile }
     }
+
+    private fun source(relative: String): String = File(repositoryRoot, relative).readText()
 
     /**
      * Each `LfTextField(` call, as the text up to its closing parenthesis at
@@ -63,19 +74,30 @@ class Bug25_PhraseFieldsDoNotTeachTheKeyboardTest {
 
     @Test
     fun everyPhraseField_usesTheRecoveryWordKeyboard() {
-        PHRASE_SCREENS.forEach { screen ->
-            val calls = textFieldCalls(source(screen))
+        FIELD_BUILDERS.forEach { file ->
+            val calls = textFieldCalls(source(file))
 
-            assertWithMessage("%s: no LfTextField found -- has the screen moved?", screen)
+            assertWithMessage("%s: no LfTextField found -- has the field moved?", file)
                 .that(calls).isNotEmpty()
             calls.forEach { call ->
                 assertWithMessage(
                     "%s: an LfTextField without keyboardOptions = LfKeyboards.RecoveryWord " +
                         "lets the keyboard learn the recovery phrase:\n%s",
-                    screen,
+                    file,
                     call,
                 ).that(call).contains("keyboardOptions = LfKeyboards.RecoveryWord")
             }
+        }
+    }
+
+    @Test
+    fun screensOnTheSharedEntry_buildNoFieldOfTheirOwn() {
+        SHARED_ENTRY_USERS.forEach { file ->
+            val code = source(file)
+            assertWithMessage("%s: expected to take the phrase through LfPhraseEntry", file)
+                .that(code).contains("LfPhraseEntry(")
+            assertWithMessage("%s: builds its own LfTextField beside the shared entry", file)
+                .that(textFieldCalls(code)).isEmpty()
         }
     }
 }
