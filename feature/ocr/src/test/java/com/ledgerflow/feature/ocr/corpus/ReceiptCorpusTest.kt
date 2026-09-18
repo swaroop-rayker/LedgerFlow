@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import java.io.File
 import java.security.MessageDigest
+import java.time.LocalDate
 import java.util.Properties
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -320,6 +321,34 @@ class ReceiptCorpusTest {
                     "(Law 3), in fixtures as much as in code",
                 file.name,
             ).that(decimalMoney.containsMatchIn(file.readText())).isFalse()
+        }
+    }
+
+    /**
+     * A fixture's `date`, when present, is a real calendar day written as
+     * `YYYY-MM-DD` (testdata/receipts/README.md).
+     *
+     * Checked here because a malformed one would not fail anything else: a
+     * grader comparing strings would simply never match it, and the receipt
+     * would read as a date miss the extractor did not commit. `2026-02-30`
+     * is the shape that matters — it looks like a date and is not one.
+     */
+    @Test
+    fun anyFixtureDateIsARealCalendarDay() {
+        val dir = corpusDir
+        assumeTrue("private receipt store not present", dir != null)
+        requireNotNull(dir)
+
+        val shape = Regex("""\d{4}-\d{2}-\d{2}""")
+        dir.listFiles { f -> f.extension == "json" }.orEmpty().forEach { file ->
+            val date = Json.parseToJsonElement(file.readText()).jsonObject["date"]
+                ?.jsonPrimitive?.content
+                ?: return@forEach
+
+            assertWithMessage("fixture '%s': date '%s' is not YYYY-MM-DD", file.name, date)
+                .that(shape.matches(date)).isTrue()
+            assertWithMessage("fixture '%s': date '%s' is not a real calendar day", file.name, date)
+                .that(runCatching { LocalDate.parse(date) }.isSuccess).isTrue()
         }
     }
 }
