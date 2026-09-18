@@ -1,23 +1,23 @@
 package com.ledgerflow.core.data.vault
 
 import android.content.Context
-import androidx.lifecycle.ProcessLifecycleOwner
 import com.ledgerflow.core.common.di.IoDispatcher
-import com.ledgerflow.core.data.di.VaultDatabaseName
 import com.ledgerflow.core.crypto.AttachmentKey
 import com.ledgerflow.core.crypto.Dek
 import com.ledgerflow.core.crypto.DekManager
-import com.ledgerflow.core.crypto.UnlockFailure
 import com.ledgerflow.core.crypto.UnlockResult
+import com.ledgerflow.core.data.di.VaultDatabaseName
 import com.ledgerflow.core.database.CanaryResult
 import com.ledgerflow.core.database.DatabaseCanary
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.LedgerFlowDatabaseFactory
-import com.ledgerflow.core.database.WalCheckpointObserver
+import com.ledgerflow.core.database.backup.DatabaseBackupManager
+import com.ledgerflow.core.database.backup.OpenedBackup
+import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.database.migration.MigrationAssessment
 import com.ledgerflow.core.database.migration.PreMigrationGuard
 import com.ledgerflow.core.database.migration.SnapshotResult
-import com.ledgerflow.core.database.entity.AppMetaEntity
+import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.RecoveryReason
@@ -27,6 +27,7 @@ import com.ledgerflow.core.domain.vault.VaultOutcome
 import com.ledgerflow.core.domain.vault.VaultRepository
 import com.ledgerflow.core.domain.vault.VaultState
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
@@ -38,7 +39,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.File
 import kotlinx.coroutines.withContext
 
 /**
@@ -215,6 +215,15 @@ public class VaultSession @Inject constructor(
             // StrictMode kills the debug build, which is how this was found.
             withContext(io) { validator.warmUp() }
 
+            // Before anything else, including the open-database shortcut: a
+            // restore that is mid-way through its image pass has a database
+            // open and must not be flipped to Unlocked underneath its report,
+            // and one that died mid-way must not be opened at all (§16 Q11).
+            if (withContext(io) { restoreMarker.exists() }) {
+                if (database == null) _state.value = VaultState.RestoreInterrupted
+                return
+            }
+
             if (database != null) {
                 _state.value = VaultState.Unlocked
                 return
@@ -334,18 +343,165 @@ public class VaultSession @Inject constructor(
             }
 
             CanaryResult.Valid -> {
-                database = opened
-                registerWalCheckpoint(opened)
-                // **Before `destroy`, necessarily.** The DEK is zeroed on the
-                // next line and is not retained anywhere else, so this is the
-                // only moment the attachment key can be derived at all.
-                attachmentKey = AttachmentKey.local(dek)
-                dek.destroy()
+                accept(opened, dek)
                 VaultOutcome.Unlocked
             }
         }
     }
 
+    /** The database is verified and becomes the session's. The DEK does not survive this. */
+    private suspend fun accept(opened: LedgerFlowDatabase, dek: Dek) {
+        database = opened
+        registerWalCheckpoint(opened)
+        // **Before `destroy`, necessarily.** The DEK is zeroed on the next line
+        // and is not retained anywhere else, so this is the only moment the
+        // attachment key can be derived at all.
+        attachmentKey = AttachmentKey.local(dek)
+        dek.destroy()
+    }
+
+    // ── Restore from a backup (§7.3 step 3, §16 Q11) ─────────────────────────
+
+    /**
+     * Creates this install's vault **from a backup**, under the backup's own
+     * phrase — the owner's decision for §16 Q11: one phrase, the one the user
+     * already holds, rather than a new one at onboarding and an old one for
+     * every backup they have.
+     *
+     * The order is the design, and each step is the reason for the next:
+     *
+     * 1. **Refuse if a vault exists** and no restore is pending. Restore replaces
+     *    onboarding; it never replaces data.
+     * 2. **The backup is decrypted and parsed in memory first.** Wrong words, a
+     *    damaged file and a newer format are all answered before a single byte
+     *    of key material is written.
+     * 3. **The marker file, fsynced, before the wrap.** From here a crash lands
+     *    on [VaultState.RestoreInterrupted] rather than on a vault with a wrap
+     *    and no rows — which the ordinary launch would open, find no canary in,
+     *    and send to the Recovery screen with the wrong sentence.
+     * 4. **The DEK**: a fresh one wrapped under these words
+     *    ([DekManager.initialize]: phrase first and verified, then Keystore) —
+     *    or, finishing an interrupted restore that already wrote a wrap, the
+     *    one these words unwrap. Different words there are refused.
+     * 5. **The rows**, in one transaction, with the `app_meta` corrections
+     *    inside it: this build's schema version, and this install's backup
+     *    folder in place of the old phone's.
+     *
+     * The marker is **not** removed here. The receipt images come next and a
+     * restore is not finished until they have been attempted;
+     * [completeRestore] removes it. The vault is left open and [VaultState.Working]
+     * so the screen can report, and [finishRestore] hands it to the app.
+     *
+     * @param seed the backup's BIP-39 seed, derived from [words] by the caller,
+     *   which needs it again for the images.
+     */
+    internal suspend fun restoreFromBackup(
+        words: List<String>,
+        seed: ByteArray,
+        backup: ByteArray,
+        backupTreeUri: String?,
+    ): RestoreOutcome = mutex.withLock {
+        withContext(io) {
+            val resuming = restoreMarker.exists()
+            if (!resuming && (database != null || dekManager.isInitialized())) {
+                return@withContext RestoreOutcome.AlreadySetUp
+            }
+
+            val read = DatabaseBackupManager.open(backup, seed)
+            val opened = read as? OpenedBackup.Ready ?: return@withContext read.toRestoreRefusal()
+            // Rows committed in this process and the image pass not finished:
+            // the vault is already open, and opening a second handle onto it
+            // would orphan the first. The caller reruns the images.
+            if (database != null) return@withContext restoredReport(opened.rowCount)
+
+            val previous = _state.value
+            _state.value = VaultState.Working
+            if (!resuming && !writeRestoreMarker(restoreMarker, RESTORE_MARKER_CONTENT)) {
+                // Nothing of the vault exists yet; a half-written marker would
+                // route the next launch away from onboarding for no reason.
+                restoreMarker.delete()
+                _state.value = previous
+                return@withContext RestoreOutcome.Failed
+            }
+
+            val dek = when (val unlocked = dekManager.dekForRestore(words)) {
+                is UnlockResult.Success -> unlocked.dek
+                is UnlockResult.Failure -> {
+                    _state.value = VaultState.RestoreInterrupted
+                    return@withContext unlocked.reason.toRestoreRefusal()
+                }
+            }
+
+            when (val imported = openAndImport(dek, opened, backupTreeUri)) {
+                is RestoreOutcome.Done -> imported
+                else -> {
+                    dek.destroy()
+                    _state.value = VaultState.RestoreInterrupted
+                    imported
+                }
+            }
+        }
+    }
+    private suspend fun openAndImport(
+        dek: Dek,
+        opened: OpenedBackup.Ready,
+        backupTreeUri: String?,
+    ): RestoreOutcome {
+        // A restore creates the file, so nothing is normally pending; an
+        // interrupted one resumed by a newer build is the case this covers.
+        if (prepareForMigration(dek) is MigrationPreparation.Blocked) return RestoreOutcome.Failed
+
+        val handle = runCatching { LedgerFlowDatabaseFactory.create(context, dek, databaseName) }
+            .getOrElse { return RestoreOutcome.Failed }
+
+        val rows = runCatching {
+            handle.openHelper.writableDatabase
+            // An import that already committed before a crash is not repeated:
+            // every vault's rows include its base currency, and before the
+            // import this database holds nothing but the canary. The figure
+            // reported is the backup's, as on the first attempt — the vault's
+            // own count also includes the `app_meta` corrections.
+            if (handle.appMetaDao().value(AppMetaEntity.KEY_BASE_CURRENCY) != null) {
+                opened.rowCount
+            } else {
+                DatabaseCanary.write(handle)
+                importRows(handle, opened, backupTreeUri, KEY_BACKUP_TREE_URI)
+            }
+        }.getOrNull()
+
+        val verified = rows != null &&
+            runCatching { DatabaseCanary.verify(handle) }.getOrNull() == CanaryResult.Valid
+        if (!verified) {
+            handle.close()
+            return RestoreOutcome.Failed
+        }
+        accept(handle, dek)
+        return restoredReport(requireNotNull(rows) { "verified implies rows were counted" })
+    }
+    /**
+     * The restore is finished — rows committed, images attempted. Only now does
+     * the marker go, so a crash during the image pass returns to the restore
+     * screen, which recognises the committed rows and runs the images again.
+     */
+    internal suspend fun completeRestore(): Unit = withContext(io) {
+        restoreMarker.delete()
+    }
+
+    /** The user has seen the report: the restored vault becomes the app's. */
+    internal suspend fun finishRestore() {
+        mutex.withLock {
+            if (database != null && !withContext(io) { restoreMarker.exists() }) {
+                _state.value = VaultState.Unlocked
+            }
+        }
+    }
+
+    /**
+     * Beside the database it describes, named after it, so an instrumented
+     * test's own database has its own marker (BUG1(e)). `filesDir` (Law 5).
+     */
+    private val restoreMarker: File
+        get() = File(context.filesDir, databaseName + RESTORE_MARKER_SUFFIX)
     /**
      * An open that threw, attributed correctly.
      *
@@ -424,20 +580,6 @@ public class VaultSession @Inject constructor(
             }
         }
     }
-
-    /**
-     * BUG2's second countermeasure, finally attached to a real database.
-     *
-     * `ProcessLifecycleOwner` observers must be added on the main thread, and
-     * this runs on IO -- hence the explicit hop rather than a bare `addObserver`.
-     */
-    private suspend fun registerWalCheckpoint(opened: LedgerFlowDatabase) {
-        val observer = WalCheckpointObserver(opened)
-        withContext(kotlinx.coroutines.Dispatchers.Main) {
-            ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
-        }
-    }
-
     private fun initialMetadata(request: VaultInitRequest): List<AppMetaEntity> = buildList {
         add(AppMetaEntity(AppMetaEntity.KEY_BASE_CURRENCY, request.baseCurrency))
         add(
@@ -459,32 +601,6 @@ public class VaultSession @Inject constructor(
         is VaultOutcome.PhraseRejected -> VaultState.NeedsRecovery(RecoveryReason.KeystoreUnavailable)
         VaultOutcome.PhraseDidNotMatch -> VaultState.NeedsRecovery(RecoveryReason.KeystoreUnavailable)
     }
-
-    /**
-     * Crypto vocabulary in, domain vocabulary out.
-     *
-     * Every branch lands somewhere recoverable -- that is the point of doing the
-     * mapping explicitly rather than passing the crypto type upward.
-     */
-    private fun UnlockFailure.toRecoveryReason(): RecoveryReason = when (this) {
-        UnlockFailure.KeystoreUnavailable -> RecoveryReason.KeystoreUnavailable
-        UnlockFailure.NotInitialized -> RecoveryReason.KeystoreWrapMissing
-        UnlockFailure.AuthenticationFailed -> RecoveryReason.KeystoreWrapDamaged
-        is UnlockFailure.MalformedBlob -> RecoveryReason.KeystoreWrapDamaged
-        is UnlockFailure.UnsupportedFormat -> RecoveryReason.KeystoreWrapDamaged
-        is UnlockFailure.InvalidMnemonic -> RecoveryReason.KeystoreWrapDamaged
-    }
-
-    /** The same failures, seen from the phrase path, where they mean something else. */
-    private fun UnlockFailure.toPhraseOutcome(): VaultOutcome = when (this) {
-        // A well-formed phrase whose GCM tag did not verify: right format,
-        // wrong vault. Not a typo -- validate() already ruled that out.
-        UnlockFailure.AuthenticationFailed -> VaultOutcome.PhraseDidNotMatch
-        is UnlockFailure.InvalidMnemonic -> VaultOutcome.PhraseRejected(PhraseValidation.ChecksumMismatch)
-        UnlockFailure.NotInitialized -> VaultOutcome.Failed(RecoveryReason.KeystoreWrapMissing)
-        else -> VaultOutcome.Failed(RecoveryReason.KeystoreWrapDamaged)
-    }
-
     public companion object {
         /** SAF tree the nightly backup writes to. Null until the user grants one. */
         public const val KEY_BACKUP_TREE_URI: String = "backupTreeUri"
@@ -500,5 +616,11 @@ public class VaultSession @Inject constructor(
          * exactly the moment it is needed.
          */
         private const val SNAPSHOT_DIR: String = "premigration"
+
+        /** `<database name>` + this, in `filesDir`. See [restoreMarker]. */
+        internal const val RESTORE_MARKER_SUFFIX: String = ".restore-pending"
+
+        /** Its presence is the signal; the content only makes it non-empty. */
+        private val RESTORE_MARKER_CONTENT: ByteArray = "restore-pending v1".toByteArray()
     }
 }

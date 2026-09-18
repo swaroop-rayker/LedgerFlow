@@ -45,6 +45,27 @@ public sealed interface RestoreResult {
 }
 
 /**
+ * A `.lfbk` read into memory: decrypted, authenticated, parsed — and nothing
+ * written anywhere. What [DatabaseBackupManager.open] returns.
+ */
+public sealed interface OpenedBackup {
+
+    /**
+     * Ready to import. The constructor is `internal`, so the only way to hold
+     * one is to have opened a real backup under the right words.
+     */
+    public class Ready internal constructor(internal val payload: BackupPayload) : OpenedBackup {
+        /** Rows it will insert — the figure a restore reports. */
+        public val rowCount: Int get() = payload.rowCount
+    }
+
+    public data class Failure(val reason: LfbkFailure) : OpenedBackup
+
+    /** Written by a newer schema. Never guess forward. */
+    public data class SchemaTooNew(val backupVersion: Int, val supported: Int) : OpenedBackup
+}
+
+/**
  * Writes and restores `.lfbk` backups.
  *
  * **The write is atomic and verified**: temp file -> fsync -> decrypt-and-parse
@@ -149,16 +170,34 @@ public class DatabaseBackupManager(
         return BackupResult.Success(destination, expectedRows, LfbkContainer.fingerprint(bytes))
     }
 
-    public suspend fun restore(source: File, seed: ByteArray): RestoreResult {
-        val read = when (val result = LfbkContainer.read(source.readBytes(), seed)) {
-            is LfbkResult.Failure -> return RestoreResult.Failure(result.reason)
-            is LfbkResult.Success -> result
-        }
-        if (read.schemaVersion > LedgerFlowDatabase.VERSION) {
-            return RestoreResult.SchemaTooNew(read.schemaVersion, LedgerFlowDatabase.VERSION)
+    public suspend fun restore(source: File, seed: ByteArray): RestoreResult =
+        when (val opened = open(source.readBytes(), seed, json)) {
+            is OpenedBackup.Ready -> restore(opened)
+            is OpenedBackup.Failure -> RestoreResult.Failure(opened.reason)
+            is OpenedBackup.SchemaTooNew -> RestoreResult.SchemaTooNew(opened.backupVersion, opened.supported)
         }
 
-        val payload = json.decodeFromString(BackupPayload.serializer(), String(read.payload))
+    /**
+     * Imports a backup [open] has already decrypted and parsed.
+     *
+     * Split from [open] for the first-run restore (§16 Q11): the file has to be
+     * proven readable under the words **before** a phrase wrap or a database
+     * exists, because both are written only once it is. Taking an
+     * [OpenedBackup.Ready] rather than a [BackupPayload] keeps the
+     * single-writer permit honest — a `Ready` can only come out of [open], so
+     * this still only ever inserts rows that came out of a decrypted `.lfbk`.
+     */
+    public suspend fun restore(
+        opened: OpenedBackup.Ready,
+        /**
+         * Runs inside the import's transaction, after every row is in. For the
+         * first-run restore's `app_meta` corrections, which must commit or roll
+         * back with the rows: a crash between the two would leave restored rows
+         * describing a backup folder this install cannot reach.
+         */
+        alsoInTransaction: suspend () -> Unit = {},
+    ): RestoreResult {
+        val payload = opened.payload
 
         // One transaction for the whole restore. Found by a test that restored
         // into a non-empty database: the unique index on `category` fired
@@ -167,12 +206,44 @@ public class DatabaseBackupManager(
         // the user would be looking at some of their data and no indication
         // that the rest is missing.
         return runCatching {
-            database.withTransaction { import(payload) }
+            database.withTransaction {
+                import(payload)
+                alsoInTransaction()
+            }
             RestoreResult.Success(payload.rowCount)
         }.getOrElse { error ->
             RestoreResult.Failure(
                 LfbkFailure.Malformed("restore rolled back: ${error.message}"),
             )
+        }
+    }
+
+    public companion object {
+        private val DEFAULT_JSON = Json { encodeDefaults = true }
+
+        /**
+         * Decrypts and parses [bytes] under [seed] without touching any
+         * database.
+         *
+         * A payload that authenticates and then does not parse is reported as
+         * [LfbkFailure.Malformed] rather than thrown: the tag proves the bytes
+         * are what was written, so a parse failure means a writer bug or a
+         * format this build does not understand — either way a sentence for
+         * the user, never a crash on the restore screen.
+         */
+        public fun open(bytes: ByteArray, seed: ByteArray, json: Json = DEFAULT_JSON): OpenedBackup {
+            val read = when (val result = LfbkContainer.read(bytes, seed)) {
+                is LfbkResult.Failure -> return OpenedBackup.Failure(result.reason)
+                is LfbkResult.Success -> result
+            }
+            if (read.schemaVersion > LedgerFlowDatabase.VERSION) {
+                return OpenedBackup.SchemaTooNew(read.schemaVersion, LedgerFlowDatabase.VERSION)
+            }
+            return runCatching {
+                OpenedBackup.Ready(json.decodeFromString(BackupPayload.serializer(), String(read.payload)))
+            }.getOrElse { error ->
+                OpenedBackup.Failure(LfbkFailure.Malformed("payload did not parse: ${error.message}"))
+            }
         }
     }
 

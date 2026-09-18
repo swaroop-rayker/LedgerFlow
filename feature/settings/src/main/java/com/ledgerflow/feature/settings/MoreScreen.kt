@@ -156,9 +156,10 @@ internal fun deletedSubtitle(state: MoreUiState): String = when {
  *   forbidden to say (ADR-0019). Since "Back up now" (§16 Q23) copies the
  *   photos into the backup folder, the sentence says exactly that much: this
  *   phone keeps no other copy, and photos included in a backup stay in that
- *   folder. **It does not say they can be restored**, because nothing in the
- *   app restores yet (§16 Q11) — when a restore screen ships, this is the
- *   sentence to revisit.
+ *   folder. **It does not say they can be restored.** Revisited when restore
+ *   shipped (ADR-0026) and kept: restore rebuilds a whole vault on a fresh
+ *   install, so it is no way to get a deleted photo back on this phone, and
+ *   offering it as one would be the durability promise this rule forbids.
  *
  * And one thing specific to this dialog: it says the **entries survive**.
  * Deleting a photograph is not deleting a purchase, and a user who thought

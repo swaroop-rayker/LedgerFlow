@@ -149,7 +149,7 @@ public class DefaultBackupRepository @Inject constructor(
      */
     private fun rotate(folder: BackupFolder, keep: Int, justWritten: String): Int {
         val older = folder.list()
-            .filter { BACKUP_NAME.matches(it) && it != justWritten }
+            .filter { BackupNames.WRITTEN.matches(it) && it != justWritten }
             .sortedDescending()
             .drop(keep - 1)
         return older.count { folder.delete(it) }
@@ -200,7 +200,5 @@ public class DefaultBackupRepository @Inject constructor(
          * [rotate] relies on — whatever the device's time zone does.
          */
         const val STAMP = "yyyyMMdd-HHmmss"
-
-        val BACKUP_NAME = Regex("""ledgerflow-\d{8}-\d{6}\.lfbk""")
     }
 }

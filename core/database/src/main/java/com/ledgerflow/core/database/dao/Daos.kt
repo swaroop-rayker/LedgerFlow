@@ -37,6 +37,9 @@ public interface AppMetaDao {
 
     @Upsert
     public suspend fun putAll(entries: List<AppMetaEntity>)
+
+    @Query("DELETE FROM app_meta WHERE `key` = :key")
+    public suspend fun remove(key: String)
 }
 
 @Dao

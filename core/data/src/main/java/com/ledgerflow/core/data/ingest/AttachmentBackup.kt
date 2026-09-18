@@ -181,6 +181,16 @@ public class AttachmentBackup @Inject constructor(
         }
 
     /**
+     * A restore with no folder beside it — a `.lfbk` that travelled alone.
+     * Every row's image is, honestly, not found (ADR-0023's sentence), and
+     * nothing is looked for.
+     */
+    public suspend fun reportWithoutFolder(): AttachmentRestoreReport = withContext(io) {
+        val database = session.openForBackgroundWork() ?: return@withContext AttachmentRestoreReport()
+        AttachmentRestoreReport(notFound = database.attachmentDao().all().size)
+    }
+
+    /**
      * What one row's restore did, decided separately from the counting.
      *
      * The decision is a `when` over the states a row can be in; folding the

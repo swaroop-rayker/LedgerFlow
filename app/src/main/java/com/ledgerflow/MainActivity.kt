@@ -13,18 +13,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.feature.onboarding.OnboardingScreen
-import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.onboarding.OnboardingViewModel
+import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.onboarding.recovery.RecoveryScreen
+import com.ledgerflow.feature.onboarding.recovery.RecoveryViewModel
+import com.ledgerflow.feature.onboarding.restore.RestoreRoute
 import com.ledgerflow.feature.onboarding.upgrade.UpgradeBlockedScreen
 import com.ledgerflow.feature.onboarding.upgrade.UpgradingScreen
-import com.ledgerflow.feature.onboarding.recovery.RecoveryViewModel
 import com.ledgerflow.navigation.LedgerFlowShell
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -111,17 +115,31 @@ private fun LedgerFlowApp(
         AppRoute.Loading -> LoadingScreen()
 
         AppRoute.Onboarding -> {
-            val viewModel: OnboardingViewModel = hiltViewModel()
-            // collectAsStateWithLifecycle, never bare collectAsState
-            // (CLAUDE.md §5): the latter keeps collecting while backgrounded.
-            val state by viewModel.state.collectAsStateWithLifecycle()
-            OnboardingScreen(
-                state = state,
-                onEvent = viewModel::onEvent,
-                onGeneratePhrase = viewModel::generatePhraseAndContinue,
-                kitFileName = viewModel::suggestedKitFileName,
-            )
+            // Which of two screens, not business state: the restore branch
+            // (§16 Q11) is a fork off onboarding's first screen, and back
+            // returns to it. Saveable so a rotation does not drop the user
+            // out of the restore they were in.
+            var restoring by rememberSaveable { mutableStateOf(false) }
+            if (restoring) {
+                RestoreRoute(resuming = false, onBack = { restoring = false })
+            } else {
+                val viewModel: OnboardingViewModel = hiltViewModel()
+                // collectAsStateWithLifecycle, never bare collectAsState
+                // (CLAUDE.md §5): the latter keeps collecting while backgrounded.
+                val state by viewModel.state.collectAsStateWithLifecycle()
+                OnboardingScreen(
+                    state = state,
+                    onEvent = viewModel::onEvent,
+                    onGeneratePhrase = viewModel::generatePhraseAndContinue,
+                    kitFileName = viewModel::suggestedKitFileName,
+                    onRestoreRequested = { restoring = true },
+                )
+            }
         }
+
+        // The same screen and ViewModel as the branch above, with no way back:
+        // an interrupted restore is finished, not abandoned into onboarding.
+        AppRoute.RestoreInterrupted -> RestoreRoute(resuming = true, onBack = null)
 
         is AppRoute.Recovery -> {
             val viewModel: RecoveryViewModel = hiltViewModel()

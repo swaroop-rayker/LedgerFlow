@@ -56,6 +56,7 @@ public fun OnboardingScreen(
     onGeneratePhrase: () -> Unit,
     modifier: Modifier = Modifier,
     kitFileName: (RecoveryKitFormat) -> String = { "LedgerFlow-Recovery-Kit.${it.extension}" },
+    onRestoreRequested: () -> Unit = {},
 ) {
     // SAF, wired for real. Phase 0 emitted these events with empty URIs, which
     // meant the two gate steps that write to the filesystem did not.
@@ -83,7 +84,10 @@ public fun OnboardingScreen(
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
         ) {
             when (state.step) {
-                OnboardingStep.BaseCurrency -> BaseCurrencyStep(state, onEvent)
+                OnboardingStep.BaseCurrency -> {
+                    BaseCurrencyStep(state, onEvent)
+                    RestoreLink(onRestoreRequested)
+                }
                 OnboardingStep.PhraseDisplay -> PhraseDisplayStep(state, onEvent)
                 OnboardingStep.WordChallenge -> WordChallengeStep(state, onEvent)
                 OnboardingStep.RecoveryKit -> RecoveryKitStep(onEvent)
@@ -265,6 +269,28 @@ private fun StepHeading(title: String, body: String) {
     Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
         Text(text = title, style = LfTheme.typography.displayL, color = LfTheme.colors.textPrimary)
         Text(text = body, style = LfTheme.typography.bodyL, color = LfTheme.colors.textSecondary)
+    }
+}
+
+/**
+ * §16 Q11's branch: a quiet link, not a second primary action. Onboarding stays
+ * the path the screen leads with; someone moving from another phone finds the
+ * way out on the first screen, before choosing a currency their backup already
+ * carries.
+ */
+@Composable
+private fun RestoreLink(onRestoreRequested: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Text(
+            text = "Moving from another phone? You'll need a backup and its 24 words.",
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.textSecondary,
+        )
+        LfButton(
+            text = "Restore from a backup",
+            onClick = onRestoreRequested,
+            style = LfButtonStyle.Inline,
+        )
     }
 }
 

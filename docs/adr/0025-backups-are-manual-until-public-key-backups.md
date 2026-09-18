@@ -84,9 +84,7 @@ exactly as frequent as the user makes them.
 - **Found on the owner's device:** the backup screen asked for a folder, so the
   onboarding grant was absent or had lapsed. No backup could ever have been
   written to it; the first backup starts with the picker.
-- **Restore is still missing** (§16 Q11). Backups can be written and are verified
-  to open, but no screen restores one. Until one exists, restoring needs a
-  developer build — which is also why the receipt-delete dialog promises no
-  restore.
+- **Restore was still missing** (§16 Q11) when this was written. **Closed by
+  ADR-0026:** a first-run restore from onboarding, under the backup's own phrase.
 - `SafBackupFolder` has no automated test: a real tree grant only comes from the
   system picker. `TESTING.md` D6 is its check, on local and cloud providers.

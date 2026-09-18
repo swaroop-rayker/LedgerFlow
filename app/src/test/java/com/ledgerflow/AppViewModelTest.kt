@@ -114,6 +114,18 @@ class AppViewModelTest {
         assertThat(routeOf(vault)).isEqualTo(AppRoute.Recovery(RecoveryReason.CanaryMismatch))
     }
 
+    /**
+     * An interrupted restore (§16 Q11) is finished on its own route, and none of
+     * the housekeeping that writes into the vault runs against the half-built one.
+     */
+    @Test
+    fun anInterruptedRestore_routesToItsScreen_andSeedsNothing() = runTest(dispatcher) {
+        assertThat(routeOf(FakeVaultRepository(VaultState.RestoreInterrupted)))
+            .isEqualTo(AppRoute.RestoreInterrupted)
+        assertThat(drafts.purgeCalls).isEqualTo(0)
+        assertThat(parsePassesRequested).isEqualTo(0)
+    }
+
     @Test
     fun unlocked_routesToReady() {
         assertThat(routeOf(FakeVaultRepository(VaultState.Unlocked))).isEqualTo(AppRoute.Ready)

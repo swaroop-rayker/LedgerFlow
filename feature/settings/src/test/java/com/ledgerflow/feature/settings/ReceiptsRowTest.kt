@@ -58,10 +58,11 @@ class ReceiptsRowTest {
     /**
      * **The promises it must not make.** The CSV export carries no photograph,
      * so it must not be offered as a way to keep them. And although "Back up
-     * now" copies the photos into the backup folder, nothing in the app
-     * restores yet (§16 Q11), so the dialog must not promise recovery either —
-     * only what is true: this phone keeps no other copy, and a backup's copies
-     * stay in its folder.
+     * now" copies the photos into the backup folder, the only restore
+     * (ADR-0026) rebuilds a whole vault on a fresh install — no way to get a
+     * deleted photo back on this phone — so the dialog must not promise recovery
+     * either: only what is true, that this phone keeps no other copy and a
+     * backup's copies stay in its folder.
      */
     @Test
     fun theBody_promisesNeitherAnExportNorARestore() {

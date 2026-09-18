@@ -9,7 +9,16 @@ import com.ledgerflow.core.crypto.keystore.KeystoreKek
 import com.ledgerflow.core.data.analytics.DefaultAnalyticsRepository
 import com.ledgerflow.core.data.analytics.DefaultBudgetRepository
 import com.ledgerflow.core.data.analytics.DefaultRollupRepository
+import com.ledgerflow.core.data.backup.BackupDocumentReader
+import com.ledgerflow.core.data.backup.BackupFolderResolver
+import com.ledgerflow.core.data.backup.DefaultBackupRepository
+import com.ledgerflow.core.data.backup.DefaultRestoreRepository
+import com.ledgerflow.core.data.backup.SafBackupDocumentReader
+import com.ledgerflow.core.data.backup.SafBackupFolderResolver
 import com.ledgerflow.core.data.export.DefaultExportRepository
+import com.ledgerflow.core.data.inbox.DefaultPendingRepository
+import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
+import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
 import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
@@ -22,7 +31,12 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.BudgetRepository
 import com.ledgerflow.core.domain.analytics.RollupRepository
+import com.ledgerflow.core.domain.backup.BackupRepository
+import com.ledgerflow.core.domain.backup.RestoreRepository
 import com.ledgerflow.core.domain.export.ExportRepository
+import com.ledgerflow.core.domain.inbox.PendingRepository
+import com.ledgerflow.core.domain.ingest.AttachmentRepository
+import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
@@ -32,16 +46,6 @@ import com.ledgerflow.core.domain.vault.RecoveryKitRepository
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.StorageMaintenance
 import com.ledgerflow.core.domain.vault.VaultRepository
-import com.ledgerflow.core.data.inbox.DefaultPendingRepository
-import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
-import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
-import com.ledgerflow.core.domain.inbox.PendingRepository
-import com.ledgerflow.core.domain.ingest.AttachmentRepository
-import com.ledgerflow.core.domain.ingest.RawIngestRepository
-import com.ledgerflow.core.data.backup.BackupFolderResolver
-import com.ledgerflow.core.data.backup.DefaultBackupRepository
-import com.ledgerflow.core.data.backup.SafBackupFolderResolver
-import com.ledgerflow.core.domain.backup.BackupRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -241,4 +245,12 @@ public interface IngestModule {
      */
     @Binds
     public fun backupFolderResolver(impl: SafBackupFolderResolver): BackupFolderResolver
+
+    /** Restore from a backup at first run (§16 Q11). */
+    @Binds
+    public fun restoreRepository(impl: DefaultRestoreRepository): RestoreRepository
+
+    /** A single picked `.lfbk`, read through SAF. A seam for the same reason as the folder's. */
+    @Binds
+    public fun backupDocumentReader(impl: SafBackupDocumentReader): BackupDocumentReader
 }

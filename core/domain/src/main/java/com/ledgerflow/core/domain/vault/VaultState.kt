@@ -27,6 +27,18 @@ public sealed interface VaultState {
     public data class NeedsRecovery(val reason: RecoveryReason) : VaultState
 
     /**
+     * A restore from a backup (§16 Q11) started and did not finish: the
+     * process died between marking it begun and committing the rows.
+     *
+     * **The vault is not opened, by anything.** It may hold a phrase wrap and
+     * an empty database, and neither the app nor background capture may write
+     * into that — a captured SMS landing in it would collide with the rows the
+     * restore has yet to insert. The restore screen finishes the job; the same
+     * words are needed if a wrap was already written.
+     */
+    public data object RestoreInterrupted : VaultState
+
+    /**
      * A schema migration is running behind its own screen (SPEC.md §8.1).
      *
      * Distinct from [Working], which is a spinner inside a screen that already

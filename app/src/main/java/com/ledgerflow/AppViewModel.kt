@@ -28,6 +28,12 @@ public sealed interface AppRoute {
     public data object Loading : AppRoute
     public data object Onboarding : AppRoute
     public data class Recovery(val reason: RecoveryReason) : AppRoute
+
+    /**
+     * A restore from a backup was interrupted (§16 Q11). The restore screen is
+     * the only way on: the vault is not opened until the restore finishes.
+     */
+    public data object RestoreInterrupted : AppRoute
     public data object Ready : AppRoute
 
     /**
@@ -135,6 +141,7 @@ public class AppViewModel @Inject constructor(
                 VaultState.NeedsOnboarding -> AppRoute.Onboarding
                 VaultState.Unlocked -> AppRoute.Ready
                 is VaultState.NeedsRecovery -> AppRoute.Recovery(state.reason)
+                VaultState.RestoreInterrupted -> AppRoute.RestoreInterrupted
                 is VaultState.Upgrading -> AppRoute.Upgrading(state.from, state.to)
                 is VaultState.UpgradeBlocked -> AppRoute.UpgradeBlocked(state.reason)
                 VaultState.Working -> previous

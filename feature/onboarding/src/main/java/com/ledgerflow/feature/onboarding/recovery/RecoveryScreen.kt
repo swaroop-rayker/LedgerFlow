@@ -20,9 +20,9 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.PhraseEntry
-import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.ui.phrase.LfPhraseEntry
+import com.ledgerflow.feature.onboarding.phrase.rejectionMessage
 
 /**
  * The Recovery screen (SPEC.md §7.3 step 2).
@@ -164,19 +164,7 @@ private fun RecoveryFailure.message(): String = when (this) {
     is RecoveryFailure.Other ->
         "That didn't work. Your data has not been changed — you can try again."
 
-    is RecoveryFailure.PhraseRejected -> when (val v = validation) {
-        PhraseValidation.ChecksumMismatch ->
-            "Every word is valid but the phrase isn't — two words are probably in " +
-                "the wrong order."
-
-        is PhraseValidation.UnknownWord ->
-            "Word ${v.position} (\"${v.word}\") isn't in the recovery word list."
-
-        is PhraseValidation.WrongWordCount ->
-            "That's ${v.actual} words; a recovery phrase has ${v.expected}."
-
-        PhraseValidation.Valid -> ""
-    }
+    is RecoveryFailure.PhraseRejected -> validation.rejectionMessage()
 }
 
 // ── Previews (CLAUDE.md §5) ───────────────────────────────────────────────
