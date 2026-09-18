@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import com.ledgerflow.core.designsystem.theme.LfTheme
@@ -301,6 +302,44 @@ public fun LfCard(
     ) {
         content()
     }
+}
+
+/**
+ * Keyboard configurations with a job beyond layout.
+ *
+ * Named here rather than built inline at each call site, because the one that
+ * matters is a security property: a screen that forgets it looks and behaves
+ * identically, and only the keyboard's learned dictionary knows the difference.
+ */
+public object LfKeyboards {
+
+    /**
+     * **For any field that receives a recovery-phrase word** — onboarding's
+     * word challenge, the Recovery screen, and "Back up now".
+     *
+     * The 24 words are the only thing that protects a `.lfbk`, and a
+     * keyboard's personal dictionary is a store outside this app: Gboard and
+     * Samsung Keyboard learn typed words and, with sync on, carry them off the
+     * device. So the field is declared a **password** input, which those
+     * keyboards neither learn from nor offer suggestions into, with
+     * autocorrect off so a real word cannot be "corrected" into another one.
+     *
+     * The characters stay visible — there is no masking transformation — so a
+     * user can see what they typed; the app's own suggestion strip, from the
+     * BIP-39 list, replaces the keyboard's.
+     *
+     * **A limit, stated.** Android's explicit incognito signal,
+     * `EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING`, is not reachable through
+     * Compose's `KeyboardOptions`, so this relies on keyboards honouring the
+     * password variation — which the mainstream ones do, and which is the
+     * convention every password manager depends on. A keyboard that ignores
+     * it is outside what the app can control.
+     */
+    public val RecoveryWord: KeyboardOptions = KeyboardOptions(
+        capitalization = KeyboardCapitalization.None,
+        autoCorrectEnabled = false,
+        keyboardType = KeyboardType.Password,
+    )
 }
 
 @Composable

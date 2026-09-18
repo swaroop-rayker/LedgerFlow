@@ -31,6 +31,7 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.component.LfKeyboards
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
@@ -373,6 +374,8 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
             onValueChange = { onEvent(OnboardingEvent.ChallengeAnswerChanged(index, it)) },
             label = "Word $position",
             isError = state.challengeError,
+            // The keyboard must not learn the words (LfKeyboards.RecoveryWord).
+            keyboardOptions = LfKeyboards.RecoveryWord,
         )
     }
 

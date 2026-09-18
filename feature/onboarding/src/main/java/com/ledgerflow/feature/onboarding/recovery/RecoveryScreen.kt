@@ -22,6 +22,7 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.component.LfKeyboards
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.PhraseValidation
@@ -64,6 +65,8 @@ public fun RecoveryScreen(
                     state.draftIsUnknown -> "Not a word in the recovery list."
                     else -> "Type a word, then press space."
                 },
+                // The keyboard must not learn the words (LfKeyboards.RecoveryWord).
+                keyboardOptions = LfKeyboards.RecoveryWord,
             )
 
             Suggestions(state, onEvent)
