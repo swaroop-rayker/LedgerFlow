@@ -136,11 +136,14 @@ internal fun deletedSubtitle(state: MoreUiState): String = when {
  * - **Name the count**, because a dialog that only asks "are you sure?" is one
  *   people learn to tap through.
  * - **Say it cannot be undone**, in those words.
- * - **Tell the user to export rather than offering to back up.** The app
- *   cannot back these up for them: the `.lfbk` is phrase-derived (ADR-0011)
- *   and the app never holds the 24 words. Offering would be a promise it
- *   cannot keep — the same rule the purge dialog and the pre-migration
- *   snapshot already follow (ADR-0019).
+ * - **Say plainly that nothing else holds a copy.** It used to say "Export
+ *   first if you want to keep them" — but the export is CSV, and the
+ *   attachment CSV is metadata only (ADR-0023), so following that advice kept
+ *   no photograph at all. A sentence promising a durability the app does not
+ *   have is exactly what the purge dialog and the pre-migration snapshot are
+ *   forbidden to say (ADR-0019). The honest version names the gap: receipt
+ *   photos are not backed up yet (`SPEC.md` §16 Q23). When a backup that
+ *   carries them ships, this sentence should point at it instead.
  *
  * And one thing specific to this dialog: it says the **entries survive**.
  * Deleting a photograph is not deleting a purchase, and a user who thought
@@ -148,12 +151,9 @@ internal fun deletedSubtitle(state: MoreUiState): String = when {
  */
 @Composable
 private fun DeleteReceiptsDialog(state: MoreUiState, onEvent: (MoreEvent) -> Unit) {
-    val count = state.receipts.count
     LfDialog(
-        title = if (count == 1) "Delete 1 receipt image?" else "Delete $count receipt images?",
-        body = "This frees ${formatSize(state.receipts.bytes)} and cannot be undone. " +
-            "Your entries and their amounts are untouched — only the photographs go. " +
-            "Export first if you want to keep them.",
+        title = deleteReceiptsTitle(state),
+        body = deleteReceiptsBody(state),
         confirmText = "Delete",
         // Warning emphasis also stops an outside tap from standing in for an
         // answer, which on an irreversible action would defeat the point.
@@ -162,6 +162,21 @@ private fun DeleteReceiptsDialog(state: MoreUiState, onEvent: (MoreEvent) -> Uni
         onDismiss = { onEvent(MoreEvent.ReceiptDeleteDismissed) },
     )
 }
+
+/** The delete dialog's title, with the count named (see [DeleteReceiptsDialog]). */
+internal fun deleteReceiptsTitle(state: MoreUiState): String {
+    val count = state.receipts.count
+    return if (count == 1) "Delete 1 receipt image?" else "Delete $count receipt images?"
+}
+
+/**
+ * The delete dialog's body. Separate from the composable so the promise it
+ * makes — or refuses to make — is pinned by a test rather than by review.
+ */
+internal fun deleteReceiptsBody(state: MoreUiState): String =
+    "This frees ${formatSize(state.receipts.bytes)} and cannot be undone. " +
+        "Your entries and their amounts are untouched — only the photographs go. " +
+        "Receipt photos aren't backed up yet, so deleted ones can't be recovered."
 
 /**
  * What the receipts row says about itself (ADR-0023).
