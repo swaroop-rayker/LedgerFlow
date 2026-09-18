@@ -91,10 +91,19 @@ class Bip39ValidationTest {
      * looks like a hang."
      *
      * Asserts the ordering property directly: rejecting a bad phrase must be
-     * orders of magnitude cheaper than deriving a seed from a good one. The
-     * threshold is deliberately loose so this does not become a flaky
-     * performance test on a loaded CI runner -- it is checking that no KDF runs
-     * at all, not measuring throughput.
+     * orders of magnitude cheaper than deriving a seed from a good one. It is
+     * checking that no KDF runs at all, not measuring throughput.
+     *
+     * **Each side is timed as its fastest run, not its average.** The original
+     * version divided one 100-run loop by 100 and failed under a loaded
+     * `preMergeCheck` (3 of 6 full uncached runs on 2026-09-17): a single
+     * scheduler stall anywhere in that loop was charged to the average, and the
+     * 20x margin could not absorb it. A stall can only ever make a run
+     * *slower*, so the minimum is the one statistic load cannot inflate, and it
+     * is the right estimate of "how long does the work take". The seed side
+     * takes a minimum too, over a few runs, for the same reason in the other
+     * direction: a lucky fast seed run is impossible, but symmetry keeps the
+     * two numbers the same kind of measurement.
      */
     @Test
     fun validate_rejectsBadPhraseWithoutRunningTheKdf() {
@@ -109,12 +118,12 @@ class Bip39ValidationTest {
             Bip39.toSeed(validPhrase)
         }
 
-        val validateNanos = measureNanoTime { repeat(100) { Bip39.validate(bad) } } / 100
-        val seedNanos = measureNanoTime { Bip39.toSeed(validPhrase) }
+        val validateNanos = (1..VALIDATE_RUNS).minOf { measureNanoTime { Bip39.validate(bad) } }
+        val seedNanos = (1..SEED_RUNS).minOf { measureNanoTime { Bip39.toSeed(validPhrase) } }
 
         assertThat(Bip39.validate(bad)).isInstanceOf(MnemonicCheck.Invalid::class.java)
-        // A 20x margin asserts "no KDF ran here", not a throughput figure, so a
-        // loaded CI runner cannot make this flaky. The real ratio is ~1000x.
+        // A 20x margin asserts "no KDF ran here", not a throughput figure. The
+        // real ratio is ~1000x.
         assertThat(validateNanos * 20).isLessThan(seedNanos)
     }
 
@@ -130,5 +139,13 @@ class Bip39ValidationTest {
         val error = runCatching { Bip39.toSeed(validPhrase.take(23)) }.exceptionOrNull()
 
         assertThat(error).isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    private companion object {
+        /** Enough samples that at least one lands between scheduler stalls. */
+        const val VALIDATE_RUNS = 100
+
+        /** Each run is a full 2048-round PBKDF2, so a handful is plenty. */
+        const val SEED_RUNS = 5
     }
 }
