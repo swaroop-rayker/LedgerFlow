@@ -56,19 +56,22 @@ class ReceiptsRowTest {
     }
 
     /**
-     * **The promise it must not make.** Nothing in the app keeps a copy of a
-     * receipt photograph: the CSV export carries metadata only, and no backup
-     * has a trigger yet (`SPEC.md` §16 Q23). Advising an export as though it
-     * preserved the images is the exact durability claim ADR-0019 forbids.
+     * **The promises it must not make.** The CSV export carries no photograph,
+     * so it must not be offered as a way to keep them. And although "Back up
+     * now" copies the photos into the backup folder, nothing in the app
+     * restores yet (§16 Q11), so the dialog must not promise recovery either —
+     * only what is true: this phone keeps no other copy, and a backup's copies
+     * stay in its folder.
      */
     @Test
-    fun theBody_neverSuggestsAnExportOrBackupKeepsThePhotos() {
+    fun theBody_promisesNeitherAnExportNorARestore() {
         val body = deleteReceiptsBody(state(count = 3, bytes = 900_000))
 
         assertThat(body).doesNotContain("Export")
         assertThat(body).doesNotContain("export")
-        assertThat(body).contains("aren't backed up")
-        assertThat(body).contains("can't be recovered")
+        assertThat(body.lowercase()).doesNotContain("restore")
+        assertThat(body).contains("keeps no other copy")
+        assertThat(body).contains("stay in that backup folder")
     }
 
     /** Irreversible, said in those words; and the entries survive. */

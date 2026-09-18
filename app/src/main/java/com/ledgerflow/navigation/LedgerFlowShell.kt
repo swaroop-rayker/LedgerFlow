@@ -63,6 +63,8 @@ import com.ledgerflow.feature.ledger.LedgerScreen
 import com.ledgerflow.feature.ledger.LedgerViewModel
 import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.settings.MoreScreen
+import com.ledgerflow.feature.settings.backup.BackupNowScreen
+import com.ledgerflow.feature.settings.backup.BackupNowViewModel
 import com.ledgerflow.feature.settings.MoreViewModel
 
 /**
@@ -282,6 +284,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             onBudgets = { navController.navigate(Destination.Budgets) },
             onExport = { navController.navigate(Destination.Export) },
             onDeletedEntries = { navController.navigate(Destination.DeletedEntries) },
+            onBackUp = { navController.navigate(Destination.BackUpNow) },
             onNotificationAccess = { navController.navigate(Destination.NotificationAccess) },
             onEvent = viewModel::onEvent,
         )
@@ -372,6 +375,11 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
             onEvent = viewModel::onEvent,
             onBack = { navController.popBackStack() },
         )
+    }
+    composable<Destination.BackUpNow> {
+        val viewModel: BackupNowViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        BackupNowScreen(state = state, onEvent = viewModel::onEvent)
     }
     composable<Destination.Export> { ExportRoute(onBack = navController::popBackStack) }
     // §5.2. Full-screen rather than a tab destination: it sends the user to a
@@ -487,6 +495,7 @@ private val Destination.label: String
         Destination.Budgets -> "Budgets"
         Destination.Export -> "Export"
         Destination.DeletedEntries -> "Deleted"
+        Destination.BackUpNow -> "Back up"
         Destination.Inbox -> "Inbox"
         is Destination.InboxReview -> "Review"
         Destination.ScanReceipt -> "Scan"

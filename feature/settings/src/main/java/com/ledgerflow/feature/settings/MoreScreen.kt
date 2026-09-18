@@ -22,6 +22,9 @@ import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * The "More" tab (SPEC.md §9.3): everything that is not one of the three main
@@ -38,6 +41,7 @@ public fun MoreScreen(
     onExport: () -> Unit,
     onDeletedEntries: () -> Unit,
     onNotificationAccess: () -> Unit,
+    onBackUp: () -> Unit,
     onEvent: (MoreEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -75,6 +79,14 @@ public fun MoreScreen(
                 title = "Budgets",
                 subtitle = "Set a limit per category",
                 onClick = onBudgets,
+            )
+            // §16 Q23. Directly above Export, because the two are easy to
+            // confuse and must not be: Export writes plain CSV anyone can read;
+            // this writes the encrypted backup only the 24 words can open.
+            MoreRow(
+                title = "Back up now",
+                subtitle = backupSubtitle(state),
+                onClick = onBackUp,
             )
             MoreRow(
                 title = "Export",
@@ -141,9 +153,12 @@ internal fun deletedSubtitle(state: MoreUiState): String = when {
  *   attachment CSV is metadata only (ADR-0023), so following that advice kept
  *   no photograph at all. A sentence promising a durability the app does not
  *   have is exactly what the purge dialog and the pre-migration snapshot are
- *   forbidden to say (ADR-0019). The honest version names the gap: receipt
- *   photos are not backed up yet (`SPEC.md` §16 Q23). When a backup that
- *   carries them ships, this sentence should point at it instead.
+ *   forbidden to say (ADR-0019). Since "Back up now" (§16 Q23) copies the
+ *   photos into the backup folder, the sentence says exactly that much: this
+ *   phone keeps no other copy, and photos included in a backup stay in that
+ *   folder. **It does not say they can be restored**, because nothing in the
+ *   app restores yet (§16 Q11) — when a restore screen ships, this is the
+ *   sentence to revisit.
  *
  * And one thing specific to this dialog: it says the **entries survive**.
  * Deleting a photograph is not deleting a purchase, and a user who thought
@@ -163,6 +178,21 @@ private fun DeleteReceiptsDialog(state: MoreUiState, onEvent: (MoreEvent) -> Uni
     )
 }
 
+/**
+ * What the backup row says about itself (§16 Q23).
+ *
+ * **The never-backed-up case says what that means**, not merely "never": the
+ * app keeps no copy anywhere else, and a user reading Settings is owed that
+ * sentence before they lose the phone rather than after. Dates only, in the
+ * device's locale; a backup's time of day does not change what to do next.
+ */
+internal fun backupSubtitle(state: MoreUiState, locale: Locale = Locale.getDefault()): String {
+    val last = state.lastBackupAt
+        ?: return "No backup yet. Your data exists only on this phone."
+    val date = DateFormat.getDateInstance(DateFormat.MEDIUM, locale).format(Date(last))
+    return "Last backup $date. Asks for your 24 words."
+}
+
 /** The delete dialog's title, with the count named (see [DeleteReceiptsDialog]). */
 internal fun deleteReceiptsTitle(state: MoreUiState): String {
     val count = state.receipts.count
@@ -176,7 +206,8 @@ internal fun deleteReceiptsTitle(state: MoreUiState): String {
 internal fun deleteReceiptsBody(state: MoreUiState): String =
     "This frees ${formatSize(state.receipts.bytes)} and cannot be undone. " +
         "Your entries and their amounts are untouched — only the photographs go. " +
-        "Receipt photos aren't backed up yet, so deleted ones can't be recovered."
+        "This phone keeps no other copy. Photos included in a backup made with " +
+        "\u201cBack up now\u201d stay in that backup folder."
 
 /**
  * What the receipts row says about itself (ADR-0023).
@@ -285,6 +316,7 @@ private fun MorePreview() {
             onExport = {},
             onDeletedEntries = {},
             onNotificationAccess = {},
+            onBackUp = {},
             onEvent = {},
         )
     }
@@ -304,6 +336,7 @@ private fun MoreEmptyBinPreview() {
             onExport = {},
             onDeletedEntries = {},
             onNotificationAccess = {},
+            onBackUp = {},
             onEvent = {},
         )
     }

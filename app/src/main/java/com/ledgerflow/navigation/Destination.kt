@@ -62,6 +62,14 @@ public sealed interface Destination {
     @Serializable
     public data object DeletedEntries : Destination
 
+    /**
+     * "Back up now", reached from More (§16 Q23). Full-screen: it takes the 24
+     * words, and a bottom bar under that is an invitation to wander off with
+     * them half-typed.
+     */
+    @Serializable
+    public data object BackUpNow : Destination
+
     /** The approval queue, reached from the centre action's dial (§9.3). */
     @Serializable
     public data object Inbox : Destination

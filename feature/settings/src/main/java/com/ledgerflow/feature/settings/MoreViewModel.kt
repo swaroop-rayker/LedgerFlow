@@ -3,6 +3,7 @@ package com.ledgerflow.feature.settings
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
@@ -85,6 +86,13 @@ public data class MoreUiState(
      * in system Settings and changes without telling anyone.
      */
     val captureHealth: NotificationCaptureHealth = NotificationCaptureHealth.RECONNECTING,
+
+    /**
+     * When the last **verified** backup was written, or null if never
+     * (§16 Q23). Only a backup that passed its read-back check records this,
+     * so the row never reassures on the strength of a failed one.
+     */
+    val lastBackupAt: Long? = null,
 )
 
 @HiltViewModel
@@ -92,6 +100,7 @@ public class MoreViewModel @Inject constructor(
     ledger: LedgerRepository,
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
     private val attachments: AttachmentRepository,
+    backups: BackupRepository,
 ) : ViewModel() {
 
     /**
@@ -137,7 +146,11 @@ public class MoreViewModel @Inject constructor(
             receipts = images,
             confirmingReceiptDelete = confirming,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), MoreUiState())
+    }
+        // Joined second rather than as a sixth argument: `combine` is typed
+        // to five, and the array form would give up the types.
+        .combine(backups.lastBackupAt()) { state, last -> state.copy(lastBackupAt = last) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), MoreUiState())
 
     init {
         refresh()
