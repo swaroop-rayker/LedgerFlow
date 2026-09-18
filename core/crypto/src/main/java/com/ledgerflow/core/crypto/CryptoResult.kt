@@ -41,6 +41,12 @@ public sealed interface UnlockFailure {
 }
 
 /** Outcome of an unlock attempt. */
+/** Whether a phrase opens this vault, from [DekManager.verifyPhrase]. Carries no key. */
+public sealed interface PhraseVerification {
+    public data object Opens : PhraseVerification
+    public data class Failure(val reason: UnlockFailure) : PhraseVerification
+}
+
 public sealed interface UnlockResult {
     public data class Success(val dek: Dek) : UnlockResult
     public data class Failure(val reason: UnlockFailure) : UnlockResult

@@ -96,6 +96,42 @@ public class DekManager(
         }
     }
 
+    /**
+     * Does [mnemonic] open **this** vault? Read-only: nothing is written,
+     * nothing is regenerated, and the DEK it opens is zeroed before return.
+     *
+     * For "Back up now" (§16 Q23), which must not seal a backup under words
+     * that are not this vault's. Every valid BIP-39 phrase passes the checksum,
+     * so without this a phrase from an old install — or a typo that happens to
+     * land on another valid phrase — would produce a backup that reports
+     * success and can never be restored.
+     *
+     * Not [unlockWithPhrase], deliberately: that one's success path
+     * regenerates the Keystore key and rewraps the DEK, which is right for
+     * Recovery and a side effect on the key path that a backup has no business
+     * causing. Same validation-before-KDF order (CLAUDE.md §7), same KEK-B
+     * derivation — nothing new is derived and nothing is stored.
+     */
+    public fun verifyPhrase(mnemonic: List<String>): PhraseVerification {
+        val validation = Bip39.validate(mnemonic)
+        if (validation is MnemonicCheck.Invalid) {
+            return PhraseVerification.Failure(UnlockFailure.InvalidMnemonic(validation.error))
+        }
+        val blob = when (val decoded = readBlob(KekId.PHRASE)) {
+            is WrappedDekBlob.DecodeResult.Failure -> return PhraseVerification.Failure(decoded.reason)
+            is WrappedDekBlob.DecodeResult.Success -> decoded.blob
+        }
+        val kekB = KeyDerivation.kekB(Bip39.toSeed(mnemonic), blob.salt)
+        val dekBytes = AesGcm.decrypt(kekB, blob.sealed, blob.aad)
+        kekB.fill(0)
+        return if (dekBytes == null) {
+            PhraseVerification.Failure(UnlockFailure.AuthenticationFailed)
+        } else {
+            dekBytes.fill(0)
+            PhraseVerification.Opens
+        }
+    }
+
     /** The expensive half of [unlockWithPhrase], reached only after validation. */
     private fun unwrapWithPhrase(
         blob: WrappedDekBlob.Decoded,

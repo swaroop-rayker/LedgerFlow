@@ -32,6 +32,64 @@ class DekManagerTest {
     private fun initialize(): Dek =
         (manager.initialize(mnemonic) as UnlockResult.Success).dek
 
+    // ─── verifyPhrase: "Back up now" checks the words are this vault's ──────
+
+    @Test
+    fun verifyPhrase_thisVaultsPhrase_opens() {
+        initialize()
+
+        assertThat(manager.verifyPhrase(mnemonic)).isEqualTo(PhraseVerification.Opens)
+    }
+
+    /**
+     * **The case the check exists for.** A different phrase is perfectly
+     * valid BIP-39, so the checksum alone would wave it through, and a backup
+     * sealed under it could never be restored.
+     */
+    @Test
+    fun verifyPhrase_anotherValidPhrase_doesNotOpen() {
+        initialize()
+
+        assertThat(manager.verifyPhrase(otherMnemonic))
+            .isEqualTo(PhraseVerification.Failure(UnlockFailure.AuthenticationFailed))
+    }
+
+    @Test
+    fun verifyPhrase_anInvalidPhrase_isRejectedBeforeAnyKdf() {
+        initialize()
+        val typo = mnemonic.toMutableList().apply { this[3] = "notaword" }
+
+        val result = manager.verifyPhrase(typo)
+
+        assertThat(result).isInstanceOf(PhraseVerification.Failure::class.java)
+        assertThat((result as PhraseVerification.Failure).reason)
+            .isInstanceOf(UnlockFailure.InvalidMnemonic::class.java)
+    }
+
+    /**
+     * **Read-only, unlike [DekManager.unlockWithPhrase].** A backup must not
+     * regenerate the Keystore key or rewrite a wrapped blob as a side effect.
+     */
+    @Test
+    fun verifyPhrase_writesNothingAndCreatesNoKey() {
+        initialize()
+        val keysBefore = keystore.createCount
+        val phraseBlob = store.read(KekId.PHRASE)?.copyOf()
+        val keystoreBlob = store.read(KekId.KEYSTORE)?.copyOf()
+
+        manager.verifyPhrase(mnemonic)
+        manager.verifyPhrase(otherMnemonic)
+
+        assertThat(keystore.createCount).isEqualTo(keysBefore)
+        assertThat(store.read(KekId.PHRASE)).isEqualTo(phraseBlob)
+        assertThat(store.read(KekId.KEYSTORE)).isEqualTo(keystoreBlob)
+    }
+
+    @Test
+    fun verifyPhrase_beforeAnyVaultExists_saysSo() {
+        assertThat(manager.verifyPhrase(mnemonic)).isInstanceOf(PhraseVerification.Failure::class.java)
+    }
+
     @Test
     fun initialize_writesBothWrappedBlobs() {
         initialize()
