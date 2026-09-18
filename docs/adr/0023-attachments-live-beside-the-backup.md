@@ -190,6 +190,43 @@ Three implementation notes, all load-bearing:
 inside it. The two seals are deliberately named apart so that nobody later
 assumes one file opens with the other's key.
 
+### Amendment (P4, implementation): the backup copy, built — and five things the decision did not say
+
+The sidecar half of this ADR is now built: `AttachmentBackupKey`,
+`LfbaContainer` (`:core:crypto`) and `AttachmentBackup` (`:core:data`). Five
+details were decided in the doing, each because the alternative was wrong in a
+way that would only have shown up at a restore.
+
+- **The attachment id is bound into each file's authenticated header.** The
+  folder holds one file per image, named by id. Renaming two of them past each
+  other would otherwise produce two images that decrypt perfectly onto each
+  other's entries — the `sha256` on the row catches it eventually, but reports
+  "corrupt" for what is actually a misnaming. In the AAD, the swap fails
+  outright and the reader can say which file it found.
+- **The bytes are re-sealed, never copied.** The local file is sealed under the
+  DEK-derived key, so copying it would put a file in the backup folder that is
+  readable by anything holding this device's Keystore *and* unopenable on the
+  new install a restore exists for. This is the ADR's own "a leaked backup
+  folder must be as useless as a leaked `.lfbk`", made concrete.
+- **"Already copied" is judged by the phrase, not by the filesystem.** This ADR
+  says an attachment is written once and never rewritten. Taken literally that
+  is wrong after a phrase rotation: every copy is then sealed under words the
+  user no longer has, and skipping them leaves a folder that quietly cannot be
+  restored. A copy counts as current only if its `keyCheck` matches the phrase
+  in hand — a header read, so the pass stays proportional to new receipts.
+- **Every sidecar write is decrypt-verified before its rename**, unlike the
+  local store, which deliberately skips it. §7's rule applies here because this
+  copy may be the user's only one.
+- **A local file that disagrees with its row is not copied.** The one place
+  meant to survive a corruption must not be handed one.
+
+**What is still missing is the trigger, and it is not a small remainder.**
+Nothing in the app writes a `.lfbk` either: `DatabaseBackupManager` has no
+production caller, and a scheduled job cannot obtain a phrase-derived key
+(ADR-0011). So this machinery is proven and dormant. Recorded as `SPEC.md` §16
+Q23, where the options — a manual backup that asks for the words, versus
+storing key material a worker could use — are the owner's to choose.
+
 ## Consequences
 
 **What this makes easy.** A phrase-only restore that returns images as well as

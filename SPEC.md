@@ -907,7 +907,31 @@ The schema was always currency-tagged, so the storage cost of this is zero. What
 |---|---|---|---|
 | Data export | CSV (one file per table, zipped) — **shipped, ADR-0017** | none (user's choice, warned) | Manual, SAF destination |
 | Data export | XLSX (multi-sheet: entries, line items, categories, merchants, budgets, summary pivots) | none | Manual, SAF destination |
-| **Full backup** | `.lfbk` (custom container) | **AES-256-GCM, key = HKDF-SHA256(24-word phrase seed). Never the passphrase (§7.2).** | Manual + `PeriodicWorkRequest` nightly to a user-granted SAF tree URI |
+| **Full backup** | `.lfbk` (custom container) | **AES-256-GCM, key = HKDF-SHA256(24-word phrase seed). Never the passphrase (§7.2).** | Manual + `PeriodicWorkRequest` nightly to a user-granted SAF tree URI — **neither trigger is built; see §16 Q23** |
+| **Receipt images** | one `.lfba` per attachment, in an `attachments/` subfolder of the same tree (ADR-0023) | AES-256-GCM, key = `HKDF-SHA256(seed, salt = per file, info = "lfbk-attachment-v1")` | Written once per image, alongside a `.lfbk` write |
+
+**The `.lfba` sidecar container** (ADR-0023, `LfbaContainer`). Same shape as the
+`.lfbk` header and for the same three reasons — explicit `kdfParamsLen`, the
+header as GCM AAD, and `keyCheck` to separate "wrong words" from "damaged
+file" — plus one field the `.lfbk` has no use for:
+
+```
+magic "LFBA" | formatVersion u16 | kdfId u8 | kdfParamsLen u16 | kdfParams
+salt u8[16]  | nonce u8[12]      | keyCheck u8[4]
+idLen u16    | attachmentId      | plaintextLen u64 | ciphertext + tag
+```
+
+**`attachmentId` is in the authenticated header**, because the folder holds one
+file per image named by that id: renaming two files past each other would
+otherwise restore two perfectly decryptable images onto each other's entries.
+Bound into the AAD, the swap fails to authenticate and the reader can say which
+file it actually found. **The copy is re-sealed, never copied** — locally an
+image is sealed under a DEK-derived key, so a copied file would be readable by
+anything holding the device's Keystore *and* unopenable on the new install a
+restore is for. **A copy counts as current only if its `keyCheck` matches the
+phrase in hand**, so a phrase rotation re-seals the folder instead of leaving
+files nobody can open. Each write is `.tmp` → fsync → **decrypt-and-parse the
+file that landed** → rename, §7's rule for the backup writer.
 
 `.lfbk` container format (**all integers big-endian**):
 
@@ -1921,3 +1945,9 @@ Added at P3, while verifying §5.7's budget form on the device:
 
     **No screenshot could have caught this**, which is the point worth keeping: the picture was correct the whole time and only the semantics node was wrong. `LfChipSelectionSemanticsTest` asserts all three cases; removing the modifier turns the two that assert presence red and correctly leaves the third — which asserts *absence* on a label chip — green.
 22. **A bill paid partly from a merchant wallet — which figure is the debit?** Found on the owner's bigbasket invoice (private corpus, `2026-09-12-bigbasket-a4-pdf`): the invoice value is ₹1,776.17, of which ₹1,443.41 and ₹5.17 came from the bigbasket wallet and ₹327.60 was charged to RuPay. The page also prints `Final Total Rs.332.76` and `Payable Amount Rs. 0.00`. **The parser's answer is settled and is not this question:** it reads the printed invoice value, which is what the corpus fixture records, because that is what the paper says the purchase cost. The open question is the ledger's. If topping up the wallet was recorded as spending, booking ₹1,776.17 again double-counts ₹1,448.58; if it was not, booking only the card charge hides most of a grocery bill from item-grain analytics (ADR-0018). The same shape will arrive from Paytm, Amazon Pay and any cashback balance. Not decided unilaterally (CLAUDE.md §10: ledger semantics).
+
+23. **Nothing in the app writes or restores a backup, and the nightly worker §5.9 specifies cannot be built as written.** `DatabaseBackupManager.writeBackup` and `restore` have no production caller — only `BackupRestoreRoundTripTest`. There is no `BackupWorker`, no "Back up now", no restore screen; onboarding takes the SAF tree grant and records `backupTreeUri`, and nothing has ever written to it. **This is not an oversight that can be closed by wiring it up.** A `.lfbk` is phrase-derived (ADR-0011) and the app never holds the phrase after onboarding, which is the same wall ADR-0019 hit for the pre-migration snapshot: a scheduled job has no way to obtain the key. §5.9's nightly `PeriodicWorkRequest` and BUG4(c)'s "`lastBackupAt` age > 7 days" banner both assume a trigger that does not exist, so **the app currently promises a durability it does not have** — the one thing §7 and ADR-0019 both say never to do.
+
+    The options are not equal and the choice is the owner's. **A manual "Back up now" that asks for the 24 words each time** — validate the checksum, derive the seed, write the `.lfbk` and ADR-0023's images, zero the seed — is honest and needs no new key material, at the cost of §5.9's nightly promise, which would have to be struck rather than deferred. **Storing a backup key** so a worker can run unattended is the obvious alternative and is a third wrap on the DEK path, which ADR-0011 and §7 forbid; it would need a superseding ADR arguing why a device-local convenience factor may protect a file that leaves the device. **Keeping the phrase in memory for a session** is the same objection in a shorter-lived form. Whatever is chosen also decides what the Dashboard banner may claim.
+
+    The machinery below the trigger is built and tested either way: `LfbkContainer`, `DatabaseBackupManager`, and — since this session — `AttachmentBackup` with its `.lfba` container and phrase-derived key, covered by `AttachmentBackupRoundTripTest` on the device (back up, wipe, restore onto a *fresh vault with a different DEK*, every image byte-for-byte). What is missing is the decision about when it runs and how it gets the words.

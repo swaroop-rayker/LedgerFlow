@@ -3,14 +3,11 @@ package com.ledgerflow.core.data.ingest
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
-import com.ledgerflow.core.crypto.AesGcm
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.AttachmentEntity
 import com.ledgerflow.core.domain.ingest.AttachmentOutcome
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
-import java.io.File
-import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
@@ -56,6 +53,18 @@ import kotlinx.coroutines.withContext
  * backup writer. A process death mid-write otherwise leaves a truncated file
  * that authenticates as damaged, and the row would point at it. The rename is
  * the commit point, and the row is written only after it succeeds.
+ *
+ * The layout and that write live in [LocalAttachmentSeal], shared with
+ * [AttachmentBackup] — which reads these files to seal a copy for the backup
+ * folder and writes them when restoring one. Two descriptions of one byte
+ * format is how a file written by one path stops opening on the other.
+ *
+ * Unlike the backup writer this does **not** decrypt-and-verify before the
+ * rename. That rule exists because a `.lfbk` is the user's last copy and an
+ * unverified one is not a backup; a receipt image has the ledger entry beside
+ * it and a phrase-sealed copy in the backup tree, so reading every image back
+ * through GCM on the capture path would buy little for a cost paid on every
+ * scan.
  */
 @Singleton
 public class DefaultAttachmentRepository @Inject constructor(
@@ -90,9 +99,9 @@ public class DefaultAttachmentRepository @Inject constructor(
 
                 val id = ids.generate()
                 val relativePath = "$id$EXTENSION"
-                val sealed = AesGcm.encrypt(key = key, plaintext = bytes)
+                val sealed = LocalAttachmentSeal.seal(key, bytes)
 
-                if (!writeAtomically(relativePath, sealed)) {
+                if (!LocalAttachmentSeal.writeAtomically(files.resolve(relativePath), sealed)) {
                     return@withContext AttachmentOutcome.WriteFailed
                 }
 
@@ -133,15 +142,7 @@ public class DefaultAttachmentRepository @Inject constructor(
                 return@withContext null
             }
 
-            val raw = file.readBytes()
-            if (raw.size <= AesGcm.NONCE_LENGTH) return@withContext null
-            AesGcm.decrypt(
-                key = key,
-                sealed = AesGcm.Sealed(
-                    nonce = raw.copyOfRange(0, AesGcm.NONCE_LENGTH),
-                    ciphertext = raw.copyOfRange(AesGcm.NONCE_LENGTH, raw.size),
-                ),
-            )
+            LocalAttachmentSeal.open(key, file.readBytes())
         } catch (_: java.io.IOException) {
             null
         } finally {
@@ -173,51 +174,9 @@ public class DefaultAttachmentRepository @Inject constructor(
         }.getOrDefault(0)
     }
 
-    /**
-     * `.tmp` → fsync → rename, and the row only after.
-     *
-     * The same discipline §7 requires of the backup writer, for the same
-     * reason: without the rename as a commit point, a process death mid-write
-     * leaves a truncated file that a row already points at, and the failure
-     * surfaces much later as an image that will not authenticate.
-     *
-     * Unlike the backup writer this does **not** decrypt-and-verify before the
-     * rename. That rule exists because a `.lfbk` is the user's last copy and an
-     * unverified one is not a backup; a receipt image has the ledger entry
-     * beside it and a phrase-sealed copy in the backup tree, so reading every
-     * image back through GCM on the capture path would buy little for a cost
-     * paid on every scan.
-     */
-    private fun writeAtomically(relativePath: String, sealed: AesGcm.Sealed): Boolean = try {
-        val directory = files.directory().apply { mkdirs() }
-        val target = File(directory, relativePath)
-        val temp = File(directory, "$relativePath$TEMP_SUFFIX")
-
-        java.io.FileOutputStream(temp).use { stream ->
-            stream.write(sealed.nonce)
-            stream.write(sealed.ciphertext)
-            stream.flush()
-            // The bytes, and the directory entry that names them.
-            stream.fd.sync()
-        }
-
-        if (temp.renameTo(target)) {
-            true
-        } else {
-            temp.delete()
-            false
-        }
-    } catch (_: java.io.IOException) {
-        false
-    }
-
-    private fun sha256(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(bytes)
-            .joinToString("") { "%02x".format(it) }
+    private fun sha256(bytes: ByteArray): String = LocalAttachmentSeal.sha256(bytes)
 
     private companion object {
         val EXTENSION = ".${AttachmentFiles.EXTENSION}"
-
-        const val TEMP_SUFFIX = ".tmp"
     }
 }

@@ -103,15 +103,36 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
     /** The open handle, for tests asserting on rows this module's ports hide. */
     val database: LedgerFlowDatabase get() = session.requireDatabase()
 
-    suspend fun open() {
+    /**
+     * The phrase this vault was initialised with.
+     *
+     * Exposed because a `.lfbk` and ADR-0023's sealed images are keyed by the
+     * *seed*, not by the DEK, so a test that backs up and restores needs the
+     * words — and a restore onto a "new device" is a **second vault with its
+     * own DEK** reading a backup written by the first.
+     */
+    lateinit var mnemonic: List<String>
+        private set
+
+    /**
+     * @param keepFiles leaves `filesDir/attachments/` alone, for a test that
+     *   opens a second vault and expects the first one's sealed images to be
+     *   gone or present by its own arrangement rather than by [open]'s.
+     */
+    suspend fun open(
+        phrase: List<String> = Bip39.generate(SecureRandom()),
+        keepFiles: Boolean = false,
+    ) {
         keyDirectory.deleteRecursively()
         deleteKeystoreEntry()
         context.deleteDatabase(TEST_DATABASE)
+        if (!keepFiles) File(context.filesDir, "attachments").deleteRecursively()
 
         val store = FileWrappedDekStore(keyDirectory)
         val dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
         session = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, TEST_DATABASE)
-        session.initialize(VaultInitRequest(Bip39.generate(SecureRandom()), BASE_CURRENCY))
+        mnemonic = phrase
+        session.initialize(VaultInitRequest(phrase, BASE_CURRENCY))
 
         storage = DefaultStorageMaintenance(session, Dispatchers.IO)
         categories = DefaultCategoryRepository(session, ids, clock, storage, Dispatchers.IO)
