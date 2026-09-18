@@ -80,14 +80,12 @@ public data class AttachmentRestoreReport(
  * which deliberately skips verification because the entry and this copy are
  * both beside it.
  *
- * ## Nothing here has a caller yet
+ * ## Its caller is "Back up now"
  *
- * There is no scheduled backup in the app, because writing a `.lfbk` needs the
- * BIP-39 seed and the app never holds the phrase after onboarding (ADR-0011).
- * §5.9's nightly worker is therefore unimplementable as written — the same wall
- * ADR-0019 hit for the pre-migration snapshot — and choosing what replaces it
- * is the owner's, recorded as `SPEC.md` §16 Q23. This class is built and tested
- * so that whichever trigger is chosen, its hardest part is already proven.
+ * `DefaultBackupRepository` runs this after the `.lfbk` is written and
+ * verified (ADR-0025). There is no scheduled backup: writing one needs the
+ * BIP-39 seed, and the app never holds the phrase after onboarding (ADR-0011),
+ * so the user starts each backup and types the words for it.
  */
 @Singleton
 public class AttachmentBackup @Inject constructor(

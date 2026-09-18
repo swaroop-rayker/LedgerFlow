@@ -223,9 +223,8 @@ way that would only have shown up at a restore.
 **What is still missing is the trigger, and it is not a small remainder.**
 Nothing in the app writes a `.lfbk` either: `DatabaseBackupManager` has no
 production caller, and a scheduled job cannot obtain a phrase-derived key
-(ADR-0011). So this machinery is proven and dormant. Recorded as `SPEC.md` §16
-Q23, where the options — a manual backup that asks for the words, versus
-storing key material a worker could use — are the owner's to choose.
+(ADR-0011). **Resolved by ADR-0025**: the owner chose a manual "Back up now"
+that asks for the words each time, and it now calls this machinery.
 
 ## Consequences
 

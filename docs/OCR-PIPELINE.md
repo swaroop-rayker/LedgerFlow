@@ -286,8 +286,8 @@ reasoning and the two alternatives are in ADR-0023.
   seals each image into `<backup folder>/attachments/<id>.lfba` under a
   phrase-derived key, and restores them onto a fresh vault byte-for-byte
   (`AttachmentBackupRoundTripTest`, on the device). The count ADR-0023 promises
-  is what `AttachmentRestoreReport.notFound` carries. **It has no caller**, and
-  neither does the `.lfbk` writer — see the cross-cutting list.
+  is what `AttachmentRestoreReport.notFound` carries. Its caller is "Back up
+  now" (ADR-0025), which writes the `.lfbk` first and these after it.
 - **The purge still does not unlink.** `ON DELETE CASCADE` takes the
   `attachment` row and leaves the bytes, and nothing else enumerates that
   directory. `AttachmentDao.pathsForEntry` exists for exactly this and
@@ -370,17 +370,16 @@ yet**: step 20's suggestion in the review screen is the other half.
 ## Cross-cutting, still open
 
 - ~~**Attachment images beside the `.lfbk`**~~ (ADR-0023) — **built, and
-  dormant.** `LfbaContainer` + `AttachmentBackupKey` + `AttachmentBackup`:
+  called by "Back up now" (ADR-0025).** `LfbaContainer` + `AttachmentBackupKey` + `AttachmentBackup`:
   re-sealed under the phrase (never copied, or a new install could not open
   them), the attachment id bound into each authenticated header (or two renamed
   files restore onto each other's entries), a copy counted as current only if
   its `keyCheck` matches the phrase in hand (or a rotation leaves a folder
   nobody can open), and every write decrypt-verified before its rename.
-- **Nothing in the app backs up at all — the real gap, now stated** (`SPEC.md`
-  §16 Q23). `DatabaseBackupManager` has no production caller either: a `.lfbk`
-  is phrase-derived and the app never holds the phrase after onboarding, so
-  §5.9's nightly worker cannot be built as written. The images machinery above
-  is proven and waiting on that decision, which is the owner's.
+- ~~**Nothing in the app backs up at all**~~ — **closed by ADR-0025**: a manual
+  "Back up now" asks for the 24 words each time, since a scheduled job cannot
+  seal a phrase-derived `.lfbk`. What is still missing is **restore** (§16
+  Q11): backups are written and verified to open, and no screen restores one.
 - ~~**Purge must unlink attachment files.**~~ **Done.** Both purge statements
   read the paths before the delete and unlink after it succeeds, and
   `AttachmentLifecycleInstrumentedTest` covers the dangerous direction too:
