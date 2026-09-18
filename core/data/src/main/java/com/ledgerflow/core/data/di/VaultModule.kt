@@ -38,6 +38,10 @@ import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
 import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
+import com.ledgerflow.core.data.backup.BackupFolderResolver
+import com.ledgerflow.core.data.backup.DefaultBackupRepository
+import com.ledgerflow.core.data.backup.SafBackupFolderResolver
+import com.ledgerflow.core.domain.backup.BackupRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -226,4 +230,15 @@ public interface IngestModule {
      */
     @Binds
     public fun pendingRepository(impl: DefaultPendingRepository): PendingRepository
+
+    /** "Back up now" (§16 Q23): the `.lfbk` and the receipt images beside it. */
+    @Binds
+    public fun backupRepository(impl: DefaultBackupRepository): BackupRepository
+
+    /**
+     * The backup folder as a SAF tree. A seam rather than a hard dependency so
+     * the backup logic is tested against a real directory.
+     */
+    @Binds
+    public fun backupFolderResolver(impl: SafBackupFolderResolver): BackupFolderResolver
 }

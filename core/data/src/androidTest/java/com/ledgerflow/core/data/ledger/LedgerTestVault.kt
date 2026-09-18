@@ -114,6 +114,10 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
     lateinit var mnemonic: List<String>
         private set
 
+    /** This vault's key manager, for tests of what checks a phrase against it. */
+    lateinit var dekManager: DekManager
+        private set
+
     /**
      * @param keepFiles leaves `filesDir/attachments/` alone, for a test that
      *   opens a second vault and expects the first one's sealed images to be
@@ -129,7 +133,7 @@ internal class LedgerTestVault(private val keystoreAlias: String) {
         if (!keepFiles) File(context.filesDir, "attachments").deleteRecursively()
 
         val store = FileWrappedDekStore(keyDirectory)
-        val dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
+        dekManager = DekManager(store, AndroidKeystoreKek(keystoreAlias), SecureRandom())
         session = VaultSession(context, dekManager, Bip39PhraseValidator(), Dispatchers.IO, TEST_DATABASE)
         mnemonic = phrase
         session.initialize(VaultInitRequest(phrase, BASE_CURRENCY))
