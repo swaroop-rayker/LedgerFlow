@@ -3,10 +3,10 @@ package com.ledgerflow.core.data.ingest
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.crypto.lfbk.LfbaContainer
 import com.ledgerflow.core.crypto.lfbk.LfbaResult
+import com.ledgerflow.core.data.backup.BackupFolder
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.AttachmentEntity
 import java.io.File
-import java.io.RandomAccessFile
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
@@ -99,19 +99,26 @@ public class AttachmentBackup @Inject constructor(
     /**
      * Seals every attachment into `[backupFolder]/attachments/`.
      *
+     * @param backupFolder the user's backup folder -- a SAF tree in the app, a
+     *   directory in the tests ([BackupFolder]).
      * @param seed the BIP-39 seed. **Never a passphrase** (CLAUDE.md §0) — this
      *   folder travels with the `.lfbk`.
      */
-    public suspend fun writeAll(backupFolder: File, seed: ByteArray): AttachmentBackupReport =
+    public suspend fun writeAll(backupFolder: BackupFolder, seed: ByteArray): AttachmentBackupReport =
         withContext(io) {
             val database = session.openForBackgroundWork()
                 ?: return@withContext AttachmentBackupReport()
+            val rows = database.attachmentDao().all()
+            // A folder that cannot hold the images fails every one of them,
+            // and says so, rather than reporting a backup with no pictures as
+            // a clean pass.
+            val directory = backupFolder.subfolder(IMAGES_DIRECTORY)
+                ?: return@withContext AttachmentBackupReport(failed = rows.size)
             val key = session.attachmentKeyOrNull()
                 ?: return@withContext AttachmentBackupReport()
-            val directory = imagesDirectory(backupFolder)
 
             try {
-                database.attachmentDao().all().fold(AttachmentBackupReport()) { report, row ->
+                rows.fold(AttachmentBackupReport()) { report, row ->
                     writeOne(row, directory, key, seed, report)
                 }
             } finally {
@@ -121,13 +128,13 @@ public class AttachmentBackup @Inject constructor(
 
     private fun writeOne(
         row: AttachmentEntity,
-        directory: File,
+        directory: BackupFolder,
         key: ByteArray,
         seed: ByteArray,
         report: AttachmentBackupReport,
     ): AttachmentBackupReport {
-        val target = File(directory, fileNameFor(row.id))
-        if (isCurrentCopy(target, seed)) {
+        val target = fileNameFor(row.id)
+        if (isCurrentCopy(directory, target, seed)) {
             return report.copy(alreadyCurrent = report.alreadyCurrent + 1)
         }
 
@@ -142,7 +149,7 @@ public class AttachmentBackup @Inject constructor(
             ?: return report.copy(unreadableLocally = report.unreadableLocally + 1)
 
         val sealed = LfbaContainer.write(plaintext, seed, row.id)
-        return if (writeVerified(target, sealed, seed, row.id, plaintext)) {
+        return if (writeVerified(directory, target, sealed, seed, row.id, plaintext)) {
             report.copy(written = report.written + 1)
         } else {
             report.copy(failed = report.failed + 1)
@@ -155,13 +162,16 @@ public class AttachmentBackup @Inject constructor(
      * Run **after** the `.lfbk` restore, which is what puts the rows there: the
      * rows say which images to look for and what each should hash to.
      */
-    public suspend fun restoreAll(backupFolder: File, seed: ByteArray): AttachmentRestoreReport =
+    public suspend fun restoreAll(backupFolder: BackupFolder, seed: ByteArray): AttachmentRestoreReport =
         withContext(io) {
             val database = session.openForBackgroundWork()
                 ?: return@withContext AttachmentRestoreReport()
             val key = session.attachmentKeyOrNull()
                 ?: return@withContext AttachmentRestoreReport()
-            val directory = imagesDirectory(backupFolder)
+            // Created if absent; an empty folder then reports every row as
+            // not found, which is the honest answer.
+            val directory = backupFolder.subfolder(IMAGES_DIRECTORY)
+                ?: return@withContext AttachmentRestoreReport()
 
             try {
                 database.attachmentDao().all().fold(AttachmentRestoreReport()) { report, row ->
@@ -183,7 +193,7 @@ public class AttachmentBackup @Inject constructor(
 
     private fun restoreOne(
         row: AttachmentEntity,
-        directory: File,
+        directory: BackupFolder,
         key: ByteArray,
         seed: ByteArray,
         report: AttachmentRestoreReport,
@@ -197,19 +207,19 @@ public class AttachmentBackup @Inject constructor(
 
     private fun outcomeFor(
         row: AttachmentEntity,
-        directory: File,
+        directory: BackupFolder,
         key: ByteArray,
         seed: ByteArray,
     ): RestoreOutcome {
         val local = files.resolve(row.filePath)
-        val source = File(directory, fileNameFor(row.id))
+        val source = fileNameFor(row.id)
 
         return when {
             // Never overwrite an image that is already here and intact: the
             // restore's job is to fill gaps, not to replace good files.
             isIntactLocally(local, key, row.sha256) -> RestoreOutcome.ALREADY_PRESENT
-            !source.isFile -> RestoreOutcome.NOT_FOUND
-            else -> when (val image = recoveredImage(source, seed, row)) {
+            !directory.exists(source) -> RestoreOutcome.NOT_FOUND
+            else -> when (val image = recoveredImage(directory, source, seed, row)) {
                 null -> RestoreOutcome.UNREADABLE
                 else ->
                     if (LocalAttachmentSeal.writeAtomically(local, LocalAttachmentSeal.seal(key, image))) {
@@ -230,8 +240,13 @@ public class AttachmentBackup @Inject constructor(
      * opens and is not what the row says it is. The last is the final check
      * between the folder and a receipt shown against the wrong entry.
      */
-    private fun recoveredImage(source: File, seed: ByteArray, row: AttachmentEntity): ByteArray? {
-        val bytes = runCatching { source.readBytes() }.getOrNull() ?: return null
+    private fun recoveredImage(
+        directory: BackupFolder,
+        source: String,
+        seed: ByteArray,
+        row: AttachmentEntity,
+    ): ByteArray? {
+        val bytes = directory.read(source) ?: return null
         val image = when (val read = LfbaContainer.read(bytes, seed, row.id)) {
             is LfbaResult.Failure -> null
             is LfbaResult.Success -> read.image
@@ -240,11 +255,8 @@ public class AttachmentBackup @Inject constructor(
     }
 
     /**
-     * Verify the file that **landed**, not the bytes in hand (§7).
-     *
-     * Verifying the in-memory array would prove nothing about the file, which
-     * is the only thing a restore will ever see. On any failure the temp file
-     * is removed and nothing replaces what was there before.
+     * Verify the file that **landed**, not the bytes in hand (§7): the folder
+     * reads the written copy back and this checks *that* opens to the image.
      *
      * **Kept despite being unexercised, and said out loud rather than implied.**
      * A mutation sweep replaced this verification with `true` and reddened
@@ -255,33 +267,26 @@ public class AttachmentBackup @Inject constructor(
      * is read as though a test is watching it.
      */
     private fun writeVerified(
-        target: File,
+        directory: BackupFolder,
+        target: String,
         sealed: ByteArray,
         seed: ByteArray,
         attachmentId: String,
         expected: ByteArray,
-    ): Boolean {
-        val temp = File(target.parentFile, "${target.name}${LocalAttachmentSeal.TEMP_SUFFIX}")
-        if (!LocalAttachmentSeal.writeAtomically(temp, sealed)) return false
-
-        val verified = runCatching {
-            when (val read = LfbaContainer.read(temp.readBytes(), seed, attachmentId)) {
-                is LfbaResult.Failure -> false
-                is LfbaResult.Success -> read.image.contentEquals(expected)
-            }
-        }.getOrDefault(false)
-
-        if (!verified || !temp.renameTo(target)) {
-            temp.delete()
-            return false
+    ): Boolean = directory.writeVerified(target, sealed) { landed ->
+        when (val read = LfbaContainer.read(landed, seed, attachmentId)) {
+            is LfbaResult.Failure -> false
+            is LfbaResult.Success -> read.image.contentEquals(expected)
         }
-        return true
     }
 
-    /** Is [target] a copy this phrase can open? Header only — no decryption. */
-    private fun isCurrentCopy(target: File, seed: ByteArray): Boolean {
-        if (!target.isFile) return false
-        val header = runCatching { readPrefix(target, HEADER_PROBE_BYTES) }.getOrNull() ?: return false
+    /**
+     * Is [target] a copy this phrase can open? Header only -- no decryption and
+     * no reading the image: the difference between a pass proportional to new
+     * receipts and one proportional to all of them.
+     */
+    private fun isCurrentCopy(directory: BackupFolder, target: String, seed: ByteArray): Boolean {
+        val header = directory.readPrefix(target, HEADER_PROBE_BYTES) ?: return false
         return LfbaContainer.sealedWith(header, seed)
     }
 
@@ -292,22 +297,6 @@ public class AttachmentBackup @Inject constructor(
             ?: return false
         return LocalAttachmentSeal.sha256(plaintext) == sha256
     }
-
-    /**
-     * The first [count] bytes, so the incremental check costs a header read
-     * rather than a whole image — which is the difference between a pass that
-     * is proportional to new receipts and one proportional to all of them.
-     */
-    private fun readPrefix(file: File, count: Int): ByteArray =
-        RandomAccessFile(file, "r").use { handle ->
-            val size = minOf(count.toLong(), handle.length()).toInt()
-            ByteArray(size).also { handle.readFully(it) }
-        }
-
-    private fun imagesDirectory(backupFolder: File): File =
-        File(backupFolder, IMAGES_DIRECTORY).apply {
-            runCatching { mkdirs() }
-        }
 
     private fun fileNameFor(attachmentId: String): String = "$attachmentId.$EXTENSION"
 

@@ -29,6 +29,12 @@ public sealed interface BackupResult {
     public data class Failure(val reason: String) : BackupResult
 }
 
+/**
+ * A sealed `.lfbk` held in memory, and how many rows it carries — the number
+ * [DatabaseBackupManager.opensAs] checks the written copy against.
+ */
+public class SealedBackup(public val bytes: ByteArray, public val rowCount: Int)
+
 /** Outcome of restoring a backup. */
 public sealed interface RestoreResult {
     public data class Success(val rowCount: Int) : RestoreResult
@@ -58,12 +64,8 @@ public class DatabaseBackupManager(
      *   the device, so only the 256-bit phrase may protect it.
      */
     public suspend fun writeBackup(destination: File, seed: ByteArray): BackupResult {
-        val payload = export()
-        val bytes = LfbkContainer.write(
-            payload = json.encodeToString(BackupPayload.serializer(), payload).toByteArray(),
-            seed = seed,
-            schemaVersion = LedgerFlowDatabase.VERSION,
-        )
+        val sealed = seal(seed)
+        val bytes = sealed.bytes
 
         val temp = File(destination.parentFile, "${destination.name}.tmp")
         val written = runCatching {
@@ -80,8 +82,47 @@ public class DatabaseBackupManager(
             temp.delete()
             return BackupResult.Failure("write failed: ${written.exceptionOrNull()?.message}")
         }
-        return promoteIfVerified(temp, destination, seed, payload.rowCount, bytes)
+        return promoteIfVerified(temp, destination, seed, sealed.rowCount, bytes)
     }
+
+    /**
+     * A sealed `.lfbk`, in memory, for a destination that is not a `File`.
+     *
+     * The user's backup folder is a SAF tree (§5.9), which `writeBackup`'s
+     * rename-a-`File` discipline cannot reach. This is the same payload and the
+     * same container that method writes — it now calls this — so the two
+     * cannot drift apart on what a backup contains. The caller owns the §7
+     * discipline for its destination: write a temp, fsync, check the bytes
+     * that landed with [opensAs], and only then promote.
+     *
+     * @param seed the BIP-39 seed. **Never a passphrase** (CLAUDE.md §0).
+     */
+    public suspend fun seal(seed: ByteArray): SealedBackup {
+        val payload = export()
+        val bytes = LfbkContainer.write(
+            payload = json.encodeToString(BackupPayload.serializer(), payload).toByteArray(),
+            seed = seed,
+            schemaVersion = LedgerFlowDatabase.VERSION,
+        )
+        return SealedBackup(bytes, payload.rowCount)
+    }
+
+    /**
+     * Would [bytes] restore as a backup of [expectedRows] rows under [seed]?
+     *
+     * §7's "decrypt-and-parse to verify", as a check a caller can run against
+     * the bytes it read back from wherever it wrote them. Verifying the array it
+     * *meant* to write proves nothing about the file a restore will see.
+     */
+    public fun opensAs(bytes: ByteArray, seed: ByteArray, expectedRows: Int): Boolean =
+        runCatching {
+            when (val read = LfbkContainer.read(bytes, seed)) {
+                is LfbkResult.Failure -> false
+                is LfbkResult.Success ->
+                    json.decodeFromString(BackupPayload.serializer(), String(read.payload)).rowCount ==
+                        expectedRows
+            }
+        }.getOrDefault(false)
 
     /**
      * Verifies the file that actually landed on disk, then renames it into
@@ -95,15 +136,9 @@ public class DatabaseBackupManager(
         expectedRows: Int,
         bytes: ByteArray,
     ): BackupResult {
-        val verified = runCatching {
-            when (val read = LfbkContainer.read(temp.readBytes(), seed)) {
-                is LfbkResult.Failure -> null
-                is LfbkResult.Success ->
-                    json.decodeFromString(BackupPayload.serializer(), String(read.payload))
-            }
-        }.getOrNull()
+        val verified = runCatching { opensAs(temp.readBytes(), seed, expectedRows) }.getOrDefault(false)
 
-        if (verified == null || verified.rowCount != expectedRows) {
+        if (!verified) {
             temp.delete()
             return BackupResult.Failure("verification failed; backup discarded")
         }

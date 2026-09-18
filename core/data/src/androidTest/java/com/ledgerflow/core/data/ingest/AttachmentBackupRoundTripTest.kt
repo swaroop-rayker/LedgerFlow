@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.lfbk.LfbaContainer
+import com.ledgerflow.core.data.backup.FileBackupFolder
 import com.ledgerflow.core.data.ledger.LedgerTestVault
 import com.ledgerflow.core.database.backup.BackupResult
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
@@ -91,7 +92,7 @@ class AttachmentBackupRoundTripTest {
         val lfbk = File(backupFolder, "ledgerflow.lfbk")
         val written = DatabaseBackupManager(vault.database).writeBackup(lfbk, seed)
         assertThat(written).isInstanceOf(BackupResult.Success::class.java)
-        assertThat(backup().writeAll(backupFolder, seed))
+        assertThat(backup().writeAll(FileBackupFolder(backupFolder), seed))
             .isEqualTo(AttachmentBackupReport(written = 3))
 
         // A new device: new vault, new DEK, new local key, nothing on disk.
@@ -102,7 +103,7 @@ class AttachmentBackupRoundTripTest {
 
         val rows = DatabaseBackupManager(vault.database).restore(lfbk, recoveredSeed)
         assertThat(rows).isInstanceOf(RestoreResult.Success::class.java)
-        val report = backup().restoreAll(backupFolder, recoveredSeed)
+        val report = backup().restoreAll(FileBackupFolder(backupFolder), recoveredSeed)
 
         assertThat(report).isEqualTo(AttachmentRestoreReport(restored = 3))
         ids.forEachIndexed { index, id ->
@@ -130,7 +131,7 @@ class AttachmentBackupRoundTripTest {
         vault.open(phrase = Bip39.generate(SecureRandom()))
         DatabaseBackupManager(vault.database).restore(lfbk, Bip39.toSeed(phrase))
 
-        val report = backup().restoreAll(backupFolder, Bip39.toSeed(phrase))
+        val report = backup().restoreAll(FileBackupFolder(backupFolder), Bip39.toSeed(phrase))
 
         assertThat(report).isEqualTo(AttachmentRestoreReport(notFound = 3))
         // And the rows are still there, reading as "no image" rather than
@@ -145,10 +146,10 @@ class AttachmentBackupRoundTripTest {
     @Test
     fun backup_secondPass_writesNothingAndLeavesTheFilesAlone() = runTest {
         storeAll()
-        assertThat(backup().writeAll(backupFolder, seed).written).isEqualTo(3)
+        assertThat(backup().writeAll(FileBackupFolder(backupFolder), seed).written).isEqualTo(3)
         val before = sealedFiles().map { it.name to it.readBytes().toList() }
 
-        val second = backup().writeAll(backupFolder, seed)
+        val second = backup().writeAll(FileBackupFolder(backupFolder), seed)
 
         assertThat(second).isEqualTo(AttachmentBackupReport(alreadyCurrent = 3))
         assertThat(sealedFiles().map { it.name to it.readBytes().toList() }).isEqualTo(before)
@@ -163,20 +164,20 @@ class AttachmentBackupRoundTripTest {
     @Test
     fun backup_afterThePhraseChanges_resealsTheFolder() = runTest {
         storeAll()
-        backup().writeAll(backupFolder, seed)
+        backup().writeAll(FileBackupFolder(backupFolder), seed)
 
-        val rewritten = backup().writeAll(backupFolder, otherSeed)
+        val rewritten = backup().writeAll(FileBackupFolder(backupFolder), otherSeed)
 
         assertThat(rewritten).isEqualTo(AttachmentBackupReport(written = 3))
         // And the folder now opens with the new phrase only.
-        assertThat(backup().writeAll(backupFolder, otherSeed).alreadyCurrent).isEqualTo(3)
+        assertThat(backup().writeAll(FileBackupFolder(backupFolder), otherSeed).alreadyCurrent).isEqualTo(3)
     }
 
     /** The bytes in the folder are neither the image nor the local file. */
     @Test
     fun theSealedCopies_areNeitherThePlaintextNorTheLocalFile() = runTest {
         storeAll()
-        backup().writeAll(backupFolder, seed)
+        backup().writeAll(FileBackupFolder(backupFolder), seed)
 
         val local = vault.attachmentFiles.all().map { it.readBytes().toList() }
         sealedFiles().forEachIndexed { index, file ->
@@ -206,7 +207,7 @@ class AttachmentBackupRoundTripTest {
     @Test
     fun restore_withTwoFilesRenamedOntoEachOther_refusesThemAndRestoresTheRest() = runTest {
         val ids = storeAll()
-        backup().writeAll(backupFolder, seed)
+        backup().writeAll(FileBackupFolder(backupFolder), seed)
         vault.attachmentFiles.all().forEach { assertThat(it.delete()).isTrue() }
 
         val files = sealedFiles()
@@ -215,7 +216,7 @@ class AttachmentBackupRoundTripTest {
         assertThat(files[1].renameTo(files[0])).isTrue()
         assertThat(parked.renameTo(files[1])).isTrue()
 
-        val report = backup().restoreAll(backupFolder, seed)
+        val report = backup().restoreAll(FileBackupFolder(backupFolder), seed)
 
         // The swapped pair is refused; the untouched third image comes back.
         assertThat(report).isEqualTo(AttachmentRestoreReport(restored = 1, unreadable = 2))
@@ -234,10 +235,10 @@ class AttachmentBackupRoundTripTest {
     @Test
     fun restore_withTheWrongPhrase_recoversNothing() = runTest {
         storeAll()
-        backup().writeAll(backupFolder, seed)
+        backup().writeAll(FileBackupFolder(backupFolder), seed)
         vault.attachmentFiles.all().forEach { assertThat(it.delete()).isTrue() }
 
-        val report = backup().restoreAll(backupFolder, otherSeed)
+        val report = backup().restoreAll(FileBackupFolder(backupFolder), otherSeed)
 
         assertThat(report).isEqualTo(AttachmentRestoreReport(unreadable = 3))
     }
@@ -253,7 +254,7 @@ class AttachmentBackupRoundTripTest {
         val damaged = vault.attachmentFiles.all().first()
         damaged.writeBytes(damaged.readBytes().also { it[it.size - 1] = (it[it.size - 1] + 1).toByte() })
 
-        val report = backup().writeAll(backupFolder, seed)
+        val report = backup().writeAll(FileBackupFolder(backupFolder), seed)
 
         assertThat(report).isEqualTo(AttachmentBackupReport(written = 2, unreadableLocally = 1))
         assertThat(sealedFiles()).hasSize(2)
@@ -278,7 +279,7 @@ class AttachmentBackupRoundTripTest {
         vault.attachmentFiles.resolve(row.filePath)
             .writeBytes(LocalAttachmentSeal.seal(key, impostor))
 
-        val report = backup().writeAll(backupFolder, seed)
+        val report = backup().writeAll(FileBackupFolder(backupFolder), seed)
 
         assertThat(report).isEqualTo(AttachmentBackupReport(written = 2, unreadableLocally = 1))
         assertThat(sealedFiles().map { it.name }).doesNotContain("${ids[0]}.${AttachmentBackup.EXTENSION}")
@@ -297,7 +298,7 @@ class AttachmentBackupRoundTripTest {
     @Test
     fun restore_aCopyWhoseContentDoesNotMatchTheRow_isRefused() = runTest {
         val ids = storeAll()
-        backup().writeAll(backupFolder, seed)
+        backup().writeAll(FileBackupFolder(backupFolder), seed)
         vault.attachmentFiles.all().forEach { assertThat(it.delete()).isTrue() }
 
         val impostor = ByteArray(2_500) { (it % 89).toByte() }
@@ -306,7 +307,7 @@ class AttachmentBackupRoundTripTest {
             "${ids[0]}.${AttachmentBackup.EXTENSION}",
         ).writeBytes(LfbaContainer.write(impostor, seed, ids[0]))
 
-        val report = backup().restoreAll(backupFolder, seed)
+        val report = backup().restoreAll(FileBackupFolder(backupFolder), seed)
 
         assertThat(report).isEqualTo(AttachmentRestoreReport(restored = 2, unreadable = 1))
         assertThat(vault.attachments.read(ids[0])).isNull()
@@ -316,9 +317,9 @@ class AttachmentBackupRoundTripTest {
     @Test
     fun restore_whenTheImageIsAlreadyPresent_doesNothing() = runTest {
         storeAll()
-        backup().writeAll(backupFolder, seed)
+        backup().writeAll(FileBackupFolder(backupFolder), seed)
 
-        val report = backup().restoreAll(backupFolder, seed)
+        val report = backup().restoreAll(FileBackupFolder(backupFolder), seed)
 
         assertThat(report).isEqualTo(AttachmentRestoreReport(alreadyPresent = 3))
     }
@@ -331,11 +332,11 @@ class AttachmentBackupRoundTripTest {
     @Test
     fun restore_withADamagedCopy_leavesAGoodLocalImageAlone() = runTest {
         val ids = storeAll()
-        backup().writeAll(backupFolder, seed)
+        backup().writeAll(FileBackupFolder(backupFolder), seed)
         val corrupt = sealedFiles().first()
         corrupt.writeBytes(corrupt.readBytes().also { it[it.size - 1] = (it[it.size - 1] + 1).toByte() })
 
-        val report = backup().restoreAll(backupFolder, seed)
+        val report = backup().restoreAll(FileBackupFolder(backupFolder), seed)
 
         assertThat(report).isEqualTo(AttachmentRestoreReport(alreadyPresent = 3))
         ids.forEachIndexed { index, id ->
