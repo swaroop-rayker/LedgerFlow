@@ -103,6 +103,8 @@ public data class RecognitionSummary(
     val totalText: String? = null,
     val items: List<ExtractedItemRow> = emptyList(),
     val balance: String? = null,
+    /** Which day the bill says it was issued, or why no day was taken (§5.3). */
+    val dateText: String? = null,
 ) {
     /** True when the pipeline produced something that resembles a bill. */
     public val isBill: Boolean get() = items.isNotEmpty() || totalText != null

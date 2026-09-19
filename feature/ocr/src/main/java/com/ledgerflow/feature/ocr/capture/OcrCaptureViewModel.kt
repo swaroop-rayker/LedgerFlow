@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.common.di.IoDispatcher
+import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.ingest.AttachmentOutcome
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
@@ -17,10 +18,14 @@ import com.ledgerflow.core.domain.ingest.Reconciliation
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LineItemKind
+import com.ledgerflow.feature.ocr.extraction.ReceiptDates
 import com.ledgerflow.feature.ocr.extraction.ReceiptExtractor
 import com.ledgerflow.feature.ocr.recognition.ReceiptTextRecognizer
 import com.ledgerflow.feature.ocr.recognition.RecognizedPage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +73,7 @@ public class OcrCaptureViewModel @Inject constructor(
     private val ledgerRepository: LedgerRepository,
     private val attachments: AttachmentRepository,
     private val ingest: RawIngestRepository,
+    private val clock: Clock,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -99,6 +105,9 @@ public class OcrCaptureViewModel @Inject constructor(
     private var lastRead: ReadResult? = null
 
     private data class ReadResult(val png: ByteArray, val extracted: ExtractedTransaction)
+
+    /** What one read produced, before it becomes state. */
+    private data class Read(val page: RecognizedPage, val dated: ReceiptDates.Dated, val png: ByteArray)
 
     init {
         viewModelScope.launch { currency = ledgerRepository.baseCurrency() ?: DEFAULT_CURRENCY }
@@ -189,23 +198,33 @@ public class OcrCaptureViewModel @Inject constructor(
                     // the main thread after it: StrictMode has penaltyDeath in
                     // debug and there is no reason to find out where the line
                     // is on a 60-line supermarket roll.
-                    val extracted = ReceiptExtractor.extract(page, currency)
+                    // The bill's own date (§5.3's four rules), applied to the
+                    // extraction here so the candidate carries it — and kept,
+                    // so the summary can say which day was read or why none was.
+                    val dated = ReceiptDates.apply(
+                        ReceiptExtractor.extract(page, currency),
+                        page,
+                        capturedAt = clock.nowMillis(),
+                        zone = ZoneId.systemDefault(),
+                    )
+                    val extracted = dated.extracted
                     // **Recognised large, stored small** (ADR-0023 as amended).
                     // The recogniser gets every pixel it can use; what is kept
                     // is a downscaled copy of that same frame, which is what
                     // makes a receipt ~250 KB instead of a few MB. Both happen
                     // here, on IO, so the main thread never sees a bitmap.
-                    Triple(page, extracted, images.encode(images.downscale(bitmap)))
+                    Read(page, dated, images.encode(images.downscale(bitmap)))
                 }
             }
 
             internalState.update { current ->
                 outcome.fold(
-                    onSuccess = { (page, extracted, png) ->
-                        lastRead = ReadResult(png, extracted)
+                    onSuccess = { (page, dated, png) ->
+                        lastRead = ReadResult(png, dated.extracted)
                         current.copy(
                             reading = false,
-                            result = summaryOf(page, extracted, sourceLabel, currency),
+                            result = summaryOf(page, dated.extracted, sourceLabel, currency)
+                                .copy(dateText = dateSentence(dated.detection)),
                             failure = null,
                             saved = null,
                         )
@@ -362,6 +381,26 @@ internal fun summaryOf(
             },
         balance = balanceSentence(extracted, currency),
     )
+
+/**
+ * The date detection, in words — including when it found nothing usable, since
+ * the review then shows the capture date and the user should know to check it.
+ */
+internal fun dateSentence(detection: ReceiptDates.Detection): String {
+    val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+    return when (detection) {
+        is ReceiptDates.Detection.Found -> "Dated ${detection.date.format(format)}"
+        is ReceiptDates.Detection.Refused -> {
+            val why = when (detection.reason) {
+                ReceiptDates.Refusal.AFTER_CAPTURE -> "is after today"
+                ReceiptDates.Refusal.TOO_OLD -> "is over a year ago"
+            }
+            "Printed date ${detection.date.format(format)} $why, so it was not used — " +
+                "set the date when you review"
+        }
+        ReceiptDates.Detection.None -> "No bill date found — today's date is used; check it when you review"
+    }
+}
 
 /**
  * §5.3's reconciliation, in words.

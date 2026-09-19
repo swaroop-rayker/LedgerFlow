@@ -718,17 +718,28 @@ as `:feature:ocr`'s `extraction` package; each is arithmetic over
   Zepto 4/4 items with one amount left for the user (a misread `52,00`).
   **Not handled:** top-aligned table cells, merchant selection when the shop's
   name is a logo (bigbasket reads `basket`), and pages after the first.
-- **No date detection yet — the rules are decided (owner, 2026-09-19), not built.**
-  The review screen still falls back to the capture time. When built:
-  (a) the **invoice/bill date**, else the earliest labelled date, **never** an
-  expiry, best-before or due date; (b) a date printed without a time becomes
-  **local noon** on that day, so no time-zone shift can move it across midnight;
-  (c) numeric dates are read **day-first** (`dd/mm/yy`, `dd-mm-yyyy`) always;
-  (d) a date **more than one day after the capture, or more than a year before
-  it, is refused** and the field is left for the user, never guessed. The
-  formats are measured over the corpus before the parser is written, and it is
-  graded against the committed ground truth — whose transcriptions the owner
-  checks first.
+- **The bill date (`ReceiptDates`, rules decided by the owner 2026-09-19).**
+  (a) The **invoice/bill date**, else the earliest date under a generic "Date"
+  label; **never** an expiry, best-before, use-by, manufacture, packing or due
+  date, and **never an unlabelled one** (bigbasket's delivery slot and payment
+  lines). The label is the few words just before the date in its row, read as
+  whole words — measured on the device, Zepto's `Date :` loses its colon in the
+  text-layer rebuild and shares a row with the order number. (b) The day is
+  stored at **local midnight**, the same convention as every SMS, so
+  `OccurredAt.effective` shows it with the capture's clock; the owner first
+  chose noon and changed it once the collision with that shared rule was found.
+  (c) Numeric dates are **day-first** (`12/09/26`); a leading four-digit year is
+  **ISO** (`2026-09-12`). (d) A date more than one day after the capture or more
+  than a year before it is **refused**, and no weaker date is tried in its
+  place. A refused or absent date leaves `occurredAt` empty, so the review
+  falls back to the capture time as before, and the capture screen says which
+  day was read or why none was ("Printed date … is over a year ago, so it was
+  not used — set the date when you review"). Graded on the device against both
+  owner-verified receipts by `ReceiptCorpusDateGradingTest`, the first test to
+  grade the extractor against the real corpus; it skips where the private store
+  has not been copied to the device. Two receipts are two layouts: the other
+  common formats (`dd.mm.yyyy`, `12 Sep 2026`, `Sep 12, 2026`, two-digit years)
+  are covered by `ReceiptDatesTest`, by construction rather than by measurement.
 
 **Review screen (the important part):**
 - Editable table: item name, qty, unit price, line total, category, subcategory.

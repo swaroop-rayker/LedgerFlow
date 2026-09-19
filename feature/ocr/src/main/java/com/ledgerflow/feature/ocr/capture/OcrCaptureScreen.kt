@@ -361,6 +361,13 @@ private fun ResultCard(
                 style = LfTheme.typography.bodyL,
                 color = LfTheme.colors.textPrimary,
             )
+            summary.dateText?.let {
+                Text(
+                    text = it,
+                    style = LfTheme.typography.bodyM,
+                    color = LfTheme.colors.textSecondary,
+                )
+            }
             Text(
                 text = buildString {
                     if (summary.isBill) {
