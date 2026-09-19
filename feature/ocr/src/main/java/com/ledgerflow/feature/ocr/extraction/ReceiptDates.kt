@@ -41,7 +41,12 @@ import java.time.ZoneId
  * never from punctuation.
  *
  * **Words are whole words** (BUG24's lesson, met again while measuring: a
- * naive month pattern matched `Margin` as March).
+ * naive month pattern matched `Margin` as March). For the *labels* that is a
+ * live rule — `Update` must not read as `Date`, and a test fails without it.
+ * For the *month names* it is belt and braces, said rather than implied: every
+ * date pattern requires digits right after the month word, so `Margin` cannot
+ * match even without the `(?!\p{L})` boundaries, and a mutation sweep removing
+ * them reddens nothing.
  */
 internal object ReceiptDates {
 
