@@ -26,7 +26,7 @@ import kotlin.random.Random
  * Drives the onboarding gate (SPEC.md §7.4).
  *
  * The phrase is generated here and held only in memory until the DEK is
- * wrapped. It is deliberately not persisted anywhere in plaintext -- the only
+ * wrapped — then dropped by [forgetThePhrase] (BUG30). It is deliberately not persisted anywhere in plaintext -- the only
  * copies that should exist are the user's transcription and the Recovery Kit
  * they choose to save.
  *
@@ -290,6 +290,7 @@ public class OnboardingViewModel @Inject constructor(
                     backupTreeUri = treeUri,
                 ),
             )
+            if (outcome == VaultOutcome.Unlocked) forgetThePhrase()
             _state.update {
                 it.copy(
                     isWorking = false,
@@ -302,6 +303,24 @@ public class OnboardingViewModel @Inject constructor(
                     },
                 )
             }
+        }
+    }
+
+    /**
+     * BUG30: the promise in this class's KDoc, kept. This ViewModel belongs to
+     * the activity, so it outlives the gate and `onCleared` does not run while
+     * the app lives; without this the phrase stayed on the heap for the life of
+     * the process. Only on success — a failed setup says the phrase is
+     * unchanged, and the retry needs it.
+     */
+    private fun forgetThePhrase() {
+        challenge = null
+        _state.update {
+            it.copy(
+                mnemonic = emptyList(),
+                challengePositions = emptyList(),
+                challengeAnswers = List(WordChallenge.CHALLENGE_COUNT) { "" },
+            )
         }
     }
 }

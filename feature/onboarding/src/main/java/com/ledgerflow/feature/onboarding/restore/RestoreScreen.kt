@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.onboarding.restore
 
 import android.content.Intent
+import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,10 +21,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
@@ -70,13 +76,13 @@ public fun RestoreScreen(
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    // Leaving mid-restore would strand the words and the work; leaving after it
-    // would strand a restored vault behind onboarding.
-    if (onBack != null && !state.isWorking && !state.isDone) BackHandler(onBack = onBack)
+    val closeKeyboard = rememberCloseKeyboard()
+    val leave = onBack?.let { leavingVia(it, onEvent) }
+    if (leave != null) RestoreBackHandler(state, leave, closeKeyboard)
 
     LfScaffold(
         modifier = modifier,
-        bottomBar = { SubmitBar(state, onEvent) },
+        bottomBar = { SubmitBar(state, onEvent, onSubmit = closeKeyboard) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -86,14 +92,14 @@ public fun RestoreScreen(
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         ) {
             // The action takes its own band above the heading (BUG17).
-            if (onBack != null && !state.isDone) {
+            if (leave != null && !state.isDone) {
                 LfActionRow(
                     modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
                     alignment = LfActionAlignment.Start,
                 ) {
                     LfButton(
                         text = "Back",
-                        onClick = onBack,
+                        onClick = leave,
                         enabled = !state.isWorking,
                         style = LfButtonStyle.Inline,
                     )
@@ -251,7 +257,7 @@ private fun ResultMessage(outcome: RestoreOutcome) {
 }
 
 @Composable
-private fun SubmitBar(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit) {
+private fun SubmitBar(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit, onSubmit: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(LfTheme.spacing.sm)) {
         if (state.isDone) {
             LfButton(
@@ -266,7 +272,12 @@ private fun SubmitBar(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit) {
                     state.entry.isComplete -> "Restore"
                     else -> "${state.entry.remaining} words to go"
                 },
-                onClick = { onEvent(RestoreEvent.Submitted) },
+                onClick = {
+                    // The answer appears above the words; an open keyboard
+                    // hides it, and is BUG29's precondition.
+                    onSubmit()
+                    onEvent(RestoreEvent.Submitted)
+                },
                 enabled = state.canSubmit,
                 loading = state.isWorking,
                 modifier = Modifier.fillMaxWidth(),
@@ -292,6 +303,62 @@ internal fun backupLabel(fileName: String, zone: TimeZone = TimeZone.getDefault(
 }
 
 private val STAMPED_NAME = Regex("""ledgerflow-(\d{8}-\d{6})\.lfbk""")
+
+/**
+ * The ViewModel belongs to the activity and outlives this screen, so leaving is
+ * when the words are forgotten (BUG30) — by either way out.
+ */
+private fun leavingVia(back: () -> Unit, onEvent: (RestoreEvent) -> Unit): () -> Unit = {
+    onEvent(RestoreEvent.Left)
+    back()
+}
+
+@Composable
+private fun rememberCloseKeyboard(): () -> Unit {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    return {
+        focus.clearFocus()
+        keyboard?.hide()
+    }
+}
+
+/**
+ * Leaving after the restore would strand a restored vault behind onboarding,
+ * so back is off once it is done. Before that the handler stays registered
+ * throughout (BUG29): switching it off while a restore ran and on again after
+ * it re-registered it above the keyboard's own callback, so back skipped the
+ * keyboard and left the screen with the words on it.
+ */
+@Composable
+private fun RestoreBackHandler(state: RestoreUiState, leave: () -> Unit, closeKeyboard: () -> Unit) {
+    val view = LocalView.current
+    BackHandler(enabled = !state.isDone) {
+        when (restoreBack(keyboardOpen = view.keyboardOpen(), isWorking = state.isWorking)) {
+            RestoreBack.CloseKeyboard -> closeKeyboard()
+            RestoreBack.Stay -> Unit
+            RestoreBack.Leave -> leave()
+        }
+    }
+}
+
+/** Read from the window at the moment back arrives, not from composition state. */
+private fun View.keyboardOpen(): Boolean =
+    ViewCompat.getRootWindowInsets(this)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+
+/** What back does on the restore screen (BUG29). */
+internal enum class RestoreBack { CloseKeyboard, Stay, Leave }
+
+/**
+ * An open keyboard is closed first, whatever else is true: back was leaving the
+ * screen — and the 24 words on it — when it should only have closed the
+ * keyboard. While a restore runs, back waits for the answer.
+ */
+internal fun restoreBack(keyboardOpen: Boolean, isWorking: Boolean): RestoreBack = when {
+    keyboardOpen -> RestoreBack.CloseKeyboard
+    isWorking -> RestoreBack.Stay
+    else -> RestoreBack.Leave
+}
 
 // ── Previews (CLAUDE.md §5) ───────────────────────────────────────────────
 

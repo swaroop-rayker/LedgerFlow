@@ -87,9 +87,20 @@ public class RecoveryViewModel @Inject constructor(
                     // On success the shell switches away from this screen off the
                     // vault's own state, so there is nothing to set here.
                     failure = outcome.toFailure(),
+                    // BUG30: this ViewModel belongs to the activity and outlives
+                    // the screen, so once the words have opened the vault they
+                    // are dropped here — `onCleared` would not run for the life
+                    // of the process. A failure keeps them for a fix.
+                    entry = if (outcome.leavesTheScreen()) current.entry.cleared() else current.entry,
                 )
             }
         }
+    }
+
+    /** The words did their job and the shell routes away: to the vault, or to the upgrade screen. */
+    private fun VaultOutcome.leavesTheScreen(): Boolean = when (this) {
+        VaultOutcome.Unlocked, is VaultOutcome.UpgradeBlocked -> true
+        is VaultOutcome.PhraseRejected, VaultOutcome.PhraseDidNotMatch, is VaultOutcome.Failed -> false
     }
 
     private fun VaultOutcome.toFailure(): RecoveryFailure? = when (this) {

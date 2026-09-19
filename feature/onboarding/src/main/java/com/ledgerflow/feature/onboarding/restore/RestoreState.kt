@@ -59,6 +59,13 @@ public sealed interface RestoreEvent {
 
     /** The report is read; open the restored ledger. */
     public data object Continued : RestoreEvent
+
+    /**
+     * The user went back to onboarding (BUG30). The ViewModel outlives the
+     * screen — it belongs to the activity — so this, not `onCleared`, is when
+     * the words and the chosen backup are forgotten.
+     */
+    public data object Left : RestoreEvent
 }
 
 /**

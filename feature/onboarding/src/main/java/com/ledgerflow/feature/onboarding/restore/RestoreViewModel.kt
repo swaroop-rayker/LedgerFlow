@@ -46,7 +46,18 @@ public class RestoreViewModel @Inject constructor(
             is RestoreEvent.WordRemoved -> updateEntry { it.remove(event.index) }
             RestoreEvent.Submitted -> submit()
             RestoreEvent.Continued -> if (_state.value.isDone) viewModelScope.launch { restores.finish() }
+            RestoreEvent.Left -> leave()
         }
+    }
+
+    /**
+     * Back to onboarding (BUG30): start over, words and backup both forgotten.
+     * Not while a restore runs — the screen does not offer back then, and the
+     * answer still has to land somewhere.
+     */
+    private fun leave() {
+        if (_state.value.isWorking) return
+        _state.value = RestoreUiState(entry = PhraseEntry(requiredWordCount = validator.wordCount))
     }
 
     private fun chooseFolder(treeUri: String) {
