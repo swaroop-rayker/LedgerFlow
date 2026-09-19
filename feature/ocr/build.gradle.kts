@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("ledgerflow.android.feature")
 }
@@ -60,4 +62,44 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.truth)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+}
+
+/**
+ * `ReceiptCorpusTest` reads the committed manifest and the **private receipt
+ * store** as plain files at run time, and Gradle could see neither.
+ *
+ * Found on 2026-09-19: fixtures in the store were edited and the test task,
+ * being up to date, reported the previous green — a check on the corpus that
+ * does not run when the corpus changes. The same shape as `:feature:ingest`'s
+ * golden corpus (its build file), and the fourth place it has appeared.
+ *
+ * The store is resolved exactly as the test resolves it — the
+ * `LEDGERFLOW_RECEIPT_CORPUS` environment variable, then
+ * `ledgerflow.receiptCorpusDir` in `local.properties`, then the sibling
+ * `../LedgerFlow-receipts` — and its `.git` is excluded, so committing in the
+ * store does not by itself re-run the tests. Absent, it simply is not an input,
+ * and the test skips (locally) or fails (CI) as it always has.
+ */
+val receiptCorpusDir: File? = run {
+    val fromEnv = providers.environmentVariable("LEDGERFLOW_RECEIPT_CORPUS").orNull?.takeIf { it.isNotBlank() }
+    val localProperties = rootProject.file("local.properties")
+    val fromLocal = if (localProperties.isFile) {
+        Properties().apply { localProperties.inputStream().use { load(it) } }
+            .getProperty("ledgerflow.receiptCorpusDir")?.takeIf { it.isNotBlank() }
+    } else {
+        null
+    }
+    listOfNotNull(fromEnv?.let(::File), fromLocal?.let(::File), rootProject.file("../LedgerFlow-receipts"))
+        .firstOrNull { it.isDirectory }
+}
+
+tasks.withType<Test>().configureEach {
+    inputs.file(rootProject.file("testdata/receipts/manifest.json"))
+        .withPropertyName("receiptManifest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    receiptCorpusDir?.let { dir ->
+        inputs.files(fileTree(dir) { exclude(".git/**") })
+            .withPropertyName("privateReceiptCorpus")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    }
 }

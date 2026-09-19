@@ -735,7 +735,7 @@ as `:feature:ocr`'s `extraction` package; each is arithmetic over
   falls back to the capture time as before, and the capture screen says which
   day was read or why none was ("Printed date … is over a year ago, so it was
   not used — set the date when you review"). Graded on the device against both
-  owner-verified receipts by `ReceiptCorpusDateGradingTest`, the first test to
+  owner-verified receipts by `ReceiptCorpusGradingTest`, the first test to
   grade the extractor against the real corpus; it skips where the private store
   has not been copied to the device. Two receipts are two layouts: the other
   common formats (`dd.mm.yyyy`, `12 Sep 2026`, `Sep 12, 2026`, two-digit years)
@@ -1680,6 +1680,19 @@ recall" is not yet a criterion, and the ways it fails are specific:
   drowns ten failures on small slips.
 - **A number needs a corpus size to mean anything.** Below roughly 25 graded
   receipts / 300 item lines, 90% is noise rather than a measurement.
+
+**The gate has a runner (2026-09-19).** `ReceiptGrading` is the definition above
+in code — the name threshold is §5.5's **0.88** (`JaroWinkler.MERCHANT_THRESHOLD`),
+the one shared figure, since this section names the measure and not a number —
+pinned by `ReceiptGradingTest`, every clause mutation-swept. `ReceiptCorpusGradingTest`
+applies it on the device to every real receipt in the private store, read the way
+the app reads it, and also asserts the bill total exact and the bill date. On the
+two owner-verified receipts: Zepto **4/4** recall and precision, bigbasket **11/11**,
+both totals exact. The floors are asserted per receipt and are **provisional** by
+the rule above — at two receipts they are a regression guard, not a measurement.
+The test skips where the store has not been copied to the device (its KDoc has the
+steps). `ReceiptCorpusTest`'s real-receipt floor is **2**, and `:feature:ocr`'s
+test task now re-runs when the manifest or the store changes.
 
 **Composition and privacy are decided.** Unlike SMS, real receipts are trivially
 obtainable — a camera has no equivalent of `adb`'s inability to deliver a message

@@ -409,18 +409,20 @@ Bootstrapping ground truth from a dump and correcting what you happen to
 notice is fast, inflates recall by an unknown amount, and is undetectable
 afterwards.
 
-Creating the store is still ten minutes and is still what turns §12's ≥90%
-from an aspiration into a measurement:
+**The store exists** (`../LedgerFlow-receipts`, a local git repo) with two real
+A4 invoices, both transcriptions verified by the owner on 2026-09-19. Adding a
+receipt is:
 
-1. Create the store — `../LedgerFlow-receipts`, or set
-   `ledgerflow.receiptCorpusDir` in `local.properties`
-2. Drop in the image **and** a hand-transcribed `.json`, transcribed *from the
+1. Drop in the image **and** a hand-transcribed `.json`, transcribed *from the
    image*
-3. `./gradlew regenerateReceiptManifest`, commit the manifest
+2. `./gradlew regenerateReceiptManifest`, commit the manifest — alone, before
+   any extractor change for it
+3. Raise `ReceiptCorpusTest.MINIMUM_REAL_RECEIPTS` (now 2)
 
-That also arms `ReceiptCorpusTest`'s CI check, which is gated on the manifest
-listing at least one receipt. Until it happens, the corpus gate is a test that
-passes by doing nothing.
+**It is graded:** `ReceiptCorpusGradingTest` runs §12's metric on the device
+(`ReceiptGrading`), currently 4/4 and 11/11 with exact totals. What is still
+missing is CI's copy of the store — a private repository and a read-only token,
+the owner's to create — without which `theCorpusIsReachableInCi` stays red.
 
 ## Shortest path to a receipt reaching the ledger
 

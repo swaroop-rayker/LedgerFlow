@@ -51,15 +51,21 @@ import org.junit.Test
  * holds steady. Raise it when a receipt lands. Never lower it to make a change
  * pass.
  *
- * It starts at **0**, which is the honest count: no receipt has been captured
- * yet. Zero asserts nothing today and everything the moment someone removes the
- * first one.
+ * It started at **0**, the honest count before any receipt existed, and stayed
+ * there after two landed — which asserted nothing while claiming a floor. It is
+ * **2** from 2026-09-19: the owner's Zepto and bigbasket invoices, both
+ * transcriptions verified by the owner against their PDFs that day.
+ *
+ * **This task now re-runs when the corpus changes.** It read the manifest and
+ * the private store as plain files Gradle could not see, so an edited fixture
+ * reported the previous green; `:feature:ocr`'s build file declares both as
+ * inputs.
  */
 class ReceiptCorpusTest {
 
     private companion object {
         /** The ratchet. Only ever goes up. See the class KDoc. */
-        const val MINIMUM_REAL_RECEIPTS = 0
+        const val MINIMUM_REAL_RECEIPTS = 2
 
         /**
          * Below these, `SPEC.md` §12's ≥90% figure is **provisional**.
