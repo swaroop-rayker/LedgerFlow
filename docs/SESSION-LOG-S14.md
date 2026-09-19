@@ -163,16 +163,20 @@ days.
 
 Each needs a stated plan and the owner's nod first.
 
-1. **Item 9, housekeeping** — raise `ReceiptCorpusTest.MINIMUM_REAL_RECEIPTS`
-   0 → 2 and fix its KDoc (it says no receipt exists); make the private store an
-   **input** of `:feature:ocr`'s test task (today a changed fixture can report a
-   stale green — use `--rerun` until then); extend `ReceiptCorpusDateGradingTest`
-   into a **full extractor grade** (items, totals) — SPEC §12's recall gate has
-   no runner; stale docs.
-2. **Item 7, merchant selection** — bigbasket reads `basket` (the name is a
-   logo); `FOOD BAZAAR` did not win on its receipt. Design first.
-3. **Item 6, multi-page PDFs** — only page 1 is read, and the screen says so.
-   Design first (which page carries the total; memory on long PDFs).
+1. ~~**Item 9, housekeeping**~~ **Done** (`0dc99f2`): `ReceiptGrading` is SPEC
+   §12's metric in code; `ReceiptCorpusGradingTest` grades every real receipt on
+   the device (Zepto 4/4, bigbasket 11/11, totals exact, dates and merchants
+   right); `MINIMUM_REAL_RECEIPTS` 0 → 2; `:feature:ocr`'s test task re-runs
+   when the manifest or the private store changes.
+2. ~~**Item 7, merchant selection**~~ **Done** (`00d9715`): a PDF whose text
+   names no shop has its rendered header recognised for the legal entity
+   (bigbasket → "Innovative Retail Concepts Pvt Ltd"); merchant corrections are
+   remembered as exact aliases (the `merchant_alias` table was never written
+   before); **BUG28** — a merge undone by the next capture — fixed with it.
+3. **Item 6, multi-page PDFs** — both corpus PDFs' page 2 is legal boilerplate
+   (no items, no totals), so reading it changes nothing today; the real case —
+   items continuing onto page 2 — has no sample. Recommended: defer until the
+   owner captures one, as for item 8.
 4. **Item 8, top-aligned table cells** — only with a real receipt that needs it.
 5. **Owner-only**: the private corpus repo on GitHub + a read-only token as a CI
    secret (then CI goes green); D6c and D10 on the phone (D10 needs a guest
