@@ -7,6 +7,10 @@ android {
 }
 
 dependencies {
+    // DashboardBackupReminderTest drives the real ViewModel over the shared
+    // FakeBackupRepository, as the other features' ViewModel tests do.
+    testImplementation(project(":core:testing"))
+
     // DashboardBannerContentTest renders the real banner and reads what it says.
     // §5.2's two unhealthy states differ only in their sentence, and a state
     // enum can be correct while the screen renders the wrong words for it --

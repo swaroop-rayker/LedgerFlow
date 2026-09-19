@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.dashboard
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 
 /**
@@ -29,6 +30,13 @@ public data class DashboardUiState(
      * behaviour is identical to this one.
      */
     val captureHealth: NotificationCaptureHealth = NotificationCaptureHealth.RECONNECTING,
+
+    /**
+     * Whether to ask for a backup (BUG4(c) as amended; owner, 2026-09-19).
+     * Null means no reminder — including before the backup date has been read,
+     * so a first frame never flashes "No backup yet" at someone who has one.
+     */
+    val backupReminder: BackupReminder? = null,
 ) {
 
     /**

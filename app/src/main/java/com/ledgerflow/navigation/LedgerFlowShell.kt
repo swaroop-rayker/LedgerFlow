@@ -228,6 +228,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
     composable<Destination.Dashboard> {
         DashboardRoute(
             onSetUpNotifications = { navController.navigate(Destination.NotificationAccess) },
+            onBackUpNow = { navController.navigate(Destination.BackUpNow) },
         )
     }
     composable<Destination.Ledger> {

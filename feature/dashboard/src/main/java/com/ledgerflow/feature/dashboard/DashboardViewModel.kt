@@ -2,6 +2,8 @@ package com.ledgerflow.feature.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.backup.BackupReminder
+import com.ledgerflow.core.domain.backup.ObserveLastBackupUseCase
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -28,10 +30,19 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 public class DashboardViewModel @Inject constructor(
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
+    private val lastBackup: ObserveLastBackupUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DashboardUiState())
     public val state: StateFlow<DashboardUiState> = _state.asStateFlow()
+
+    /**
+     * The last verified backup, once read. Kept rather than only its verdict,
+     * because the verdict goes stale on its own: a backup six days old when
+     * Home opened is eight days old two days later, with nothing emitting.
+     */
+    private var lastBackupRead: Boolean = false
+    private var lastBackupAt: Long? = null
 
     init {
         // The observation's first emission is also the initial read, so there is
@@ -42,6 +53,20 @@ public class DashboardViewModel @Inject constructor(
                 _state.update { it.copy(captureHealth = health) }
             }
         }
+        // A backup made on the Back up now screen lands here as a new date,
+        // and the reminder goes without a resume.
+        viewModelScope.launch {
+            lastBackup().collect { at ->
+                lastBackupRead = true
+                lastBackupAt = at
+                judgeBackup()
+            }
+        }
+    }
+
+    private fun judgeBackup() {
+        if (!lastBackupRead) return
+        _state.update { it.copy(backupReminder = BackupReminder.of(lastBackupAt, lastBackup.now())) }
     }
 
     /** §5.2's resume poll. The grant half; see the class KDoc for why both exist. */
@@ -50,5 +75,7 @@ public class DashboardViewModel @Inject constructor(
             val health = getCaptureHealth()
             _state.update { it.copy(captureHealth = health) }
         }
+        // Time passed while the app was away; the same date may now be stale.
+        judgeBackup()
     }
 }

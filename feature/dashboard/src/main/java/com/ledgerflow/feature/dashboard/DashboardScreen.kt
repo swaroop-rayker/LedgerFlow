@@ -24,6 +24,7 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.ingest.ListenerHealth
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 
@@ -40,6 +41,7 @@ import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 @Composable
 public fun DashboardRoute(
     onSetUpNotifications: () -> Unit,
+    onBackUpNow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: DashboardViewModel = hiltViewModel()
@@ -53,6 +55,7 @@ public fun DashboardRoute(
     DashboardScreen(
         state = state,
         onSetUpNotifications = onSetUpNotifications,
+        onBackUpNow = onBackUpNow,
         modifier = modifier,
     )
 }
@@ -76,6 +79,7 @@ public fun DashboardScreen(
     state: DashboardUiState,
     onSetUpNotifications: () -> Unit,
     modifier: Modifier = Modifier,
+    onBackUpNow: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -84,6 +88,14 @@ public fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
     ) {
         LfScreenTitle(title = "Home")
+
+        state.backupReminder?.let { reminder ->
+            BackupReminderCard(
+                reminder = reminder,
+                onBackUpNow = onBackUpNow,
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
 
         if (state.showsCaptureBanner) {
             CaptureHealthBanner(
@@ -167,6 +179,43 @@ private fun CaptureHealthBanner(
 }
 
 /**
+ * The backup reminder (BUG4(c) as amended; owner, 2026-09-19).
+ *
+ * **One line and an action**, in Home's one card shape: a reminder that fills
+ * the screen above a ledger is nagging, and one that can be dismissed while it
+ * is still true defeats the reason it exists. Above the capture banner, because
+ * a phone lost today loses data whether or not capture is working.
+ */
+@Composable
+private fun BackupReminderCard(
+    reminder: BackupReminder,
+    onBackUpNow: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LfCard(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = when (reminder) {
+                    BackupReminder.NeverBackedUp ->
+                        "No backup yet. Your data exists only on this phone."
+                    is BackupReminder.Stale ->
+                        "Last backup ${reminder.daysAgo} days ago. Anything since is only on this phone."
+                },
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.warn,
+            )
+            LfActionRow(alignment = LfActionAlignment.End) {
+                LfButton(
+                    text = "Back up now",
+                    style = LfButtonStyle.Inline,
+                    onClick = onBackUpNow,
+                )
+            }
+        }
+    }
+}
+
+/**
  * The threshold, in the units the sentence uses.
  *
  * Derived from [ListenerHealth.DEAD_THRESHOLD_MILLIS] rather than written as
@@ -194,6 +243,21 @@ private fun DashboardNotGrantedPreview() {
     LfTheme {
         DashboardScreen(
             state = DashboardUiState(captureHealth = NotificationCaptureHealth.NOT_GRANTED),
+            onSetUpNotifications = {},
+        )
+    }
+}
+
+@PreviewFontScale
+@PreviewLightDark
+@Composable
+private fun DashboardBackupReminderPreview() {
+    LfTheme {
+        DashboardScreen(
+            state = DashboardUiState(
+                captureHealth = NotificationCaptureHealth.NOT_GRANTED,
+                backupReminder = BackupReminder.Stale(daysAgo = 12),
+            ),
             onSetUpNotifications = {},
         )
     }
