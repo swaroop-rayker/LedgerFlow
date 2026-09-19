@@ -118,6 +118,10 @@ public interface MerchantAliasDao {
     @Query("DELETE FROM merchant_alias WHERE id = :id")
     public suspend fun delete(id: String)
 
+    /** A re-taught alias: the same name, now meaning another merchant. */
+    @Query("UPDATE merchant_alias SET merchant_id = :merchantId WHERE normalized_alias = :normalized")
+    public suspend fun repoint(normalized: String, merchantId: String)
+
     /** Follows a merge: the folded merchant's aliases point at the survivor. */
     @Query("UPDATE merchant_alias SET merchant_id = :target WHERE merchant_id = :source")
     public suspend fun reassign(source: String, target: String)

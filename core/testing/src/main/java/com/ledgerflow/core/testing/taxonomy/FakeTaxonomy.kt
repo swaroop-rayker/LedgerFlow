@@ -147,8 +147,21 @@ public class FakeMerchantRepository : MerchantRepository {
 
     override suspend fun find(id: String): Merchant? = merchants.value.firstOrNull { it.id == id }
 
+    /** Every (merchantId, rawName) taught, in order (item 7b). */
+    public val taughtAliases: MutableList<Pair<String, String>> = mutableListOf()
+
+    /** Taught names, looked up case-insensitively as the real one does after normalising. */
+    public val aliases: MutableMap<String, String> = mutableMapOf()
+
     override suspend fun findByName(rawName: String): Merchant? =
         merchants.value.firstOrNull { it.canonicalName.equals(rawName, ignoreCase = true) }
+            ?: aliases[rawName.lowercase()]?.let { id -> merchants.value.firstOrNull { it.id == id } }
+
+    override suspend fun rememberAlias(merchantId: String, rawName: String): TaxonomyResult<Unit> {
+        taughtAliases += merchantId to rawName
+        aliases[rawName.lowercase()] = merchantId
+        return TaxonomyResult.Success(Unit)
+    }
 
     override suspend fun createOrGet(
         rawName: String,

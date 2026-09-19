@@ -31,10 +31,9 @@ import com.ledgerflow.feature.ocr.recognition.RecognizedPage
  *
  * ## What this does not do yet, stated rather than hidden
  *
- * - **No date detection.** §5.3's pipeline does not list one, and the review
- *   screen falls back to the capture time. A receipt photographed days later
- *   therefore lands on the wrong day until the user corrects it. Worth doing;
- *   not done here, and not silently half-done.
+ * - **The date is not read here.** `ReceiptDates` reads it and the capture
+ *   screen applies it (`ReceiptDates.apply`), because rule (d) needs the capture
+ *   time, which this pure pipeline deliberately does not take.
  * - **No fuzzy merchant match.** Step 9 produces `merchantRaw` and stops, which
  *   is that field's contract. §5.5's Jaro-Winkler ≥ 0.88 suggestion is a review
  *   -time surface and needs the merchant table, which this layer deliberately
@@ -107,6 +106,20 @@ internal object ReceiptExtractor {
             confidence = confidenceOf(lines, total, reconciliation, readings),
             lines = lines,
         )
+    }
+
+    /**
+     * The legal entity in a recognised page's header — [MerchantFallback]'s
+     * source (item 7a). The header is everything above an invoice table's
+     * column header, or the first [FALLBACK_HEADER_ROWS] rows of a page with no
+     * table.
+     */
+    fun legalEntityName(page: RecognizedPage, currency: String = "INR"): String? {
+        val rows = ReceiptGeometry.rows(page)
+        if (rows.isEmpty()) return null
+        val scale = ReceiptGeometry.medianHeight(ReceiptGeometry.contentElements(page))
+        val headerEnd = ReceiptTable.read(rows, scale, currency)?.headerFirst ?: minOf(rows.size, FALLBACK_HEADER_ROWS)
+        return MerchantHeader.legalEntity(rows.take(headerEnd), scale)
     }
 
     /**
@@ -325,4 +338,7 @@ internal object ReceiptExtractor {
 
     /** A row that parsed but had nothing to check against. */
     private const val OPEN_LINE_CONFIDENCE = 0.6
+
+    /** How deep a table-less page's header is taken to be, for [legalEntityName]. */
+    private const val FALLBACK_HEADER_ROWS = 10
 }

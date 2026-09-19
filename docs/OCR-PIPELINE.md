@@ -212,10 +212,11 @@ were worth doing:
 
 ### Still open in B
 
-- **Invoice tables (S13, `ReceiptTable`) do not handle** top-aligned cells, a
-  logo as the merchant name (bigbasket reads `basket`), or any page after the
-  first. On the owner's two PDF invoices on the device: bigbasket 11/11 items
-  exact and balanced, Zepto 4/4 items with one misread amount left blank.
+- **Invoice tables (S13, `ReceiptTable`) do not handle** top-aligned cells or
+  any page after the first. Read from their text layers, the owner's two PDF
+  invoices grade 11/11 and 4/4 with exact totals (`ReceiptCorpusGradingTest`).
+  bigbasket's merchant, absent from its text layer, comes from recognising the
+  rendered header (`MerchantFallback`, item 7a).
 - **No date detection.** §5.3's pipeline does not list one and the review
   screen falls back to the capture time, so a receipt photographed days later
   lands on the wrong day until corrected.

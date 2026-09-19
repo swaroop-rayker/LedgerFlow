@@ -129,6 +129,19 @@ public interface MerchantRepository {
         defaultCategoryId: String? = null,
     ): TaxonomyResult<Merchant>
 
+    /**
+     * Remembers that [rawName] — a payee as an SMS or receipt printed it —
+     * means merchant [merchantId] (§5.5; item 7b, owner, 2026-09-19).
+     *
+     * Learned when the user approves a candidate under a different merchant
+     * than the one it read, so the next "GEDDIT CONVENIENCE PRIVATE LIMITED"
+     * arrives as Zepto. Exact normalised matches only: §5.5's fuzzy match stays
+     * a suggestion. A name that is itself a live merchant's is never stored —
+     * that merchant keeps it, and a merge is the tool for folding it. The same
+     * name taught again under another merchant moves the alias.
+     */
+    public suspend fun rememberAlias(merchantId: String, rawName: String): TaxonomyResult<Unit>
+
     public suspend fun rename(id: String, canonicalName: String): TaxonomyResult<Unit>
 
     public suspend fun setDefaultCategory(id: String, categoryId: String?): TaxonomyResult<Unit>

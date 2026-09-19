@@ -18,6 +18,7 @@ import com.ledgerflow.core.domain.ingest.Reconciliation
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LineItemKind
+import com.ledgerflow.feature.ocr.extraction.MerchantFallback
 import com.ledgerflow.feature.ocr.extraction.ReceiptDates
 import com.ledgerflow.feature.ocr.extraction.ReceiptExtractor
 import com.ledgerflow.feature.ocr.recognition.ReceiptTextRecognizer
@@ -36,27 +37,25 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Receipt capture (SPEC.md §5.3).
+ * Receipt capture (SPEC.md §5.3): capture or pick, read, extract, date, and —
+ * on Save — seal the image and file a candidate in the Inbox.
  *
- * ## What this deliberately stops short of
+ * ## How a page is read
  *
- * It captures, decodes, downscales and **recognises** — and then reports how
- * much text came back. It does not extract line items, because §5.3's pipeline
- * does not exist yet, and a screen that showed a plausible-looking bill it had
- * not actually parsed would be the worst possible placeholder.
+ * A digital PDF is read from its **text layer** (`PdfTextLayer`), exact for
+ * every item and total; anything else is **recognised** (ML Kit). The pure
+ * extractor turns either into a bill; `ReceiptDates` adds the bill's day
+ * (it needs the capture time the extractor does not take); and a text-layer
+ * read that names no shop has the rendered page's header recognised for it
+ * (`MerchantFallback`, item 7a).
  *
- * What it does buy is the thing nothing else could: proof that the whole
- * capture path works on real hardware against a real receipt. ML Kit has been
- * exercised on a synthetic bitmap in a test; this is the first thing that
- * points it at paper.
+ * ## Nothing reaches the ledger from here
  *
- * ## Nothing here writes to the ledger, or anywhere else
- *
- * No `pending_transaction`, no `attachment`, no file. Law 1 is not even in
- * reach — the candidate this will eventually produce is written by the
- * extraction step, and approval remains `ApproveTransactionUseCase`'s alone.
- * Until then a capture is a read that leaves no trace, which is also why
- * cancelling one costs nothing to clean up.
+ * Save writes the sealed image, an `attachment` row and a `pending_transaction`
+ * at `PENDING` — three writes, none of them `ledger_entry`. Law 1 holds:
+ * `ApproveTransactionUseCase` still runs only when the user approves in the
+ * Inbox. Reading alone leaves no trace, which is why cancelling one costs
+ * nothing to clean up.
  *
  * ## Dispatchers are injected
  *
@@ -192,7 +191,8 @@ public class OcrCaptureViewModel @Inject constructor(
             val outcome = runCatching {
                 withContext(io) {
                     val bitmap = decode()
-                    val page = textLayer() ?: recognizer.recognize(bitmap)
+                    val textPage = textLayer()
+                    val page = textPage ?: recognizer.recognize(bitmap)
                     // Extraction is pure arithmetic and runs in microseconds,
                     // but it runs on [io] with the recognition rather than on
                     // the main thread after it: StrictMode has penaltyDeath in
@@ -201,8 +201,17 @@ public class OcrCaptureViewModel @Inject constructor(
                     // The bill's own date (§5.3's four rules), applied to the
                     // extraction here so the candidate carries it — and kept,
                     // so the summary can say which day was read or why none was.
+                    // A digital PDF whose text names no shop (item 7a): only
+                    // then is the rendered page recognised, for its header.
+                    val read = ReceiptExtractor.extract(page, currency).let { base ->
+                        if (textPage == null) {
+                            base
+                        } else {
+                            MerchantFallback.apply(base, currency) { recognizer.recognize(bitmap) }
+                        }
+                    }
                     val dated = ReceiptDates.apply(
-                        ReceiptExtractor.extract(page, currency),
+                        read,
                         page,
                         capturedAt = clock.nowMillis(),
                         zone = ZoneId.systemDefault(),

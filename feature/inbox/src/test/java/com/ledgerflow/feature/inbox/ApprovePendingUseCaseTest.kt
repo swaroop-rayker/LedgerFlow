@@ -2,6 +2,8 @@ package com.ledgerflow.feature.inbox
 
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.inbox.InboxError
+import com.ledgerflow.core.domain.ledger.LedgerError
+import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.ApprovalEdits
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
@@ -214,5 +216,49 @@ class ApprovePendingUseCaseTest {
         val request = ledger.approved.single()
         assertThat(request.amount).isEqualTo(Money(50_000L))
         assertThat(request.note).isEqualTo("corrected")
+    }
+
+    // ── Item 7b: a merchant correction is remembered ──────────────────────
+
+    /** Filed under a merchant the user picked: what the message read now means it. */
+    @Test
+    fun approvingUnderAPickedMerchant_teachesWhatTheMessageRead() = runTest {
+        pending.put(candidate(merchantRaw = "GEDDIT CONVENIENCE PRIVATE LIMITED"))
+
+        approve("p1", ApprovalEdits(merchantId = "zepto"))
+
+        assertThat(merchants.taughtAliases).containsExactly("zepto" to "GEDDIT CONVENIENCE PRIVATE LIMITED")
+    }
+
+    /** An untouched candidate was resolved from the raw name already: nothing to learn. */
+    @Test
+    fun approvingUntouched_teachesNothing() = runTest {
+        pending.put(candidate(merchantRaw = "RAMESH KUMAR"))
+
+        approve("p1")
+
+        assertThat(merchants.taughtAliases).isEmpty()
+    }
+
+    /** An alias must not outlive an approval that failed. */
+    @Test
+    fun aFailedApproval_teachesNothing() = runTest {
+        pending.put(candidate(merchantRaw = "GEDDIT CONVENIENCE PRIVATE LIMITED"))
+        ledger.approveResult = LedgerResult.Failure(LedgerError.AmountNotPositive)
+
+        val result = approve("p1", ApprovalEdits(merchantId = "zepto"))
+
+        assertThat(result.isSuccess).isFalse()
+        assertThat(merchants.taughtAliases).isEmpty()
+    }
+
+    /** A message that read no payee has nothing to teach. */
+    @Test
+    fun noPayeeRead_teachesNothing() = runTest {
+        pending.put(candidate(merchantRaw = null))
+
+        approve("p1", ApprovalEdits(merchantId = "zepto"))
+
+        assertThat(merchants.taughtAliases).isEmpty()
     }
 }

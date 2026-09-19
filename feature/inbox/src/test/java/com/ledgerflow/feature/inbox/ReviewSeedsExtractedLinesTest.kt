@@ -17,6 +17,7 @@ import com.ledgerflow.core.domain.usecase.ObserveCategoryTreeUseCase
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.LineItemKind
+import com.ledgerflow.core.model.Merchant
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.model.Quantity
@@ -278,5 +279,25 @@ class ReviewSeedsExtractedLinesTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         assertThat(subject.state.value.lines.map { it.name }).containsExactly("TOMATO 1KG")
+    }
+
+    // ── Item 7b: a taught payee opens on its merchant ─────────────────────
+
+    /**
+     * The receipt read the legal seller; the user once filed it as Zepto; the
+     * next one opens on Zepto — and that is part of what was read, so opening
+     * the review writes no draft (BUG16's baseline).
+     */
+    @Test
+    fun aTaughtPayee_opensOnItsMerchant_withoutRecordingADraft() = runTest(dispatcher) {
+        merchants.merchants.value = listOf(Merchant("zepto", "Zepto", "zepto", null, null))
+        merchants.aliases["sri lakshmi stores"] = "zepto"
+        pending.put(candidate())
+
+        val subject = viewModel()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(subject.state.value.merchantId).isEqualTo("zepto")
+        assertThat(pending.get("p1")?.edits).isNull()
     }
 }

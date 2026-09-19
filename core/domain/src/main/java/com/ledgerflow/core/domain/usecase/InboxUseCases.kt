@@ -192,8 +192,28 @@ public class ApprovePendingUseCase @Inject constructor(
             }
 
             is Preflight.Refused -> Result.failure(InboxException(preflight.error))
-            is Preflight.Ready -> commit(pendingId, preflight.request)
+            is Preflight.Ready -> commit(pendingId, preflight.request).also { result ->
+                if (result.isSuccess) learnMerchant(candidate, edits, preflight.request)
+            }
         }
+    }
+
+    /**
+     * Item 7b (owner, 2026-09-19): the user filed this under a merchant of
+     * their choosing, so what the message or receipt *read* now means that
+     * merchant, and the next one arrives already resolved.
+     *
+     * **After the commit, never before**: an alias must not outlive an approval
+     * that failed. Only when the user chose the merchant — a pick or a typed
+     * name — since an untouched candidate was resolved from the raw name
+     * already, and there is nothing to learn. Never fails the approval: the
+     * repository refuses quietly, and the entry is what the user asked for.
+     */
+    private suspend fun learnMerchant(candidate: PendingTransaction, edits: ApprovalEdits, request: ApprovalRequest) {
+        if (edits.merchantId == null && edits.merchantName == null) return
+        val merchantId = request.assignment.merchantId ?: return
+        val read = candidate.extracted.merchantRaw?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        merchants.rememberAlias(merchantId, read)
     }
 
     /**

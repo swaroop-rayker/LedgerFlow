@@ -75,6 +75,46 @@ internal object MerchantHeader {
     }
 
     /**
+     * The legal entity named in the header, for the one path that asks
+     * (item 7a, the owner's decision of 2026-09-19): a **digital PDF whose text
+     * layer carries no shop name**, whose rendered page is then recognised.
+     *
+     * Measured on the owner's bigbasket invoice: the supplier block is drawn,
+     * not typed, so the text layer goes straight from "Details of Supplier" to
+     * the invoice fields. Recognised, the tallest header line is the logo read
+     * as `basket`, and the name shares a row with two other columns —
+     * `ATATA Enterprise | Innovative Retail Concepts Pvt Ltd,71 2 | Karunakar…`.
+     * So the rule works per **column cell** ([ReceiptGeometry.cells]): the first
+     * cell holding a name that ends in a legal-entity suffix wins, cut right
+     * after the suffix (the glued `,71 2` of the address goes), and the logo's
+     * tagline stays out because it is its own cell.
+     *
+     * **Only on that path.** On a photographed slip the brand is usually the
+     * large name and "Operated by … Pvt Ltd" small print, and type size stays
+     * the rule there ([detect]).
+     */
+    fun legalEntity(headerRows: List<ReceiptRow>, scale: Float): String? =
+        headerRows.asSequence()
+            .flatMap { ReceiptGeometry.cells(it, scale) }
+            .mapNotNull { cell -> LEGAL_NAME.find(cell.text)?.groupValues?.get(1)?.trim() }
+            .map { it.withoutSellerLabel() }
+            .firstOrNull { name ->
+                name.length >= MIN_NAME_LENGTH && !ReceiptKeywords.matches(name.uppercase(), ReceiptKeywords.ADMIN)
+            }
+
+    /**
+     * A name ending in a legal-entity suffix, as a whole word. It starts at the
+     * cell's first letter **or digit** — `24X7 Stores Pvt Ltd` is a real name,
+     * and a bullet or rule glyph before it is not part of it (an earlier
+     * version anchored on a letter and refused both). Lazy, so the first suffix
+     * ends the name.
+     */
+    private val LEGAL_NAME = Regex(
+        """([\p{L}\d].*?\b(?:private\s+limited|pvt\.?\s*ltd|limited|ltd|llp))(?!\p{L})""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
      * Drops a printed label in front of the name.
      *
      * Zepto's invoice heads the page `Seller Name: Geddit Convenience Private

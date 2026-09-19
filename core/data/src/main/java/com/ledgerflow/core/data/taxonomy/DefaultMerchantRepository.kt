@@ -5,6 +5,8 @@ import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.database.LedgerFlowDatabase
+import com.ledgerflow.core.database.entity.MerchantAliasEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.domain.taxonomy.MerchantNormalizer
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
@@ -49,8 +51,21 @@ public class DefaultMerchantRepository @Inject constructor(
     override suspend fun findByName(rawName: String): Merchant? = withContext(io) {
         val key = MerchantNormalizer.normalize(rawName)
         if (key.isEmpty()) return@withContext null
-        session.requireDatabase().merchantDao().byNormalizedKey(key)?.toDomain()
+        val database = session.requireDatabase()
+        // The merchant's own name first; then a name it has been taught
+        // (item 7b) -- so a review opens on "Zepto" for a Geddit invoice.
+        database.merchantDao().byNormalizedKey(key)?.toDomain()
+            ?: aliasTarget(database, key)?.toDomain()
     }
+
+    /**
+     * The live merchant a learned alias points at, or null. An alias to a
+     * hidden merchant resolves to nothing rather than to the hidden row.
+     */
+    private suspend fun aliasTarget(database: LedgerFlowDatabase, key: String): MerchantEntity? =
+        database.merchantAliasDao().byNormalized(key)
+            ?.let { database.merchantDao().byId(it.merchantId) }
+            ?.takeIf { it.deletedAt == 0L }
 
     /**
      * Get-or-create rather than create.
@@ -70,8 +85,15 @@ public class DefaultMerchantRepository @Inject constructor(
         val key = MerchantNormalizer.normalize(name)
         if (key.isEmpty()) return@withContext TaxonomyResult.Failure(TaxonomyError.BlankName)
 
-        val dao = session.requireDatabase().merchantDao()
+        val database = session.requireDatabase()
+        val dao = database.merchantDao()
         dao.byNormalizedKey(key)?.let { return@withContext TaxonomyResult.Success(it.toDomain()) }
+
+        // A name the user has taught (item 7b), **before** the un-hide below.
+        // That order is BUG28's fix: a merged merchant's name is an alias of
+        // the survivor, and resolving it here stops the next capture naming
+        // the merged shop from un-hiding it and quietly reversing the merge.
+        aliasTarget(database, key)?.let { return@withContext TaxonomyResult.Success(it.toDomain()) }
 
         // A *hidden* row still occupies the key, and this is where that used to
         // become a crash (BUG11). `index_merchant_normalized_key` is
@@ -99,6 +121,35 @@ public class DefaultMerchantRepository @Inject constructor(
         )
         dao.insert(entity)
         TaxonomyResult.Success(entity.toDomain())
+    }
+
+    override suspend fun rememberAlias(merchantId: String, rawName: String): TaxonomyResult<Unit> =
+        withContext(io) {
+            val key = MerchantNormalizer.normalize(rawName)
+            if (key.isEmpty()) return@withContext TaxonomyResult.Success(Unit)
+            val database = session.requireDatabase()
+            val merchant = database.merchantDao().byId(merchantId)?.takeIf { it.deletedAt == 0L }
+                ?: return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
+
+            // A live merchant owns this name -- this one (nothing to learn) or
+            // another (it keeps it; merging is the tool for folding it).
+            if (database.merchantDao().byNormalizedKey(key) != null) return@withContext TaxonomyResult.Success(Unit)
+
+            teach(database, key, rawName.trim(), merchant.id)
+            TaxonomyResult.Success(Unit)
+        }
+
+    /** Points [key] at [merchantId]: moved if already taught, otherwise stored. */
+    private suspend fun teach(database: LedgerFlowDatabase, key: String, alias: String, merchantId: String) {
+        val aliases = database.merchantAliasDao()
+        val existing = aliases.byNormalized(key)
+        when {
+            existing == null -> aliases.insert(
+                MerchantAliasEntity(id = ids.generate(), merchantId = merchantId, alias = alias, normalizedAlias = key),
+            )
+            existing.merchantId != merchantId -> aliases.repoint(key, merchantId)
+            else -> Unit
+        }
     }
 
     /**
@@ -165,7 +216,7 @@ public class DefaultMerchantRepository @Inject constructor(
             val dao = database.merchantDao()
             val entries = database.ledgerTaxonomyDao()
 
-            dao.byId(sourceId) ?: return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
+            val source = dao.byId(sourceId) ?: return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
             val target = dao.byId(targetId)?.takeIf { it.deletedAt == 0L }
                 ?: return@withContext TaxonomyResult.Failure(TaxonomyError.NotFound)
 
@@ -176,6 +227,11 @@ public class DefaultMerchantRepository @Inject constructor(
                 LedgerType.entries.forEach { ledger ->
                     entries.reassignMerchant(ledger, sourceId, target.id, clock.nowMillis())
                 }
+                // The folded merchant's taught names follow it, and its own name
+                // becomes one -- without that, the next capture naming it would
+                // un-hide it through createOrGet and reverse the merge (BUG28).
+                database.merchantAliasDao().reassign(sourceId, target.id)
+                teach(database, source.normalizedKey, source.canonicalName, target.id)
                 dao.softDelete(sourceId, clock.nowMillis())
             }
             TaxonomyResult.Success(Unit)

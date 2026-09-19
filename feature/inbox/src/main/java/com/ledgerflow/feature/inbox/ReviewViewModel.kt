@@ -141,7 +141,13 @@ public class ReviewViewModel @Inject constructor(
             _state.update { it.copy(loading = false, missing = true) }
             return
         }
-        val fromExtraction = candidate.toUiState(_state.value)
+        // A payee this install has been taught (item 7b) opens on its merchant.
+        // Resolved here, before the baseline below, so the pre-selection is
+        // part of what was read rather than an edit the draft would record.
+        val known = candidate.extracted.merchantRaw?.let { merchants.findByName(it) }
+        val fromExtraction = candidate.toUiState(_state.value).let { read ->
+            if (read.merchantId == null && known != null) read.copy(merchantId = known.id) else read
+        }
         // The saved typing goes ON TOP of the extraction, never instead of it:
         // the source label, the reference hint and needsManualFill are facts
         // about the message, and a draft has no business overriding them
