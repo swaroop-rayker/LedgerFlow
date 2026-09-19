@@ -1,7 +1,9 @@
 # ADR-0025 — Backups are manual ("Back up now"), and nightly backups wait for public-key sealing
 
 - **Status:** Part 1 **Accepted** (manual backup, built). Part 2 **Proposed** (public-key
-  nightly backups — not decided, not built).
+  nightly backups — not built). **Owner, 2026-09-19: keep part 2 proposed and build
+  it later;** manual backups plus a Dashboard reminder (no backup, or none in 7
+  days) are the interim answer.
 - **Date:** 2026-09-18
 - **Deciders:** Swaroop (owner, chose among options A–D in `SPEC.md` §16 Q23), lead engineer
 - **Supersedes / Superseded by:** none. **Closes `SPEC.md` §16 Q23.** Amends §5.9's
