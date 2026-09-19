@@ -176,7 +176,7 @@ Each needs a stated plan and the owner's nod first.
 3. **Item 6, multi-page PDFs** — both corpus PDFs' page 2 is legal boilerplate
    (no items, no totals), so reading it changes nothing today; the real case —
    items continuing onto page 2 — has no sample. Recommended: defer until the
-   owner captures one, as for item 8.
+   owner captures one, as for item 8. **Owner: deferred** (2026-09-19).
 4. **Item 8, top-aligned table cells** — only with a real receipt that needs it.
 5. **Owner-only**: the private corpus repo on GitHub + a read-only token as a CI
    secret (then CI goes green); D6c and D10 on the phone (D10 needs a guest

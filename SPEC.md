@@ -716,7 +716,10 @@ as `:feature:ocr`'s `extraction` package; each is arithmetic over
   slips never reach this path. Measured on the owner's two invoices on the
   device: bigbasket 11/11 items with every amount exact and the bill balanced;
   Zepto 4/4 items with one amount left for the user (a misread `52,00`).
-  **Not handled:** top-aligned table cells and pages after the first.
+  **Not handled:** top-aligned table cells and pages after the first — both
+  **deferred until a real receipt needs them** (owner, 2026-09-19): the two
+  corpus PDFs' second pages are legal boilerplate, and the screen says "page 1
+  of N".
   **A PDF whose text names no shop** (bigbasket draws its supplier block, so
   its text layer has no merchant at all) has its rendered page's header
   recognised, and the header's **legal entity** is taken — the first column
