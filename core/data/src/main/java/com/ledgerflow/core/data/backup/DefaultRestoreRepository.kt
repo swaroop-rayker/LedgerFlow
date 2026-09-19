@@ -57,7 +57,9 @@ public class DefaultRestoreRepository @Inject constructor(
 ) : RestoreRepository {
 
     override suspend fun listBackups(treeUri: String): List<String>? = withContext(io) {
-        folders.resolve(treeUri)?.let { folder -> BackupNames.newestFirst(folder.list()) }
+        folders.resolve(treeUri)
+            ?.takeIf { it.displayName() != null }
+            ?.let { folder -> BackupNames.newestFirst(folder.list()) }
     }
 
     override suspend fun restore(source: RestoreSource, words: List<String>): RestoreOutcome =

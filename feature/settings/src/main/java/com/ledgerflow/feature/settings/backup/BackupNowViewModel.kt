@@ -40,10 +40,7 @@ public class BackupNowViewModel @Inject constructor(
     init {
         // Asked up front, so the picker is offered before the user types 24
         // words for a backup that has nowhere to go.
-        viewModelScope.launch {
-            val hasFolder = backups.hasBackupFolder()
-            _state.update { it.copy(needsFolder = !hasFolder) }
-        }
+        viewModelScope.launch { refreshFolder() }
     }
 
     public fun onEvent(event: BackupNowEvent) {
@@ -76,24 +73,33 @@ public class BackupNowViewModel @Inject constructor(
                     isWorking = false,
                     result = outcome,
                     entry = if (outcome.isSuccess) it.entry.cleared() else it.entry,
-                    needsFolder = outcome == BackupOutcome.NoBackupFolder || it.needsFolder && !outcome.isSuccess,
                 )
             }
+            // A backup that found no folder may have found it gone since the
+            // screen opened (BUG27); ask again rather than trust the old answer.
+            if (outcome == BackupOutcome.NoBackupFolder) refreshFolder()
         }
     }
 
     private fun chooseFolder(treeUri: String) {
         viewModelScope.launch {
+            val hadFolder = _state.value.folderName != null
             backups.setBackupFolder(treeUri)
-            val hasFolder = backups.hasBackupFolder()
+            refreshFolder()
             _state.update {
+                val hasFolder = it.folderName != null
                 it.copy(
-                    needsFolder = !hasFolder,
+                    folderChanged = it.folderChanged || hadFolder && hasFolder,
                     // "Choose a folder first" is no longer true.
                     result = it.result.takeUnless { r -> r == BackupOutcome.NoBackupFolder && hasFolder },
                 )
             }
         }
+    }
+
+    private suspend fun refreshFolder() {
+        val name = backups.backupFolderName()
+        _state.update { it.copy(folderName = name, folderChecked = true) }
     }
 
     override fun onCleared() {

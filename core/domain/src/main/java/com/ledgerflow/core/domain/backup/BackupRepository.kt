@@ -27,10 +27,17 @@ public interface BackupRepository {
     /** When the last *verified* backup was written, or null if never. */
     public fun lastBackupAt(): Flow<Long?>
 
-    /** Whether a backup folder is chosen and its grant is still held. */
-    public suspend fun hasBackupFolder(): Boolean
+    /**
+     * The chosen backup folder's name — only while its grant is held **and the
+     * folder still exists** (BUG27). Null means the user must choose one.
+     */
+    public suspend fun backupFolderName(): String?
 
-    /** Records a newly chosen folder. The caller has already persisted the grant. */
+    /**
+     * Records a newly chosen folder, replacing any earlier one. The caller has
+     * already persisted the new grant; the previous folder's is released.
+     * Backups already written stay where they are.
+     */
     public suspend fun setBackupFolder(treeUri: String)
 }
 

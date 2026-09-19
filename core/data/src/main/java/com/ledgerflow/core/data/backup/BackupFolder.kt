@@ -21,6 +21,15 @@ import java.io.RandomAccessFile
  */
 public interface BackupFolder {
 
+    /**
+     * The folder's own name, or null if it no longer exists (BUG27).
+     *
+     * A held grant says nothing about the folder: renaming or deleting it
+     * leaves the grant in place, and every write then fails with a message
+     * about space. This is the question the grant cannot answer.
+     */
+    public fun displayName(): String?
+
     /** Names of the plain files directly in this folder. */
     public fun list(): List<String>
 
@@ -57,6 +66,8 @@ public interface BackupFolder {
  * the same temp → fsync → verify → rename discipline the SAF tree follows.
  */
 public class FileBackupFolder(private val directory: File) : BackupFolder {
+
+    override fun displayName(): String? = directory.takeIf { it.isDirectory }?.name
 
     override fun list(): List<String> =
         directory.listFiles().orEmpty().filter { it.isFile }.map { it.name }

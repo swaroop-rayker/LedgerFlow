@@ -73,6 +73,13 @@ public class SafBackupFolder(
 
     override fun list(): List<String> = children().filterNot { it.isDirectory }.map { it.name }
 
+    /** The tree's root document, queried: a renamed or deleted folder has none. */
+    override fun displayName(): String? = runCatching {
+        resolver.query(folderUri, arrayOf(Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    }.getOrNull()
+
     override fun exists(name: String): Boolean = childUri(name) != null
 
     override fun read(name: String): ByteArray? = runCatching {

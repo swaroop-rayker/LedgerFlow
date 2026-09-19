@@ -132,7 +132,7 @@ class BackupNowViewModelTest {
     /** The picker is offered before the user types 24 words for nowhere. */
     @Test
     fun noFolder_isOfferedUpFront() = runTest(dispatcher) {
-        repository.folderChosen = false
+        repository.folderName = null
 
         val vm = viewModel()
         advanceUntilIdle()
@@ -142,7 +142,7 @@ class BackupNowViewModelTest {
 
     @Test
     fun choosingAFolder_recordsItAndStopsAsking() = runTest(dispatcher) {
-        repository.folderChosen = false
+        repository.folderName = null
         val vm = viewModel()
         advanceUntilIdle()
 
@@ -156,7 +156,7 @@ class BackupNowViewModelTest {
     /** Backing out of the picker changes nothing. */
     @Test
     fun cancellingThePicker_changesNothing() = runTest(dispatcher) {
-        repository.folderChosen = false
+        repository.folderName = null
         val vm = viewModel()
         advanceUntilIdle()
 
@@ -167,12 +167,18 @@ class BackupNowViewModelTest {
         assertThat(vm.state.value.needsFolder).isTrue()
     }
 
-    /** A backup that finds the folder gone asks for one again, keeping the words. */
+    /**
+     * A backup that finds the folder gone asks for one again, keeping the words
+     * — including when it went **after** the screen opened, so the answer from
+     * opening is stale (BUG27).
+     */
     @Test
     fun aLostFolder_asksAgainAndKeepsTheWords() = runTest(dispatcher) {
         repository.outcome = BackupOutcome.NoBackupFolder
         val vm = viewModel()
         advanceUntilIdle()
+        assertThat(vm.state.value.needsFolder).isFalse()
+        repository.folderName = null
         vm.typeFullPhrase()
 
         vm.onEvent(BackupNowEvent.Submitted)
@@ -180,5 +186,47 @@ class BackupNowViewModelTest {
 
         assertThat(vm.state.value.needsFolder).isTrue()
         assertThat(vm.state.value.entry.words).hasSize(validator.wordCount)
+    }
+
+    /** Where backups go is on screen, so the user can see what "Change folder" would change. */
+    @Test
+    fun theChosenFolder_isNamed_andNothingIsAskedFor() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.folderName).isEqualTo("LedgerFlow backups")
+        assertThat(vm.state.value.needsFolder).isFalse()
+        assertThat(vm.state.value.folderChanged).isFalse()
+    }
+
+    /**
+     * BUG27's second half: a folder can be changed without losing the old one
+     * first — the only way to move backups to a cloud drive — and the screen
+     * says the earlier backups stayed behind.
+     */
+    @Test
+    fun bug27_changingTheFolder_recordsItAndSaysTheOldBackupsStay() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.onEvent(BackupNowEvent.FolderChosen("content://drive/tree/LedgerFlow-drive"))
+        advanceUntilIdle()
+
+        assertThat(repository.chosenFolders).containsExactly("content://drive/tree/LedgerFlow-drive")
+        assertThat(vm.state.value.folderName).isEqualTo("LedgerFlow-drive")
+        assertThat(vm.state.value.folderChanged).isTrue()
+    }
+
+    /** Choosing a first folder is not a change: there are no earlier backups to mention. */
+    @Test
+    fun aFirstFolder_isNotReportedAsAChange() = runTest(dispatcher) {
+        repository.folderName = null
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.onEvent(BackupNowEvent.FolderChosen("content://tree/backups"))
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.folderChanged).isFalse()
     }
 }

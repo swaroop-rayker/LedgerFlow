@@ -17,6 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import com.ledgerflow.core.designsystem.component.LfActionAlignment
+import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
@@ -58,6 +60,7 @@ public fun BackupNowScreen(
             ) {
                 Explanation()
                 if (state.needsFolder) FolderPrompt(onEvent)
+                state.folderName?.let { FolderLine(it, state.folderChanged, state.isWorking, onEvent) }
                 state.result?.let { ResultMessage(it) }
                 LfPhraseEntry(
                     words = state.entry.words,
@@ -97,18 +100,7 @@ private fun Explanation() {
  */
 @Composable
 private fun FolderPrompt(onEvent: (BackupNowEvent) -> Unit) {
-    val context = LocalContext.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-            }
-        }
-        onEvent(BackupNowEvent.FolderChosen(uri?.toString()))
-    }
+    val launch = rememberFolderPicker(onEvent)
     LfCard {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
             Text(
@@ -119,9 +111,49 @@ private fun FolderPrompt(onEvent: (BackupNowEvent) -> Unit) {
             )
             LfButton(
                 text = "Choose folder",
-                onClick = { picker.launch(null) },
+                onClick = launch,
                 style = LfButtonStyle.Outlined,
             )
+        }
+    }
+}
+
+/**
+ * Where backups go, and the way to move them — to a cloud drive, say. Without
+ * it the only way to change folders was to lose the current one (BUG27).
+ * Backups already written stay where they are, and after a change the screen
+ * says so: the new folder starts empty.
+ */
+@Composable
+private fun FolderLine(
+    name: String,
+    changed: Boolean,
+    isWorking: Boolean,
+    onEvent: (BackupNowEvent) -> Unit,
+) {
+    val launch = rememberFolderPicker(onEvent)
+    LfCard {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = "Backups go to $name.",
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textPrimary,
+            )
+            if (changed) {
+                Text(
+                    text = "Earlier backups stay in the previous folder.",
+                    style = LfTheme.typography.bodyM,
+                    color = LfTheme.colors.textSecondary,
+                )
+            }
+            LfActionRow(alignment = LfActionAlignment.Start) {
+                LfButton(
+                    text = "Change folder",
+                    onClick = launch,
+                    enabled = !isWorking,
+                    style = LfButtonStyle.Inline,
+                )
+            }
         }
     }
 }
@@ -150,6 +182,24 @@ private fun SubmitBar(state: BackupNowUiState, onEvent: (BackupNowEvent) -> Unit
     }
 }
 
+/** The system folder picker, with the grant persisted as it returns. */
+@Composable
+private fun rememberFolderPicker(onEvent: (BackupNowEvent) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+        }
+        onEvent(BackupNowEvent.FolderChosen(uri?.toString()))
+    }
+    return { picker.launch(null) }
+}
+
 // ── Previews (CLAUDE.md §5) ───────────────────────────────────────────────
 
 @PreviewScreenSizes
@@ -161,7 +211,7 @@ private fun BackupNowNeedsFolderPreview() {
         BackupNowScreen(
             state = BackupNowUiState(
                 entry = PhraseEntry(requiredWordCount = 24, draft = "aban", suggestions = listOf("abandon")),
-                needsFolder = true,
+                folderChecked = true,
             ),
             onEvent = {},
         )
@@ -177,6 +227,9 @@ private fun BackupNowDonePreview() {
         BackupNowScreen(
             state = BackupNowUiState(
                 entry = PhraseEntry(requiredWordCount = 24),
+                folderName = "LedgerFlow backups",
+                folderChecked = true,
+                folderChanged = true,
                 result = BackupOutcome.Done(
                     fileName = "ledgerflow-20260918-101500.lfbk",
                     rows = 412,

@@ -108,7 +108,7 @@ class BackUpNowTest {
     @Test
     fun noFolderChosen_asksForOne() = runTest {
         assertThat(repository().backUpNow(vault.mnemonic)).isEqualTo(BackupOutcome.NoBackupFolder)
-        assertThat(repository().hasBackupFolder()).isFalse()
+        assertThat(repository().backupFolderName()).isNull()
     }
 
     /** A grant revoked from system settings reads as "choose a folder", not a crash. */

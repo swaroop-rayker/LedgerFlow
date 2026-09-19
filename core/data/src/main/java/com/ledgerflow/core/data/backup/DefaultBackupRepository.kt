@@ -34,6 +34,14 @@ import kotlinx.coroutines.withContext
 /** Turns a stored tree URI into a folder, or null if its grant is gone. */
 public fun interface BackupFolderResolver {
     public fun resolve(treeUri: String): BackupFolder?
+
+    /**
+     * Gives up a folder's grant once another has replaced it. Android caps the
+     * grants an app may hold, so a replaced one must not linger. Not done when
+     * a folder merely fails a check: that can be transient (a cloud provider
+     * offline), and dropping a good grant would make the user choose it again.
+     */
+    public fun release(treeUri: String) {}
 }
 
 /**
@@ -52,6 +60,12 @@ public class SafBackupFolderResolver @Inject constructor(
             it.uri == uri && it.isReadPermission && it.isWritePermission
         }
         return if (held) SafBackupFolder.fromTree(context.contentResolver, uri) else null
+    }
+
+    override fun release(treeUri: String) {
+        runCatching {
+            context.contentResolver.releasePersistableUriPermission(Uri.parse(treeUri), GRANT_FLAGS)
+        }
     }
 
     /** The flags a grant must be persisted with — the picker's caller uses these. */
@@ -99,9 +113,7 @@ public class DefaultBackupRepository @Inject constructor(
             is PhraseVerification.Failure -> return@withContext verification.reason.toOutcome()
         }
 
-        val folder = database.appMetaDao().value(VaultSession.KEY_BACKUP_TREE_URI)
-            ?.let(folders::resolve)
-            ?: return@withContext BackupOutcome.NoBackupFolder
+        val folder = reachableFolder(database) ?: return@withContext BackupOutcome.NoBackupFolder
 
         val seed = Bip39.toSeed(words)
         try {
@@ -163,15 +175,27 @@ public class DefaultBackupRepository @Inject constructor(
             } ?: flowOf(null)
         }
 
-    override suspend fun hasBackupFolder(): Boolean = withContext(io) {
-        val database = session.openForBackgroundWork() ?: return@withContext false
-        database.appMetaDao().value(VaultSession.KEY_BACKUP_TREE_URI)?.let(folders::resolve) != null
+    override suspend fun backupFolderName(): String? = withContext(io) {
+        val database = session.openForBackgroundWork() ?: return@withContext null
+        reachableFolder(database)?.displayName()
     }
 
     override suspend fun setBackupFolder(treeUri: String): Unit = withContext(io) {
         val database = session.openForBackgroundWork() ?: return@withContext
+        val previous = database.appMetaDao().value(VaultSession.KEY_BACKUP_TREE_URI)
         database.appMetaDao().put(AppMetaEntity(VaultSession.KEY_BACKUP_TREE_URI, treeUri))
+        if (previous != null && previous != treeUri) folders.release(previous)
     }
+
+    /**
+     * The chosen folder, if its grant is held **and it still exists** (BUG27).
+     * A renamed or deleted folder keeps its grant, so the grant alone sent the
+     * user into 24 words and a failure blaming disk space.
+     */
+    private suspend fun reachableFolder(database: LedgerFlowDatabase): BackupFolder? =
+        database.appMetaDao().value(VaultSession.KEY_BACKUP_TREE_URI)
+            ?.let(folders::resolve)
+            ?.takeIf { it.displayName() != null }
 
     private fun UnlockFailure.toOutcome(): BackupOutcome = when (this) {
         UnlockFailure.AuthenticationFailed -> BackupOutcome.NotThisVaultsPhrase

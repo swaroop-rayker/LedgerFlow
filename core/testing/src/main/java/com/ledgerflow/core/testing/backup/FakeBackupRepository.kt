@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 public class FakeBackupRepository(
     /** What [backUpNow] returns. */
     public var outcome: BackupOutcome = BackupOutcome.NoBackupFolder,
-    /** Whether a folder is chosen and granted. */
-    public var folderChosen: Boolean = true,
+    /** The chosen folder's name; null when none is chosen or it is gone. */
+    public var folderName: String? = "LedgerFlow backups",
 ) : BackupRepository {
 
     public val backUpCalls: MutableList<List<String>> = mutableListOf()
@@ -28,10 +28,10 @@ public class FakeBackupRepository(
 
     override fun lastBackupAt(): Flow<Long?> = lastBackup
 
-    override suspend fun hasBackupFolder(): Boolean = folderChosen
+    override suspend fun backupFolderName(): String? = folderName
 
     override suspend fun setBackupFolder(treeUri: String) {
         chosenFolders += treeUri
-        folderChosen = true
+        folderName = treeUri.substringAfterLast('/')
     }
 }

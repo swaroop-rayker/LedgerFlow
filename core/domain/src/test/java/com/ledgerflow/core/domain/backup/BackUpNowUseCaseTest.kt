@@ -33,7 +33,7 @@ class BackUpNowUseCaseTest {
             return BackupOutcome.NoBackupFolder
         }
         override fun lastBackupAt(): Flow<Long?> = flowOf(null)
-        override suspend fun hasBackupFolder(): Boolean = false
+        override suspend fun backupFolderName(): String? = null
         override suspend fun setBackupFolder(treeUri: String) = Unit
     }
 

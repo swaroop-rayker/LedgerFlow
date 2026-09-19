@@ -19,10 +19,20 @@ public data class BackupNowUiState(
     val isWorking: Boolean = false,
     /** The last attempt's outcome, until dismissed or superseded. */
     val result: BackupOutcome? = null,
-    /** No folder is chosen, or its grant is gone. The screen offers the picker. */
-    val needsFolder: Boolean = false,
+    /**
+     * Where backups go — the folder's own name, or null when none is chosen,
+     * its grant is gone, or the folder itself no longer exists (BUG27).
+     */
+    val folderName: String? = null,
+    /** The folder has been asked about. Until then neither the name nor the prompt shows. */
+    val folderChecked: Boolean = false,
+    /** The user changed folders in this visit; earlier backups stayed in the old one. */
+    val folderChanged: Boolean = false,
 ) {
     val canSubmit: Boolean get() = entry.isComplete && !isWorking
+
+    /** The screen offers the picker before any words are typed. */
+    val needsFolder: Boolean get() = folderChecked && folderName == null
 }
 
 public sealed interface BackupNowEvent {
