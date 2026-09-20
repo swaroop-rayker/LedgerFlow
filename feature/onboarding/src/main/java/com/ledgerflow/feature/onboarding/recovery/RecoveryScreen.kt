@@ -22,6 +22,7 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.ui.phrase.LfPhraseEntry
+import com.ledgerflow.core.ui.phrase.LfPhraseScanner
 import com.ledgerflow.feature.onboarding.phrase.rejectionMessage
 
 /**
@@ -37,6 +38,18 @@ public fun RecoveryScreen(
     onEvent: (RecoveryEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The scanner takes the whole screen while it is open: a viewfinder beside
+    // a word list is two things asking for the same attention, and the camera
+    // is a moment rather than a mode (ADR-0028).
+    if (state.isScanning) {
+        LfPhraseScanner(
+            onScanned = { onEvent(RecoveryEvent.Scanner.Read(it)) },
+            onDismiss = { onEvent(RecoveryEvent.Scanner.Dismissed) },
+            modifier = modifier,
+        )
+        return
+    }
+
     LfScaffold(
         modifier = modifier,
         bottomBar = { SubmitBar(state, onEvent) },
@@ -62,8 +75,10 @@ public fun RecoveryScreen(
                 onDraftChange = { onEvent(RecoveryEvent.DraftChanged(it)) },
                 onSuggestionTap = { onEvent(RecoveryEvent.WordCommitted(it)) },
                 onWordRemove = { onEvent(RecoveryEvent.WordRemoved(it)) },
+                onScanRequested = { onEvent(RecoveryEvent.Scanner.Requested) },
             )
 
+            state.scanMessage?.let { ScanMessage(it) }
             state.failure?.let { FailureMessage(it) }
         }
     }
@@ -118,6 +133,17 @@ private fun Header(state: RecoveryUiState) {
             color = LfTheme.colors.textSecondary,
         )
     }
+}
+
+/** A scan that was ours and unusable. Not an error state: the field still works. */
+@Composable
+private fun ScanMessage(message: String) {
+    Text(
+        text = "$message Type the words instead.",
+        style = LfTheme.typography.bodyM,
+        color = LfTheme.colors.textSecondary,
+        textAlign = TextAlign.Start,
+    )
 }
 
 @Composable

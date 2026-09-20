@@ -6,6 +6,8 @@ import com.ledgerflow.core.domain.backup.BackUpNowUseCase
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.vault.PhraseEntry
+import com.ledgerflow.core.domain.vault.PhraseScan
+import com.ledgerflow.core.domain.vault.applyScan
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -41,6 +43,13 @@ public class BackupNowViewModel @Inject constructor(
         // Asked up front, so the picker is offered before the user types 24
         // words for a backup that has nowhere to go.
         viewModelScope.launch { refreshFolder() }
+        // And whether nightly backups are already on, because the screen says
+        // different things either way (ADR-0027).
+        viewModelScope.launch {
+            backups.nightlyBackupsEnabled().collect { enabled ->
+                _state.update { it.copy(nightlyBackupsEnabled = enabled) }
+            }
+        }
     }
 
     public fun onEvent(event: BackupNowEvent) {
@@ -51,6 +60,26 @@ public class BackupNowViewModel @Inject constructor(
             BackupNowEvent.Submitted -> submit()
             is BackupNowEvent.FolderChosen -> event.treeUri?.let(::chooseFolder)
             BackupNowEvent.ResultDismissed -> _state.update { it.copy(result = null) }
+            is BackupNowEvent.Scanner -> scanner(event)
+        }
+    }
+
+    /** A scanned Recovery Kit, through the same [PhraseEntry] typed words go through. */
+    private fun scanner(event: BackupNowEvent.Scanner) {
+        when (event) {
+            BackupNowEvent.Scanner.Requested -> _state.update { it.copy(isScanning = true, scanMessage = null) }
+            BackupNowEvent.Scanner.Dismissed -> _state.update { it.copy(isScanning = false) }
+            is BackupNowEvent.Scanner.Read -> scanned(event.text)
+        }
+    }
+
+    private fun scanned(text: String) {
+        when (val scan = _state.value.entry.applyScan(text, validator)) {
+            is PhraseScan.Filled ->
+                _state.update { it.copy(entry = scan.entry, isScanning = false, scanMessage = null, result = null) }
+
+            is PhraseScan.Rejected -> _state.update { it.copy(isScanning = false, scanMessage = scan.message) }
+            PhraseScan.KeepLooking -> Unit
         }
     }
 

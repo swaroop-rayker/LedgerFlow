@@ -45,6 +45,20 @@ dependencies {
     // from any feature without dragging a domain vocabulary along with it.
     implementation(project(":core:designsystem"))
 
+    // Reading a Recovery Kit's QR code instead of typing 24 words (ADR-0028).
+    // The camera stack is already in the APK for receipt capture and needs no
+    // new permission; ZXing decodes the frame in memory. The shared phrase
+    // entry lives here, so the scanner does too -- one implementation, and the
+    // three phrase screens cannot drift apart on it.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.compose)
+    // The camera permission request; the scanner asks for it itself rather
+    // than making every host screen carry a launcher.
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.zxing.core)
+
     testImplementation(libs.junit4)
     testImplementation(libs.truth)
 

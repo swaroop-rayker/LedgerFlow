@@ -28,6 +28,12 @@ public data class BackupNowUiState(
     val folderChecked: Boolean = false,
     /** The user changed folders in this visit; earlier backups stayed in the old one. */
     val folderChanged: Boolean = false,
+    /** Nightly backups are already enrolled (ADR-0027), so this backup is an extra one. */
+    val nightlyBackupsEnabled: Boolean = false,
+    /** The QR scanner is open (ADR-0028); typing stays available behind it. */
+    val isScanning: Boolean = false,
+    /** Why the last scan was refused, if it was. */
+    val scanMessage: String? = null,
 ) {
     val canSubmit: Boolean get() = entry.isComplete && !isWorking
 
@@ -45,6 +51,21 @@ public sealed interface BackupNowEvent {
     public data class FolderChosen(val treeUri: String?) : BackupNowEvent
 
     public data object ResultDismissed : BackupNowEvent
+
+    /**
+     * The Recovery Kit scanner (ADR-0028), grouped so the screen's `when` has
+     * one branch for "the camera said something" rather than three.
+     */
+    public sealed interface Scanner : BackupNowEvent {
+        /** Open the scanner. Typing stays available behind it. */
+        public data object Requested : Scanner
+
+        /** Close it without a scan — "type the words instead", or back. */
+        public data object Dismissed : Scanner
+
+        /** A QR code was read; the text is validated before it becomes words. */
+        public data class Read(val text: String) : Scanner
+    }
 }
 
 /**
@@ -106,6 +127,11 @@ private fun BackupOutcome.Done.doneMessage(): String = buildString {
     }
     if (olderBackupsRemoved > 0) {
         append(" ${plural(olderBackupsRemoved, "older backup")} removed; the five newest are kept.")
+    }
+    // Once, on the backup that enrolled: from here the phone does this by
+    // itself, which is a change worth stating exactly when it happens.
+    if (nightlyBackupsJustEnabled) {
+        append(" Nightly backups are on from now on — no words needed for those.")
     }
 }
 

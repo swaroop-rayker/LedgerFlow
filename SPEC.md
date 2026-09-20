@@ -935,8 +935,23 @@ The schema was always currency-tagged, so the storage cost of this is zero. What
 |---|---|---|---|
 | Data export | CSV (one file per table, zipped) — **shipped, ADR-0017** | none (user's choice, warned) | Manual, SAF destination |
 | Data export | XLSX (multi-sheet: entries, line items, categories, merchants, budgets, summary pivots) | none | Manual, SAF destination |
-| **Full backup** | `.lfbk` (custom container) | **AES-256-GCM, key = HKDF-SHA256(24-word phrase seed). Never the passphrase (§7.2).** | **Manual: "Back up now"** in More, which asks for the 24 words each time, into a user-granted SAF tree (ADR-0025). ~~Nightly `PeriodicWorkRequest`~~ — struck: a scheduled job cannot seal a phrase-derived `.lfbk` (§16 Q23); ADR-0025 part 2 proposes how it could come back |
+| **Full backup** | `.lfbk` (custom container; **v1 phrase-keyed, v2 sealed to a phrase-derived public key** — ADR-0027) | **AES-256-GCM.** v1's key is `HKDF-SHA256(24-word phrase seed)`; v2's comes from DHKEM(P-256, HKDF-SHA256) to a key only the phrase reproduces. Never a passphrase (§7.2). | **Nightly, unattended (ADR-0027), once enrolled** — plus **manual: "Back up now"** in More, which asks for the 24 words each time, into a user-granted SAF tree (ADR-0025). ~~Nightly `PeriodicWorkRequest`~~ — struck by ADR-0025 because a scheduled job cannot seal a *phrase-derived* `.lfbk`, and **restored by ADR-0027** on a different key: sealed to a public key, so the job needs no secret at all |
 | **Receipt images** | one `.lfba` per attachment, in an `attachments/` subfolder of the same tree (ADR-0023) | AES-256-GCM, key = `HKDF-SHA256(seed, salt = per file, info = "lfbk-attachment-v1")` | Written once per image, alongside a `.lfbk` write |
+
+**Nightly backups, sealed to a public key (ADR-0027).** A successful "Back up
+now" stores the **public** half of a key pair derived from the 24 words, and
+nothing else; `NightlyBackupWorker` then seals a `.lfbk` and the receipt images
+to it once a day, battery-not-low, with **no phrase anywhere in the process**.
+Only the phrase regenerates the private half, so a stolen phone opens nothing —
+including last night's file. Container v2 carries the KEM's `enc` in
+`kdfParams`, and `keyCheck` is derived from the public key rather than the seed,
+because the writer has no seed and the reader re-derives the key from the
+phrase. **What "verified" means at night is weaker, and stated rather than
+implied:** the writer compares the bytes that landed with the bytes it sealed
+and parses the header, and cannot prove the file decrypts — that needs the
+words, and a manual backup still does it. A skip (not enrolled, no folder, no
+vault) is recorded as a reason rather than announced; a run of bad nights shows
+up in Home's reminder, which is what BUG4(c)'s notification was replaced by.
 
 **The `.lfba` sidecar container** (ADR-0023, `LfbaContainer`). Same shape as the
 `.lfbk` header and for the same three reasons — explicit `kdfParamsLen`, the
@@ -1405,11 +1420,32 @@ keyCheck    HKDF-SHA256(ikm = seed, salt = container.salt[16],
 - `info` strings are versioned. Changing one is a breaking format change and requires a `formatVersion` bump in §5.9.
 - **A golden test vector is committed** in `:core:crypto`: one fixed known mnemonic → expected `seed`, `KEK-B`, `backupKey`, and `keyCheck`, as hex. This test is what stops a refactor from silently changing the derivation. It must never be "re-recorded" to match new output — if it fails, the code is wrong, not the fixture.
 
+**The backup sealing key is not a wrap — ADR-0027.** Nightly backups (§5.9)
+derive a P-256 key pair from the same BIP-39 seed and store **only the public
+half**, in `app_meta`. It wraps nothing, unwraps nothing and decrypts nothing:
+it can only seal a file that the phrase alone reopens, so the DEK still has
+exactly two wraps and the device still holds nothing that can read a backup.
+The derivation is RFC 9180's DHKEM(P-256, HKDF-SHA256) and is pinned by golden
+vectors from the CFRG's own published set — the same rule as the phrase
+derivation above: **if the vector test fails, the code is wrong.** A phrase
+rotation (§7.7) must replace the stored public key, or nightly backups keep
+being sealed to the old words.
+
 **KEK-C is dropped — D-05, ADR-0011.** The P0 deferral is resolved as "do not ship it". KEK-A already provides frictionless daily unlock and KEK-B already provides complete recovery, so KEK-C's entire value was the narrow case of "Keystore was invalidated *and* the user would rather not type 24 words". Against that it wanted either a native `.so` per ABI (Argon2id at m=64 MiB) against a 15 MB budget SQLCipher is already taxing, or a pure-Java implementation whose only speed lever is the memory parameter that *is* its security. The decisive cost was neither: a third wrap adds a branch to the §7.3 unlock state machine, to §7.4 onboarding, and to **both** §7.7 rotation procedures, and every one of those branches is a place where a wrap goes stale and the failure is shaped like data loss. `wrapped_dek_pass.bin` and `app_meta.dekWrapVersion` keep the slot reserved, so reintroducing it later is additive and needs no format change. Full reasoning and reversal triggers in ADR-0011.
 
 **The cost is accepted explicitly and paid in interaction design.** A user whose Keystore is invalidated types 24 words. The Recovery screen (§7.3) is therefore a first-class surface, not a fallback: BIP-39 autocomplete, per-word validation, checksum verified before any KDF work, visible progress, no dead ends. Friction we declined to remove with a passphrase gets removed there instead.
 
 **Recovery Kit — plaintext, behind an explicit confirmation (D-07, closes Q8).** At onboarding the app generates the phrase and offers a one-tap **"Save Recovery Kit"** → writes a plain-text `.txt` + a printable PDF to a user-chosen SAF location, containing the 24 words, the install date, and restore instructions. Also displayed on screen for manual transcription, and the user is prompted to store it in a password manager.
+
+**The PDF also carries the phrase as a QR code** (ADR-0028), so a restore can be
+a scan instead of 24 typed words: `LFBK1:` followed by the words, read back
+through `PhraseQr` and then through the *same* BIP-39 validation a typed phrase
+gets. It is the carrier that changes and never the secret — the 256 bits are
+identical — and it adds no exposure the page did not already have, since the
+words are printed in full a few centimetres away. **Typing always stays**, on
+every phrase screen: a camera that will not focus, a kit saved only as text and
+a screen reader all need the words, so the scan is the secondary affordance
+(§7.4, §9.6). The `.txt` kit is unchanged: it cannot hold a code.
 
 The file is **not** encrypted, and the tap that writes it is gated behind a dialog that says so in those terms — that this file is the master key to every backup, that it is being written to shared storage which may be cloud-synced, and where it is going. The rejected alternative was a password-protected PDF: it reintroduces a user-chosen secret into the recovery path, which is exactly what D-03 forbids for the backup path and for the same reason, and PDF password encryption is weak on its own terms. Encrypting the kit also creates a regress — the thing that protects the thing that protects everything — whose answer is always another secret the user can forget. Plaintext plus informed consent is the honest version of a trade-off that cannot be engineered away.
 
@@ -1472,6 +1508,11 @@ A recovery factor that can never be changed is a recovery factor that stays comp
 **1. Phrase rotation (common).** Generate a new mnemonic → word challenge (no skip, §7.4) → unwrap the DEK with the current factor → derive the new KEK-B → write `wrapped_dek_phrase.bin.tmp`, fsync, **verify by unwrapping back to the live DEK**, atomic rename → bump `app_meta.dekWrapVersion` → write and verify a fresh `.lfbk` under the new phrase. The database is never opened for writing.
 
 **2. DEK rotation (device compromise).** Verified `.lfbk` snapshot (rollback point) → new DEK, wrapped under KEK-A and KEK-B → `ATTACH` a sidecar file keyed by the new DEK and `SELECT sqlcipher_export()` → verify the sidecar (`integrity_check`, `foreign_key_check`, canary, per-table row equality) → atomic swap `live → .rotating.old`, `sidecar → live` → commit the wrapped blobs → reopen successfully, **then** delete `.rotating.old`. Everything before the swap is discardable; everything after is idempotent on retry. On next launch, a `.rotating.old` beside a healthy live database means cleanup was interrupted — resume; beside an unopenable one means the swap was interrupted — roll back.
+
+**Rotation replaces the nightly sealing key too** (ADR-0027). The public key in
+`app_meta` is derived from the phrase, so new words mean a new key; leaving the
+old one would mean every nightly backup after the rotation was still sealed to
+the phrase the user has just replaced.
 
 **Rotation cannot un-leak existing backups.** `.lfbk` files are encrypted with a phrase-derived key (§5.9), so every copy already written remains decryptable with the **old** words, forever. Rotation protects future backups only. The flow therefore ends on an explicit screen listing where backups are known to have been written, instructing the user to destroy them. Rotating silently and letting the user assume otherwise would be worse than not offering rotation at all.
 

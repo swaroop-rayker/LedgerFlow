@@ -28,6 +28,7 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.ui.phrase.LfPhraseEntry
+import com.ledgerflow.core.ui.phrase.LfPhraseScanner
 
 /**
  * "Back up now" (SPEC.md §16 Q23).
@@ -42,6 +43,15 @@ public fun BackupNowScreen(
     onEvent: (BackupNowEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (state.isScanning) {
+        LfPhraseScanner(
+            onScanned = { onEvent(BackupNowEvent.Scanner.Read(it)) },
+            onDismiss = { onEvent(BackupNowEvent.Scanner.Dismissed) },
+            modifier = modifier,
+        )
+        return
+    }
+
     LfScaffold(
         modifier = modifier,
         bottomBar = { SubmitBar(state, onEvent) },
@@ -58,7 +68,7 @@ public fun BackupNowScreen(
                 modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
             ) {
-                Explanation()
+                Explanation(state.nightlyBackupsEnabled)
                 if (state.needsFolder) FolderPrompt(onEvent)
                 state.folderName?.let { FolderLine(it, state.folderChanged, state.isWorking, onEvent) }
                 state.result?.let { ResultMessage(it) }
@@ -71,7 +81,15 @@ public fun BackupNowScreen(
                     onDraftChange = { onEvent(BackupNowEvent.DraftChanged(it)) },
                     onSuggestionTap = { onEvent(BackupNowEvent.WordCommitted(it)) },
                     onWordRemove = { onEvent(BackupNowEvent.WordRemoved(it)) },
+                    onScanRequested = { onEvent(BackupNowEvent.Scanner.Requested) },
                 )
+                state.scanMessage?.let {
+                    Text(
+                        text = "$it Type the words instead.",
+                        style = LfTheme.typography.bodyM,
+                        color = LfTheme.colors.textSecondary,
+                    )
+                }
             }
         }
     }
@@ -82,14 +100,31 @@ public fun BackupNowScreen(
  * for the one secret protecting every backup owes that sentence up front.
  */
 @Composable
-private fun Explanation() {
+private fun Explanation(nightlyBackupsEnabled: Boolean) {
     LfCard {
-        Text(
-            text = "Your 24 words seal the backup. They're checked, used once and forgotten — " +
-                "never saved or sent.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = "Your 24 words seal the backup. They're checked, used once and forgotten — " +
+                    "never saved or sent.",
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textSecondary,
+            )
+            // Said before the words are typed, because enrolment is a
+            // consequence of typing them (ADR-0027): a user who does not want
+            // nightly backups should learn that here, not afterwards.
+            Text(
+                text = if (nightlyBackupsEnabled) {
+                    "Nightly backups are on: this phone backs up by itself and still can't open " +
+                        "a backup. This adds one now."
+                } else {
+                    "These words also turn on nightly backups. From then on the phone backs up " +
+                        "by itself — and still can't open a backup, because it keeps only the " +
+                        "locking half of the key."
+                },
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textSecondary,
+            )
+        }
     }
 }
 

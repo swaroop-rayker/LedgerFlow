@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.usecase.RecoverVaultUseCase
 import com.ledgerflow.core.domain.vault.PhraseEntry
+import com.ledgerflow.core.domain.vault.PhraseScan
+import com.ledgerflow.core.domain.vault.applyScan
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.VaultOutcome
@@ -49,6 +51,7 @@ public class RecoveryViewModel @Inject constructor(
             is RecoveryEvent.Pasted -> paste(event.text)
             RecoveryEvent.Submitted -> submit()
             RecoveryEvent.FailureDismissed -> _state.update { it.copy(failure = null) }
+            is RecoveryEvent.Scanner -> scanner(event)
         }
     }
 
@@ -64,6 +67,30 @@ public class RecoveryViewModel @Inject constructor(
     private fun remove(index: Int) = updateEntry { it.remove(index) }
 
     private fun paste(text: String) = updateEntry { it.paste(text, validator) }
+
+    /**
+     * A scanned Recovery Kit (ADR-0028), through the same [PhraseEntry] a typed
+     * word goes through. A QR that is not ours leaves the camera open.
+     */
+    private fun scanner(event: RecoveryEvent.Scanner) {
+        when (event) {
+            RecoveryEvent.Scanner.Requested -> _state.update { it.copy(isScanning = true, scanMessage = null) }
+            RecoveryEvent.Scanner.Dismissed -> _state.update { it.copy(isScanning = false) }
+            is RecoveryEvent.Scanner.Read -> scanned(event.text)
+        }
+    }
+
+    private fun scanned(text: String) {
+        when (val scan = _state.value.entry.applyScan(text, validator)) {
+            is PhraseScan.Filled ->
+                _state.update {
+                    it.copy(entry = scan.entry, isScanning = false, scanMessage = null, failure = null)
+                }
+
+            is PhraseScan.Rejected -> _state.update { it.copy(isScanning = false, scanMessage = scan.message) }
+            PhraseScan.KeepLooking -> Unit
+        }
+    }
 
     private fun updateEntry(change: (PhraseEntry) -> PhraseEntry) {
         _state.update { current ->

@@ -79,5 +79,41 @@ class BackupMessagesTest {
 
         assertThat(subtitle).startsWith("Last backup ")
         assertThat(subtitle).contains("2025")
+        assertThat(subtitle).contains("Asks for your 24 words")
     }
+
+    // ─── Nightly backups (ADR-0027) ─────────────────────────────────────────
+
+    /** With nightly backups on, "asks for your 24 words" is the wrong expectation. */
+    @Test
+    fun withNightlyBackupsOn_theRowSaysThePhoneDoesItItself() {
+        val subtitle = backupSubtitle(
+            MoreUiState(lastBackupAt = 1_758_189_300_000L, nightlyBackupsEnabled = true),
+            Locale.UK,
+        )
+
+        assertThat(subtitle).contains("Backs up nightly on its own")
+        assertThat(subtitle).doesNotContain("Asks for your 24 words")
+    }
+
+    /** Said once, on the backup that enrolled — not on every backup after it. */
+    @Test
+    fun theBackupThatEnrols_saysNightlyBackupsAreOn() {
+        val enrolling = done(nightlyBackupsJustEnabled = true).message()
+        val ordinary = done(nightlyBackupsJustEnabled = false).message()
+
+        assertThat(enrolling).contains("Nightly backups are on from now on")
+        assertThat(ordinary).doesNotContain("Nightly backups")
+    }
+
+    private fun done(nightlyBackupsJustEnabled: Boolean) = BackupOutcome.Done(
+        fileName = "ledgerflow-20260920-101500.lfbk",
+        rows = 12,
+        imagesWritten = 0,
+        imagesAlreadyThere = 0,
+        imagesUnreadable = 0,
+        imagesFailed = 0,
+        olderBackupsRemoved = 0,
+        nightlyBackupsJustEnabled = nightlyBackupsJustEnabled,
+    )
 }

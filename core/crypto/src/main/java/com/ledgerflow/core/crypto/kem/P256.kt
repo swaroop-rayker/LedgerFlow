@@ -101,7 +101,7 @@ internal object P256 {
         val y = BigInteger(1, bytes.copyOfRange(1 + SCALAR_BYTES, PUBLIC_KEY_BYTES))
         require(x < field && y < field) { "public key coordinates are outside the field" }
         require(x.signum() != 0 || y.signum() != 0) { "public key is the point at infinity" }
-        require(y.modPow(BigInteger.TWO, field) == rightHandSide(x)) { "public key is not on the curve" }
+        require(y.modPow(TWO, field) == rightHandSide(x)) { "public key is not on the curve" }
         return ECPoint(x, y)
     }
 
@@ -134,6 +134,12 @@ internal object P256 {
     private const val ECDSA = "SHA256withECDSA"
     private const val CURVE = "secp256r1"
     private const val UNCOMPRESSED: Byte = 0x04
+    /**
+     * `BigInteger.TWO` and friends are API 33 — caught by lint, and it would
+     * have been a crash on exactly the Android versions this curve was chosen
+     * to keep (ADR-0027: `minSdk` 26).
+     */
+    private val TWO = BigInteger.valueOf(2)
     private val THREE = BigInteger.valueOf(3)
 
     /** Fixed, meaningless, never stored: it exists only to tell two candidate points apart. */

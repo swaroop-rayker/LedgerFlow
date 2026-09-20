@@ -93,6 +93,12 @@ public data class MoreUiState(
      * so the row never reassures on the strength of a failed one.
      */
     val lastBackupAt: Long? = null,
+
+    /**
+     * Nightly backups are enrolled (ADR-0027): this phone backs up on its own,
+     * and still cannot open a backup.
+     */
+    val nightlyBackupsEnabled: Boolean = false,
 )
 
 @HiltViewModel
@@ -150,6 +156,9 @@ public class MoreViewModel @Inject constructor(
         // Joined second rather than as a sixth argument: `combine` is typed
         // to five, and the array form would give up the types.
         .combine(backups.lastBackupAt()) { state, last -> state.copy(lastBackupAt = last) }
+        .combine(backups.nightlyBackupsEnabled()) { state, nightly ->
+            state.copy(nightlyBackupsEnabled = nightly)
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), MoreUiState())
 
     init {

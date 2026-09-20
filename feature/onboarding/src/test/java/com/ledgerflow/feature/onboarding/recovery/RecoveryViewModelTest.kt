@@ -2,6 +2,7 @@ package com.ledgerflow.feature.onboarding.recovery
 
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.usecase.RecoverVaultUseCase
+import com.ledgerflow.core.domain.vault.PhraseQr
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.domain.vault.VaultOutcome
 import com.ledgerflow.core.testing.vault.FakeRecoveryPhraseValidator
@@ -201,5 +202,49 @@ class RecoveryViewModelTest {
         vm.onEvent(RecoveryEvent.WordRemoved(0))
 
         assertThat(vm.state.value.failure).isNull()
+    }
+
+    // ─── Scanning a Recovery Kit (ADR-0028) ─────────────────────────────────
+
+    /** The scan fills the same field typing does, and closes the camera. */
+    @Test
+    fun scanningAKit_fillsTheWordsAndClosesTheScanner() {
+        val vm = viewModel()
+        vm.onEvent(RecoveryEvent.Scanner.Requested)
+        assertThat(vm.state.value.isScanning).isTrue()
+
+        vm.onEvent(RecoveryEvent.Scanner.Read(KIT_CODE))
+
+        assertThat(vm.state.value.words).hasSize(validator.wordCount)
+        assertThat(vm.state.value.isScanning).isFalse()
+        assertThat(vm.state.value.scanMessage).isNull()
+    }
+
+    /** A boarding pass is not the user's mistake: the camera stays open. */
+    @Test
+    fun scanningSomeoneElsesCode_keepsTheCameraOpen() {
+        val vm = viewModel()
+        vm.onEvent(RecoveryEvent.Scanner.Requested)
+
+        vm.onEvent(RecoveryEvent.Scanner.Read("https://example.com/boarding-pass"))
+
+        assertThat(vm.state.value.isScanning).isTrue()
+        assertThat(vm.state.value.words).isEmpty()
+    }
+
+    @Test
+    fun scanningANewerKit_closesTheScannerAndSaysWhy() {
+        val vm = viewModel()
+        vm.onEvent(RecoveryEvent.Scanner.Requested)
+
+        vm.onEvent(RecoveryEvent.Scanner.Read("LFBK2:whatever"))
+
+        assertThat(vm.state.value.isScanning).isFalse()
+        assertThat(vm.state.value.scanMessage).contains("newer version")
+    }
+
+    private companion object {
+        /** The public BIP-39 test vector in a kit's payload. Nobody's key. */
+        val KIT_CODE: String = PhraseQr.encode(List(23) { "abandon" } + "art")
     }
 }

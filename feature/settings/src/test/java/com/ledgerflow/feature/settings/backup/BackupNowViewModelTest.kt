@@ -3,6 +3,7 @@ package com.ledgerflow.feature.settings.backup
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.backup.BackUpNowUseCase
 import com.ledgerflow.core.domain.backup.BackupOutcome
+import com.ledgerflow.core.domain.vault.PhraseQr
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.testing.backup.FakeBackupRepository
 import com.ledgerflow.core.testing.vault.FakeRecoveryPhraseValidator
@@ -228,5 +229,34 @@ class BackupNowViewModelTest {
         advanceUntilIdle()
 
         assertThat(vm.state.value.folderChanged).isFalse()
+    }
+
+    // ─── Scanning a Recovery Kit (ADR-0028) ─────────────────────────────────
+
+    @Test
+    fun scanningAKit_fillsTheWordsAndClosesTheScanner() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(BackupNowEvent.Scanner.Requested)
+
+        vm.onEvent(BackupNowEvent.Scanner.Read(KIT_CODE))
+
+        assertThat(vm.state.value.entry.words).hasSize(validator.wordCount)
+        assertThat(vm.state.value.isScanning).isFalse()
+    }
+
+    @Test
+    fun scanningSomeoneElsesCode_keepsTheCameraOpen() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(BackupNowEvent.Scanner.Requested)
+
+        vm.onEvent(BackupNowEvent.Scanner.Read("upi://pay?pa=someone@upi"))
+
+        assertThat(vm.state.value.isScanning).isTrue()
+        assertThat(vm.state.value.entry.words).isEmpty()
+    }
+
+    private companion object {
+        /** The public BIP-39 test vector in a kit's payload. Nobody's key. */
+        val KIT_CODE: String = PhraseQr.encode(List(23) { "abandon" } + "art")
     }
 }

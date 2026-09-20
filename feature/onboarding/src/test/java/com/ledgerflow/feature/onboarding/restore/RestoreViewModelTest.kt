@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.backup.RestoreFromBackupUseCase
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.backup.RestoreSource
+import com.ledgerflow.core.domain.vault.PhraseQr
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.testing.backup.FakeRestoreRepository
 import com.ledgerflow.core.testing.vault.FakeRecoveryPhraseValidator
@@ -241,5 +242,45 @@ class RestoreViewModelTest {
         vm.onEvent(RestoreEvent.WordRemoved(3))
 
         assertThat(vm.state.value.result).isNull()
+    }
+
+    // ─── Scanning a Recovery Kit (ADR-0028) ─────────────────────────────────
+
+    @Test
+    fun scanningAKit_fillsTheWordsAndClosesTheScanner() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(RestoreEvent.Scanner.Requested)
+
+        vm.onEvent(RestoreEvent.Scanner.Read(KIT_CODE))
+
+        assertThat(vm.state.value.entry.words).hasSize(validator.wordCount)
+        assertThat(vm.state.value.isScanning).isFalse()
+    }
+
+    @Test
+    fun scanningSomeoneElsesCode_keepsTheCameraOpen() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(RestoreEvent.Scanner.Requested)
+
+        vm.onEvent(RestoreEvent.Scanner.Read("WIFI:S:cafe;T:WPA;P:latte;;"))
+
+        assertThat(vm.state.value.isScanning).isTrue()
+        assertThat(vm.state.value.entry.words).isEmpty()
+    }
+
+    /** Leaving forgets a scanned phrase exactly as it forgets a typed one (BUG30). */
+    @Test
+    fun leavingAfterAScan_forgetsTheWords() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(RestoreEvent.Scanner.Read(KIT_CODE))
+
+        vm.onEvent(RestoreEvent.Left)
+
+        assertThat(vm.state.value.entry.words).isEmpty()
+    }
+
+    private companion object {
+        /** The public BIP-39 test vector in a kit's payload. Nobody's key. */
+        val KIT_CODE: String = PhraseQr.encode(List(23) { "abandon" } + "art")
     }
 }

@@ -35,6 +35,9 @@ class BackUpNowUseCaseTest {
         override fun lastBackupAt(): Flow<Long?> = flowOf(null)
         override suspend fun backupFolderName(): String? = null
         override suspend fun setBackupFolder(treeUri: String) = Unit
+        override fun nightlyBackupsEnabled(): Flow<Boolean> = flowOf(false)
+        override suspend fun backUpNightly(): NightlyBackupOutcome =
+            NightlyBackupOutcome.Skipped(NightlyBackupOutcome.SkipReason.NotEnrolled)
     }
 
     private val useCase = BackUpNowUseCase(validator, repository)

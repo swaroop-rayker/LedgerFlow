@@ -43,6 +43,7 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.ui.phrase.LfPhraseEntry
+import com.ledgerflow.core.ui.phrase.LfPhraseScanner
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -76,6 +77,15 @@ public fun RestoreScreen(
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    if (state.isScanning) {
+        LfPhraseScanner(
+            onScanned = { onEvent(RestoreEvent.Scanner.Read(it)) },
+            onDismiss = { onEvent(RestoreEvent.Scanner.Dismissed) },
+            modifier = modifier,
+        )
+        return
+    }
+
     val closeKeyboard = rememberCloseKeyboard()
     val leave = onBack?.let { leavingVia(it, onEvent) }
     if (leave != null) RestoreBackHandler(state, leave, closeKeyboard)
@@ -106,29 +116,46 @@ public fun RestoreScreen(
                 }
             }
             LfScreenTitle(title = if (resuming) "Finish restoring" else "Restore a backup")
-            Column(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-            ) {
-                val result = state.result
-                if (result is RestoreOutcome.Done) {
-                    ResultMessage(result)
-                } else {
-                    Explanation(resuming)
-                    BackupChoice(state, onEvent)
-                    result?.let { ResultMessage(it) }
-                    LfPhraseEntry(
-                        words = state.entry.words,
-                        draft = state.entry.draft,
-                        suggestions = state.entry.suggestions,
-                        draftIsUnknown = state.entry.draftIsUnknown,
-                        requiredWordCount = state.entry.requiredWordCount,
-                        onDraftChange = { onEvent(RestoreEvent.DraftChanged(it)) },
-                        onSuggestionTap = { onEvent(RestoreEvent.WordCommitted(it)) },
-                        onWordRemove = { onEvent(RestoreEvent.WordRemoved(it)) },
-                    )
-                }
-            }
+            RestoreBody(state, resuming, onEvent)
+        }
+    }
+}
+
+/**
+ * Everything below the title: the report once it exists, and until then the
+ * explanation, the backup choice and the words.
+ */
+@Composable
+private fun RestoreBody(state: RestoreUiState, resuming: Boolean, onEvent: (RestoreEvent) -> Unit) {
+    Column(
+        modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+    ) {
+        val result = state.result
+        if (result is RestoreOutcome.Done) {
+            ResultMessage(result)
+            return@Column
+        }
+        Explanation(resuming)
+        BackupChoice(state, onEvent)
+        result?.let { ResultMessage(it) }
+        LfPhraseEntry(
+            words = state.entry.words,
+            draft = state.entry.draft,
+            suggestions = state.entry.suggestions,
+            draftIsUnknown = state.entry.draftIsUnknown,
+            requiredWordCount = state.entry.requiredWordCount,
+            onDraftChange = { onEvent(RestoreEvent.DraftChanged(it)) },
+            onSuggestionTap = { onEvent(RestoreEvent.WordCommitted(it)) },
+            onWordRemove = { onEvent(RestoreEvent.WordRemoved(it)) },
+            onScanRequested = { onEvent(RestoreEvent.Scanner.Requested) },
+        )
+        state.scanMessage?.let {
+            Text(
+                text = "$it Type the words instead.",
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textSecondary,
+            )
         }
     }
 }

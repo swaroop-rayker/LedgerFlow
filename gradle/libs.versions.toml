@@ -50,6 +50,11 @@ mlkitText = "16.0.1"
 # OpenCV, for camera-capture perspective correction only (ADR-0024).
 opencv = "4.14.0"
 camerax = "1.5.0"
+# ZXing core, for the Recovery Kit's QR code and for reading one back
+# (ADR-0028). Pure Java, ~500 KB, no Android dependencies and no manifest
+# entries -- it draws and decodes a matrix, nothing more. The camera it is fed
+# from is CameraX, already here for receipt capture, so no new permission.
+zxing = "3.5.3"
 
 # Persistence & crypto
 room = "2.8.4"
@@ -84,6 +89,7 @@ android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_li
 
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
 opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 # Devanagari, which is the SCRIPT -- ML Kit models are per script, not per
 # language, so this one artifact covers Hindi, Marathi, Nepali, Sanskrit and
 # Konkani. There is no `text-recognition-hindi`; it was probed and does not

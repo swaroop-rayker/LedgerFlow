@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.ledgerflow.core.designsystem.component.LfActionAlignment
+import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfButton
+import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfKeyboards
@@ -42,6 +46,13 @@ public fun LfPhraseEntry(
     onSuggestionTap: (String) -> Unit,
     onWordRemove: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Offers "Scan the Recovery Kit" above the field (ADR-0028). Null on a
+     * screen with no scanner; typing is always available either way, and the
+     * scan is deliberately the *secondary* affordance — a screen reader cannot
+     * aim a camera.
+     */
+    onScanRequested: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier,
@@ -60,6 +71,16 @@ public fun LfPhraseEntry(
             },
             keyboardOptions = LfKeyboards.RecoveryWord,
         )
+
+        if (onScanRequested != null) {
+            LfActionRow(alignment = LfActionAlignment.Start) {
+                LfButton(
+                    text = "Scan the Recovery Kit",
+                    onClick = onScanRequested,
+                    style = LfButtonStyle.Inline,
+                )
+            }
+        }
 
         Suggestions(suggestions, onSuggestionTap)
     }

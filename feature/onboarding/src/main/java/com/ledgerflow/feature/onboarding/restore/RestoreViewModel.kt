@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.backup.RestoreFromBackupUseCase
 import com.ledgerflow.core.domain.backup.RestoreRepository
 import com.ledgerflow.core.domain.vault.PhraseEntry
+import com.ledgerflow.core.domain.vault.PhraseScan
+import com.ledgerflow.core.domain.vault.applyScan
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -47,6 +49,7 @@ public class RestoreViewModel @Inject constructor(
             RestoreEvent.Submitted -> submit()
             RestoreEvent.Continued -> if (_state.value.isDone) viewModelScope.launch { restores.finish() }
             RestoreEvent.Left -> leave()
+            is RestoreEvent.Scanner -> scanner(event)
         }
     }
 
@@ -93,6 +96,25 @@ public class RestoreViewModel @Inject constructor(
                 folderUnreadable = false,
                 result = null,
             )
+        }
+    }
+
+    /** A scanned Recovery Kit, through the same [PhraseEntry] typed words go through. */
+    private fun scanner(event: RestoreEvent.Scanner) {
+        when (event) {
+            RestoreEvent.Scanner.Requested -> _state.update { it.copy(isScanning = true, scanMessage = null) }
+            RestoreEvent.Scanner.Dismissed -> _state.update { it.copy(isScanning = false) }
+            is RestoreEvent.Scanner.Read -> scanned(event.text)
+        }
+    }
+
+    private fun scanned(text: String) {
+        when (val scan = _state.value.entry.applyScan(text, validator)) {
+            is PhraseScan.Filled ->
+                _state.update { it.copy(entry = scan.entry, isScanning = false, scanMessage = null, result = null) }
+
+            is PhraseScan.Rejected -> _state.update { it.copy(isScanning = false, scanMessage = scan.message) }
+            PhraseScan.KeepLooking -> Unit
         }
     }
 

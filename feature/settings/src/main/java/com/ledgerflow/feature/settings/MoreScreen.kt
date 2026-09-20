@@ -191,7 +191,14 @@ internal fun backupSubtitle(state: MoreUiState, locale: Locale = Locale.getDefau
     val last = state.lastBackupAt
         ?: return "No backup yet. Your data exists only on this phone."
     val date = DateFormat.getDateInstance(DateFormat.MEDIUM, locale).format(Date(last))
-    return "Last backup $date. Asks for your 24 words."
+    // With nightly backups on, "asks for your 24 words" would be the wrong
+    // expectation to set: the phone backs up by itself, and the words are for
+    // the backup the user asks for on top of that (ADR-0027).
+    return if (state.nightlyBackupsEnabled) {
+        "Last backup $date. Backs up nightly on its own."
+    } else {
+        "Last backup $date. Asks for your 24 words."
+    }
 }
 
 /** The delete dialog's title, with the count named (see [DeleteReceiptsDialog]). */

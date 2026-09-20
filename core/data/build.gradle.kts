@@ -12,6 +12,10 @@ android {
 }
 
 dependencies {
+    // The Recovery Kit's QR code (ADR-0028). Drawing only here; the reading
+    // half lives in :core:ui with the camera.
+    implementation(libs.zxing.core)
+
     // The layer where Android, crypto and Room types are allowed to meet the
     // domain ports -- and the only one. Everything above sees :core:domain.
     api(project(":core:domain"))

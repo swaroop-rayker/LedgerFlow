@@ -1,7 +1,6 @@
 # ADR-0028 — The recovery phrase can be carried as a QR code
 
-- **Status:** Proposed — the owner chose each option below (2026-09-20); this records
-  why, and what it costs.
+- **Status:** **Accepted** and built (owner, 2026-09-20).
 - **Date:** 2026-09-20
 - **Deciders:** Swaroop (owner), lead engineer
 - **Spec sections touched:** `SPEC.md` §7.2 (Recovery Kit), §7.3, §7.4, §9.6;

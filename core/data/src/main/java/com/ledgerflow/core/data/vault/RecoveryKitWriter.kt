@@ -1,12 +1,17 @@
 package com.ledgerflow.core.data.vault
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import com.ledgerflow.core.common.di.IoDispatcher
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.ledgerflow.core.domain.vault.PhraseQr
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 import com.ledgerflow.core.domain.vault.RecoveryKitRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -118,6 +123,12 @@ public class RecoveryKitWriter @Inject constructor(
             }
             y = top + columnRows * LINE_HEIGHT + LINE_HEIGHT
 
+            // The same words a camera can read (ADR-0028). It sits beside the
+            // restore steps rather than above the words, because the page is
+            // read top-down by someone who has just been told to write them
+            // out: the code is the shortcut for later, not the instruction.
+            drawPhraseQr(canvas, mnemonic, y)
+
             canvas.drawText("How to restore", MARGIN, y, headingPaint)
             y += LINE_HEIGHT
             RESTORE_STEPS.forEachIndexed { index, step ->
@@ -130,6 +141,50 @@ public class RecoveryKitWriter @Inject constructor(
         } finally {
             document.close()
         }
+    }
+
+    /**
+     * The phrase as a QR code, in the page's right margin.
+     *
+     * **It adds no exposure that the page did not already have**: the words are
+     * printed in full a few centimetres away, and D-07's dialog says what the
+     * file is before it is written. What it buys is a restore that is a scan
+     * rather than 24 typed words.
+     *
+     * Drawn module by module rather than as a bitmap, so the code stays crisp
+     * at any print size and the PDF stays a few kilobytes.
+     */
+    private fun drawPhraseQr(canvas: Canvas, mnemonic: List<String>, top: Float) {
+        val matrix = runCatching {
+            QRCodeWriter().encode(
+                PhraseQr.encode(mnemonic),
+                BarcodeFormat.QR_CODE,
+                QR_MODULES,
+                QR_MODULES,
+                mapOf(EncodeHintType.MARGIN to 0),
+            )
+        }.getOrNull() ?: return
+
+        val left = PAGE_WIDTH - MARGIN - QR_SIZE
+        val module = QR_SIZE / matrix.width
+        for (x in 0 until matrix.width) {
+            for (yIndex in 0 until matrix.height) {
+                if (!matrix.get(x, yIndex)) continue
+                canvas.drawRect(
+                    left + x * module,
+                    top + yIndex * module,
+                    left + (x + 1) * module,
+                    top + (yIndex + 1) * module,
+                    qrPaint,
+                )
+            }
+        }
+        canvas.drawText(
+            "Scan to restore",
+            left,
+            top + QR_SIZE + LINE_HEIGHT,
+            bodyPaint,
+        )
     }
 
     private fun today(): String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -146,6 +201,12 @@ public class RecoveryKitWriter @Inject constructor(
         textSize = HEADING_SIZE
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         isAntiAlias = true
+    }
+
+    /** Solid black modules: a QR is read by contrast, not by style. */
+    private val qrPaint = Paint().apply {
+        color = Color.BLACK
+        isAntiAlias = false
     }
 
     private val bodyPaint = Paint().apply {
@@ -181,6 +242,12 @@ public class RecoveryKitWriter @Inject constructor(
         private const val TITLE_SIZE = 22f
         private const val HEADING_SIZE = 14f
         private const val BODY_SIZE = 11f
+
+        /** The requested module count; ZXing picks the version that fits the payload. */
+        private const val QR_MODULES = 33
+
+        /** ~2.5 cm on A4 at 72 dpi: large enough for a phone camera off paper. */
+        private const val QR_SIZE = 132f
         private const val WARNING_R = 176
         private const val WARNING_G = 0
         private const val WARNING_B = 32

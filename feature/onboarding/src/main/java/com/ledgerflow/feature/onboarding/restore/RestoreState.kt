@@ -27,6 +27,10 @@ public data class RestoreUiState(
     /** A single `.lfbk` chosen instead of a folder. */
     val singleFileUri: String? = null,
     val entry: PhraseEntry = PhraseEntry(),
+    /** The QR scanner is open (ADR-0028); typing stays available behind it. */
+    val isScanning: Boolean = false,
+    /** Why the last scan was refused, if it was. */
+    val scanMessage: String? = null,
     val isWorking: Boolean = false,
     /** The last attempt's outcome, until superseded. A [RestoreOutcome.Done] is final. */
     val result: RestoreOutcome? = null,
@@ -66,6 +70,21 @@ public sealed interface RestoreEvent {
      * the words and the chosen backup are forgotten.
      */
     public data object Left : RestoreEvent
+
+    /**
+     * The Recovery Kit scanner (ADR-0028), grouped so the screen's `when` has
+     * one branch for "the camera said something" rather than three.
+     */
+    public sealed interface Scanner : RestoreEvent {
+        /** Open the scanner. Typing stays available behind it. */
+        public data object Requested : Scanner
+
+        /** Close it without a scan — "type the words instead", or back. */
+        public data object Dismissed : Scanner
+
+        /** A QR code was read; the text is validated before it becomes words. */
+        public data class Read(val text: String) : Scanner
+    }
 }
 
 /**
