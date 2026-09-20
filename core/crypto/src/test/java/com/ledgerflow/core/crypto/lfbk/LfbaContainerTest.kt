@@ -125,10 +125,12 @@ class LfbaContainerTest {
 
     @Test
     fun aNewerFormatVersion_saysSoRatherThanFailingToParse() {
-        val bytes = sealed().also { it[5] = 2 } // formatVersion's low byte
+        // 3, not 2: version 2 is the sealed format this build reads (ADR-0027).
+        val future = LfbaContainer.FORMAT_VERSION_SEALED + 1
+        val bytes = sealed().also { it[5] = future.toByte() } // formatVersion's low byte
 
         assertThat(LfbaContainer.read(bytes, seed, id).failure())
-            .isEqualTo(LfbaFailure.UnsupportedFormat(2))
+            .isEqualTo(LfbaFailure.UnsupportedFormat(future))
     }
 
     @Test

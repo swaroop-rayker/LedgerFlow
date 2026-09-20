@@ -90,7 +90,10 @@ internal fun OpenedBackup.toRestoreRefusal(): RestoreOutcome = when (this) {
     is OpenedBackup.SchemaTooNew -> RestoreOutcome.NewerVersion(backupVersion, supported)
     is OpenedBackup.Failure -> when (val failure = reason) {
         LfbkFailure.WrongPhrase -> RestoreOutcome.WrongPhrase
-        is LfbkFailure.UnsupportedFormat -> RestoreOutcome.NewerVersion(failure.version, LfbkContainer.FORMAT_VERSION)
+        // The highest this build reads, which is the sealed format (ADR-0027),
+        // not the oldest one it still opens.
+        is LfbkFailure.UnsupportedFormat ->
+            RestoreOutcome.NewerVersion(failure.version, LfbkContainer.FORMAT_VERSION_SEALED)
         LfbkFailure.Corrupt,
         LfbkFailure.NotAnLfbkFile,
         is LfbkFailure.Malformed,

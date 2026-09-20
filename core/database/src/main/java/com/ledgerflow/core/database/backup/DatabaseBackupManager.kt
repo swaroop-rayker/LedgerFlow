@@ -129,6 +129,25 @@ public class DatabaseBackupManager(
     }
 
     /**
+     * A `.lfbk` sealed to [publicKeyBytes] — the nightly path (ADR-0027).
+     *
+     * The same payload and the same container as [seal], with the key coming
+     * from the KEM instead of a seed, because this runs at 3 a.m. with no
+     * phrase anywhere. What the caller can check afterwards is
+     * `LfbkContainer.sealedTo` over the bytes that landed, not `opensAs`:
+     * opening needs the words.
+     */
+    public suspend fun sealTo(publicKeyBytes: ByteArray): SealedBackup {
+        val payload = export()
+        val bytes = LfbkContainer.writeSealed(
+            payload = json.encodeToString(BackupPayload.serializer(), payload).toByteArray(),
+            publicKeyBytes = publicKeyBytes,
+            schemaVersion = LedgerFlowDatabase.VERSION,
+        )
+        return SealedBackup(bytes, payload.rowCount)
+    }
+
+    /**
      * Would [bytes] restore as a backup of [expectedRows] rows under [seed]?
      *
      * §7's "decrypt-and-parse to verify", as a check a caller can run against

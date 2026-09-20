@@ -2,6 +2,7 @@ package com.ledgerflow.core.crypto.lfbk
 
 import com.ledgerflow.core.crypto.AesGcm
 import com.ledgerflow.core.crypto.AttachmentBackupKey
+import com.ledgerflow.core.crypto.kem.BackupSealKem
 import com.ledgerflow.core.crypto.KeyDerivation
 import java.io.ByteArrayOutputStream
 import java.security.SecureRandom
@@ -86,7 +87,14 @@ public sealed interface LfbaResult {
 public object LfbaContainer {
 
     public const val FORMAT_VERSION: Int = 1
+
+    /** Sealed to a phrase-derived public key (ADR-0027); written without a seed. */
+    public const val FORMAT_VERSION_SEALED: Int = 2
+
     public const val KDF_ID_HKDF_BIP39: Int = 1
+
+    /** `kdfParams` is the KEM's `enc`: the ephemeral public key this image was sealed with. */
+    public const val KDF_ID_DHKEM_P256: Int = 2
 
     private val MAGIC = byteArrayOf(
         'L'.code.toByte(), 'F'.code.toByte(), 'B'.code.toByte(), 'A'.code.toByte(),
@@ -123,17 +131,74 @@ public object LfbaContainer {
         val keyCheck = KeyDerivation.keyCheck(seed, salt)
         val nonce = ByteArray(AesGcm.NONCE_LENGTH).also(random::nextBytes)
 
-        val header = header(salt, nonce, keyCheck, attachmentId, image.size.toLong())
+        val header = header(Keying.Phrase, salt, nonce, keyCheck, attachmentId, image.size.toLong())
         val sealed = AesGcm.encryptWithNonce(key, image, nonce, header)
         return header + sealed.ciphertext
+    }
+
+    /**
+     * An image sealed to [publicKeyBytes] — the nightly path (ADR-0027), which
+     * never sees a seed. One `enc` per file, so two images share no key.
+     */
+    public fun writeSealed(
+        image: ByteArray,
+        publicKeyBytes: ByteArray,
+        attachmentId: String,
+        random: SecureRandom = SecureRandom(),
+    ): ByteArray {
+        val encapsulation = BackupSealKem.seal(publicKeyBytes, random)
+        val salt = ByteArray(KeyDerivation.SALT_LENGTH).also(random::nextBytes)
+        val key = AttachmentBackupKey.forSealedBackup(encapsulation.sharedSecret, salt)
+        val keyCheck = KeyDerivation.sealedKeyCheck(publicKeyBytes, salt)
+        val nonce = ByteArray(AesGcm.NONCE_LENGTH).also(random::nextBytes)
+
+        val header = header(
+            Keying.sealedWith(encapsulation.enc),
+            salt,
+            nonce,
+            keyCheck,
+            attachmentId,
+            image.size.toLong(),
+        )
+        return header + AesGcm.encryptWithNonce(key, image, nonce, header).ciphertext
     }
 
     /** @param attachmentId the row the caller is restoring; must match the file's. */
     public fun read(bytes: ByteArray, seed: ByteArray, attachmentId: String): LfbaResult =
         when (val parsed = parse(bytes)) {
             is ParseResult.Failure -> LfbaResult.Failure(parsed.reason)
-            is ParseResult.Success -> decrypt(parsed.header, seed, attachmentId)
+            is ParseResult.Success -> when (parsed.header.kdfId) {
+                KDF_ID_DHKEM_P256 -> decryptSealed(parsed.header, seed, attachmentId)
+                else -> decrypt(parsed.header, seed, attachmentId)
+            }
         }
+
+    private fun decryptSealed(parsed: ParsedHeader, seed: ByteArray, attachmentId: String): LfbaResult {
+        val publicKey = runCatching { BackupSealKem.publicKey(seed) }.getOrNull()
+            ?: return LfbaResult.Failure(LfbaFailure.Malformed("seed rejected by the KEM"))
+        if (!KeyDerivation.sealedKeyCheck(publicKey, parsed.salt).contentEquals(parsed.keyCheck)) {
+            return LfbaResult.Failure(LfbaFailure.WrongPhrase)
+        }
+        if (parsed.attachmentId != attachmentId) {
+            return LfbaResult.Failure(
+                LfbaFailure.WrongAttachment(expected = attachmentId, found = parsed.attachmentId),
+            )
+        }
+        val shared = runCatching { BackupSealKem.open(seed, parsed.kdfParams) }.getOrNull()
+            ?: return LfbaResult.Failure(LfbaFailure.Malformed("the sealing key in this file is not a valid point"))
+
+        val image = AesGcm.decrypt(
+            AttachmentBackupKey.forSealedBackup(shared, parsed.salt),
+            AesGcm.Sealed(parsed.nonce, parsed.ciphertext),
+            parsed.headerBytes,
+        ) ?: return LfbaResult.Failure(LfbaFailure.Corrupt)
+
+        return if (image.size.toLong() != parsed.plaintextLen) {
+            LfbaResult.Failure(LfbaFailure.Malformed("declared length disagrees with image"))
+        } else {
+            LfbaResult.Success(image)
+        }
+    }
 
     /**
      * Would this file open with [seed], judged from its header alone?
@@ -148,8 +213,30 @@ public object LfbaContainer {
     public fun sealedWith(bytes: ByteArray, seed: ByteArray): Boolean =
         when (val parsed = parse(bytes)) {
             is ParseResult.Failure -> false
-            is ParseResult.Success ->
-                KeyDerivation.keyCheck(seed, parsed.header.salt)
+            is ParseResult.Success -> when (parsed.header.kdfId) {
+                KDF_ID_DHKEM_P256 -> KeyDerivation
+                    .sealedKeyCheck(BackupSealKem.publicKey(seed), parsed.header.salt)
+                    .contentEquals(parsed.header.keyCheck)
+
+                else -> KeyDerivation.keyCheck(seed, parsed.header.salt)
+                    .contentEquals(parsed.header.keyCheck)
+            }
+        }
+
+    /**
+     * [sealedWith] for a caller that holds the public key and no seed — the
+     * nightly writer, deciding whether an image in the folder is already its
+     * own current copy.
+     *
+     * A v1 file always answers false here: it was written under the phrase
+     * directly, and re-sealing it is exactly what should happen once an install
+     * has enrolled (ADR-0027).
+     */
+    public fun sealedTo(bytes: ByteArray, publicKeyBytes: ByteArray): Boolean =
+        when (val parsed = parse(bytes)) {
+            is ParseResult.Failure -> false
+            is ParseResult.Success -> parsed.header.kdfId == KDF_ID_DHKEM_P256 &&
+                KeyDerivation.sealedKeyCheck(publicKeyBytes, parsed.header.salt)
                     .contentEquals(parsed.header.keyCheck)
         }
 
@@ -184,7 +271,16 @@ public object LfbaContainer {
         }
     }
 
+    /** How a file is keyed; the two fields move together, and [parse] refuses any other pairing. */
+    private class Keying(val formatVersion: Int, val kdfId: Int, val params: ByteArray) {
+        companion object {
+            val Phrase = Keying(FORMAT_VERSION, KDF_ID_HKDF_BIP39, ByteArray(0))
+            fun sealedWith(enc: ByteArray) = Keying(FORMAT_VERSION_SEALED, KDF_ID_DHKEM_P256, enc)
+        }
+    }
+
     private fun header(
+        keying: Keying,
         salt: ByteArray,
         nonce: ByteArray,
         keyCheck: ByteArray,
@@ -196,9 +292,11 @@ public object LfbaContainer {
             "Attachment id must be 1..$MAX_ID_BYTES bytes, was ${id.size}"
         }
         write(MAGIC)
-        writeU16(FORMAT_VERSION)
-        write(KDF_ID_HKDF_BIP39)
-        writeU16(0) // kdfParamsLen: HKDF over a BIP-39 seed takes no parameters.
+        writeU16(keying.formatVersion)
+        write(keying.kdfId)
+        // kdfParamsLen: none for a phrase-keyed file, the KEM's `enc` for a sealed one.
+        writeU16(keying.params.size)
+        write(keying.params)
         write(salt)
         write(nonce)
         write(keyCheck)
@@ -208,6 +306,8 @@ public object LfbaContainer {
     }.toByteArray()
 
     private class ParsedHeader(
+        val kdfId: Int,
+        val kdfParams: ByteArray,
         val salt: ByteArray,
         val nonce: ByteArray,
         val keyCheck: ByteArray,
@@ -230,14 +330,19 @@ public object LfbaContainer {
             return ParseResult.Failure(LfbaFailure.NotAnLfbaFile)
         }
         val formatVersion = reader.readU16()
-        if (formatVersion != FORMAT_VERSION) {
+        if (formatVersion != FORMAT_VERSION && formatVersion != FORMAT_VERSION_SEALED) {
             return ParseResult.Failure(LfbaFailure.UnsupportedFormat(formatVersion))
         }
-        if (reader.readByte() != KDF_ID_HKDF_BIP39) {
-            return ParseResult.Failure(LfbaFailure.Malformed("unknown kdfId"))
+        val kdfId = reader.readByte()
+        val expectedKdfId = if (formatVersion == FORMAT_VERSION) KDF_ID_HKDF_BIP39 else KDF_ID_DHKEM_P256
+        if (kdfId != expectedKdfId) {
+            return ParseResult.Failure(LfbaFailure.Malformed("kdfId $kdfId does not belong to format $formatVersion"))
         }
 
-        reader.take(reader.readU16()) // kdfParams, empty for kdfId = 1
+        val kdfParams = reader.take(reader.readU16())
+        if (kdfId == KDF_ID_DHKEM_P256 && kdfParams.size != BackupSealKem.PUBLIC_KEY_BYTES) {
+            return ParseResult.Failure(LfbaFailure.Malformed("sealed image carries no usable sealing key"))
+        }
         val salt = reader.take(KeyDerivation.SALT_LENGTH)
         val nonce = reader.take(AesGcm.NONCE_LENGTH)
         val keyCheck = reader.take(KeyDerivation.KEY_CHECK_LENGTH)
@@ -259,6 +364,8 @@ public object LfbaContainer {
         }
         return ParseResult.Success(
             ParsedHeader(
+                kdfId = kdfId,
+                kdfParams = kdfParams,
                 salt = salt,
                 nonce = nonce,
                 keyCheck = keyCheck,

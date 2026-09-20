@@ -48,6 +48,9 @@ public object AttachmentBackupKey {
      */
     private const val INFO_ATTACHMENT_BACKUP = "lfbk-attachment-v1"
 
+    /** Named apart from v1 for the same reason v1 is named apart from the local seal. */
+    private const val INFO_SEALED_ATTACHMENT_BACKUP = "lfbk-attachment-v2"
+
     /**
      * The AES-256 key for one sealed image beside the `.lfbk`.
      *
@@ -64,6 +67,24 @@ public object AttachmentBackupKey {
             ikm = seed,
             salt = salt,
             info = INFO_ATTACHMENT_BACKUP.toByteArray(Charsets.UTF_8),
+            length = KeyDerivation.KEY_LENGTH,
+        )
+    }
+
+    /**
+     * The key for an image sealed without the phrase (container v2, ADR-0027).
+     *
+     * @param sharedSecret from `BackupSealKem`, one encapsulation per file.
+     * @param salt fresh per file, stored in that file's header.
+     */
+    public fun forSealedBackup(sharedSecret: ByteArray, salt: ByteArray): ByteArray {
+        require(salt.size == KeyDerivation.SALT_LENGTH) {
+            "Salt must be ${KeyDerivation.SALT_LENGTH} bytes, was ${salt.size}"
+        }
+        return Hkdf.derive(
+            ikm = sharedSecret,
+            salt = salt,
+            info = INFO_SEALED_ATTACHMENT_BACKUP.toByteArray(Charsets.UTF_8),
             length = KeyDerivation.KEY_LENGTH,
         )
     }

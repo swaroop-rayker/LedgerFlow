@@ -33,6 +33,8 @@ public object KeyDerivation {
     private const val INFO_KEK_B = "ledgerflow-kek-b-v1"
     private const val INFO_BACKUP = "lfbk-backup-v1"
     private const val INFO_KEY_CHECK = "lfbk-keycheck-v1"
+    private const val INFO_SEALED_BACKUP = "lfbk-backup-v2"
+    private const val INFO_SEALED_KEY_CHECK = "lfbk-keycheck-v2"
 
     /**
      * KEK-B: the phrase-derived key that wraps the DEK.
@@ -55,6 +57,24 @@ public object KeyDerivation {
     /** The 4-byte `keyCheck` written into the `.lfbk` header. */
     public fun keyCheck(seed: ByteArray, salt: ByteArray): ByteArray =
         derive(seed, salt, INFO_KEY_CHECK, KEY_CHECK_LENGTH)
+
+    /**
+     * A sealed backup's key (container v2, ADR-0027), from the KEM's shared
+     * secret rather than the seed — because the nightly writer has no seed.
+     */
+    public fun sealedBackupKey(sharedSecret: ByteArray, salt: ByteArray): ByteArray =
+        derive(sharedSecret, salt, INFO_SEALED_BACKUP, KEY_LENGTH)
+
+    /**
+     * A sealed backup's `keyCheck`, over the **public** key.
+     *
+     * v1's is derived from the seed, which a nightly writer does not have. The
+     * reader re-derives the public key from the phrase, so this still answers
+     * the question `keyCheck` exists for: wrong words, or damaged file
+     * (`SPEC.md` §5.9).
+     */
+    public fun sealedKeyCheck(publicKey: ByteArray, salt: ByteArray): ByteArray =
+        derive(publicKey, salt, INFO_SEALED_KEY_CHECK, KEY_CHECK_LENGTH)
 
     private fun derive(seed: ByteArray, salt: ByteArray, info: String, length: Int): ByteArray {
         require(salt.size == SALT_LENGTH) {

@@ -103,6 +103,22 @@ public class AttachmentBackup @Inject constructor(
      *   folder travels with the `.lfbk`.
      */
     public suspend fun writeAll(backupFolder: BackupFolder, seed: ByteArray): AttachmentBackupReport =
+        writeAllWith(backupFolder, PhraseSeal(seed))
+
+    /**
+     * The nightly path (ADR-0027): every image sealed to [publicKeyBytes], with
+     * no phrase anywhere in the process.
+     *
+     * A copy already in the folder counts as current only if it is sealed to
+     * *this* key, so the pass after enrolment re-seals the phrase-written ones
+     * and every pass after that skips them.
+     */
+    public suspend fun writeAllSealed(
+        backupFolder: BackupFolder,
+        publicKeyBytes: ByteArray,
+    ): AttachmentBackupReport = writeAllWith(backupFolder, KemSeal(publicKeyBytes))
+
+    private suspend fun writeAllWith(backupFolder: BackupFolder, seal: ImageSeal): AttachmentBackupReport =
         withContext(io) {
             val database = session.openForBackgroundWork()
                 ?: return@withContext AttachmentBackupReport()
@@ -117,7 +133,7 @@ public class AttachmentBackup @Inject constructor(
 
             try {
                 rows.fold(AttachmentBackupReport()) { report, row ->
-                    writeOne(row, directory, key, seed, report)
+                    writeOne(row, directory, key, seal, report)
                 }
             } finally {
                 key.fill(0)
@@ -128,11 +144,11 @@ public class AttachmentBackup @Inject constructor(
         row: AttachmentEntity,
         directory: BackupFolder,
         key: ByteArray,
-        seed: ByteArray,
+        seal: ImageSeal,
         report: AttachmentBackupReport,
     ): AttachmentBackupReport {
         val target = fileNameFor(row.id)
-        if (isCurrentCopy(directory, target, seed)) {
+        if (isCurrentCopy(directory, target, seal)) {
             return report.copy(alreadyCurrent = report.alreadyCurrent + 1)
         }
 
@@ -146,8 +162,8 @@ public class AttachmentBackup @Inject constructor(
             ?.takeIf { LocalAttachmentSeal.sha256(it) == row.sha256 }
             ?: return report.copy(unreadableLocally = report.unreadableLocally + 1)
 
-        val sealed = LfbaContainer.write(plaintext, seed, row.id)
-        return if (writeVerified(directory, target, sealed, seed, row.id, plaintext)) {
+        val sealed = seal.seal(plaintext, row.id)
+        return if (writeVerified(directory, target, sealed, seal, row.id, plaintext)) {
             report.copy(written = report.written + 1)
         } else {
             report.copy(failed = report.failed + 1)
@@ -278,14 +294,11 @@ public class AttachmentBackup @Inject constructor(
         directory: BackupFolder,
         target: String,
         sealed: ByteArray,
-        seed: ByteArray,
+        seal: ImageSeal,
         attachmentId: String,
         expected: ByteArray,
     ): Boolean = directory.writeVerified(target, sealed) { landed ->
-        when (val read = LfbaContainer.read(landed, seed, attachmentId)) {
-            is LfbaResult.Failure -> false
-            is LfbaResult.Success -> read.image.contentEquals(expected)
-        }
+        seal.verifyLanded(landed, sealed, attachmentId, expected)
     }
 
     /**
@@ -293,9 +306,60 @@ public class AttachmentBackup @Inject constructor(
      * no reading the image: the difference between a pass proportional to new
      * receipts and one proportional to all of them.
      */
-    private fun isCurrentCopy(directory: BackupFolder, target: String, seed: ByteArray): Boolean {
+    private fun isCurrentCopy(directory: BackupFolder, target: String, seal: ImageSeal): Boolean {
         val header = directory.readPrefix(target, HEADER_PROBE_BYTES) ?: return false
-        return LfbaContainer.sealedWith(header, seed)
+        return seal.isCurrent(header)
+    }
+
+    /**
+     * How one image is sealed, and what "it landed correctly" means for it.
+     *
+     * The two differ in exactly one place — whether the writer can open what it
+     * wrote — so they share the loop rather than duplicating it (ADR-0027
+     * decision b).
+     */
+    private interface ImageSeal {
+        fun seal(plaintext: ByteArray, attachmentId: String): ByteArray
+        fun isCurrent(headerBytes: ByteArray): Boolean
+        fun verifyLanded(landed: ByteArray, written: ByteArray, attachmentId: String, expected: ByteArray): Boolean
+    }
+
+    /** With the phrase in hand: §7's full decrypt-and-parse of the file that landed. */
+    private class PhraseSeal(private val seed: ByteArray) : ImageSeal {
+        override fun seal(plaintext: ByteArray, attachmentId: String): ByteArray =
+            LfbaContainer.write(plaintext, seed, attachmentId)
+
+        override fun isCurrent(headerBytes: ByteArray): Boolean = LfbaContainer.sealedWith(headerBytes, seed)
+
+        override fun verifyLanded(
+            landed: ByteArray,
+            written: ByteArray,
+            attachmentId: String,
+            expected: ByteArray,
+        ): Boolean = when (val read = LfbaContainer.read(landed, seed, attachmentId)) {
+            is LfbaResult.Failure -> false
+            is LfbaResult.Success -> read.image.contentEquals(expected)
+        }
+    }
+
+    /**
+     * Without it: the bytes that landed are compared with the bytes that were
+     * sealed, and the header must still parse as sealed to this install's key.
+     * It cannot prove the file opens — that needs the words (ADR-0027).
+     */
+    private class KemSeal(private val publicKeyBytes: ByteArray) : ImageSeal {
+        override fun seal(plaintext: ByteArray, attachmentId: String): ByteArray =
+            LfbaContainer.writeSealed(plaintext, publicKeyBytes, attachmentId)
+
+        override fun isCurrent(headerBytes: ByteArray): Boolean =
+            LfbaContainer.sealedTo(headerBytes, publicKeyBytes)
+
+        override fun verifyLanded(
+            landed: ByteArray,
+            written: ByteArray,
+            attachmentId: String,
+            expected: ByteArray,
+        ): Boolean = landed.contentEquals(written) && LfbaContainer.sealedTo(landed, publicKeyBytes)
     }
 
     private fun isIntactLocally(local: File, key: ByteArray, sha256: String): Boolean {

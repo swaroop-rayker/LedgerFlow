@@ -2,6 +2,7 @@ package com.ledgerflow.core.crypto.lfbk
 
 import com.ledgerflow.core.crypto.AesGcm
 import com.ledgerflow.core.crypto.KeyDerivation
+import com.ledgerflow.core.crypto.kem.BackupSealKem
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -66,7 +67,14 @@ public sealed interface LfbkResult {
 public object LfbkContainer {
 
     public const val FORMAT_VERSION: Int = 1
+
+    /** Sealed to a phrase-derived public key (ADR-0027); written without a seed. */
+    public const val FORMAT_VERSION_SEALED: Int = 2
+
     public const val KDF_ID_HKDF_BIP39: Int = 1
+
+    /** `kdfParams` is the KEM's `enc`: the ephemeral public key this file was sealed with. */
+    public const val KDF_ID_DHKEM_P256: Int = 2
 
     private val MAGIC = byteArrayOf(
         'L'.code.toByte(), 'F'.code.toByte(), 'B'.code.toByte(), 'K'.code.toByte(),
@@ -100,17 +108,75 @@ public object LfbkContainer {
         // header is the AAD -- so the nonce is generated here rather than
         // inside AesGcm.
         val nonce = ByteArray(AesGcm.NONCE_LENGTH).also(random::nextBytes)
-        val header = header(schemaVersion, salt, nonce, keyCheck, payload.size.toLong())
+        val header = header(Keying.Phrase, schemaVersion, salt, nonce, keyCheck, payload.size.toLong())
         val sealed = AesGcm.encryptWithNonce(key, payload, nonce, header)
 
         return header + sealed.ciphertext
     }
 
+    /**
+     * A backup sealed to [publicKeyBytes] — the nightly path (ADR-0027).
+     *
+     * No seed reaches this function, and the ephemeral private key that sealed
+     * it is gone when [BackupSealKem.seal] returns, so the writer cannot read
+     * back what it wrote. Only the phrase behind [publicKeyBytes] opens it.
+     */
+    public fun writeSealed(
+        payload: ByteArray,
+        publicKeyBytes: ByteArray,
+        schemaVersion: Int,
+        random: SecureRandom = SecureRandom(),
+    ): ByteArray {
+        val encapsulation = BackupSealKem.seal(publicKeyBytes, random)
+        val salt = ByteArray(KeyDerivation.SALT_LENGTH).also(random::nextBytes)
+        val key = KeyDerivation.sealedBackupKey(encapsulation.sharedSecret, salt)
+        val keyCheck = KeyDerivation.sealedKeyCheck(publicKeyBytes, salt)
+
+        val nonce = ByteArray(AesGcm.NONCE_LENGTH).also(random::nextBytes)
+        val header = header(
+            keying = Keying.sealedWith(encapsulation.enc),
+            schemaVersion = schemaVersion,
+            salt = salt,
+            nonce = nonce,
+            keyCheck = keyCheck,
+            plaintextLen = payload.size.toLong(),
+        )
+        return header + AesGcm.encryptWithNonce(key, payload, nonce, header).ciphertext
+    }
+
     public fun read(bytes: ByteArray, seed: ByteArray): LfbkResult =
         when (val result = parse(bytes)) {
             is ParseResult.Failure -> LfbkResult.Failure(result.reason)
-            is ParseResult.Success -> decryptPayload(result.header, seed)
+            is ParseResult.Success -> when (result.header.kdfId) {
+                KDF_ID_DHKEM_P256 -> decryptSealedPayload(result.header, seed)
+                else -> decryptPayload(result.header, seed)
+            }
         }
+
+    /**
+     * Opens a v2 file, which costs one key derivation from the phrase.
+     *
+     * The order matters: `keyCheck` is compared before the KEM runs, so the
+     * wrong words are answered by a hash comparison rather than by a failed
+     * tag — the distinction `keyCheck` exists for.
+     */
+    private fun decryptSealedPayload(parsed: ParsedHeader, seed: ByteArray): LfbkResult {
+        val publicKey = runCatching { BackupSealKem.publicKey(seed) }.getOrNull()
+            ?: return LfbkResult.Failure(LfbkFailure.Malformed("seed rejected by the KEM"))
+        if (!KeyDerivation.sealedKeyCheck(publicKey, parsed.salt).contentEquals(parsed.keyCheck)) {
+            return LfbkResult.Failure(LfbkFailure.WrongPhrase)
+        }
+        val shared = runCatching { BackupSealKem.open(seed, parsed.kdfParams) }.getOrNull()
+            ?: return LfbkResult.Failure(LfbkFailure.Malformed("the sealing key in this file is not a valid point"))
+
+        val plaintext = AesGcm.decrypt(
+            KeyDerivation.sealedBackupKey(shared, parsed.salt),
+            AesGcm.Sealed(parsed.nonce, parsed.ciphertext),
+            parsed.headerBytes,
+        ) ?: return LfbkResult.Failure(LfbkFailure.Corrupt)
+
+        return lengthChecked(plaintext, parsed)
+    }
 
     private fun decryptPayload(parsed: ParsedHeader, seed: ByteArray): LfbkResult {
         // keyCheck first: it separates "wrong words" from "damaged file", and
@@ -125,12 +191,32 @@ public object LfbkContainer {
             parsed.headerBytes,
         ) ?: return LfbkResult.Failure(LfbkFailure.Corrupt)
 
-        return if (plaintext.size.toLong() != parsed.plaintextLen) {
+        return lengthChecked(plaintext, parsed)
+    }
+
+    private fun lengthChecked(plaintext: ByteArray, parsed: ParsedHeader): LfbkResult =
+        if (plaintext.size.toLong() != parsed.plaintextLen) {
             LfbkResult.Failure(LfbkFailure.Malformed("declared length disagrees with payload"))
         } else {
             LfbkResult.Success(plaintext, parsed.schemaVersion)
         }
-    }
+
+    /**
+     * Is this a backup sealed to [publicKeyBytes]?
+     *
+     * The strongest check a writer without the phrase can make on the bytes it
+     * read back (ADR-0027, decision b): the file parses as a `.lfbk`, it is the
+     * sealed format, and its `keyCheck` is this install's. It cannot say the
+     * file decrypts — that needs the words, and `opensAs` is where a manual
+     * backup still proves it.
+     */
+    public fun sealedTo(bytes: ByteArray, publicKeyBytes: ByteArray): Boolean =
+        when (val parsed = parse(bytes)) {
+            is ParseResult.Failure -> false
+            is ParseResult.Success -> parsed.header.kdfId == KDF_ID_DHKEM_P256 &&
+                KeyDerivation.sealedKeyCheck(publicKeyBytes, parsed.header.salt)
+                    .contentEquals(parsed.header.keyCheck)
+        }
 
     /** SHA-256 prefix, for logging a backup's identity without its content. */
     public fun fingerprint(bytes: ByteArray): String =
@@ -138,7 +224,22 @@ public object LfbkContainer {
             .take(FINGERPRINT_BYTES)
             .joinToString("") { "%02x".format(it) }
 
+    /**
+     * How a file is keyed, as one value: the two fields must move together, and
+     * `parse` refuses a header that pairs them any other way.
+     *
+     * `params` is empty for a phrase-keyed file — HKDF over a BIP-39 seed takes
+     * none — and the KEM's `enc` for a sealed one.
+     */
+    private class Keying(val formatVersion: Int, val kdfId: Int, val params: ByteArray) {
+        companion object {
+            val Phrase = Keying(FORMAT_VERSION, KDF_ID_HKDF_BIP39, ByteArray(0))
+            fun sealedWith(enc: ByteArray) = Keying(FORMAT_VERSION_SEALED, KDF_ID_DHKEM_P256, enc)
+        }
+    }
+
     private fun header(
+        keying: Keying,
         schemaVersion: Int,
         salt: ByteArray,
         nonce: ByteArray,
@@ -146,10 +247,11 @@ public object LfbkContainer {
         plaintextLen: Long,
     ): ByteArray = ByteArrayOutputStream().apply {
         write(MAGIC)
-        writeU16(FORMAT_VERSION)
+        writeU16(keying.formatVersion)
         writeU32(schemaVersion)
-        write(KDF_ID_HKDF_BIP39)
-        writeU16(0) // kdfParamsLen: HKDF over a BIP-39 seed takes no parameters.
+        write(keying.kdfId)
+        writeU16(keying.params.size)
+        write(keying.params)
         write(salt)
         write(nonce)
         write(keyCheck)
@@ -158,6 +260,8 @@ public object LfbkContainer {
 
     private class ParsedHeader(
         val schemaVersion: Int,
+        val kdfId: Int,
+        val kdfParams: ByteArray,
         val salt: ByteArray,
         val nonce: ByteArray,
         val keyCheck: ByteArray,
@@ -179,15 +283,23 @@ public object LfbkContainer {
             return ParseResult.Failure(LfbkFailure.NotAnLfbkFile)
         }
         val formatVersion = reader.readU16()
-        if (formatVersion != FORMAT_VERSION) {
+        if (formatVersion != FORMAT_VERSION && formatVersion != FORMAT_VERSION_SEALED) {
             return ParseResult.Failure(LfbkFailure.UnsupportedFormat(formatVersion))
         }
         val schemaVersion = reader.readU32()
-        if (reader.readByte() != KDF_ID_HKDF_BIP39) {
-            return ParseResult.Failure(LfbkFailure.Malformed("unknown kdfId"))
+        val kdfId = reader.readByte()
+        // The pair is fixed: a version-1 file is phrase-keyed, a version-2 file
+        // is sealed. Accepting a mixed pair would mean a header that says one
+        // thing and decrypts by another.
+        val expectedKdfId = if (formatVersion == FORMAT_VERSION) KDF_ID_HKDF_BIP39 else KDF_ID_DHKEM_P256
+        if (kdfId != expectedKdfId) {
+            return ParseResult.Failure(LfbkFailure.Malformed("kdfId $kdfId does not belong to format $formatVersion"))
         }
 
-        reader.take(reader.readU16()) // kdfParams, empty for kdfId = 1
+        val kdfParams = reader.take(reader.readU16())
+        if (kdfId == KDF_ID_DHKEM_P256 && kdfParams.size != BackupSealKem.PUBLIC_KEY_BYTES) {
+            return ParseResult.Failure(LfbkFailure.Malformed("sealed backup carries no usable sealing key"))
+        }
         val salt = reader.take(KeyDerivation.SALT_LENGTH)
         val nonce = reader.take(AesGcm.NONCE_LENGTH)
         val keyCheck = reader.take(KeyDerivation.KEY_CHECK_LENGTH)
@@ -205,6 +317,8 @@ public object LfbkContainer {
         return ParseResult.Success(
             ParsedHeader(
                 schemaVersion = schemaVersion,
+                kdfId = kdfId,
+                kdfParams = kdfParams,
                 salt = salt,
                 nonce = nonce,
                 keyCheck = keyCheck,
