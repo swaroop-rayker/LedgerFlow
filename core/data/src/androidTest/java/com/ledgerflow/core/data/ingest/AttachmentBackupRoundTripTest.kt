@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.crypto.bip39.Bip39
+import com.ledgerflow.core.crypto.kem.BackupSealKem
 import com.ledgerflow.core.crypto.lfbk.LfbaContainer
 import com.ledgerflow.core.data.backup.FileBackupFolder
 import com.ledgerflow.core.data.ledger.LedgerTestVault
@@ -110,6 +111,57 @@ class AttachmentBackupRoundTripTest {
             assertWithMessage("image $index").that(vault.attachments.read(id))
                 .isEqualTo(images[index])
         }
+    }
+
+    /**
+     * The nightly path (ADR-0027): images sealed with **no phrase**, and every
+     * one of them back on a fresh vault from the words alone.
+     *
+     * The second pass is the one that matters after the first: a copy already
+     * sealed to this key is skipped, so a nightly run costs new receipts only.
+     */
+    @Test
+    fun sealedWithoutThePhrase_everyImageComesBack() = runTest {
+        val ids = storeAll()
+        val publicKey = BackupSealKem.publicKey(seed)
+        val folder = FileBackupFolder(backupFolder)
+        val lfbk = File(backupFolder, "ledgerflow.lfbk")
+        DatabaseBackupManager(vault.database).writeBackup(lfbk, seed)
+
+        assertThat(backup().writeAllSealed(folder, publicKey))
+            .isEqualTo(AttachmentBackupReport(written = 3))
+        assertThat(backup().writeAllSealed(folder, publicKey))
+            .isEqualTo(AttachmentBackupReport(alreadyCurrent = 3))
+
+        val phraseOfTheLostPhone = vault.mnemonic
+        vault.close()
+        vault.open(phrase = Bip39.generate(SecureRandom()))
+        val recoveredSeed = Bip39.toSeed(phraseOfTheLostPhone)
+
+        DatabaseBackupManager(vault.database).restore(lfbk, recoveredSeed)
+        val report = backup().restoreAll(folder, recoveredSeed)
+
+        assertThat(report).isEqualTo(AttachmentRestoreReport(restored = 3))
+        ids.forEachIndexed { index, id ->
+            assertWithMessage("image $index").that(vault.attachments.read(id)).isEqualTo(images[index])
+        }
+    }
+
+    /**
+     * A folder written under the phrase is re-sealed once, after enrolment —
+     * not skipped as though it were already the nightly writer's own copy.
+     */
+    @Test
+    fun phraseWrittenCopies_areResealedOnceAfterEnrolment() = runTest {
+        storeAll()
+        val folder = FileBackupFolder(backupFolder)
+        val publicKey = BackupSealKem.publicKey(seed)
+        assertThat(backup().writeAll(folder, seed)).isEqualTo(AttachmentBackupReport(written = 3))
+
+        assertThat(backup().writeAllSealed(folder, publicKey))
+            .isEqualTo(AttachmentBackupReport(written = 3))
+        assertThat(backup().writeAllSealed(folder, publicKey))
+            .isEqualTo(AttachmentBackupReport(alreadyCurrent = 3))
     }
 
     /**

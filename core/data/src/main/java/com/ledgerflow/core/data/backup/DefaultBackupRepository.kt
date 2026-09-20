@@ -9,6 +9,8 @@ import com.ledgerflow.core.crypto.DekManager
 import com.ledgerflow.core.crypto.PhraseVerification
 import com.ledgerflow.core.crypto.UnlockFailure
 import com.ledgerflow.core.crypto.bip39.Bip39
+import com.ledgerflow.core.crypto.kem.BackupSealKem
+import com.ledgerflow.core.crypto.lfbk.LfbkContainer
 import com.ledgerflow.core.data.ingest.AttachmentBackup
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
@@ -16,6 +18,8 @@ import com.ledgerflow.core.database.backup.DatabaseBackupManager
 import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.backup.BackupRepository
+import com.ledgerflow.core.domain.backup.NightlyBackupOutcome
+import com.ledgerflow.core.domain.backup.NightlyBackupOutcome.SkipReason
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -140,6 +144,11 @@ public class DefaultBackupRepository @Inject constructor(
 
         val removed = rotate(folder, keep = KEEP, justWritten = name)
         database.appMetaDao().put(AppMetaEntity(AppMetaEntity.KEY_LAST_BACKUP_AT, now.toString()))
+        // Enrolment (ADR-0027), at the one moment the words are in hand and
+        // have just been proved against this vault. Only the public key is
+        // stored, and only after a backup has actually succeeded -- enrolling
+        // on the way in would leave a key behind for a backup that failed.
+        val enrolled = enrolForNightlyBackups(database, seed)
 
         val images = attachments.writeAll(folder, seed)
         return BackupOutcome.Done(
@@ -150,8 +159,78 @@ public class DefaultBackupRepository @Inject constructor(
             imagesUnreadable = images.unreadableLocally,
             imagesFailed = images.failed,
             olderBackupsRemoved = removed,
+            nightlyBackupsJustEnabled = enrolled,
         )
     }
+
+    /**
+     * Stores the public key these words derive, if this install has none.
+     *
+     * The private half is never written anywhere and is not kept in memory past
+     * this call: it is recomputed from the phrase at restore, and nowhere else.
+     */
+    private suspend fun enrolForNightlyBackups(database: LedgerFlowDatabase, seed: ByteArray): Boolean {
+        if (database.appMetaDao().value(KEY_SEAL_PUBLIC_KEY) != null) return false
+        val publicKey = runCatching { BackupSealKem.publicKey(seed) }.getOrNull() ?: return false
+        database.appMetaDao().put(AppMetaEntity(KEY_SEAL_PUBLIC_KEY, publicKey.toHex()))
+        return true
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun nightlyBackupsEnabled(): Flow<Boolean> =
+        session.whenUnlocked().flatMapLatest { database ->
+            database?.appMetaDao()?.observeAll()?.map { rows ->
+                rows.any { it.key == KEY_SEAL_PUBLIC_KEY && it.value.isNotBlank() }
+            } ?: flowOf(false)
+        }
+
+    /**
+     * The nightly pass. Nothing here can open what it writes.
+     *
+     * The order matches the manual path deliberately -- write, verify, promote,
+     * only then rotate and record -- because a failed pass must leave the folder
+     * and `lastBackupAt` exactly as it found them.
+     */
+    override suspend fun backUpNightly(): NightlyBackupOutcome = withContext(io) {
+        val database = session.openForBackgroundWork()
+            ?: return@withContext NightlyBackupOutcome.Skipped(SkipReason.VaultClosed)
+        val publicKey = database.appMetaDao().value(KEY_SEAL_PUBLIC_KEY)?.fromHex()
+            ?: return@withContext NightlyBackupOutcome.Skipped(SkipReason.NotEnrolled)
+        val folder = reachableFolder(database)
+            ?: return@withContext NightlyBackupOutcome.Skipped(SkipReason.NoFolder)
+
+        val manager = DatabaseBackupManager(database)
+        val sealed = manager.sealTo(publicKey)
+        val now = clock.nowMillis()
+        val name = fileNameFor(now)
+
+        // What a writer without the phrase can check: the bytes that landed are
+        // the bytes that were sealed, and the header still reads as sealed to
+        // this install's key (ADR-0027 decision b).
+        val written = folder.writeVerified(name, sealed.bytes) { landed ->
+            landed.contentEquals(sealed.bytes) && LfbkContainer.sealedTo(landed, publicKey)
+        }
+        if (!written) return@withContext NightlyBackupOutcome.WriteFailed
+
+        val removed = rotate(folder, keep = KEEP, justWritten = name)
+        database.appMetaDao().put(AppMetaEntity(AppMetaEntity.KEY_LAST_BACKUP_AT, now.toString()))
+
+        val images = attachments.writeAllSealed(folder, publicKey)
+        NightlyBackupOutcome.Done(
+            fileName = name,
+            rows = sealed.rowCount,
+            imagesWritten = images.written,
+            imagesFailed = images.failed,
+            olderBackupsRemoved = removed,
+        )
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    private fun String.fromHex(): ByteArray? = runCatching {
+        check(length % 2 == 0) { "odd-length hex" }
+        chunked(2).map { it.toInt(HEX_RADIX).toByte() }.toByteArray()
+    }.getOrNull()
 
     /**
      * Keeps the newest [keep] backups (§8 BUG4(d): five), and **always** the
@@ -218,6 +297,16 @@ public class DefaultBackupRepository @Inject constructor(
     private companion object {
         /** §8 BUG4(d). */
         const val KEEP = 5
+
+        const val HEX_RADIX = 16
+
+        /**
+         * The public half of the nightly sealing key (ADR-0027), hex in
+         * `app_meta`. Public, so it lives with the rest of the install's
+         * metadata rather than beside the wrapped DEK — and `app_meta` is
+         * key-value, so this needed no migration.
+         */
+        const val KEY_SEAL_PUBLIC_KEY = "backupSealPublicKey"
 
         /**
          * UTC and fixed-width, so name order is time order — which is what

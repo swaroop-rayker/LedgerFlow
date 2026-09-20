@@ -2,6 +2,7 @@ package com.ledgerflow.core.testing.backup
 
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.backup.BackupRepository
+import com.ledgerflow.core.domain.backup.NightlyBackupOutcome
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -33,5 +34,22 @@ public class FakeBackupRepository(
     override suspend fun setBackupFolder(treeUri: String) {
         chosenFolders += treeUri
         folderName = treeUri.substringAfterLast('/')
+    }
+
+    // ── Nightly backups (ADR-0027) ──────────────────────────────────────────
+
+    /** What [backUpNightly] returns. */
+    public var nightlyOutcome: NightlyBackupOutcome =
+        NightlyBackupOutcome.Skipped(NightlyBackupOutcome.SkipReason.NotEnrolled)
+
+    public val nightlyEnabled: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    public var nightlyRuns: Int = 0
+        private set
+
+    override fun nightlyBackupsEnabled(): Flow<Boolean> = nightlyEnabled
+
+    override suspend fun backUpNightly(): NightlyBackupOutcome {
+        nightlyRuns++
+        return nightlyOutcome
     }
 }

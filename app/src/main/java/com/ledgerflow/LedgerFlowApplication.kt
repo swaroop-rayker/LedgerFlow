@@ -10,6 +10,7 @@ import androidx.work.Configuration
 import com.ledgerflow.feature.analytics.work.RollupWorker
 import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.ingest.notify.InboxNotifications
+import com.ledgerflow.feature.settings.work.NightlyBackupWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -56,6 +57,11 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
         // every cold start resets the period, so on a phone the user opens
         // daily the pass would be perpetually deferred and never once run.
         RollupWorker.schedule(this)
+        // ADR-0027's nightly backup. Scheduled unconditionally: an install that
+        // has not enrolled reports a skip after one metadata read, and a
+        // schedule that enrolment had to remember to start is a schedule that
+        // is eventually never started.
+        NightlyBackupWorker.schedule(this)
         // The nightly pass above waits for idle and charging; this does not,
         // because a rollup that has never been built makes the whole Analytics
         // screen wrong until it is. No-op after the first successful run.

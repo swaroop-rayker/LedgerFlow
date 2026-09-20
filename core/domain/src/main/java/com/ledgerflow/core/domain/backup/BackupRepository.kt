@@ -39,6 +39,52 @@ public interface BackupRepository {
      * Backups already written stay where they are.
      */
     public suspend fun setBackupFolder(treeUri: String)
+
+    /**
+     * Is this install enrolled for nightly backups (ADR-0027)?
+     *
+     * Enrolment is one moment: a successful [backUpNow] stores the public key
+     * derived from the words it just used. Nothing but that public key is kept,
+     * and nothing on the device can open a backup afterwards.
+     */
+    public fun nightlyBackupsEnabled(): Flow<Boolean>
+
+    /**
+     * Tonight's backup, sealed to the stored public key. **No phrase is
+     * involved**, which is the whole point — and the reason its verification is
+     * weaker than [backUpNow]'s (ADR-0027 decision b).
+     */
+    public suspend fun backUpNightly(): NightlyBackupOutcome
+}
+
+/** What a nightly pass did. A skip is a reason, not a failure. */
+public sealed interface NightlyBackupOutcome {
+
+    /** Why tonight's pass did nothing. None of these retry usefully. */
+    public enum class SkipReason {
+        /** No words have been given yet, so there is no key to seal to. */
+        NotEnrolled,
+
+        /** No backup folder, or its grant no longer answers (BUG27). */
+        NoFolder,
+
+        /** The vault is not open — mid-restore, or onboarding never finished. */
+        VaultClosed,
+    }
+
+    public data class Skipped(val reason: SkipReason) : NightlyBackupOutcome
+
+    /** Written, and the bytes that landed are the bytes that were sealed. */
+    public data class Done(
+        val fileName: String,
+        val rows: Int,
+        val imagesWritten: Int,
+        val imagesFailed: Int,
+        val olderBackupsRemoved: Int,
+    ) : NightlyBackupOutcome
+
+    /** Nothing was recorded: `lastBackupAt` is unchanged and older backups are untouched. */
+    public data object WriteFailed : NightlyBackupOutcome
 }
 
 /** What a backup did — each outcome is a sentence the screen owes the user. */
@@ -85,6 +131,11 @@ public sealed interface BackupOutcome {
         val imagesUnreadable: Int,
         val imagesFailed: Int,
         val olderBackupsRemoved: Int,
+        /**
+         * These words also turned nightly backups on (ADR-0027), which the
+         * screen says once rather than every time.
+         */
+        val nightlyBackupsJustEnabled: Boolean = false,
     ) : BackupOutcome
 }
 
