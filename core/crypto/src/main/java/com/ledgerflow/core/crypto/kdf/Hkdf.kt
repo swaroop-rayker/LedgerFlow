@@ -43,8 +43,13 @@ public object Hkdf {
         return expand(extract(salt, ikm), info, length)
     }
 
-    /** RFC 5869 §2.2: PRK = HMAC-Hash(salt, IKM). */
-    private fun extract(salt: ByteArray, ikm: ByteArray): ByteArray {
+    /**
+     * RFC 5869 §2.2: PRK = HMAC-Hash(salt, IKM).
+     *
+     * Public because HPKE (RFC 9180, ADR-0027) labels the two steps separately
+     * and carries a PRK between them, which [derive] cannot express.
+     */
+    public fun extract(salt: ByteArray, ikm: ByteArray): ByteArray {
         // An all-zero key is legal for HMAC but SecretKeySpec rejects an empty
         // byte array, so the RFC's "HashLen zeros" default is made explicit.
         val effectiveSalt = if (salt.isEmpty()) ByteArray(HASH_LEN) else salt
@@ -53,8 +58,8 @@ public object Hkdf {
         return mac.doFinal(ikm)
     }
 
-    /** RFC 5869 §2.3: T(n) = HMAC-Hash(PRK, T(n-1) | info | n). */
-    private fun expand(prk: ByteArray, info: ByteArray, length: Int): ByteArray {
+    /** RFC 5869 §2.3: T(n) = HMAC-Hash(PRK, T(n-1) | info | n). Public for the same reason as [extract]. */
+    public fun expand(prk: ByteArray, info: ByteArray, length: Int): ByteArray {
         val mac = Mac.getInstance(ALGORITHM)
         mac.init(SecretKeySpec(prk, ALGORITHM))
 
