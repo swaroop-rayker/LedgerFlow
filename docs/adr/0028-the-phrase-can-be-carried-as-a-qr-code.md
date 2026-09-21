@@ -63,13 +63,26 @@ removes the typing.
 
 ## Verification
 
-- `QrPhrasePayloadTest` (JVM): round-trips the payload, rejects a foreign QR, a
-  wrong prefix, a truncated phrase and a phrase whose checksum fails — using the
-  public BIP-39 test vector, never a real phrase.
-- `RecoveryKitQrTest`: the PDF contains a QR that decodes back to the exact
-  words written on the page — drawn and read by the same library, so it also
-  pins that the kit and the scanner agree.
-- A device test scans a rendered QR through the analyser path, proving the
-  camera pipeline decodes what the kit draws.
+- **`PhraseQrTest`** (JVM): the payload round-trips; a foreign QR reads as
+  `NotOurs`; a `LFBK2:` code says it is newer rather than failing blankly; odd
+  whitespace from a PDF viewer still scans; and `applyScan` fills the field,
+  keeps the camera open for someone else's code, and replaces a half-typed
+  phrase the way a paste does. The public BIP-39 test vector throughout, never
+  a real phrase.
+- **`RecoveryKitQrTest`** (device): the written PDF is rendered with
+  `PdfRenderer` and decoded back to the exact words on the page — drawn and
+  read by the same library, so the kit and the scanner cannot drift apart. The
+  `.txt` kit is asserted to carry no code.
+- **ViewModel tests on all three screens** (`RecoveryViewModelTest`,
+  `RestoreViewModelTest`, `BackupNowViewModelTest`): a kit fills the words and
+  closes the scanner, a foreign code leaves it open, and on restore, leaving
+  forgets a scanned phrase exactly as it forgets a typed one (BUG30).
+- **Not covered, and stated rather than implied:** no automated test drives a
+  real camera frame through `LfPhraseScanner`'s analyser. Instrumentation
+  cannot point a lens at a page, and a fake `ImageProxy` would test ZXing
+  rather than this app. The decode path is exercised from the same library in
+  `RecoveryKitQrTest`; what is unproven by machine is the camera plumbing —
+  binding, permission, and stopping at the first code. `TESTING.md` D5 is
+  where a person checks it.
 - `TESTING.md` D5 gains the QR check on a real printout, and D10 gains "restore
   by scanning the kit instead of typing".
