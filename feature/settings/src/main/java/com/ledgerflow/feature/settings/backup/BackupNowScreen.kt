@@ -28,6 +28,8 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.ui.phrase.LfPhraseEntry
+import java.text.DateFormat
+import java.util.Date
 import com.ledgerflow.core.ui.phrase.LfPhraseScanner
 
 /**
@@ -71,6 +73,7 @@ public fun BackupNowScreen(
                 Explanation(state.nightlyBackupsEnabled)
                 if (state.needsFolder) FolderPrompt(onEvent)
                 state.folderName?.let { FolderLine(it, state.folderChanged, state.isWorking, onEvent) }
+                state.failedNightlyAt?.let { FailedNightlyLine(it) }
                 state.result?.let { ResultMessage(it) }
                 LfPhraseEntry(
                     words = state.entry.words,
@@ -125,6 +128,27 @@ private fun Explanation(nightlyBackupsEnabled: Boolean) {
                 color = LfTheme.colors.textSecondary,
             )
         }
+    }
+}
+
+/**
+ * Said only when the last automatic pass **failed**.
+ *
+ * A screen that also narrated every quiet success would teach the user to stop
+ * reading it; a failure they cannot otherwise discover is the thing worth a
+ * line (ADR-0027, amended 2026-09-22). Backing up here fixes it, which is why
+ * this sits on the screen that can.
+ */
+@Composable
+private fun FailedNightlyLine(at: Long) {
+    val date = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(at))
+    LfCard {
+        Text(
+            text = "The automatic backup on $date couldn't be written. Your earlier backups are " +
+                "untouched. Backing up here now will fix it.",
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.debit,
+        )
     }
 }
 

@@ -118,10 +118,35 @@ happened, or while a restore is pending — each recorded as a reason, not an
 error.
 
 **Failure stays quiet, deliberately.** BUG4(c)'s persistent notification is
-*not* reinstated: WorkManager retries with backoff, and a run of bad nights
-shows up where the user already looks — Home's reminder line, which is driven by
-the date and says "Last backup N days ago". A notification for something the
-user cannot act on at 3 a.m. is noise; the reminder is the honest surface.
+*not* reinstated: a run of bad nights shows up where the user already looks —
+Home's reminder line, which is driven by the date and says "Last backup N days
+ago". A notification for something the user cannot act on at 3 a.m. is noise.
+
+### Amended 2026-09-22, after the first real night — by the owner
+
+The first scheduled pass on the owner's phone **failed three times and then
+wedged**, and nothing anywhere could say why. Two changes, both the owner's
+call:
+
+1. **Every attempt is recorded in the vault** — `lastNightlyBackupAt` and
+   `lastNightlyBackupOutcome` in `app_meta`, written for a skip, a failure and
+   a success alike. A backup that runs unattended has to be able to account for
+   itself; without this, "it never ran" and "it ran and failed" are
+   indistinguishable the next morning, and the phone's log has rotated by then.
+   The one case that cannot be recorded is `VaultClosed`, for the same reason
+   the pass skipped: there is no database to write it to. **"Back up now" shows
+   a line when the last attempt failed** — and only then, because a screen that
+   narrates every quiet success teaches the user to stop reading it.
+2. **A failed pass no longer asks WorkManager to retry.** It reports success
+   and waits for the next night. The retry is what produced the wedge: three
+   attempts, then the process died mid-run, and the work sat in WorkManager's
+   `RUNNING` state — which schedules no system job at all, so it would never
+   have run again without the app being opened. The pass is daily; tomorrow is
+   the retry, and the record says what happened in the meantime.
+
+**What is still unknown, and stated rather than papered over:** why those three
+writes failed. The log had rotated before it was looked at, which is exactly
+the gap change 1 closes.
 
 ## Consequences
 

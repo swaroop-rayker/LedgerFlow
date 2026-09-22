@@ -952,6 +952,14 @@ and parses the header, and cannot prove the file decrypts — that needs the
 words, and a manual backup still does it. A skip (not enrolled, no folder, no
 vault) is recorded as a reason rather than announced; a run of bad nights shows
 up in Home's reminder, which is what BUG4(c)'s notification was replaced by.
+**Every attempt — skip, failure or success — is recorded** in `app_meta`
+(`lastNightlyBackupAt`, `lastNightlyBackupOutcome`), because an unattended
+backup that cannot account for itself leaves "it never ran" and "it ran and
+failed" indistinguishable by morning; "Back up now" shows a line when the last
+attempt **failed**, and only then. **A failed pass does not retry**: it waits
+for the next night, after a retry chain on the owner's phone wedged the work in
+WorkManager's `RUNNING` state, which schedules no job at all (ADR-0027, amended
+2026-09-22).
 
 **The `.lfba` sidecar container** (ADR-0023, `LfbaContainer`). Same shape as the
 `.lfbk` header and for the same three reasons — explicit `kdfParamsLen`, the

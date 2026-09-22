@@ -34,6 +34,12 @@ public data class BackupNowUiState(
     val isScanning: Boolean = false,
     /** Why the last scan was refused, if it was. */
     val scanMessage: String? = null,
+    /**
+     * The last automatic pass, when it **failed**. Null when it succeeded, was
+     * skipped, or has never run — a screen that narrates every quiet success
+     * teaches the user to stop reading it.
+     */
+    val failedNightlyAt: Long? = null,
 ) {
     val canSubmit: Boolean get() = entry.isComplete && !isWorking
 

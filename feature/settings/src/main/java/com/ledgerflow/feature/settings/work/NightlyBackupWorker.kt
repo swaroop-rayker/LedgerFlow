@@ -29,8 +29,13 @@ import java.util.concurrent.TimeUnit
  * pretending when it cannot.
  *
  * **Never throws** (§8, BUG7(e)): a throw here is a crash in a background
- * process. A write failure asks WorkManager to retry with backoff; a skip does
- * not, because nothing about the next hour would change a missing folder.
+ * process. **Nothing asks for a retry either** — a failed pass reports success
+ * and waits for the next night. That is not indifference: a retry chain is how
+ * the first failure on the owner's phone ended up wedged in WorkManager's
+ * RUNNING state, which schedules no job at all, so the work would never have
+ * run again without the app being opened. The pass runs daily; tomorrow is the
+ * retry, and every attempt is recorded in the vault so a failure can be read
+ * the next morning rather than lost with the log.
  *
  * **Battery not low, and nothing else.** Not "charging and idle" like the
  * rollup pass: a user who never charges overnight would simply never be backed
@@ -64,13 +69,21 @@ public class NightlyBackupWorker @AssistedInject constructor(
             }
 
             NightlyBackupOutcome.WriteFailed -> {
-                Log.w(TAG, "Nightly backup could not be written; nothing was recorded.")
-                Result.retry()
+                // Success, not retry, and deliberately (owner, 2026-09-22).
+                // A retry chain is how the very first night's failure ended up
+                // wedged: three attempts, then the process died mid-run and the
+                // work sat in RUNNING, which schedules no job at all — so it
+                // would never have run again without the app being opened. This
+                // job runs daily anyway, so the next period is the retry, and
+                // the attempt is recorded in the vault either way.
+                Log.w(TAG, "Nightly backup could not be written; nothing was recorded. Waiting for the next pass.")
+                Result.success()
             }
         }
     }.getOrElse { error ->
+        // Same reasoning as a write failure: tomorrow is the retry.
         Log.e(TAG, "Nightly backup failed", error)
-        Result.retry()
+        Result.success()
     }
 
     public companion object {

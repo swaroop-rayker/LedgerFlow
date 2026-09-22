@@ -38,6 +38,7 @@ class BackUpNowUseCaseTest {
         override fun nightlyBackupsEnabled(): Flow<Boolean> = flowOf(false)
         override suspend fun backUpNightly(): NightlyBackupOutcome =
             NightlyBackupOutcome.Skipped(NightlyBackupOutcome.SkipReason.NotEnrolled)
+        override fun lastNightlyAttempt(): Flow<NightlyAttempt?> = flowOf(null)
     }
 
     private val useCase = BackUpNowUseCase(validator, repository)

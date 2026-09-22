@@ -246,6 +246,51 @@ class NightlyBackupTest {
         assertThat(backups()).hasSize(1) // only the manual one that enrolled
     }
 
+    // ── Every attempt accounts for itself (ADR-0027, amended) ───────────────
+
+    /**
+     * A pass that did nothing still says so.
+     *
+     * Found the hard way on the owner's phone: a night's pass failed three
+     * times and nothing anywhere could say why — no record in the app, and the
+     * phone's log had rotated by morning.
+     */
+    @Test
+    fun everyAttemptIsRecorded_withItsOutcome() = runTest {
+        chooseFolder()
+
+        assertThat(repository().lastNightlyAttempt().first()).isNull()
+
+        repository().backUpNightly() // not enrolled
+        val skipped = repository().lastNightlyAttempt().first()
+        assertThat(skipped?.outcome).isEqualTo("skipped:NotEnrolled")
+        assertThat(skipped?.at).isEqualTo(vault.now)
+        assertThat(skipped?.failed).isFalse()
+
+        enrol()
+        vault.now += SECOND_MILLIS
+        repository().backUpNightly()
+        val done = repository().lastNightlyAttempt().first()
+
+        assertThat(done?.outcome).isEqualTo("done")
+        assertThat(done?.wroteABackup).isTrue()
+        assertThat(done?.at).isEqualTo(vault.now)
+    }
+
+    /** A folder that has gone is a skip, recorded as one rather than as a failure. */
+    @Test
+    fun aSkipIsNotRecordedAsAFailure() = runTest {
+        chooseFolder()
+        enrol()
+        folder = null
+
+        repository().backUpNightly()
+
+        val attempt = repository().lastNightlyAttempt().first()
+        assertThat(attempt?.outcome).isEqualTo("skipped:NoFolder")
+        assertThat(attempt?.failed).isFalse()
+    }
+
     private companion object {
         const val SECOND_MILLIS = 1_000L
     }

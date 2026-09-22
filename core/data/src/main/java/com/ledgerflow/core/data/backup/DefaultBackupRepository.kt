@@ -18,6 +18,7 @@ import com.ledgerflow.core.database.backup.DatabaseBackupManager
 import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.backup.BackupRepository
+import com.ledgerflow.core.domain.backup.NightlyAttempt
 import com.ledgerflow.core.domain.backup.NightlyBackupOutcome
 import com.ledgerflow.core.domain.backup.NightlyBackupOutcome.SkipReason
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -195,9 +196,9 @@ public class DefaultBackupRepository @Inject constructor(
         val database = session.openForBackgroundWork()
             ?: return@withContext NightlyBackupOutcome.Skipped(SkipReason.VaultClosed)
         val publicKey = database.appMetaDao().value(KEY_SEAL_PUBLIC_KEY)?.fromHex()
-            ?: return@withContext NightlyBackupOutcome.Skipped(SkipReason.NotEnrolled)
+            ?: return@withContext record(database, NightlyBackupOutcome.Skipped(SkipReason.NotEnrolled))
         val folder = reachableFolder(database)
-            ?: return@withContext NightlyBackupOutcome.Skipped(SkipReason.NoFolder)
+            ?: return@withContext record(database, NightlyBackupOutcome.Skipped(SkipReason.NoFolder))
 
         val manager = DatabaseBackupManager(database)
         val sealed = manager.sealTo(publicKey)
@@ -210,20 +211,55 @@ public class DefaultBackupRepository @Inject constructor(
         val written = folder.writeVerified(name, sealed.bytes) { landed ->
             landed.contentEquals(sealed.bytes) && LfbkContainer.sealedTo(landed, publicKey)
         }
-        if (!written) return@withContext NightlyBackupOutcome.WriteFailed
+        if (!written) return@withContext record(database, NightlyBackupOutcome.WriteFailed)
 
         val removed = rotate(folder, keep = KEEP, justWritten = name)
         database.appMetaDao().put(AppMetaEntity(AppMetaEntity.KEY_LAST_BACKUP_AT, now.toString()))
 
         val images = attachments.writeAllSealed(folder, publicKey)
-        NightlyBackupOutcome.Done(
-            fileName = name,
-            rows = sealed.rowCount,
-            imagesWritten = images.written,
-            imagesFailed = images.failed,
-            olderBackupsRemoved = removed,
+        record(
+            database,
+            NightlyBackupOutcome.Done(
+                fileName = name,
+                rows = sealed.rowCount,
+                imagesWritten = images.written,
+                imagesFailed = images.failed,
+                olderBackupsRemoved = removed,
+            ),
         )
     }
+
+    /**
+     * Every nightly attempt leaves a record: what happened, and when.
+     *
+     * **Found the hard way** (owner's phone, 2026-09-22): a night's pass failed
+     * three times and nothing anywhere could say why — the app kept no record,
+     * and by morning the phone's log had rotated. A backup that runs unattended
+     * has to be able to account for itself, or "it did not happen" and "it
+     * happened and failed" look identical from outside.
+     *
+     * The one case this cannot record is [SkipReason.VaultClosed]: there is no
+     * database to write it to, which is the same reason the pass skipped.
+     */
+    private suspend fun record(
+        database: LedgerFlowDatabase,
+        outcome: NightlyBackupOutcome,
+    ): NightlyBackupOutcome {
+        val meta = database.appMetaDao()
+        meta.put(AppMetaEntity(KEY_LAST_NIGHTLY_AT, clock.nowMillis().toString()))
+        meta.put(AppMetaEntity(KEY_LAST_NIGHTLY_OUTCOME, outcome.record()))
+        return outcome
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun lastNightlyAttempt(): Flow<NightlyAttempt?> =
+        session.whenUnlocked().flatMapLatest { database ->
+            database?.appMetaDao()?.observeAll()?.map { rows ->
+                val at = rows.firstOrNull { it.key == KEY_LAST_NIGHTLY_AT }?.value?.toLongOrNull()
+                val outcome = rows.firstOrNull { it.key == KEY_LAST_NIGHTLY_OUTCOME }?.value
+                if (at == null || outcome == null) null else NightlyAttempt(at, outcome)
+            } ?: flowOf(null)
+        }
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
@@ -307,6 +343,10 @@ public class DefaultBackupRepository @Inject constructor(
          * key-value, so this needed no migration.
          */
         const val KEY_SEAL_PUBLIC_KEY = "backupSealPublicKey"
+
+        /** When the last nightly pass ran, and what it did. */
+        const val KEY_LAST_NIGHTLY_AT = "lastNightlyBackupAt"
+        const val KEY_LAST_NIGHTLY_OUTCOME = "lastNightlyBackupOutcome"
 
         /**
          * UTC and fixed-width, so name order is time order — which is what

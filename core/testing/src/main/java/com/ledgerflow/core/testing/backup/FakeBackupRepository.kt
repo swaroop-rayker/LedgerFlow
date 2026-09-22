@@ -2,6 +2,7 @@ package com.ledgerflow.core.testing.backup
 
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.backup.BackupRepository
+import com.ledgerflow.core.domain.backup.NightlyAttempt
 import com.ledgerflow.core.domain.backup.NightlyBackupOutcome
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +51,11 @@ public class FakeBackupRepository(
 
     override suspend fun backUpNightly(): NightlyBackupOutcome {
         nightlyRuns++
+        lastNightly.value = NightlyAttempt(at = 0L, outcome = nightlyOutcome.record())
         return nightlyOutcome
     }
+
+    public val lastNightly: MutableStateFlow<NightlyAttempt?> = MutableStateFlow(null)
+
+    override fun lastNightlyAttempt(): Flow<NightlyAttempt?> = lastNightly
 }

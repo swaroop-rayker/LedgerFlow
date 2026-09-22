@@ -50,6 +50,13 @@ public class BackupNowViewModel @Inject constructor(
                 _state.update { it.copy(nightlyBackupsEnabled = enabled) }
             }
         }
+        // And whether the last automatic pass failed, which is the one thing
+        // about it the user cannot otherwise find out (ADR-0027, amended).
+        viewModelScope.launch {
+            backups.lastNightlyAttempt().collect { attempt ->
+                _state.update { it.copy(failedNightlyAt = attempt?.takeIf { a -> a.failed }?.at) }
+            }
+        }
     }
 
     public fun onEvent(event: BackupNowEvent) {

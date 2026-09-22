@@ -55,6 +55,31 @@ public interface BackupRepository {
      * weaker than [backUpNow]'s (ADR-0027 decision b).
      */
     public suspend fun backUpNightly(): NightlyBackupOutcome
+
+    /**
+     * What the last nightly pass did, and when — null until one has run.
+     *
+     * A backup that runs unattended has to be able to account for itself. Found
+     * the hard way on the owner's phone (2026-09-22): a pass failed three times
+     * and nothing could say why, because the app kept no record and the
+     * phone's log had rotated by morning.
+     */
+    public fun lastNightlyAttempt(): Flow<NightlyAttempt?>
+}
+
+/**
+ * The last nightly pass, as the app remembers it.
+ *
+ * [outcome] is [NightlyBackupOutcome.record]'s short form rather than the
+ * sealed type: it is read back from storage, where a value written by an older
+ * build must not become an exhaustive-`when` failure in a newer one.
+ */
+public data class NightlyAttempt(val at: Long, val outcome: String) {
+    /** Did the last pass write a backup? A skip is not a failure, and neither is unknown. */
+    public val wroteABackup: Boolean get() = outcome == NightlyBackupOutcome.RECORD_DONE
+
+    /** The one case worth telling the user about: it tried and could not. */
+    public val failed: Boolean get() = outcome == NightlyBackupOutcome.RECORD_WRITE_FAILED
 }
 
 /** What a nightly pass did. A skip is a reason, not a failure. */
@@ -85,6 +110,23 @@ public sealed interface NightlyBackupOutcome {
 
     /** Nothing was recorded: `lastBackupAt` is unchanged and older backups are untouched. */
     public data object WriteFailed : NightlyBackupOutcome
+
+    /**
+     * The short form stored in `app_meta`, and the only shape a later build has
+     * to keep reading. Deliberately not `toString()`, which a refactor renames
+     * silently.
+     */
+    public fun record(): String = when (this) {
+        is Done -> RECORD_DONE
+        is Skipped -> RECORD_SKIPPED + reason.name
+        WriteFailed -> RECORD_WRITE_FAILED
+    }
+
+    public companion object {
+        public const val RECORD_DONE: String = "done"
+        public const val RECORD_SKIPPED: String = "skipped:"
+        public const val RECORD_WRITE_FAILED: String = "write-failed"
+    }
 }
 
 /** What a backup did — each outcome is a sentence the screen owes the user. */
