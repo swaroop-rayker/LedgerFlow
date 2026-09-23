@@ -100,6 +100,9 @@ LedgerFlow/
 .\gradlew :core:database:connectedAndroidTest  # migration tests specifically
 .\gradlew verifyRoborazziSmsFullDebug     # screenshot diff check -- exactly what CI's `screenshot` job runs
 .\gradlew recordRoborazziSmsFullDebug     # re-record goldens. REVIEW the diff first; never re-record blind (§12)
+                                          # Comparison tolerates Windows-vs-Linux anti-aliasing only
+                                          # (LfScreenshotOptions, maxDistance 0.055, BUG33). Never raise it
+                                          # to make a diff pass: a real change is a distance near 1.
 .\gradlew detekt lintSmsFullDebug         # static analysis
 .\gradlew bannedApiCheck                  # `!!` / cacheDir bans (Laws 5 & 7)
 .\gradlew restrictedPermissionCheck       # pins the EXACT permission set per source set (D-04, Law 6)

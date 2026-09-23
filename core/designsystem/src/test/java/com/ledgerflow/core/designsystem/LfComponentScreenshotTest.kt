@@ -102,7 +102,7 @@ class LfComponentScreenshotTest {
                 }
             }
         }
-        composeRule.onRoot().captureRoboImage("$GOLDEN_DIR/$name.png")
+        composeRule.onRoot().captureRoboImage("$GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
     }
 
     /** BUG9's exact failing shape: three actions in a card-width row. */

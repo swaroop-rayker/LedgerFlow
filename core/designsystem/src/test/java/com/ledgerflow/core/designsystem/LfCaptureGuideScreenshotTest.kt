@@ -79,7 +79,7 @@ class LfCaptureGuideScreenshotTest {
                 }
             }
         }
-        composeRule.onRoot().captureRoboImage("$GUIDE_GOLDEN_DIR/$name.png")
+        composeRule.onRoot().captureRoboImage("$GUIDE_GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
     }
 
     @Test

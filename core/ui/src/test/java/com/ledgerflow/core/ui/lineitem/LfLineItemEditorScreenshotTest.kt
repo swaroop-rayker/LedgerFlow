@@ -89,7 +89,7 @@ class LfLineItemEditorScreenshotTest {
                 }
             }
         }
-        composeRule.onRoot().captureRoboImage("$EDITOR_GOLDEN_DIR/$name.png")
+        composeRule.onRoot().captureRoboImage("$EDITOR_GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
     }
 
     private fun row(

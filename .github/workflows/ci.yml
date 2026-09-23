@@ -130,13 +130,19 @@ jobs:
           # Docs, workflows and guard scripts are excluded from the identifier
           # bans: they must be able to NAME a banned API in order to ban it.
           # Matching the call form `…(` keeps prose and comments clean too.
+          # The root build.gradle.kts is excluded from the cacheDir ban for the
+          # same reason: it defines the local `bannedApiCheck`, whose regex is
+          # the literal `\.cacheDir\b`. Unexcluded, that definition was the only
+          # match in the repository and failed this step on every run (BUG33).
+          # Only the ROOT file, by exact path: a module's build script that
+          # touched cacheDir would still be caught.
           check 'Destructive migration is banned outside dev source sets (Law 4).' \
                 'fallbackToDestructiveMigration[A-Za-z]*[[:space:]]*\(' \
                 ':!*/dev/*' ':!.github/*' ':!scripts/*' ':!docs/*' ':!*.md'
           check 'cacheDir is OS-clearable. Persistent data belongs in filesDir (Law 5, BUG2).' \
                 '\.cacheDir' \
                 ':!*imageloading*' ':!*test*' ':!*Test*' \
-                ':!.github/*' ':!scripts/*' ':!docs/*' ':!*.md'
+                ':!.github/*' ':!scripts/*' ':!docs/*' ':!*.md' ':(top,exclude)build.gradle.kts'
           check 'Money must be Long minor units (Law 3).' \
                 '(Float|Double)[[:space:]]*(=|\)|,).*(amount|price|total|balance)' \
                 'core/model'

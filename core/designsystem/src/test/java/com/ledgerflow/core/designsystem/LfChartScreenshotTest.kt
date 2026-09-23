@@ -85,7 +85,7 @@ class LfChartScreenshotTest {
                 }
             }
         }
-        composeRule.onRoot().captureRoboImage("$CHART_GOLDEN_DIR/$name.png")
+        composeRule.onRoot().captureRoboImage("$CHART_GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
     }
 
     // ── A2 / A5: the donut ─────────────────────────────────────────────────
