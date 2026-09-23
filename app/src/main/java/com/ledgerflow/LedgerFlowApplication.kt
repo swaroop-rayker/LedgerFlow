@@ -60,7 +60,9 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
         // ADR-0027's nightly backup. Scheduled unconditionally: an install that
         // has not enrolled reports a skip after one metadata read, and a
         // schedule that enrolment had to remember to start is a schedule that
-        // is eventually never started.
+        // is eventually never started. Aimed at 03:00 once, here, with `KEEP`;
+        // each pass re-aims the next (BUG31). This also cancels the drifting
+        // schedule an older build left behind, which is a no-op once it is gone.
         NightlyBackupWorker.schedule(this)
         // The nightly pass above waits for idle and charging; this does not,
         // because a rollup that has never been built makes the whole Analytics

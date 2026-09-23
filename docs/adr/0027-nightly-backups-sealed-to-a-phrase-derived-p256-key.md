@@ -108,9 +108,10 @@ treatment, one `enc` per file.
 
 ## What runs, and when
 
-A daily `PeriodicWorkRequest`. It requires **battery not low** and no network of
-any kind. Each run: open the vault through `openForBackgroundWork()` (ADR-0026's
-rule, no new key material), seal the `.lfbk`, verify as in (b), promote, seal any
+A daily `PeriodicWorkRequest` — **aimed at 03:00 by each pass since the
+2026-09-23 amendment below**; as first built it drifted to the hour of its last
+run. It requires **battery not low** and no network of any kind. Each run: open
+the vault through `openForBackgroundWork()` (ADR-0026's rule, no new key material), seal the `.lfbk`, verify as in (b), promote, seal any
 image not already in the folder, rotate to the newest five, record the date.
 
 It **skips silently** when there is no backup folder, when enrolment has not
@@ -148,6 +149,89 @@ call:
 writes failed. The log had rotated before it was looked at, which is exactly
 the gap change 1 closes.
 
+### Amended 2026-09-23 — aimed at 03:00, by the owner (§8 BUG31)
+
+**What was wrong.** "A daily `PeriodicWorkRequest`" is not nightly. WorkManager
+counts a period from the moment the previous run *finished*, so the pass kept
+the hour of its last run — on the owner's phone about 21:50 — and had no
+relationship to night at all. Two nights of checking for an overnight backup
+found none, and none was due. Nothing had failed. The schedule meant something
+other than what every screen said.
+
+**The choice.** The owner was offered renaming it to a daily backup or aiming
+it at a fixed early-morning hour, and chose the hour: **03:00 local.**
+
+**How it holds the hour — decided with the owner, four points:**
+
+| | Question | Chosen |
+|---|---|---|
+| 1 | The hour | **03:00** on the device's clock. |
+| 2 | How it stays anchored | **A periodic request, re-aimed by every pass**, using `PeriodicWorkRequest.Builder.setNextScheduleTimeOverride` (WorkManager 2.9+; the project is on 2.11.2). Each pass first calls `updateWork` with the next 03:00, and then backs up. |
+| 3 | Migrating an install with the old schedule | **A new unique name** (`nightly-backup-0300`) enqueued with `KEEP`, and the old name (`nightly-backup`) **cancelled on every cold start**. |
+| 4 | What the screens say | **"Nightly", unchanged, and no hour.** Now that it is aimed at night, the word is true. The hour lives here and in `SPEC.md` §5.9, beside the statement that Android decides. |
+
+**Why a re-aimed periodic request, not a chain of one-time requests.** Both
+were on the table. A chain holds the hour, but it is only as durable as its
+weakest run: a pass that dies before it enqueues its successor ends the
+backups, silently, until the app is next opened. The periodic request cannot
+be lost. Its only failure is drift, and the override removes that. The override
+moves only the *next* run, so every pass must set it again. Two WorkManager
+behaviours make that safe. Both were read from the 2.11.2 bytecode rather than
+assumed, and both are held by `Bug31_NightlyBackupStaysAnchoredTest` against a
+real in-memory WorkManager:
+
+- `updateWork` on a request that is **running** does not stop it. The scheduler
+  cancel is skipped while the Processor holds the work, and the result is
+  `APPLIED_FOR_NEXT_RUN`.
+- The update **bumps the override's generation**, and the end-of-run reset
+  clears the override only when the generation is unchanged. A pass that
+  re-aims itself therefore keeps its aim. Without that, the reset would undo it.
+
+**Re-aimed first, not last.** The pass is the part that can die (this ADR's
+previous amendment is about exactly that). Aimed before the backup starts, a
+pass that never finishes has already pointed its successor at 03:00. If the
+re-aim itself fails, the next run follows this one by a day and the run after
+it is back on the hour. **The cost of a failure is one drifted night, never the
+schedule.** A reboot needs nothing from us: WorkManager re-registers pending
+work from its own boot receiver (`RECEIVE_BOOT_COMPLETED`, already pinned in
+`EXPECTED_MERGED_PERMISSIONS`), so no new permission merges.
+
+**Why `KEEP` and a new name, not `UPDATE`.** `KEEP` alone would leave every
+existing install on the drifting request forever. `UPDATE` on each cold start
+would re-aim the pass whenever the app is opened. That is harmless before 03:00
+and wrong after it: opening the app at 06:00, while Doze is still holding the
+03:00 pass, would push it to tomorrow — a skipped night for looking at the
+phone. RollupWorker's KDoc records the same trap. A new name with `KEEP` sets
+the aim once. The pass keeps it from then on. Cancelling the old name is
+idempotent, so it needs no "migrated" flag that could itself be lost or
+restored wrong.
+
+**DST, decided rather than inherited.** Where a spring-forward gap swallows
+03:00 (Europe/Helsinki jumps from 03:00 to 04:00), the aim moves forward by the
+gap, to 04:00 that morning, and the night is kept. Where autumn repeats 03:00,
+the aim is the first one, and a pass after it aims at tomorrow, never at the
+second 03:00 an hour later. One night never writes two backups and rotates a
+good one out. `BackupTimeTest` pins both against Helsinki. The owner's IST has
+neither case, which is why the test does not use it. A change of time zone
+moves the aim at the next pass: the pending run keeps the instant it was given.
+
+**What Android still decides, and what is therefore promised.** 03:00 is the
+**earliest** the pass may start, not when it starts:
+- **Doze** holds it to the next maintenance window, and those windows grow
+  hours apart through the night.
+- **App standby** can defer it further for an app that is rarely opened.
+- **The battery constraint** skips a night when the battery is low.
+
+Picking the phone up ends Doze, so in practice the pass runs between 03:00 and
+the morning. **The screens promise "nightly" and nothing more precise**, and a
+night the pass could not run shows up where it always did: the record in
+`app_meta` and, after seven days, Home's reminder.
+
+**Cost, stated.** One more AndroidX test artifact, `androidx.work:work-testing`
+(test scope only, version by reference to the runtime). No production
+dependency, permission, schema or key material changes. The worker gains an
+injected `Clock`, and ten lines that await a WorkManager future.
+
 ## Consequences
 
 - **The phone can no longer prove a backup opens.** This is a real weakening of
@@ -183,7 +267,18 @@ the gap change 1 closes.
   backup restores through ADR-0026's first-run path.
 - **The phone never opens what it sealed**: a test asserts the sealing side
   cannot derive the private key, i.e. that nothing but the phrase produces it.
-- **Worker tests**: skips without a folder or enrolment, retries on failure,
-  rotates to five, records the date only after the (b) check passes.
+- **Worker tests**: skips without a folder or enrolment, rotates to five,
+  records the date only after the (b) check passes. (As first written this said
+  "retries on failure"; the 2026-09-22 amendment removed the retry.)
+- **The schedule (2026-09-23 amendment):** `BackupTimeTest` (JVM) — the next
+  03:00 across a day boundary and a year end, the device's zone deciding the
+  morning, and Europe/Helsinki's gap and overlap.
+  `Bug31_NightlyBackupStaysAnchoredTest` (Robolectric, real WorkManager) — a
+  fresh schedule aims at 03:00; a pass held until 06:40 aims its successor at
+  03:00, not at 06:40 tomorrow, and keeps the battery constraint; a failed pass
+  still re-aims; a pass the system stops mid-backup has already re-aimed (the
+  "first, not last" rule); opening the app while a pass is overdue does not
+  push it to tomorrow; the drifting schedule is cancelled. Ten mutations, each
+  red on its own set of cases (`SPEC.md` §8 BUG31).
 - `TESTING.md` gains a row: leave the phone overnight, confirm a backup appeared
   with no words typed, then restore it on the playSafe install.

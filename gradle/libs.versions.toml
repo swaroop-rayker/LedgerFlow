@@ -148,6 +148,11 @@ androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", 
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
 androidx-paging-testing = { group = "androidx.paging", name = "paging-testing", version.ref = "paging" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+# Test-only. A real WorkManager (in-memory, synchronous) for the nightly
+# backup's schedule: that a pass re-aims its successor at 03:00 and the
+# override survives the run is WorkManager's behaviour, read from its bytecode,
+# and this is what holds it (§8 BUG31). Same version as the runtime, by ref.
+androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "work" }
 
 # ── DI ────────────────────────────────────────────────────────────────────
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
