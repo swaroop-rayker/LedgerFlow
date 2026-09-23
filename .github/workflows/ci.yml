@@ -82,6 +82,13 @@ jobs:
       - name: OCR corpus-order guard
         run: bash scripts/guard-corpus-order.sh
 
+      # Every workflow parses (BUG32). It cannot catch THIS file breaking --
+      # a ci.yml GitHub cannot load runs nothing, this step included, which is
+      # why it is also a pre-push guard in CLAUDE.md §11. Here it catches the
+      # other workflows (release.yml) before a tag finds out.
+      - name: Workflow parse guard (BUG32)
+        run: bash scripts/guard-workflows.sh
+
   # ══════════════════════════════════════════════════════════════════════
   static-analysis:
     name: static analysis
@@ -363,8 +370,7 @@ jobs:
           FAIL=0
           for f in "${APKS[@]}"; do
             SIZE=$(stat -c%s "$f")
-            printf '%s -> %s KiB
-' "$f" "$((SIZE / 1024))"
+            printf '%s -> %s KiB\n' "$f" "$((SIZE / 1024))"
             if [ "$SIZE" -gt "$LIMIT" ]; then
               echo "::error::$f exceeds the 50 MB budget (SPEC.md §11, ADR-0024)."
               FAIL=1

@@ -49,7 +49,8 @@ LedgerFlow/
 ├─ TESTING.md                     ← manual test matrix, run before every release
 ├─ docs/adr/NNNN-*.md             ← architecture decision records
 ├─ .github/workflows/             ← ci.yml (PR gate), release.yml (tag-triggered)
-├─ scripts/                       ← guard-schema.sh, guard-version.sh (bash — see §11)
+├─ scripts/                       ← guard-schema.sh, guard-version.sh, guard-corpus-order.sh,
+│                                   guard-workflows.sh (bash — see §11)
 ├─ gradle/libs.versions.toml      ← ALL dependency versions. No exceptions.
 ├─ build-logic/                   ← convention plugins (android-library, compose, hilt, room)
 ├─ version.properties             ← monotonic versionCode. Auto-incremented. Committed.
@@ -442,8 +443,19 @@ Verify with `(Get-Command bash).Source`. If it points at System32 or WindowsApps
 & "$((Get-Item (Get-Command git).Source).Directory.Parent.FullName)\bin\bash.exe" scripts/guard-version.sh
 ```
 ```powershell
+& "$((Get-Item (Get-Command git).Source).Directory.Parent.FullName)\bin\bash.exe" scripts/guard-workflows.sh
+```
+```powershell
 .\gradlew preMergeCheck
 ```
+
+**`guard-workflows.sh` is the one that cannot be left to CI** (BUG32). GitHub
+doesn't report a workflow it can't parse as a parse error. Instead every push
+produces a run that "fails" in zero seconds with **no jobs**, which looks like
+ordinary red CI. That is how CI ran nothing from 2026-09-08 to 2026-09-23. A
+check inside `ci.yml` can't see `ci.yml` break, so it has to run here, before
+the push. When you read a CI run, look at its jobs, not only its colour: a run
+whose `run_started_at` equals its `updated_at` never started.
 
 **What CI cannot catch.** Automation stops at real-device behaviour. `TESTING.md` still runs before every release, specifically for BUG2 (OTA/OS-update survival — no runner simulates a kernel update), BUG1 (install-over-install across signing configs), OEM battery-killer behaviour on `NotificationIngestService`, and the 60fps *feel* that Macrobenchmark numbers only approximate. Benchmarks run on a **self-hosted runner** — your Win11 box with the phone attached — because emulator frame timings are noise.
 
@@ -464,6 +476,6 @@ A change is done when **all** of these are true:
 - [ ] No new StrictMode violations in debug
 - [ ] No Compose stability regressions in the compiler report
 - [ ] `SPEC.md` updated if behaviour changed
-- [ ] `scripts/guard-schema.sh` and `scripts/guard-version.sh` pass locally
+- [ ] `scripts/guard-schema.sh`, `scripts/guard-version.sh` and `scripts/guard-workflows.sh` pass locally
 - [ ] Both flavours (`smsFull`, `playSafe`) build
 - [ ] Manually verified on the physical device — including a force-stop → relaunch cycle
