@@ -99,6 +99,14 @@ words just for this, which would be one more place handling the phrase.
   "fix" was written, disproved by its own control test, and removed.
   `ScanFramesTest` keeps the case.
 
+**And the page itself (BUG36), found the same day on the first kit saved through
+onboarding's new PDF default:** the code sat in the right margin, level with
+"How to restore", and the unwrapped steps ran under it. It still decoded, which
+was all the test asked. The code now goes below the wrapped steps, with a
+caption a full line above it (`RecoveryKitLayout`). A device test finds the code
+on the rendered page by its finder patterns and requires nothing dark beside
+it; it fails on the old placement.
+
 ## Verification
 
 - **`PhraseQrTest`** (JVM): the payload round-trips; a foreign QR reads as

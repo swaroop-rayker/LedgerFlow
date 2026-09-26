@@ -123,18 +123,17 @@ public class RecoveryKitWriter @Inject constructor(
             }
             y = top + columnRows * LINE_HEIGHT + LINE_HEIGHT
 
-            // The same words a camera can read (ADR-0028). It sits beside the
-            // restore steps rather than above the words, because the page is
-            // read top-down by someone who has just been told to write them
-            // out: the code is the shortcut for later, not the instruction.
-            drawPhraseQr(canvas, mnemonic, y)
-
-            canvas.drawText("How to restore", MARGIN, y, headingPaint)
-            y += LINE_HEIGHT
-            RESTORE_STEPS.forEachIndexed { index, step ->
-                canvas.drawText("${index + 1}. $step", MARGIN, y, bodyPaint)
-                y += LINE_HEIGHT
-            }
+            // The steps, wrapped, then the same words a camera can read
+            // (ADR-0028) below them -- never beside them, where the longer
+            // steps ran under the code (BUG36). Below the words rather than
+            // above them, because the page is read top-down by someone who has
+            // just been told to write them out: the code is the shortcut for
+            // later, not the instruction.
+            val section = RecoveryKitLayout.restoreSection(y, RESTORE_STEPS, bodyPaint::measureText)
+            canvas.drawText(section.heading.text, section.heading.x, section.heading.baseline, headingPaint)
+            section.steps.forEach { canvas.drawText(it.text, it.x, it.baseline, bodyPaint) }
+            canvas.drawText(section.caption.text, section.caption.x, section.caption.baseline, bodyPaint)
+            drawPhraseQr(canvas, mnemonic, section.qrLeft, section.qrTop, section.qrSize)
 
             document.finishPage(page)
             document.writeTo(stream)
@@ -144,7 +143,7 @@ public class RecoveryKitWriter @Inject constructor(
     }
 
     /**
-     * The phrase as a QR code, in the page's right margin.
+     * The phrase as a QR code, [size] square at ([left], [top]).
      *
      * **It adds no exposure that the page did not already have**: the words are
      * printed in full a few centimetres away, and D-07's dialog says what the
@@ -154,7 +153,7 @@ public class RecoveryKitWriter @Inject constructor(
      * Drawn module by module rather than as a bitmap, so the code stays crisp
      * at any print size and the PDF stays a few kilobytes.
      */
-    private fun drawPhraseQr(canvas: Canvas, mnemonic: List<String>, top: Float) {
+    private fun drawPhraseQr(canvas: Canvas, mnemonic: List<String>, left: Float, top: Float, size: Float) {
         val matrix = runCatching {
             QRCodeWriter().encode(
                 PhraseQr.encode(mnemonic),
@@ -165,8 +164,7 @@ public class RecoveryKitWriter @Inject constructor(
             )
         }.getOrNull() ?: return
 
-        val left = PAGE_WIDTH - MARGIN - QR_SIZE
-        val module = QR_SIZE / matrix.width
+        val module = size / matrix.width
         for (x in 0 until matrix.width) {
             for (yIndex in 0 until matrix.height) {
                 if (!matrix.get(x, yIndex)) continue
@@ -179,12 +177,6 @@ public class RecoveryKitWriter @Inject constructor(
                 )
             }
         }
-        canvas.drawText(
-            "Scan to restore",
-            left,
-            top + QR_SIZE + LINE_HEIGHT,
-            bodyPaint,
-        )
     }
 
     private fun today(): String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
@@ -230,29 +222,26 @@ public class RecoveryKitWriter @Inject constructor(
         isAntiAlias = true
     }
 
-    private companion object {
+    internal companion object {
         private const val TITLE = "LedgerFlow Recovery Kit"
 
-        /** A4 at 72 dpi, in points. */
-        private const val PAGE_WIDTH = 595
-        private const val PAGE_HEIGHT = 842
-        private const val MARGIN = 48f
+        private const val PAGE_WIDTH = RecoveryKitLayout.PAGE_WIDTH
+        private const val PAGE_HEIGHT = RecoveryKitLayout.PAGE_HEIGHT
+        private const val MARGIN = RecoveryKitLayout.MARGIN
         private const val COLUMN_WIDTH = 240f
-        private const val LINE_HEIGHT = 18f
+        private const val LINE_HEIGHT = RecoveryKitLayout.LINE_HEIGHT
         private const val TITLE_SIZE = 22f
         private const val HEADING_SIZE = 14f
-        private const val BODY_SIZE = 11f
+        internal const val BODY_SIZE: Float = 11f
 
         /** The requested module count; ZXing picks the version that fits the payload. */
         private const val QR_MODULES = 33
 
-        /** ~2.5 cm on A4 at 72 dpi: large enough for a phone camera off paper. */
-        private const val QR_SIZE = 132f
         private const val WARNING_R = 176
         private const val WARNING_G = 0
         private const val WARNING_B = 32
 
-        private val WARNING_LINES = listOf(
+        internal val WARNING_LINES: List<String> = listOf(
             "ANYONE WHO HAS THESE 24 WORDS CAN READ EVERY BACKUP THIS APP EVER WRITES.",
             "This file is not encrypted. Store it the way you would store a spare house key.",
             "LedgerFlow has no copy of these words and no way to reset them.",
@@ -266,7 +255,7 @@ public class RecoveryKitWriter @Inject constructor(
          * stale instructions during a recovery is a user who concludes they have
          * the wrong file.
          */
-        private val RESTORE_STEPS = listOf(
+        internal val RESTORE_STEPS: List<String> = listOf(
             "Install LedgerFlow on the device.",
             "When LedgerFlow cannot unlock by itself, it asks for these 24 words. " +
                 "Type them in order.",
