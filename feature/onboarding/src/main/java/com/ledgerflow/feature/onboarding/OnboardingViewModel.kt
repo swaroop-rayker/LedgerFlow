@@ -239,7 +239,7 @@ public class OnboardingViewModel @Inject constructor(
         // Null means they backed out of the system picker. Not an error, not a
         // dismissal of the step -- just nothing happened.
         if (uri == null) return
-        val format = _state.value.kitConfirmFormat ?: RecoveryKitFormat.Text
+        val format = _state.value.kitConfirmFormat ?: RecoveryKitFormat.Pdf
         viewModelScope.launch {
             _state.update { it.copy(isWorking = true) }
             val written = recoveryKit.write(uri, format, _state.value.mnemonic)

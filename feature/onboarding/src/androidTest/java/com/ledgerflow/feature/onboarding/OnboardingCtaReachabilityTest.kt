@@ -108,7 +108,7 @@ class OnboardingCtaReachabilityTest {
 
     @Test
     fun recoveryKitStep_atLargestFontScale_ctaIsOnScreen() {
-        assertCtaVisible(OnboardingUiState(step = OnboardingStep.RecoveryKit), "Save as text file")
+        assertCtaVisible(OnboardingUiState(step = OnboardingStep.RecoveryKit), "Save as PDF")
     }
 
     @Test

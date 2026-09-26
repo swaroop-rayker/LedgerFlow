@@ -1459,7 +1459,7 @@ being sealed to the old words.
 
 **The cost is accepted explicitly and paid in interaction design.** A user whose Keystore is invalidated types 24 words. The Recovery screen (§7.3) is therefore a first-class surface, not a fallback: BIP-39 autocomplete, per-word validation, checksum verified before any KDF work, visible progress, no dead ends. Friction we declined to remove with a passphrase gets removed there instead.
 
-**Recovery Kit — plaintext, behind an explicit confirmation (D-07, closes Q8).** At onboarding the app generates the phrase and offers a one-tap **"Save Recovery Kit"** → writes a plain-text `.txt` + a printable PDF to a user-chosen SAF location, containing the 24 words, the install date, and restore instructions. Also displayed on screen for manual transcription, and the user is prompted to store it in a password manager.
+**Recovery Kit — plaintext, behind an explicit confirmation (D-07, closes Q8).** At onboarding the app generates the phrase and offers to save a Recovery Kit to a user-chosen SAF location, containing the 24 words, the install date, and restore instructions. **The main button is "Save as PDF"** — the words and the QR code (below) on one printable page — and **"Save as text file"**, the words only for a password manager, is the secondary option (owner, 2026-09-26; before that the text file was the main button, so the obvious path produced a kit with nothing to scan). Also displayed on screen for manual transcription, and the user is prompted to store it in a password manager.
 
 **The PDF also carries the phrase as a QR code** (ADR-0028), so a restore can be
 a scan instead of 24 typed words: `LFBK1:` followed by the words, read back
@@ -1524,7 +1524,7 @@ There is no optional-passphrase step. It was specified here and is removed by D-
 
 This is friction. It is intentional. It is the single control that makes "data permanently unrecoverable" structurally impossible.
 
-**Because it is a gate, each step's primary action is pinned to the scaffold rather than scrolled with the content.** Measured at font scale 2.0 on a real device, three of the five steps had their CTA below the fold — including the very first, where the currency list pushes "Continue" off screen. A user who does not think to scroll cannot enter the app at all, which turns a §9.6 accessibility miss into a total block. Secondary actions ("Save as PDF", "Skip", "Not now") stay in the content, so the bar is one control tall; the corollary is that a step may never put its only way forward in a secondary action. `OnboardingCtaReachabilityTest` asserts each step's CTA is on screen at 2.0, and asserts the word challenge still has no skip.
+**Because it is a gate, each step's primary action is pinned to the scaffold rather than scrolled with the content.** Measured at font scale 2.0 on a real device, three of the five steps had their CTA below the fold — including the very first, where the currency list pushes "Continue" off screen. A user who does not think to scroll cannot enter the app at all, which turns a §9.6 accessibility miss into a total block. Secondary actions ("Save as text file", "Skip", "Not now") stay in the content, so the bar is one control tall; the corollary is that a step may never put its only way forward in a secondary action. `OnboardingCtaReachabilityTest` asserts each step's CTA is on screen at 2.0, and asserts the word challenge still has no skip.
 
 ### 7.5 Android Auto Backup
 `android:allowBackup="false"` and `android:dataExtractionRules` deny-all.

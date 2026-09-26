@@ -111,7 +111,7 @@ private fun RecoveryKitPicker(
     onEvent: (OnboardingEvent) -> Unit,
     kitFileName: (RecoveryKitFormat) -> String,
 ) {
-    val format = state.kitPickerRequest ?: state.kitConfirmFormat ?: RecoveryKitFormat.Text
+    val format = state.kitPickerRequest ?: state.kitConfirmFormat ?: PRIMARY_KIT_FORMAT
     val createKit = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(format.mimeType),
     ) { uri -> onEvent(OnboardingEvent.RecoveryKitFileChosen(uri?.toString())) }
@@ -187,13 +187,14 @@ private fun primaryActionOf(
         onClick = { onEvent(OnboardingEvent.ChallengeSubmitted) },
     )
 
-    // The text file, not the PDF: it is the copy that goes in a password
-    // manager, and the one the step's own body copy leads with.
+    // The PDF (owner, 2026-09-26): the words and the QR code in one file, so
+    // the obvious path gives a new user a kit they can scan. The text file,
+    // which cannot carry a code, is the secondary option in the step's body.
     OnboardingStep.RecoveryKit -> PrimaryAction(
-        label = "Save as text file",
+        label = "Save as PDF",
         enabled = true,
         loading = false,
-        onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text)) },
+        onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(PRIMARY_KIT_FORMAT)) },
     )
 
     OnboardingStep.BackupLocation -> PrimaryAction(
@@ -221,7 +222,7 @@ private fun primaryActionOf(
  * scroll. §9.6 requires 2.0 to work, not merely to render, and `RecoveryScreen`
  * already pins its one action for the same reason.
  *
- * **Only the primary action moves.** "Save as PDF", "Skip", "Not now" stay in
+ * **Only the primary action moves.** "Save as text file", "Skip", "Not now" stay in
  * the content: they are alternatives to the action, and a bar of three stacked
  * buttons at 2.0 costs the scrolling area more than it gives back — the header
  * and body copy are what the user has to read before choosing at all. The
@@ -423,14 +424,14 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
 private fun RecoveryKitStep(onEvent: (OnboardingEvent) -> Unit) {
     StepHeading(
         title = "Save your Recovery Kit",
-        body = "Your 24 words plus instructions for restoring your data. The text " +
-            "file is what goes in a password manager; the PDF is what you print.",
+        body = "Your 24 words and a QR code you can scan instead of typing them, on one " +
+            "printable page, with instructions for restoring your data. A text file — the " +
+            "words only, no code — is there for a password manager.",
     )
-    // "Save as text file" is the pinned primary; these two are the
-    // alternatives to it.
+    // "Save as PDF" is the pinned primary; these two are the alternatives to it.
     LfButton(
-        text = "Save as PDF",
-        onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Pdf)) },
+        text = "Save as text file",
+        onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text)) },
         style = LfButtonStyle.Tonal,
     )
     LfButton(
@@ -456,6 +457,14 @@ private fun RecoveryKitConfirmDialog(
         onDismiss = { onEvent(OnboardingEvent.RecoveryKitCancelled) },
     )
 }
+
+/**
+ * What the Recovery Kit step's main button saves: the PDF, which carries the
+ * words **and** a QR code in one file (ADR-0028; owner, 2026-09-26). Before this
+ * it was the text file, so a new user taking the obvious path got a kit with
+ * nothing to scan.
+ */
+internal val PRIMARY_KIT_FORMAT: RecoveryKitFormat = RecoveryKitFormat.Pdf
 
 private fun RecoveryKitFormat.label(): String = when (this) {
     RecoveryKitFormat.Text -> "text file"
