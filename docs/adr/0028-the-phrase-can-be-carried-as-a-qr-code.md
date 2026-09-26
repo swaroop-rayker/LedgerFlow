@@ -61,6 +61,44 @@ removes the typing.
    practice, so the typed path is the accessible path and must never be demoted
    to a secondary action (§9.6, §7.4's rule about the only way forward).
 
+## Amended 2026-09-26 — a kit after onboarding, and the scanner fixed (owner)
+
+**The gap.** Rule (b) put the QR in the Recovery Kit PDF, and the kit was
+offered **only at onboarding**. Every install that onboarded before this ADR,
+the owner's included, had at most a `.txt` kit, so there was nothing to scan and
+the whole feature was out of reach. Nobody had scanned a real kit (D5 never
+ran), so nothing had shown it.
+
+**Decision (owner): a new kit from "Back up now".** It is the one screen that
+already takes the 24 words and proves them against this vault. After a
+successful backup it offers **"Save Recovery Kit"**, a PDF with the QR, behind
+the same D-07 dialog. Rejected: a separate Settings entry that asks for the
+words just for this, which would be one more place handling the phrase.
+
+- The verified words live in the ViewModel, **not in `UiState`**. They are
+  forgotten when the kit is saved, on "Not now", when the words are edited, when
+  another backup starts, and when the screen closes. A **failed write keeps
+  them**, so another place can be tried (BUG30's rule).
+- The D-07 dialog is now **one** composable, `LfRecoveryKitWarningDialog`,
+  shared by onboarding and "Back up now". It finally says **rule 5's sentence**
+  for the PDF (a camera reads the code, so a photo of the page is as good as the
+  words), which the first version of the PDF path never showed.
+
+**The scanner, fixed, found when the owner tried it:**
+- **BUG35**: the button sat under the navigation bar, because the scanner
+  replaces the screen's `LfScaffold` and handled no insets. The controls are now
+  one inset card over a full-bleed viewfinder, with a line saying what to point
+  at. The label became **"Type the words"**: "Type the words instead" clipped at
+  font scale 2.0 (BUG9).
+- **BUG34**: the first code of any kind latched the scanner shut, so a foreign
+  code before the kit meant the kit was never read. This contradicts rule 3's
+  intent and this ADR's own verification line ("a foreign code leaves it
+  open"): it stayed open, and deaf. Every distinct code is now delivered once.
+- **Checked and not a bug:** a camera plane whose last row omits its padding
+  decodes as-is, because ZXing reads each row only up to the width. A padding
+  "fix" was written, disproved by its own control test, and removed.
+  `ScanFramesTest` keeps the case.
+
 ## Verification
 
 - **`PhraseQrTest`** (JVM): the payload round-trips; a foreign QR reads as
@@ -86,3 +124,13 @@ removes the typing.
   where a person checks it.
 - `TESTING.md` D5 gains the QR check on a real printout, and D10 gains "restore
   by scanning the kit instead of typing".
+- **Added 2026-09-26:** `ScanFramesTest` (JVM): BUG34, plus a padded plane
+  decoding as-is. `LfPhraseScannerScreenshotTest` (Robolectric, goldens at 1.0
+  and 2.0): the instruction above the button, and the label within its button,
+  measured by needed versus given width. `RecoveryKitWarningTest`: the PDF
+  dialog mentions the QR, the text file's does not. Seven kit-offer cases in
+  `BackupNowViewModelTest`, including every point where the words are forgotten
+  and the failed write that keeps them. 8 mutations, each caught by its own
+  test. **The camera plumbing is no longer unproven:** on the owner's phone a
+  foreign test QR left the camera open, and the kit's test QR (the public test
+  phrase) then filled all 24 words. `RecoveryKitQrTest` passed there too.

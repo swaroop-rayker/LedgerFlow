@@ -40,6 +40,21 @@ public data class BackupNowUiState(
      * teaches the user to stop reading it.
      */
     val failedNightlyAt: Long? = null,
+    /**
+     * A new Recovery Kit can be saved from the words the last backup just
+     * verified (ADR-0028, amended 2026-09-26) — the only route to a kit with a
+     * QR code for an install that onboarded before the QR existed. The words
+     * themselves are held by the ViewModel, never in this state.
+     */
+    val kitOffered: Boolean = false,
+    /** The plaintext warning (D-07) is up. */
+    val kitConfirming: Boolean = false,
+    /** The system "create file" picker should open, once. */
+    val kitPickerRequested: Boolean = false,
+    /** The kit was written; the words are gone. */
+    val kitSaved: Boolean = false,
+    /** Why the kit was not written, if it was not. */
+    val kitFailed: Boolean = false,
 ) {
     val canSubmit: Boolean get() = entry.isComplete && !isWorking
 
@@ -71,6 +86,27 @@ public sealed interface BackupNowEvent {
 
         /** A QR code was read; the text is validated before it becomes words. */
         public data class Read(val text: String) : Scanner
+    }
+
+    /** A new Recovery Kit from the words just verified (ADR-0028, amended 2026-09-26). */
+    public sealed interface Kit : BackupNowEvent {
+        /** "Save Recovery Kit": show the warning first. */
+        public data object Requested : Kit
+
+        /** The warning was accepted; open the picker. */
+        public data object Confirmed : Kit
+
+        /** The warning was cancelled; the offer stays. */
+        public data object Cancelled : Kit
+
+        /** The picker has been opened; do not open it again. */
+        public data object PickerLaunched : Kit
+
+        /** The picker returned; null when the user backed out of it. */
+        public data class FileChosen(val uri: String?) : Kit
+
+        /** "Not now": the words are forgotten and the offer goes. */
+        public data object Declined : Kit
     }
 }
 

@@ -28,13 +28,12 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.designsystem.component.LfDialog
-import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfKeyboards
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
+import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
 
 /**
  * The onboarding gate (SPEC.md §7.4).
@@ -442,26 +441,17 @@ private fun RecoveryKitStep(onEvent: (OnboardingEvent) -> Unit) {
 }
 
 /**
- * The D-07 confirmation.
- *
- * The Recovery Kit is written in plaintext, and that decision was made on the
- * basis that the user is *told* so at the moment it matters. This dialog is that
- * telling — it is the entire mitigation, so it says what the file is, what it
- * grants, and where it is going, in those words.
+ * The D-07 confirmation — the shared one, so onboarding and "Back up now" say
+ * the same thing about the same file. The PDF carries a QR code (ADR-0028).
  */
 @Composable
 private fun RecoveryKitConfirmDialog(
     format: RecoveryKitFormat,
     onEvent: (OnboardingEvent) -> Unit,
 ) {
-    LfDialog(
-        title = "This file is your master key",
-        body = "The ${format.label()} contains your 24 words in plain text — it is not " +
-            "encrypted. Anyone who opens it can read every backup this app will ever " +
-            "write. You're about to save it to shared storage, which may sync to the " +
-            "cloud. Store it the way you'd store a spare house key.",
-        confirmText = "I understand — save it",
-        emphasis = LfDialogEmphasis.Warning,
+    LfRecoveryKitWarningDialog(
+        fileLabel = format.label(),
+        hasQrCode = format == RecoveryKitFormat.Pdf,
         onConfirm = { onEvent(OnboardingEvent.RecoveryKitConfirmed) },
         onDismiss = { onEvent(OnboardingEvent.RecoveryKitCancelled) },
     )

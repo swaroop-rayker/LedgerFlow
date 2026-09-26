@@ -15,9 +15,14 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,7 +31,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -75,38 +79,54 @@ public fun LfPhraseScanner(
         if (!granted) request.launch(Manifest.permission.CAMERA)
     }
 
+    // The viewfinder is full-bleed; the controls are not. This screen replaces
+    // the host's LfScaffold, so nothing else insets it, and without this the
+    // one way out sat under the navigation bar (§8 BUG35). systemBars plus the
+    // cutout, never safeDrawing -- CLAUDE.md §5; there is no keyboard here.
+    val insets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     Box(modifier = modifier.fillMaxSize()) {
-        if (granted) {
-            ScannerViewfinder(onScanned)
-        } else {
-            PermissionRefused()
-        }
+        if (granted) ScannerViewfinder(onScanned)
         Column(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(LfTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                .fillMaxSize()
+                .windowInsetsPadding(insets)
+                .padding(LfTheme.spacing.sm),
+            verticalArrangement = Arrangement.Bottom,
         ) {
-            LfButton(
-                text = "Type the words instead",
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
-                style = LfButtonStyle.Outlined,
-            )
+            ScannerControls(granted = granted, onDismiss = onDismiss)
         }
     }
 }
 
+/**
+ * The card over the viewfinder: what to do, and the way back to typing.
+ *
+ * Its own composable so the screenshot harness can hold it at font scale 1.0
+ * and 2.0 without a camera (`LfPhraseScannerScreenshotTest`) — the first
+ * version drew the button over the instruction, because [LfCard] stacks its
+ * children and nothing laid them out in a column.
+ */
 @Composable
-private fun PermissionRefused() {
-    LfCard(modifier = Modifier.padding(LfTheme.spacing.lg)) {
-        Text(
-            text = "Scanning needs the camera. Without it, type the 24 words — it is the same " +
-                "phrase either way.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
-        )
+internal fun ScannerControls(granted: Boolean, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    LfCard(modifier = modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            Text(
+                text = if (granted) {
+                    "Point the camera at the QR code on your Recovery Kit PDF."
+                } else {
+                    "Scanning needs the camera. Without it, type the 24 words — it is the " +
+                        "same phrase either way."
+                },
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textPrimary,
+            )
+            LfButton(
+                text = "Type the words",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                style = LfButtonStyle.Tonal,
+            )
+        }
     }
 }
 
@@ -123,10 +143,11 @@ private fun ScannerViewfinder(onScanned: (String) -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var surfaceRequest by remember { mutableStateOf<SurfaceRequest?>(null) }
     val currentOnScanned by rememberUpdatedState(onScanned)
-    var delivered by remember { mutableStateOf(false) }
+    val deliveries = remember { ScanDeliveries() }
 
     LaunchedEffect(Unit) {
         val executor = Executors.newSingleThreadExecutor()
+        val mainExecutor = ContextCompat.getMainExecutor(context)
         val provider = runCatching { awaitCameraProvider(context) }.getOrNull() ?: return@LaunchedEffect
         val preview = Preview.Builder().build().apply {
             setSurfaceProvider { request -> surfaceRequest = request }
@@ -139,9 +160,10 @@ private fun ScannerViewfinder(onScanned: (String) -> Unit) {
             .apply {
                 setAnalyzer(executor) { image ->
                     val text = image.decodeQr()
-                    if (text != null && !delivered) {
-                        delivered = true
-                        currentOnScanned(text)
+                    // Every distinct code once (BUG34), handed over on the main
+                    // thread: the screen's ViewModel is not the analyser's.
+                    if (text != null && deliveries.shouldDeliver(text)) {
+                        mainExecutor.execute { currentOnScanned(text) }
                     }
                 }
             }
@@ -156,19 +178,25 @@ private fun ScannerViewfinder(onScanned: (String) -> Unit) {
 
 /** One frame, decoded in memory. Never written anywhere, never logged. */
 private fun ImageProxy.decodeQr(): String? = try {
-    val plane = planes[0]
-    val bytes = ByteArray(plane.buffer.remaining()).also { plane.buffer.get(it) }
-    val source = PlanarYUVLuminanceSource(
-        bytes,
-        plane.rowStride,
-        height,
-        0,
-        0,
-        width,
-        height,
-        false,
-    )
-    runCatching { qrReader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text }.getOrNull()
+    // Everything inside the guard, the source's constructor included: an
+    // exception here would otherwise escape on the analyser thread. (A padded
+    // plane with a short last row is fine as-is -- ZXing reads each row only to
+    // the width -- which ScanFramesTest pins.)
+    runCatching {
+        val plane = planes[0]
+        val bytes = ByteArray(plane.buffer.remaining()).also { plane.buffer.get(it) }
+        val source = PlanarYUVLuminanceSource(
+            bytes,
+            plane.rowStride,
+            height,
+            0,
+            0,
+            width,
+            height,
+            false,
+        )
+        qrReader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
+    }.getOrNull()
 } finally {
     close()
 }

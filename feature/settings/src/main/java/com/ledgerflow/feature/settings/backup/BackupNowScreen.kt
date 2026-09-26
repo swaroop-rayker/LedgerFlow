@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewFontScale
@@ -31,6 +32,7 @@ import com.ledgerflow.core.ui.phrase.LfPhraseEntry
 import java.text.DateFormat
 import java.util.Date
 import com.ledgerflow.core.ui.phrase.LfPhraseScanner
+import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
 
 /**
  * "Back up now" (SPEC.md §16 Q23).
@@ -54,6 +56,8 @@ public fun BackupNowScreen(
         return
     }
 
+    KitFlow(state, onEvent)
+
     LfScaffold(
         modifier = modifier,
         bottomBar = { SubmitBar(state, onEvent) },
@@ -75,6 +79,8 @@ public fun BackupNowScreen(
                 state.folderName?.let { FolderLine(it, state.folderChanged, state.isWorking, onEvent) }
                 state.failedNightlyAt?.let { FailedNightlyLine(it) }
                 state.result?.let { ResultMessage(it) }
+                if (state.kitOffered) KitOffer(state.isWorking, onEvent)
+                KitOutcome(state)
                 LfPhraseEntry(
                     words = state.entry.words,
                     draft = state.entry.draft,
@@ -108,7 +114,7 @@ private fun Explanation(nightlyBackupsEnabled: Boolean) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
             Text(
                 text = "Your 24 words seal the backup. They're checked, used once and forgotten — " +
-                    "never saved or sent.",
+                    "never sent, and saved only if you ask for a new Recovery Kit afterwards.",
                 style = LfTheme.typography.bodyM,
                 color = LfTheme.colors.textSecondary,
             )
@@ -213,6 +219,84 @@ private fun FolderLine(
                     style = LfButtonStyle.Inline,
                 )
             }
+        }
+    }
+}
+
+/**
+ * The offer of a new Recovery Kit, right after a backup verified the words
+ * (ADR-0028, amended 2026-09-26). Offered here because this is the one moment
+ * the app holds words it has proved are this vault's — the only route to a kit
+ * with a QR code for an install that onboarded before kits carried one.
+ */
+@Composable
+private fun KitOffer(isWorking: Boolean, onEvent: (BackupNowEvent) -> Unit) {
+    LfCard {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = "Save a new Recovery Kit? It's a PDF with your 24 words and a QR code you " +
+                    "can scan instead of typing them.",
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textPrimary,
+            )
+            LfActionRow(alignment = LfActionAlignment.Start) {
+                LfButton(
+                    text = "Save Recovery Kit",
+                    onClick = { onEvent(BackupNowEvent.Kit.Requested) },
+                    enabled = !isWorking,
+                    style = LfButtonStyle.Inline,
+                )
+                LfButton(
+                    text = "Not now",
+                    onClick = { onEvent(BackupNowEvent.Kit.Declined) },
+                    enabled = !isWorking,
+                    style = LfButtonStyle.Inline,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun KitOutcome(state: BackupNowUiState) {
+    val text = when {
+        state.kitSaved -> "Recovery Kit saved. Keep it like a spare house key — the words and the " +
+            "QR code both open every backup."
+        state.kitFailed -> "The Recovery Kit couldn't be written there, so nothing was saved. " +
+            "Try another place."
+        else -> return
+    }
+    Text(
+        text = text,
+        style = LfTheme.typography.bodyM,
+        color = if (state.kitSaved) LfTheme.colors.credit else LfTheme.colors.debit,
+    )
+}
+
+/** The D-07 warning, then the picker: the two steps between "Save Recovery Kit" and a file. */
+@Composable
+private fun KitFlow(state: BackupNowUiState, onEvent: (BackupNowEvent) -> Unit) {
+    RecoveryKitPicker(state.kitPickerRequested, onEvent)
+    if (state.kitConfirming) {
+        LfRecoveryKitWarningDialog(
+            fileLabel = "PDF",
+            hasQrCode = true,
+            onConfirm = { onEvent(BackupNowEvent.Kit.Confirmed) },
+            onDismiss = { onEvent(BackupNowEvent.Kit.Cancelled) },
+        )
+    }
+}
+
+/** The system "create file" picker, opened once per confirmed request. */
+@Composable
+private fun RecoveryKitPicker(requested: Boolean, onEvent: (BackupNowEvent) -> Unit) {
+    val create = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) {
+        onEvent(BackupNowEvent.Kit.FileChosen(it?.toString()))
+    }
+    if (requested) {
+        LaunchedEffect(Unit) {
+            create.launch("LedgerFlow-Recovery-Kit.pdf")
+            onEvent(BackupNowEvent.Kit.PickerLaunched)
         }
     }
 }

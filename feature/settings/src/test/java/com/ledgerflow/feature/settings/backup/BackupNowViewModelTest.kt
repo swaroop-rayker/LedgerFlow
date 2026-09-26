@@ -5,7 +5,9 @@ import com.ledgerflow.core.domain.backup.BackUpNowUseCase
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.vault.PhraseQr
 import com.ledgerflow.core.domain.vault.PhraseValidation
+import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 import com.ledgerflow.core.testing.backup.FakeBackupRepository
+import com.ledgerflow.core.testing.vault.FakeRecoveryKitRepository
 import com.ledgerflow.core.testing.vault.FakeRecoveryPhraseValidator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,6 +33,7 @@ class BackupNowViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val validator = FakeRecoveryPhraseValidator()
     private lateinit var repository: FakeBackupRepository
+    private val kit = FakeRecoveryKitRepository()
 
     private val done = BackupOutcome.Done(
         fileName = "ledgerflow-20260918-101500.lfbk",
@@ -53,7 +56,8 @@ class BackupNowViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = BackupNowViewModel(BackUpNowUseCase(validator, repository), repository, validator)
+    private fun viewModel() =
+        BackupNowViewModel(BackUpNowUseCase(validator, repository), repository, validator, kit)
 
     private fun BackupNowViewModel.typeFullPhrase() {
         repeat(validator.wordCount) { onEvent(BackupNowEvent.WordCommitted("abandon")) }
@@ -253,6 +257,132 @@ class BackupNowViewModelTest {
 
         assertThat(vm.state.value.isScanning).isTrue()
         assertThat(vm.state.value.entry.words).isEmpty()
+    }
+
+
+    // ── A new Recovery Kit from the verified words (ADR-0028, amended 2026-09-26) ──
+
+    private suspend fun kotlinx.coroutines.test.TestScope.backedUp(): BackupNowViewModel {
+        val vm = viewModel()
+        vm.typeFullPhrase()
+        vm.onEvent(BackupNowEvent.Submitted)
+        advanceUntilIdle()
+        return vm
+    }
+
+    private fun BackupNowViewModel.saveKitTo(uri: String?) {
+        onEvent(BackupNowEvent.Kit.Requested)
+        onEvent(BackupNowEvent.Kit.Confirmed)
+        onEvent(BackupNowEvent.Kit.PickerLaunched)
+        onEvent(BackupNowEvent.Kit.FileChosen(uri))
+    }
+
+    @Test
+    fun aSuccessfulBackup_offersANewKit() = runTest(dispatcher) {
+        val vm = backedUp()
+
+        assertThat(vm.state.value.kitOffered).isTrue()
+        assertThat(vm.state.value.entry.words).isEmpty()
+    }
+
+    @Test
+    fun aRefusedBackup_offersNoKit_andAskingDoesNothing() = runTest(dispatcher) {
+        repository.outcome = BackupOutcome.NotThisVaultsPhrase
+        val vm = backedUp()
+
+        vm.saveKitTo("content://kit")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.kitOffered).isFalse()
+        assertThat(vm.state.value.kitConfirming).isFalse()
+        assertThat(kit.written).isEmpty()
+    }
+
+    /** The warning first, then the picker, then a PDF of exactly the verified words. */
+    @Test
+    fun savingTheKit_warnsThenWritesAPdfOfTheVerifiedWords_thenForgetsThem() = runTest(dispatcher) {
+        val vm = backedUp()
+
+        vm.onEvent(BackupNowEvent.Kit.Requested)
+        assertThat(vm.state.value.kitConfirming).isTrue()
+        assertThat(vm.state.value.kitPickerRequested).isFalse()
+        vm.onEvent(BackupNowEvent.Kit.Confirmed)
+        assertThat(vm.state.value.kitPickerRequested).isTrue()
+        vm.onEvent(BackupNowEvent.Kit.PickerLaunched)
+        assertThat(vm.state.value.kitPickerRequested).isFalse()
+        vm.onEvent(BackupNowEvent.Kit.FileChosen("content://kit"))
+        advanceUntilIdle()
+
+        val (uri, format, words) = kit.written.single()
+        assertThat(uri).isEqualTo("content://kit")
+        assertThat(format).isEqualTo(RecoveryKitFormat.Pdf)
+        assertThat(words).isEqualTo(repository.backUpCalls.single())
+        assertThat(vm.state.value.kitSaved).isTrue()
+        assertThat(vm.state.value.kitOffered).isFalse()
+
+        // Forgotten: a second pick writes nothing.
+        vm.onEvent(BackupNowEvent.Kit.FileChosen("content://again"))
+        advanceUntilIdle()
+        assertThat(kit.written).hasSize(1)
+    }
+
+    /** BUG30's rule on this screen: "Not now" is the moment the words are finished with. */
+    @Test
+    fun notNow_forgetsTheWords() = runTest(dispatcher) {
+        val vm = backedUp()
+
+        vm.onEvent(BackupNowEvent.Kit.Declined)
+        vm.saveKitTo("content://kit")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.kitOffered).isFalse()
+        assertThat(kit.written).isEmpty()
+    }
+
+    /** A failed write keeps them, so another place can be tried without retyping 24. */
+    @Test
+    fun aFailedWrite_keepsTheWordsForAnotherTry() = runTest(dispatcher) {
+        val vm = backedUp()
+        kit.succeeds = false
+
+        vm.saveKitTo("content://full-disk")
+        advanceUntilIdle()
+        assertThat(vm.state.value.kitFailed).isTrue()
+        assertThat(vm.state.value.kitOffered).isTrue()
+
+        kit.succeeds = true
+        vm.saveKitTo("content://elsewhere")
+        advanceUntilIdle()
+        assertThat(kit.written.single().first).isEqualTo("content://elsewhere")
+        assertThat(vm.state.value.kitSaved).isTrue()
+        assertThat(vm.state.value.kitFailed).isFalse()
+    }
+
+    @Test
+    fun backingOutOfTheWarningOrThePicker_keepsTheOffer() = runTest(dispatcher) {
+        val vm = backedUp()
+
+        vm.onEvent(BackupNowEvent.Kit.Requested)
+        vm.onEvent(BackupNowEvent.Kit.Cancelled)
+        vm.saveKitTo(null)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.kitOffered).isTrue()
+        assertThat(vm.state.value.kitConfirming).isFalse()
+        assertThat(kit.written).isEmpty()
+    }
+
+    /** Typing again means the verified words are no longer the ones in play. */
+    @Test
+    fun typingNewWords_forgetsTheVerifiedOnes() = runTest(dispatcher) {
+        val vm = backedUp()
+
+        vm.onEvent(BackupNowEvent.WordCommitted("abandon"))
+        vm.saveKitTo("content://kit")
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.kitOffered).isFalse()
+        assertThat(kit.written).isEmpty()
     }
 
     private companion object {
