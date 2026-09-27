@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.StrictMode
 import android.os.strictmode.Violation
+import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.ledgerflow.feature.analytics.work.RollupWorker
@@ -37,6 +38,12 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
+            // Debug builds log WorkManager's scheduling decisions (WM-* tags).
+            // Its default, INFO, hides exactly the lines that say when a job is
+            // scheduled, re-aimed, cancelled, stopped or reconciled -- what
+            // tracing the nightly backup's schedule needed (BUG37's
+            // investigation, 2026-09-26). Release keeps the default.
+            .setMinimumLoggingLevel(if (isDebuggable()) Log.DEBUG else Log.INFO)
             .build()
 
     override fun onCreate() {
