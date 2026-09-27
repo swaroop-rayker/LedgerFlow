@@ -21,6 +21,8 @@ dependencies {
     // classpath.
     compileOnly(libs.android.gradle.plugin)
     compileOnly(libs.kotlin.gradle.plugin)
+    // The plugin kotlin-compose applies, for its typed extension (report paths).
+    compileOnly(libs.compose.compiler.gradle.plugin)
     compileOnly(libs.ksp.gradle.plugin)
     compileOnly(libs.detekt.gradle.plugin)
 }

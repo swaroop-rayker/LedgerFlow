@@ -3,7 +3,9 @@ import com.android.build.api.dsl.LibraryExtension
 import com.ledgerflow.buildlogic.libs
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.dependencies
+import org.jetbrains.kotlin.compose.compiler.gradle.ComposeCompilerGradlePluginExtension
 
 /**
  * Compose support. Applied on top of `ledgerflow.android.library` or
@@ -30,6 +32,21 @@ class AndroidComposeConventionPlugin : Plugin<Project> {
                     "plugin applied first; neither extension is present on $path"
             }
             application.buildFeatures.compose = true
+        }
+
+        // The stability report CLAUDE.md §8/§12 asks reviewers to watch. CI's
+        // compose-stability job has passed this property since bc43d43
+        // (2026-08-13), but nothing read it, so no report was ever written and
+        // the job uploaded an empty artifact. Off by default: the reports cost
+        // compile time on every build that does not look at them.
+        val reports = providers.gradleProperty("ledgerflow.enableComposeCompilerReports")
+            .map(String::toBoolean)
+            .getOrElse(false)
+        if (reports) {
+            extensions.configure<ComposeCompilerGradlePluginExtension> {
+                reportsDestination.set(layout.buildDirectory.dir("compose_compiler"))
+                metricsDestination.set(layout.buildDirectory.dir("compose_compiler"))
+            }
         }
 
         val bom = libs.findLibrary("androidx-compose-bom").get()

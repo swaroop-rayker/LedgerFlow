@@ -105,6 +105,9 @@ LedgerFlow/
                                           # to make a diff pass: a real change is a distance near 1.
 .\gradlew detekt lintSmsFullDebug         # static analysis
 .\gradlew bannedApiCheck                  # `!!` / cacheDir bans (Laws 5 & 7)
+.\gradlew assembleSmsFullRelease "-Pledgerflow.enableComposeCompilerReports=true"
+                                          # Compose stability report -> <module>/build/compose_compiler/
+                                          # (quote the -P: PowerShell splits it at the dot otherwise)
 .\gradlew restrictedPermissionCheck       # pins the EXACT permission set per source set (D-04, Law 6)
 .\gradlew :benchmark:connectedBenchmarkAndroidTest  # macrobenchmark
 .\gradlew generateBaselineProfile         # regenerate shipped baseline profile
