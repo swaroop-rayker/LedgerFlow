@@ -349,7 +349,7 @@ is a write that makes past totals change again.
 - Unparseable SMS from an allowlisted sender still creates a `PENDING` row with `confidence = 0`. **Never silently drop a financial SMS.**
 
 ### Backup writer
-Atomic only: write `.tmp` → fsync → **decrypt-and-parse to verify** → rename. A backup that hasn't been round-trip verified is not a backup, and `lastBackupAt` must not be updated for it.
+Atomic only: write `.tmp` → fsync → **decrypt-and-parse to verify** → rename. A backup that hasn't been round-trip verified is not a backup, and `lastBackupAt` must not be updated for it. The same holds per receipt image: a copy whose landed bytes fail verification is counted `failed`, never `written`, and is not left in the folder, so the next pass writes it again. `AttachmentBackupFaultTest` injects flipped and truncated bytes between the write and the verifier for both the phrase and the nightly writer.
 
 ### Draft persistence
 Entry-form state persists to Room on every field change (300 ms debounce). If you find yourself holding a half-built entry only in a ViewModel field, that's BUG6 — fix it, don't ship it.
