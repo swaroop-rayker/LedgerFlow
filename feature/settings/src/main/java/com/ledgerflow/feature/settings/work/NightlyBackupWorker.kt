@@ -56,7 +56,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * 03:00 ([BackupTime]); without that the day is counted from the last run and
  * the pass drifts to any hour (§8 BUG31). 03:00 is the earliest it may start,
  * not a promise: Doze defers it to a maintenance window, often until the phone
- * is picked up. Periodic rather than a chain of one-time requests because a
+ * is picked up. The pass re-aims **after** it finishes, so one the system kills
+ * is retried the same night, up to [MAX_INTERRUPTED_ATTEMPTS] times (BUG37). Periodic rather than a chain of one-time requests because a
  * chain can be lost by one run that dies before enqueuing its successor; this
  * can only drift for a day.
  */
@@ -69,8 +70,17 @@ public class NightlyBackupWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        // Interrupted attempts since the last completed pass; WorkManager
+        // counts them (a killed pass comes back with this raised) and resets
+        // the count when a pass completes. Past the cap, stop trying tonight.
+        if (runAttemptCount >= MAX_INTERRUPTED_ATTEMPTS) {
+            Log.w(TAG, "Nightly backup interrupted $runAttemptCount times tonight; waiting for the next night.")
+            aimTheNextPass()
+            return Result.success()
+        }
+        val result = pass()
         aimTheNextPass()
-        return pass()
+        return result
     }
 
     private suspend fun pass(): Result = runCatching {
@@ -109,7 +119,7 @@ public class NightlyBackupWorker @AssistedInject constructor(
     }
 
     /**
-     * Points the next pass at the next 03:00 — **before** this one does anything.
+     * Points the next pass at the next 03:00 — **after** this one has finished.
      *
      * A periodic request counts its day from the moment a run finishes, so on
      * its own this pass drifted to whenever the last one happened, and on the
@@ -117,11 +127,20 @@ public class NightlyBackupWorker @AssistedInject constructor(
      * (§8 BUG31). The override moves only the *next* run, so every run has to
      * set it again, and this is where that happens.
      *
-     * First rather than last, because the pass is the part that can die: the
-     * wedge ADR-0027's amendment records was a process killed mid-pass. Aimed
-     * first, a pass that never finishes has already pointed its successor at
-     * 03:00. If this call itself fails, the next run follows this one by a day,
-     * and the run after that is back on the hour — the schedule is a periodic
+     * **Last, not first** (§8 BUG37). It was first, on the argument that a pass
+     * which dies should already have pointed its successor at tomorrow. That
+     * was backwards: aimed first, a pass the system kills mid-way has *already*
+     * said "not until tomorrow", so WorkManager does not retry it and the night
+     * is lost — seen on 2026-09-27, when the idle test copy's pass was killed
+     * (`STOP_REASON_UNKNOWN`, one interrupted attempt) and waited a day. Aimed
+     * last, a killed pass leaves today's aim in place; WorkManager honours an
+     * override before any backoff, so the retry is due at once and runs in the
+     * next window the same night. A completed pass — success, skip or failure
+     * alike — then aims at tomorrow. [MAX_INTERRUPTED_ATTEMPTS] stops a pass
+     * that is killed every time from retrying all night.
+     *
+     * If this call itself fails, the next run follows this one by a day, and
+     * the run after that is back on the hour — the schedule is a periodic
      * request either way, so a failure costs a drift, never the backups.
      *
      * Updating a running request does not stop it: WorkManager applies the
@@ -142,6 +161,13 @@ public class NightlyBackupWorker @AssistedInject constructor(
 
     public companion object {
         private const val TAG = "NightlyBackupWorker"
+
+        /**
+         * Interrupted attempts allowed in one night before the pass gives up
+         * until tomorrow (BUG37). Three covers a kill or two in a noisy night
+         * without letting a pass that can never finish retry until morning.
+         */
+        internal const val MAX_INTERRUPTED_ATTEMPTS = 3
 
         /**
          * The schedule's name since it was aimed at 03:00 (2026-09-23).

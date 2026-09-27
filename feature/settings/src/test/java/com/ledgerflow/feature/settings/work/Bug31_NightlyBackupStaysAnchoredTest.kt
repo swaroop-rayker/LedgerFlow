@@ -23,7 +23,7 @@ import com.ledgerflow.core.testing.backup.FakeBackupRepository
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.CompletableDeferred
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.awaitCancellation
 import org.junit.After
 import org.junit.Before
@@ -137,31 +137,68 @@ class Bug31_NightlyBackupStaysAnchoredTest {
     }
 
     /**
-     * Aimed **first**: a pass the system stops in the middle of the backup has
-     * already pointed its successor at 03:00. The stop stands in for the
-     * process dying mid-pass, which is how ADR-0027's first night ended; a
-     * re-aim placed after the backup never runs here, and the next run would be
-     * the stale aim instead.
+     * BUG37: a pass the system kills mid-backup is retried **the same night**.
+     *
+     * It used to re-aim first, so a killed pass had already said "tomorrow" and
+     * the night was lost (the idle test copy, 2026-09-27: one interrupted
+     * attempt, `STOP_REASON_UNKNOWN`). Re-aimed last, the killed pass leaves
+     * tonight's aim in place — already due — and the interruption is counted.
      */
     @Test
-    fun aPassStoppedMidBackup_hasAlreadyAimedItsSuccessor() {
-        val started = CompletableDeferred<Unit>()
-        backups = object : BackupRepository by repository {
-            override suspend fun backUpNightly(): NightlyBackupOutcome {
-                started.complete(Unit)
-                awaitCancellation()
-            }
-        }
+    fun Bug37_aPassKilledMidBackup_isRetriedTheSameNight_notTomorrow() {
+        val started = AtomicInteger(0)
+        backups = hangingBackups(started)
         NightlyBackupWorker.schedule(context, clock)
         now = local(2026, 9, 24, 3, 20)
-        val id = scheduled().id
 
+        interruptOnce(started, expectedStarts = 1)
+
+        val next = scheduled()
+        assertThat(next.nextScheduleTimeMillis).isEqualTo(local(2026, 9, 24, 3, 0))
+        assertThat(next.nextScheduleTimeMillis).isAtMost(now)
+        assertThat(next.runAttemptCount).isEqualTo(1)
+    }
+
+    /**
+     * The cap: three interrupted attempts each really try, and the fourth start
+     * gives up until tomorrow. Written as the owner's number, not as the
+     * constant, so a changed cap turns this red rather than following it.
+     */
+    @Test
+    fun Bug37_afterThreeInterruptedAttempts_itWaitsForTomorrow() {
+        val started = AtomicInteger(0)
+        backups = hangingBackups(started)
+        NightlyBackupWorker.schedule(context, clock)
+        now = local(2026, 9, 24, 3, 20)
+
+        repeat(3) { interruptOnce(started, expectedStarts = it + 1) }
         startThePass()
-        awaitUntil("the pass never started") { started.isCompleted }
-        driver().stopRunningWorkWithReason(id, WorkInfo.STOP_REASON_CONSTRAINT_BATTERY_NOT_LOW)
-        awaitUntil("the stopped pass was never put back") { scheduled().state == WorkInfo.State.ENQUEUED }
+        awaitUntil("the capped pass never aimed at tomorrow") {
+            scheduled().state == WorkInfo.State.ENQUEUED &&
+                scheduled().nextScheduleTimeMillis == local(2026, 9, 25, 3, 0)
+        }
 
-        assertThat(scheduled().nextScheduleTimeMillis).isEqualTo(local(2026, 9, 25, 3, 0))
+        assertThat(started.get()).isEqualTo(3)
+        assertThat(scheduled().runAttemptCount).isEqualTo(0)
+    }
+
+    /** A repository whose nightly pass never finishes, counting how often it began. */
+    private fun hangingBackups(started: AtomicInteger) = object : BackupRepository by repository {
+        override suspend fun backUpNightly(): NightlyBackupOutcome {
+            started.incrementAndGet()
+            awaitCancellation()
+        }
+    }
+
+    /** Starts the pass, waits for the backup to begin, then stops it as the system would. */
+    private fun interruptOnce(started: AtomicInteger, expectedStarts: Int) {
+        val id = scheduled().id
+        startThePass()
+        awaitUntil("attempt $expectedStarts never started") { started.get() == expectedStarts }
+        driver().stopRunningWorkWithReason(id, WorkInfo.STOP_REASON_UNKNOWN)
+        awaitUntil("attempt $expectedStarts was never put back") {
+            scheduled().state == WorkInfo.State.ENQUEUED && scheduled().runAttemptCount == expectedStarts
+        }
     }
 
     /**

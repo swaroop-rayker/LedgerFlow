@@ -187,7 +187,8 @@ real in-memory WorkManager:
   clears the override only when the generation is unchanged. A pass that
   re-aims itself therefore keeps its aim. Without that, the reset would undo it.
 
-**Re-aimed first, not last.** The pass is the part that can die (this ADR's
+**Re-aimed first, not last** — *superseded 2026-09-27, see the amendment below:
+the reasoning in this paragraph was backwards.* The pass is the part that can die (this ADR's
 previous amendment is about exactly that). Aimed before the backup starts, a
 pass that never finishes has already pointed its successor at 03:00. If the
 re-aim itself fails, the next run follows this one by a day and the run after
@@ -231,6 +232,48 @@ night the pass could not run shows up where it always did: the record in
 (test scope only, version by reference to the runtime). No production
 dependency, permission, schema or key material changes. The worker gains an
 injected `Clock`, and ten lines that await a WorkManager future.
+
+### Amended 2026-09-27 — re-aimed last, with a cap, by the owner (§8 BUG37)
+
+**What happened.** On the night of 09-26/27 the idle playSafe test copy's pass
+started, re-aimed itself at 09-28 03:00, and never finished. WorkManager's own
+record showed one interrupted attempt (`run_attempt_count = 1`) and
+`stop_reason = -512`, `STOP_REASON_UNKNOWN`. That is the value it records when
+it finds a pass that was running with no system reason for stopping, which is
+what a process killed mid-pass looks like; JobScheduler's own stops carry a
+reason (`TIMEOUT`, `QUOTA`, `APP_STANDBY`…). The copy is in the RARE standby
+bucket, and Samsung's freezer had been logged acting on both apps. The owner's
+real app completed its pass the same night (four of four nights).
+
+**Why the 09-23 reasoning was backwards.** "Aimed first, a pass that dies has
+already pointed its successor" is true, and it is the problem. Aimed first, a
+pass killed mid-way has already said *not until tomorrow*: WorkManager honours
+an override before any backoff, so the killed pass is not retried and the night
+is lost. Aimed **last**, a killed pass leaves tonight's aim in place, which is
+already due, so the retry runs in the next window the same night. A pass that
+completes, whether by success, skip or recorded failure, then aims at tomorrow.
+The thing the old order protected against (a dead pass drifting) cannot happen
+either way: a pass that dies without re-aiming keeps whichever aim it had.
+
+**The cap (owner's choice).** WorkManager counts interrupted attempts since
+the last completed pass (`runAttemptCount`, reset on completion). From the
+fourth start after three interruptions, the pass gives up until tomorrow: it
+re-aims and reports success without backing up. That stops a pass that is
+killed every time from retrying all night. No new stored state is needed.
+
+**Verification.** In `Bug31_NightlyBackupStaysAnchoredTest`, which runs against
+a real in-memory WorkManager:
+- `Bug37_aPassKilledMidBackup_isRetriedTheSameNight_notTomorrow`: the stopped
+  pass is due again tonight, with one attempt counted. It replaces the 09-23
+  case that required the opposite.
+- `Bug37_afterThreeInterruptedAttempts_itWaitsForTomorrow`: three real
+  attempts, then the fourth aims at tomorrow without running the backup, and
+  the count resets.
+
+Mutation-swept: the old order, no cap, a cap of one (caught only after the
+test stopped reading the constant it tests), and never re-aiming each turn a
+test red. **What to read each morning without a cable overnight:** the
+WorkManager record's `run_attempt_count` and `stop_reason` (`TESTING.md` D12).
 
 ## Consequences
 
@@ -276,8 +319,9 @@ injected `Clock`, and ten lines that await a WorkManager future.
   `Bug31_NightlyBackupStaysAnchoredTest` (Robolectric, real WorkManager) — a
   fresh schedule aims at 03:00; a pass held until 06:40 aims its successor at
   03:00, not at 06:40 tomorrow, and keeps the battery constraint; a failed pass
-  still re-aims; a pass the system stops mid-backup has already re-aimed (the
-  "first, not last" rule); opening the app while a pass is overdue does not
+  still re-aims; a pass the system stops mid-backup is retried the same night
+  and the fourth interrupted start gives up until tomorrow (BUG37, which
+  replaced the 09-23 "first, not last" case); opening the app while a pass is overdue does not
   push it to tomorrow; the drifting schedule is cancelled. Ten mutations, each
   red on its own set of cases (`SPEC.md` §8 BUG31).
 - `TESTING.md` gains a row: leave the phone overnight, confirm a backup appeared
