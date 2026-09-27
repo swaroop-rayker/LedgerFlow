@@ -261,6 +261,7 @@ it.
 - **Reads go through the `debit_entries` / `credit_entries` views, never `ledger_entry` directly** (ADR-0002). Any query that does name the base table takes a `ledger: LedgerType` parameter — no overload omits it. `LedgerIsolationTest` fails the build otherwise.
 - `@Transaction` on any multi-write operation. Approval is a single transaction: insert entry + line items + update pending status + update rollups.
 - Schema JSONs in `core/database/schemas/` are **committed**. Changing one without a migration fails CI.
+- **A column added to an existing table gets a field in its `BackupPayload` row with a default equal to what its migration writes** (`0`, `NULL`, …), and a field is never removed. Without the default, every older `.lfbk` holding such a row fails to decode and the user is told their backup is damaged; with a different default, a restored old backup disagrees with a migrated old database. `OlderSchemaBackupRestoresTest` restores v1, v7 and v9 payloads in the exact shape those versions wrote.
 
 **Naming**
 - Use cases: `VerbNounUseCase` with a single `operator fun invoke`.
