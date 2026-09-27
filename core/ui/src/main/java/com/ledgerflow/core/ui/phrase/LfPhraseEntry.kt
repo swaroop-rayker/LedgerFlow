@@ -55,12 +55,13 @@ public fun LfPhraseEntry(
     onScanRequested: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.phraseSecret(),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
     ) {
         EnteredWords(words, onWordRemove)
 
         LfTextField(
+            modifier = Modifier.phraseSecret(),
             value = draft,
             onValueChange = onDraftChange,
             label = "Word ${(words.size + 1).coerceAtMost(requiredWordCount)}",
@@ -102,6 +103,7 @@ private fun EnteredWords(words: List<String>, onWordRemove: (Int) -> Unit) {
                         style = LfChipStyle.Selected,
                         contentDescription = "Word ${position + 1}, $word. Tap to remove.",
                         onClick = { onWordRemove(position) },
+                        modifier = Modifier.phraseSecret(),
                     )
                 }
             }
@@ -122,7 +124,7 @@ private fun Suggestions(suggestions: List<String>, onSuggestionTap: (String) -> 
             contentType = { "suggestion" },
         ) { index ->
             val word = suggestions[index]
-            LfChip(label = word, onClick = { onSuggestionTap(word) })
+            LfChip(label = word, onClick = { onSuggestionTap(word) }, modifier = Modifier.phraseSecret())
         }
     }
 }

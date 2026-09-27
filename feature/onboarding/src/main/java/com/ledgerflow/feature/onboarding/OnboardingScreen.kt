@@ -34,6 +34,7 @@ import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
+import com.ledgerflow.core.ui.phrase.phraseSecret
 
 /**
  * The onboarding gate (SPEC.md §7.4).
@@ -362,11 +363,15 @@ private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEven
                 )
             }
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Column(
+                modifier = Modifier.phraseSecret(),
+                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            ) {
                 state.mnemonic.forEachIndexed { index, word ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .phraseSecret()
                             .semantics { contentDescription = "Word ${index + 1}: $word" },
                         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
                     ) {
@@ -396,6 +401,7 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
 
     state.challengePositions.forEachIndexed { index, position ->
         LfTextField(
+            modifier = Modifier.phraseSecret(),
             value = state.challengeAnswers.getOrElse(index) { "" },
             onValueChange = { onEvent(OnboardingEvent.ChallengeAnswerChanged(index, it)) },
             label = "Word $position",

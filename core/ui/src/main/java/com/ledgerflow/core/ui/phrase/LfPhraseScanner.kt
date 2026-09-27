@@ -84,7 +84,9 @@ public fun LfPhraseScanner(
     // one way out sat under the navigation bar (§8 BUG35). systemBars plus the
     // cutout, never safeDrawing -- CLAUDE.md §5; there is no keyboard here.
     val insets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
-    Box(modifier = modifier.fillMaxSize()) {
+    // The camera may be pointed at a Recovery Kit's QR code, which is the
+    // phrase: no screen sharing or recording while it is open.
+    Box(modifier = modifier.fillMaxSize().phraseSecret()) {
         if (granted) ScannerViewfinder(onScanned)
         Column(
             modifier = Modifier

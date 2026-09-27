@@ -295,6 +295,7 @@ The DEK is multi-wrapped by two factors: Android Keystore (KEK-A) and the 24-wor
 - **Never** add a "skip" or "remind me later" to the onboarding word challenge.
 - **Never** wipe the database on a decryption failure. Route to the Recovery screen instead (`SPEC.md` §7.3).
 - **A screen that holds the phrase forgets it explicitly when it is done with it** (BUG30). Onboarding, Recovery and restore are not navigation destinations — their ViewModels belong to the activity, so `onCleared` does not run while the app lives, and "forget on close" there is a promise nothing keeps. Clear on success and on leaving; keep on failure, so a wrong word is fixable.
+- **Every node that shows or takes a word of the phrase uses `phraseSecret()`** (`:core:ui`, SPEC §9.6). TalkBack still reads it; other accessibility services and dump tools get an empty node, and Android 15+ blanks the window in screen sharing. A new phrase screen without it hands the words to any accessibility service on the phone.
 - Validate the BIP-39 checksum **before** running PBKDF2/HKDF — otherwise a typo costs the user 2048 HMAC-SHA512 rounds and looks like a hang.
 - Any change here requires the backup→wipe→restore round-trip test to pass **before** the commit.
 

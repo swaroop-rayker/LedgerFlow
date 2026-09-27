@@ -1678,6 +1678,25 @@ Min touch target 48 dp. Content descriptions on every icon-only control. Amounts
 
 **Decorative glyphs are pinned to their shape, not to the text scale.** `LfCategoryDot` draws a category's initial inside a 24 dp circle. Sized in `sp` the letter scaled while the circle did not, so at 2.0x its em box matched the circle's *diameter* and the curve clipped it on all four sides — visible on every row of the Ledger list. The initial carries nothing the adjacent label does not (it is excluded from semantics for exactly that reason), so it is sized from the swatch via `Dp.toSp()` and renders identically at every font scale. A row's *text* still scales in full, and degrades by wrapping the name rather than clipping it (§8/BUG9).
 
+**The recovery phrase is readable by TalkBack and by nothing else** (owner,
+2026-09-27). The phrase chips' labels ("Word 3, …") carry the words, because that
+is how a blind user checks what they typed. But a plain label is readable by
+*every* accessibility service, which is how a screen dump could read the phrase
+(SESSION-LOG-S15). Every node that shows or takes a word uses `phraseSecret()`:
+- the phrase entry's container, chips, field and suggestions (Recovery, restore,
+  Back up now);
+- onboarding's revealed word list, each row, and the challenge fields;
+- the QR scanner.
+
+`phraseSecret()` sets `isSensitiveData`, so a service that is not a declared
+accessibility tool gets an empty node and sensitive-marked events, while
+TalkBack reads everything (Android 14+). It also sets `sensitiveContent()`, so
+**Android 15+ blanks the window in screen sharing and recording** while the words
+or the camera aimed at a kit's QR are on it. `PhraseSecretTest` (JVM) holds each
+entry site. `PhraseScreensAreSensitiveTest` (device) holds onboarding's rows and
+fields, and shows the window turns content-sensitive only once the phrase is
+revealed.
+
 ---
 
 ## 10. Charts
