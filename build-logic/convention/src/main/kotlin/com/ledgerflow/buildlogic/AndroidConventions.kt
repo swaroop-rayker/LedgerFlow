@@ -36,13 +36,32 @@ internal enum class LedgerFlowFlavor(
      * configuration failure that surfaces as an unresolvable dependency.
      */
     val applicationIdSuffix: String?,
+    /**
+     * The launcher label of this flavour's **debug** build. With both debug
+     * flavours installed side by side the phone showed two identical
+     * "LedgerFlow" icons, and the owner reported a missing feature from the
+     * throwaway playSafe vault that was working in their real one. Release
+     * keeps "LedgerFlow" for both: each is a different distribution, and a
+     * user of either sees one app.
+     */
+    val debugLabel: String,
 ) {
     /** SMS + notification ingest. Sideload / internal testing only. */
-    smsFull(applicationIdSuffix = null),
+    smsFull(applicationIdSuffix = null, debugLabel = "LedgerFlow"),
 
     /** Notification + OCR + manual. No Play-restricted permissions. */
-    playSafe(applicationIdSuffix = ".playsafe"),
+    playSafe(applicationIdSuffix = ".playsafe", debugLabel = "LF PlaySafe"),
 }
+
+internal const val APP_LABEL = "LedgerFlow"
+
+/** The `${appLabel}` manifest placeholder for one variant. */
+internal fun launcherLabel(flavorName: String?, buildType: String?): String =
+    if (buildType == "debug") {
+        LedgerFlowFlavor.entries.firstOrNull { it.name == flavorName }?.debugLabel ?: APP_LABEL
+    } else {
+        APP_LABEL
+    }
 
 internal const val FLAVOR_DIMENSION = "ingest"
 

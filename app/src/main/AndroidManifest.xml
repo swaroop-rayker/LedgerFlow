@@ -29,7 +29,7 @@
     <application
         android:name=".LedgerFlowApplication"
         android:allowBackup="false"
-        android:label="LedgerFlow"
+        android:label="${appLabel}"
         android:supportsRtl="true"
         android:theme="@style/Theme.LedgerFlow">
 

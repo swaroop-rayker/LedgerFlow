@@ -1,6 +1,8 @@
 import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 import com.ledgerflow.buildlogic.configureAndroidApplication
 import com.ledgerflow.buildlogic.configureDetekt
+import com.ledgerflow.buildlogic.launcherLabel
 import com.ledgerflow.buildlogic.libs
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -26,6 +28,18 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
 
         extensions.configure<ApplicationExtension> {
             configureAndroidApplication(this)
+        }
+
+        // Per variant, not per flavour: a flavour placeholder would rename the
+        // release build too, and one set on the debug build type cannot tell
+        // the two flavours apart.
+        extensions.configure<ApplicationAndroidComponentsExtension> {
+            onVariants { variant ->
+                variant.manifestPlaceholders.put(
+                    "appLabel",
+                    launcherLabel(variant.flavorName, variant.buildType),
+                )
+            }
         }
 
         configureDetekt()
