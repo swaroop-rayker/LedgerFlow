@@ -47,7 +47,7 @@ private const val EDGE_DIVISOR = 5
  */
 internal fun MacrobenchmarkScope.ensureSeeded() {
     device.executeShellCommand("am start -W -n $SEED_ACTIVITY")
-    val seeded = awaitNode(SEED_TIMEOUT_MS) { it.text?.startsWith("Seeded") == true }
+    val seeded = awaitAppNode(SEED_TIMEOUT_MS) { it.text?.startsWith("Seeded") == true }
     checkNotNull(seeded) { "The benchmark vault was not seeded. On screen: ${screenText()}" }
     killProcess()
     dismissFirstRunSheet()
@@ -60,7 +60,7 @@ internal fun MacrobenchmarkScope.ensureSeeded() {
  */
 private fun MacrobenchmarkScope.dismissFirstRunSheet() {
     startActivityAndWait()
-    val notNow = awaitNode(FIRST_RUN_SHEET_MS) { it.text?.toString() == "Not now" }
+    val notNow = awaitAppNode(FIRST_RUN_SHEET_MS) { it.text?.toString() == "Not now" }
     if (notNow != null) {
         val bounds = Rect().also(notNow::getBoundsInScreen)
         device.click(bounds.centerX(), bounds.centerY())
@@ -71,7 +71,7 @@ private fun MacrobenchmarkScope.dismissFirstRunSheet() {
 
 /** Taps a bottom-navigation tab by its label. */
 internal fun UiDevice.openTab(label: String) {
-    val tab = checkNotNull(awaitNode(UI_TIMEOUT_MS) { it.text?.toString() == label }) {
+    val tab = checkNotNull(awaitAppNode(UI_TIMEOUT_MS) { it.text?.toString() == label }) {
         "No \"$label\" tab on screen: ${screenText()}"
     }
     val bounds = Rect().also(tab::getBoundsInScreen)
@@ -81,7 +81,7 @@ internal fun UiDevice.openTab(label: String) {
 
 /** The screen's scrolling list's bounds, once it has appeared. */
 internal fun UiDevice.scrollingList(): Rect {
-    val list = checkNotNull(awaitNode(UI_TIMEOUT_MS) { it.isScrollable }) {
+    val list = checkNotNull(awaitAppNode(UI_TIMEOUT_MS) { it.isScrollable }) {
         "No scrollable list on screen: ${screenText()}"
     }
     return Rect().also(list::getBoundsInScreen)
@@ -107,7 +107,7 @@ internal fun Rect.flingDownAndUp(device: UiDevice, times: Int) {
 }
 
 /** Polls the app's windows for a node matching [predicate]. */
-private fun awaitNode(timeoutMs: Long, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+internal fun awaitAppNode(timeoutMs: Long, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
     val deadline = SystemClock.uptimeMillis() + timeoutMs
     while (true) {
         appRoots().firstNotNullOfOrNull { find(it, predicate, 0) }?.let { return it }

@@ -18,6 +18,11 @@ android {
     }
 
     buildTypes {
+        // Before `benchmark`, which copies release with initWith (BUG38).
+        getByName("release") {
+            proguardFiles("proguard-rules.pro")
+        }
+
         // What :benchmark measures (P5, SPEC §11). Release's code -- R8 on, not
         // debuggable, because a debuggable build's timings are not the app's --
         // signed with the debug key so it installs from a dev box, and its own

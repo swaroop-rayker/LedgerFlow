@@ -22,5 +22,10 @@
         <activity
             android:name=".bench.BenchmarkSeedActivity"
             android:exported="true" />
+
+        <!-- BUG38: reads a drawn line with the app's recognizer, in shrunk code. -->
+        <activity
+            android:name=".bench.OcrProbeActivity"
+            android:exported="true" />
     </application>
 </manifest>
