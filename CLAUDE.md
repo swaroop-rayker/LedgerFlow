@@ -369,7 +369,9 @@ Targets live in `SPEC.md` §11. Practical rules while coding:
 - Never load a full ledger into memory. Paging 3, always.
 - Charts get pre-binned data — never more data points than horizontal pixels.
 - Analytics reads `daily_rollup`, not `ledger_entry`. Drill-downs read base tables via Paging.
-- Watch the Compose compiler stability report. A new unstable parameter in a `LazyColumn` item composable is a regression — fix the type, don't wrap it in `remember`.
+- Watch the Compose compiler stability report. A new unstable parameter in a `LazyColumn` item composable is a regression — fix the type, don't wrap it in `remember`. A type from `:core:model`/`:core:domain` is reported unstable only because those modules are not Compose-compiled; if it is **deeply** immutable, list it in `compose-stability.conf` (the file says how to check). Never list a type you have not checked — a wrongly "stable" row is skipped when it should have changed.
+- **Per-row cost is paid inside the frame at 120 Hz.** Measured on the Ledger (2026-09-29): every late frame was composing and measuring a new row. So in a list: no `rememberVectorPainter`/`Icon(imageVector)` per row (one painter, passed down — `LfIconButton` has a `Painter` overload), no formatter built per row (`TimeStamp` caches), and a `LazyLayoutCacheWindow` on long lists so rows are composed ahead in idle time.
+- **The `benchmark` build type is release code.** Anything that only breaks under R8 (BUG38 broke release OCR) shows there and nowhere else; `app/proguard-rules.pro` is the release rules file.
 - Baseline profiles are shipped and regenerated whenever startup or the nav graph changes materially.
 - Anything > 1 ms on the main thread is suspicious. `StrictMode` runs with `penaltyDeath` in debug — if it kills your build, that's the system working.
 

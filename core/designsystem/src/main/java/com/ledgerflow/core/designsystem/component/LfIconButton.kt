@@ -11,7 +11,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
@@ -35,6 +37,33 @@ public fun LfIconButton(
     modifier: Modifier = Modifier,
     tint: Color = LfTheme.colors.textSecondary,
 ) {
+    LfIconButton(
+        icon = rememberVectorPainter(icon),
+        contentDescription = contentDescription,
+        onClick = onClick,
+        modifier = modifier,
+        tint = tint,
+    )
+}
+
+/**
+ * The same control over a [Painter] the caller already holds.
+ *
+ * **For lists.** Every `rememberVectorPainter` builds the vector's node tree
+ * during composition and rasterises it into a bitmap of its own, which the
+ * render thread then uploads. In a list that is paid once per row as rows
+ * scroll in: measured 2026-09-29 on the Ledger at 120 Hz, a 48×48 upload sat in
+ * most of the frames that missed their deadline. A list remembers one painter
+ * and hands it to every row, so it is built and uploaded once.
+ */
+@Composable
+public fun LfIconButton(
+    icon: Painter,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color = LfTheme.colors.textSecondary,
+) {
     val spacing = LfTheme.spacing
     Box(
         modifier = modifier.size(spacing.minTouchTarget),
@@ -46,7 +75,7 @@ public fun LfIconButton(
             colors = IconButtonDefaults.iconButtonColors(contentColor = tint),
         ) {
             Icon(
-                imageVector = icon,
+                painter = icon,
                 contentDescription = contentDescription,
                 modifier = Modifier.size(spacing.md),
             )

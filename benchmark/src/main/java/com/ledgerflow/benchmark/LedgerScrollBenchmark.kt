@@ -46,6 +46,18 @@ class LedgerScrollBenchmark {
             ensureSeeded()
             startActivityAndWait()
             device.openTab("Ledger")
+            // Unmeasured warm-up. Each iteration is a fresh process, and the
+            // first fling of a fresh process compiles a Vulkan pipeline the
+            // driver has no cached copy of: measured 2026-09-29, one
+            // `CreateGraphicsPipeline-CompileAfterCacheMiss` per iteration,
+            // 15-67 ms, plus the late frames queued behind it. Five iterations
+            // put five of those at the top of ~470 frames, so P99 measured the
+            // GPU driver and nothing of the app. A real install keeps the cache
+            // across launches (by hand, the second and later runs showed no
+            // compile at all); the benchmark kills the process seconds after
+            // each scroll, before the cache is saved. SPEC §11 states the
+            // first-scroll compile separately rather than hiding it.
+            device.scrollingList().flingDownAndUp(device, times = 1)
         },
     ) {
         device.scrollingList().flingDownAndUp(device, FLINGS)

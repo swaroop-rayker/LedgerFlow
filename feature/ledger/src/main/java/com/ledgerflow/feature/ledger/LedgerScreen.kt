@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -23,6 +26,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -193,6 +198,9 @@ private fun MessageBanner(message: String, onEvent: (LedgerEvent) -> Unit) {
  * the next page. Declaring from the snapshot alone would build a list that
  * never grows.
  */
+// LazyLayoutCacheWindow is experimental in foundation 1.12. If a BOM bump
+// changes it, this fails to compile rather than silently losing the prefetch.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EntryList(
     items: LazyPagingItems<LedgerListItem>,
@@ -219,12 +227,27 @@ private fun EntryList(
     }
 
     val snapshot = items.itemSnapshotList
+    // One painter for every row's delete control: a painter per row was a
+    // vector tree built and a bitmap uploaded for each row scrolled in, inside
+    // the frames that missed 120 Hz (see LfIconButton's Painter overload).
+    val deleteIcon = rememberVectorPainter(LfIcons.Delete)
     // Keyed on the book, so switching tabs builds a new list rather than
     // carrying the old one's scroll position into it. Two disjoint books are
     // two lists (Law 2), and it also means a book with more unsaved entries
     // than the last one cannot reproduce the prepend problem above.
     key(state.ledger) {
+    // Rows composed ahead of the viewport in idle time, not inside the frame
+    // that scrolls them in. Measured 2026-09-29 at 120 Hz: every frame that
+    // missed its 8.3 ms deadline was composing, creating and measuring a new
+    // row (~4 ms) because the default prefetch keeps one row ahead, and a fast
+    // fling outruns it. Two viewports ahead and one behind (for the fling
+    // back): one-and-a-half still left late frames on a warm phone, and the
+    // rows it keeps composed cost little (32 MB PSS after a scroll).
+    val listState = rememberLazyListState(
+        cacheWindow = LazyLayoutCacheWindow(aheadFraction = CACHE_AHEAD, behindFraction = CACHE_BEHIND),
+    )
     LazyColumn(
+        state = listState,
         // `md`, not the `lg` the taxonomy list uses. That screen holds a dozen
         // items; this one holds a row per transaction and has to fit a name, an
         // amount, a timestamp and a control on every one of them. 16dp of side
@@ -257,6 +280,7 @@ private fun EntryList(
                 EntryRow(
                     item = items[index] ?: item,
                     bucket = bucket,
+                    deleteIcon = deleteIcon,
                     onEvent = onEvent,
                 )
             }
@@ -559,6 +583,7 @@ private fun PendingRow(
 private fun EntryRow(
     item: LedgerListItem,
     bucket: RecencyBucket,
+    deleteIcon: Painter,
     onEvent: (LedgerEvent) -> Unit,
 ) {
     val spacing = LfTheme.spacing
@@ -644,7 +669,7 @@ private fun EntryRow(
         // job is being scanned. `LfIconButton` is already a 48dp target and the
         // rows are taller than that, so it costs no height at all.
         LfIconButton(
-            icon = LfIcons.Delete,
+            icon = deleteIcon,
             // Stays centred on the row: unlike the swatch it belongs to the
             // entry as a whole rather than to the naming line.
             modifier = Modifier.align(Alignment.CenterVertically),
@@ -942,6 +967,10 @@ internal const val HAIRLINE = 1
 
 private const val BAND_HEADER_TYPE = "band"
 private const val ENTRY_TYPE = "entry"
+
+/** The Ledger's prefetch window, in viewports (see EntryList). */
+private const val CACHE_AHEAD = 2f
+private const val CACHE_BEHIND = 1f
 private const val PENDING_TYPE = "pending"
 private const val CANDIDATE_TYPE = "candidate"
 private const val SEPARATOR = " · "

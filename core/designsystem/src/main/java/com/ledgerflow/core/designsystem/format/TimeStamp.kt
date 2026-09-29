@@ -9,6 +9,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * When something happened, as a person reads it (SPEC.md §6.2).
@@ -86,10 +87,21 @@ public object TimeStamp {
     ): String {
         val time = if (is24Hour) TIME_24_HOUR else TIME_12_HOUR
         val pattern = if (withDate) DATE_PREFIX + time else time
-        return DateTimeFormatter.ofPattern(pattern, locale)
-            .withZone(ZoneId.systemDefault())
-            .format(Instant.ofEpochMilli(millis))
+        val zone = ZoneId.systemDefault()
+        // Cached: a list composes a stamp per row as rows scroll in, and parsing
+        // the pattern each time was measurable inside 120 Hz frames. The key
+        // carries everything the formatter depends on, so a locale, 24-hour or
+        // time-zone change still takes effect on the next composition.
+        val formatter = formatters.getOrPut(FormatterKey(pattern, locale, zone)) {
+            DateTimeFormatter.ofPattern(pattern, locale).withZone(zone)
+        }
+        return formatter.format(Instant.ofEpochMilli(millis))
     }
+
+    private data class FormatterKey(val pattern: String, val locale: Locale, val zone: ZoneId)
+
+    /** A handful of entries at most: two patterns × the locales and zones a session sees. */
+    private val formatters = ConcurrentHashMap<FormatterKey, DateTimeFormatter>()
 
     private const val TIME_12_HOUR = "h:mm a"
     private const val TIME_24_HOUR = "HH:mm"

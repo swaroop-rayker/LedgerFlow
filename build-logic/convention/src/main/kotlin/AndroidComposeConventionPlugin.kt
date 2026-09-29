@@ -34,6 +34,14 @@ class AndroidComposeConventionPlugin : Plugin<Project> {
             application.buildFeatures.compose = true
         }
 
+        // Types from the plain-Kotlin core modules that are immutable but that
+        // the Compose compiler cannot see into; see the file for the rule.
+        extensions.configure<ComposeCompilerGradlePluginExtension> {
+            stabilityConfigurationFiles.add(
+                rootProject.layout.projectDirectory.file("compose-stability.conf"),
+            )
+        }
+
         // The stability report CLAUDE.md §8/§12 asks reviewers to watch. CI's
         // compose-stability job has passed this property since bc43d43
         // (2026-08-13), but nothing read it, so no report was ever written and

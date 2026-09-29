@@ -77,9 +77,12 @@ tasks.register<Copy>("generateBaselineProfile") {
     includeEmptyDirs = false
     into(rootProject.layout.projectDirectory.dir("app/src/main"))
     // The seed activity is recorded too, and exists only in the benchmark
-    // build type; its rules name classes no shipped APK contains.
+    // build type; its rules name classes no shipped APK contains. The File is
+    // resolved here, at configuration time: a `rootProject` reference inside
+    // doLast cannot be stored by the configuration cache, and failed the build
+    // after the copy had already succeeded.
+    val profile = rootProject.file("app/src/main/baseline-prof.txt")
     doLast {
-        val profile = rootProject.file("app/src/main/baseline-prof.txt")
         val kept = profile.readLines().filterNot { "Lcom/ledgerflow/bench/" in it }
         profile.writeText(kept.joinToString(separator = "\n", postfix = "\n"))
     }

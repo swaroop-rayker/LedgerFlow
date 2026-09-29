@@ -1598,6 +1598,7 @@ the phrase the user has just replaced.
 | **BUG35** — the scanner's only way back sat under the navigation bar | Reported by the owner (2026-09-26). The three phrase screens replace their `LfScaffold` with `LfPhraseScanner` while scanning, and the scanner drew edge-to-edge with no inset handling, so "Type the words instead" rendered under the phone's navigation bar. | The controls are one card over a full-bleed viewfinder, padded by `WindowInsets.systemBars ∪ displayCutout` (never `safeDrawing`, CLAUDE.md §5), with a one-line instruction. Two defects found while fixing it, both caught before shipping: (a) `LfCard` stacks its children, so the first version drew the button over the instruction (seen in a device screenshot); (b) at font scale 2.0 the label "Type the words instead" clipped to "Type the words i" (BUG9), so it is now **"Type the words"**. | `LfPhraseScannerScreenshotTest` (Robolectric, 3 cases, goldens at 1.0 and 2.0, reviewed): the instruction must end above the button, and the label's needed width must not exceed its button's. That second check was proved against the old wording, which fails at 2.0 and passes at 1.0. Two earlier forms of it were tried and discarded: node bounds report the width a label was *given*, and `didOverflowWidth` is true for any label narrower than its slot. The inset itself needs real window insets, which Robolectric reports as zero, so it was **measured on the device**: instruction 1670–1812, button 1867–1949, navigation bar from 2196 (1080×2340). `TESTING.md` D5 repeats the check. |
 | **BUG36** — the Recovery Kit PDF's QR code sat on top of the "How to restore" sentences | Reported by the owner on 2026-09-26, from the first kit saved through onboarding's new "Save as PDF" default. `RecoveryKitWriter` drew the code in the page's right margin, level with the "How to restore" heading, and drew each restore step as one unwrapped line at 11 pt. The longer steps ran straight under the code (x ≈ 415 pt onward) and close to the page edge. `RecoveryKitQrTest` only checked that the code *decodes*, and it did, with text under it. | `RecoveryKitLayout`, a pure layout function: steps are word-wrapped to the text width, with continuation lines hung under the step's text rather than its number, and the code goes **below** the last step, captioned "Scan to restore" a full line above it (about six modules of quiet zone). Text and code never share a row, whatever the wording. | `RecoveryKitLayoutTest` (JVM, 6, stand-in font): `Bug36_theCodeStartsBelowTheLastStep`, every line fits, the longest step wraps and loses no words, continuations hang, the section stays on the page, and an over-long word is kept whole. `RecoveryKitQrTest` (device) adds two: the same rules with Android's real `Paint`, including the bold warning lines, and `Bug36_nothingIsDrawnBesideOrUnderTheCode`. That one finds the code on the rendered page by its finder patterns, the way a camera does, and requires no dark pixel outside its columns across its rows. Mutation-swept: the code level with the heading turns the JVM Bug36 case red, no wrapping turns four JVM cases red, and **the old right-margin placement turns the device pixel check red**. A preview of the fixed page (public test phrase only) was reviewed. |
 | **BUG37** — a nightly pass killed mid-way lost the whole night | Found on 2026-09-27 from the idle playSafe test copy's WorkManager record, with no log. Its pass had started and re-aimed itself at the next day, but never finished (`period_count = 0`, `run_attempt_count = 1`, `stop_reason = STOP_REASON_UNKNOWN`, which is what a process killed mid-pass leaves). BUG31's fix re-aimed **first**, on the argument that a pass which dies should already point at tomorrow. That was backwards: a killed pass had already said "tomorrow", WorkManager honours the override before any backoff, and nothing retried it that night. | (a) The pass re-aims **last**, after it completes, whether by success, skip or recorded failure. A killed pass keeps tonight's aim, which is already due, so it runs again in the next window the same night. (b) **A cap:** after three interrupted attempts since the last completed pass (WorkManager's own `runAttemptCount`), the next start gives up until tomorrow without backing up, so a pass that is killed every time does not retry all night. No new stored state. | `Bug31_NightlyBackupStaysAnchoredTest` (Robolectric, real WorkManager): `Bug37_aPassKilledMidBackup_isRetriedTheSameNight_notTomorrow` (due tonight, one attempt counted) replaces the 09-23 case that asserted the opposite. `Bug37_afterThreeInterruptedAttempts_itWaitsForTomorrow` (three real attempts, the fourth aims at tomorrow, the count resets) states the owner's number rather than reading the constant, because reading it let a mutation to a cap of one pass. Mutation-swept: the old order, no cap, a cap of one and never re-aiming each turn a named case red. **On the device:** read `run_attempt_count` and `stop_reason` in `no_backup/androidx.work.workdb` each morning (`TESTING.md` D12); no overnight cable is needed. |
+| **BUG38** — receipt OCR failed in every release build | Found 2026-09-29 while benchmarking the `benchmark` build type (release code): the app's log showed `NoSuchMethodException: CommonComponentRegistrar.<init>` at startup. ML Kit starts through Firebase component discovery, which instantiates each `ComponentRegistrar` reflectively by its no-argument constructor. `firebase-components` 16.1.0 ships `-keep class * implements ComponentRegistrar` with no member list, and in R8 full mode (AGP's default) that keeps the class but not its constructor, so R8 removed it. The first recognition then threw a `NullPointerException`. Debug is not shrunk, so no build the owner had ever used showed it, and every OCR test runs unshrunk code. | `app/proguard-rules.pro`, now applied to release (and inherited by `benchmark`): `-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }`. Giving release a rules file also made R8 report Jetpack WindowManager's device-supplied extension classes as missing, so the two `-dontwarn` lines R8 itself generated sit beside it. | `Bug38_OcrWorksInAShrunkBuildTest` (`:benchmark`, device): launches `OcrProbeActivity` (benchmark build type only) in `com.ledgerflow.bench`, release code under release's R8 rules, and requires the app's own `ReceiptTextRecognizer` to read a drawn "TOTAL 245.00". **Mutation-checked on the device:** without the keep rule it reports `OCR failed: NullPointerException` and the test is red; with it, `OCR ok: TOTAL 245.00`. |
 
 ### 8.1 Pre-migration snapshot — operating design
 
@@ -1720,23 +1721,42 @@ Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — ach
 | SMS → notification latency | ≤ 1.5 s | Instrumented |
 | OCR (single receipt page) | ≤ 2.5 s | Instrumented |
 | APK size (arm64 release split) | ≤ 50 MB | CI check — builds the split and fails if it finds none |
-
-**First measurement, 2026-09-29 (P5 step 1)** — SM-S721B (Android 16, 120 Hz
-panel), `com.ledgerflow.bench` (release code, R8 on, not debuggable), a
-throwaway vault of 2,005 synthetic entries over five years, smsFull only:
-
-| Metric | No profile | Shipped baseline profile | Budget |
-|---|---|---|---|
-| Cold start, time to initial display (median of 10) | 264 ms | **244 ms** | ≤ 700 ms — met |
-| Warm start (median of 10) | 169 ms | **149 ms** | ≤ 250 ms — met |
-| Ledger scroll, frame CPU time P50 / P90 / P99 | 4.0 / 10.2 / 19.4 ms | **2.9 / 6.1 / 13.3 ms** | P99 ≤ 16.6 ms — met with the profile; the 120 Hz 8.3 ms target is **not** met at P99 |
-| Ledger scroll, frame overrun P99 | +12.9 ms | +6.3 ms | late frames remain at P99 on 120 Hz |
-| Memory after the scroll (RSS anon + file) | 138.6 MB | 140.9 MB | ≤ 150 MB PSS — met (RSS bounds PSS from above) |
-
-"Initial display" is the first frame, which may still be the unlock state
-rather than Home; a fully-drawn marker would tighten that figure. The Analytics
-5Y, SMS-latency and OCR rows are instrumented tests, not part of this run.
 | Memory (steady state) | ≤ 150 MB PSS | Macrobenchmark |
+
+**Measured 2026-09-29 (P5)** — SM-S721B (Android 16, adaptive 60/120 Hz
+panel), `com.ledgerflow.bench` (release code, R8 on, not debuggable), a
+throwaway vault of 2,005 synthetic entries over five years, smsFull only.
+
+| Metric | Result | Budget |
+|---|---|---|
+| Cold start, time to initial display (median of 10) | 244–256 ms with the profile, 264–268 without | ≤ 700 ms — met |
+| Warm start (median of 10) | 149–154 ms with the profile, 169–171 without | ≤ 250 ms — met |
+| Ledger scroll at 120 Hz, **in use** (no tracing; the phone's own accessibility service bound) | 0.2–0.3% of frames late — the original code and the final code alike, 3 interleaved runs each, ~470 frames per run | 8.3 ms, P99 — **met** |
+| Ledger scroll at 120 Hz, **under Macrobenchmark** (tracing on; UiAutomation subscribed to every accessibility event) | late frames 33 → 12–14 per five iterations after the changes below, when the phone is cool; frame CPU P99 12.7 → 8.9 ms | 8.3 ms, P99 — not met under these conditions |
+| Ledger scroll at 60 Hz | frame CPU P99 ≤ 13 ms in every run | 16.6 ms — met |
+| Memory after the scroll | 32.4 MB PSS (+12.9 MB swapped); RSS 160 MB overstates it by counting shared pages | ≤ 150 MB PSS — met |
+
+**Reading the scroll rows.** The two conditions disagree, and both are true.
+Every frame that missed 8.3 ms under the benchmark was composing and
+measuring a newly visible row (~4 ms), with the list's prefetch one row
+behind. The benchmark's own accessibility connection subscribes to every
+event, so Compose also maintains its accessibility tree each frame — the
+condition a TalkBack user is in. The owner's phone binds an accessibility
+service too (screen mirroring), but one that subscribes only to clicks and
+focus, and there the original code already met the budget. The changes made
+(a Compose stability config for the core row types; one shared painter for the
+row's delete icon; cached date formatters; a prefetch window of two viewports ahead and one
+behind, `LazyLayoutCacheWindow`) remove per-row work in both conditions and
+are what moved the benchmark figures.
+
+**Two things the benchmark measures that are not the app:** the first fling in
+a fresh process compiles a Vulkan pipeline (15–67 ms, once), and a warm phone
+throttles — a full ten-minute suite ran at thermal status 2 and gave the
+original code's numbers back. The scroll benchmark therefore flings once,
+unmeasured, before measuring, and figures are only compared at the same
+temperature. "Initial display" is the first frame, which may still be the
+unlock state rather than Home. The Analytics 5Y, SMS-latency and OCR rows are
+instrumented tests, not part of these runs.
 
 **The budget moved again in S13, from 25 MB to 50 MB — ADR-0024**: OpenCV's native library for photographed-page perspective correction measured the split at 42.94 MiB (18.18 before), after the owner chose to add it. **The budget was re-validated at P4 and moved from 15 MB to 25 MB — ADR-0021.**
 The original 15 MB was never measured, because until P4 the build could not
