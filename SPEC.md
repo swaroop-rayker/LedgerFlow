@@ -1720,6 +1720,22 @@ Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — ach
 | SMS → notification latency | ≤ 1.5 s | Instrumented |
 | OCR (single receipt page) | ≤ 2.5 s | Instrumented |
 | APK size (arm64 release split) | ≤ 50 MB | CI check — builds the split and fails if it finds none |
+
+**First measurement, 2026-09-29 (P5 step 1)** — SM-S721B (Android 16, 120 Hz
+panel), `com.ledgerflow.bench` (release code, R8 on, not debuggable), a
+throwaway vault of 2,005 synthetic entries over five years, smsFull only:
+
+| Metric | No profile | Shipped baseline profile | Budget |
+|---|---|---|---|
+| Cold start, time to initial display (median of 10) | 264 ms | **244 ms** | ≤ 700 ms — met |
+| Warm start (median of 10) | 169 ms | **149 ms** | ≤ 250 ms — met |
+| Ledger scroll, frame CPU time P50 / P90 / P99 | 4.0 / 10.2 / 19.4 ms | **2.9 / 6.1 / 13.3 ms** | P99 ≤ 16.6 ms — met with the profile; the 120 Hz 8.3 ms target is **not** met at P99 |
+| Ledger scroll, frame overrun P99 | +12.9 ms | +6.3 ms | late frames remain at P99 on 120 Hz |
+| Memory after the scroll (RSS anon + file) | 138.6 MB | 140.9 MB | ≤ 150 MB PSS — met (RSS bounds PSS from above) |
+
+"Initial display" is the first frame, which may still be the unlock state
+rather than Home; a fully-drawn marker would tighten that figure. The Analytics
+5Y, SMS-latency and OCR rows are instrumented tests, not part of this run.
 | Memory (steady state) | ≤ 150 MB PSS | Macrobenchmark |
 
 **The budget moved again in S13, from 25 MB to 50 MB — ADR-0024**: OpenCV's native library for photographed-page perspective correction measured the split at 42.94 MiB (18.18 before), after the owner chose to add it. **The budget was re-validated at P4 and moved from 15 MB to 25 MB — ADR-0021.**

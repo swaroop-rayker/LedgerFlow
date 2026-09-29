@@ -16,6 +16,33 @@ android {
     defaultConfig {
         applicationId = "com.ledgerflow"
     }
+
+    buildTypes {
+        // What :benchmark measures (P5, SPEC §11). Release's code -- R8 on, not
+        // debuggable, because a debuggable build's timings are not the app's --
+        // signed with the debug key so it installs from a dev box, and its own
+        // application id so it never touches a real install's vault. Its
+        // src/benchmark source set adds the one thing release must never have:
+        // a seed entry point that makes a throwaway vault with synthetic data.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            applicationIdSuffix = ".bench"
+            isDebuggable = false
+            proguardFiles("benchmark-rules.pro")
+        }
+    }
+}
+
+// Benchmarked on smsFull only (owner, 2026-09-29): the flavours share every
+// screen, so a second set of numbers would cost device time and say nothing new.
+androidComponents {
+    beforeVariants { variant ->
+        if (variant.buildType == "benchmark" && variant.flavorName != "smsFull") {
+            variant.enable = false
+        }
+    }
 }
 
 /**

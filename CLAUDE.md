@@ -109,8 +109,11 @@ LedgerFlow/
                                           # Compose stability report -> <module>/build/compose_compiler/
                                           # (quote the -P: PowerShell splits it at the dot otherwise)
 .\gradlew restrictedPermissionCheck       # pins the EXACT permission set per source set (D-04, Law 6)
-.\gradlew :benchmark:connectedBenchmarkAndroidTest  # macrobenchmark
-.\gradlew generateBaselineProfile         # regenerate shipped baseline profile
+.\gradlew :benchmark:connectedSmsFullBenchmarkAndroidTest  # macrobenchmark (phone attached, untouched)
+.\gradlew generateBaselineProfile         # regenerate app/src/main/baseline-prof.txt; review the diff
+                                          # Both run against com.ledgerflow.bench: the `benchmark` build
+                                          # type, release code, seeded by a src/benchmark-only activity
+                                          # with a throwaway vault. Never your real install.
 .\gradlew assemblePlaySafeDebug           # Play-eligible flavour (no RECEIVE_SMS)
 .\gradlew preMergeCheck                   # everything the CI gate runs — builds BOTH flavours
 ```

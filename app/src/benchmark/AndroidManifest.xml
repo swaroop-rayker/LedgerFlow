@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The benchmark build type only (P5). Nothing here reaches debug or release.
+
+  profileable: lets Macrobenchmark read traces from a non-debuggable build
+  without root, which is what makes its numbers the app's rather than a
+  debug build's.
+
+  BenchmarkSeedActivity is exported because the benchmark drives it with
+  `am start` from the shell, which cannot start a non-exported activity. It
+  exists only in com.ledgerflow.bench, an install whose vault is a throwaway
+  under the public BIP-39 test phrase.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+
+        <activity
+            android:name=".bench.BenchmarkSeedActivity"
+            android:exported="true" />
+    </application>
+</manifest>
