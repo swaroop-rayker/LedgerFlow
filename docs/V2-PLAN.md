@@ -80,9 +80,50 @@ supplement**, with the allowlist seeded accordingly (smsFull); playSafe, which
 has no SMS, explains its limit plainly.
 
 ### BUG-C — Home says "Nothing here yet" with entries in the vault
-Seen on the benchmark install (2,005 entries, several today) and on the
-owner's own Home. Not investigated; v2 finds out whether Home's summary reads a
-window, a rollup or a condition that is wrong. Named test once understood.
+**Cause, from the code:** it is not a data bug — Home was never built.
+`DashboardScreen` draws its "Nothing here yet" empty state **unconditionally**
+after the two banners, whatever the vault holds. Its KDoc says the real content
+(recent entries, quick stats, budget rings) would arrive "with the rollup worker
+at P3"; `DashboardUiState` still says "when P3 lands, this class grows fields",
+and holds only the capture-health and backup-reminder state. P3 built the rollup
+worker and Analytics, and Home was never revisited. Seen on the owner's Home and
+on the benchmark install (2,005 entries, several today).
+
+**Recommended fix — Home v1, built entirely from what already exists** (no
+schema change, no new query shapes):
+
+| Order | Card | Source (existing) | Rule it must keep |
+|---|---|---|---|
+| — | Backup reminder, capture-health banner | unchanged | unchanged |
+| 1 | **To review: N** — pending Inbox items, tap → Inbox | the shell's pending count | hidden at zero |
+| 2 | **This month** — *Spent* and *Received* as **two separate figures**, each with Δ vs last month | `GetAnalyticsSnapshotUseCase` for DEBIT and for CREDIT, month window, compare-previous on | Law 2: no net, no balance, no combined total — ever |
+| 3 | **Spent today** (debit) | the same snapshot, day window | debit only |
+| 4 | **Budgets** — the two or three closest to their limit, as `LfBudgetRing`s, tap → Budgets | `snapshot.budgets` (`BudgetProgress`) | debit only (§5.7); hidden when no budgets |
+| 5 | **Coming up** — "₹X of recurring charges due before the 30th" (A10 runway), tap → Analytics | `snapshot.runway` | hidden when nothing is due |
+| 6 | **Recent spending** — the last five debit entries, same row as the Ledger, "See all" → Ledger | the Ledger's DEBIT paged query, limit 5 | one book per list; no mixed list |
+| — | "Nothing here yet" | — | **only** when both books hold no live entries — a real condition, tested |
+
+Design and performance rules for it:
+- Compactness brief: one card shape for the whole screen, figures first, no
+  decorative charts — the ring is the only graphic, and it is small.
+- Home is the start screen, so it pays against §11's cold-start budget: the
+  first frame shows the banners and fixed-height placeholders; the figures load
+  after first frame from `daily_rollup` (cheap by design), sized so nothing
+  jumps when they arrive. `reportFullyDrawn()` fires when they do
+  (`docs/PERF-120HZ-PLAN.md` §6), so startup is measured to a real Home.
+- Font scale 2.0 and RTL: the two monthly figures stack rather than clip (BUG9).
+- The two figures are labelled in words ("Spent", "Received") and announced as
+  such, never distinguished by colour alone (§9.6).
+
+Tests: `BugNN_HomeSummarisesWhenEntriesExist` (a vault with entries never shows
+the empty state; an empty vault always does); `DashboardViewModel` unit tests
+per card, including each card's hidden case; a guard that no Home figure is
+computed from both ledgers (alongside `LedgerIsolationTest`); goldens at 1×
+and 2×, reviewed; the startup benchmark re-run against the new Home.
+
+Open for the owner: whether capture coverage (DATAVIZ-PLAN C1, §7.3's open
+question) earns a Home slot, and whether "Recent" should also offer the Income
+book as a second, separate list.
 
 ---
 
@@ -222,7 +263,7 @@ merchant, spending categories describe the money — and changes nothing else.
 | Phase | Scope | Needs first |
 |---|---|---|
 | V2-0 | Owner decisions D1–D8; ADR-0029 (network), ADR-0030 (FX), ADR for D5 | owner |
-| V2-1 | BUG-A transitions, BUG-B ghost entries + copy, BUG-C Home | D6; ghost-message evidence |
+| V2-1 | BUG-A transitions, BUG-B ghost entries + copy, BUG-C Home v1 | D6; ghost-message evidence; Home card list |
 | V2-2 | Settings destination and restructure (moves only, no new features) | D7 |
 | V2-3 | Appearance, Currency & region, Notifications, App lock, About | D4 |
 | V2-4 | Data & sync: Drive, Import (CSV/XLSX), Restore entry | D1, D8; P5 XLSX |
