@@ -527,8 +527,6 @@ internal object CsvTables {
                 CsvWriter.timestamp(row.deletedAt),
                 row.lastAlertedThreshold.toString(),
                 row.alertPeriodStart.toString(),
-                row.lastAlertedThreshold.toString(),
-                row.alertPeriodStart.toString(),
             )
         },
     )
