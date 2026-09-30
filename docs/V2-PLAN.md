@@ -100,7 +100,9 @@ schema change, no new query shapes):
 | 3 | **Spent today** (debit) | the same snapshot, day window | debit only |
 | 4 | **Budgets** — the two or three closest to their limit, as `LfBudgetRing`s, tap → Budgets | `snapshot.budgets` (`BudgetProgress`) | debit only (§5.7); hidden when no budgets |
 | 5 | **Coming up** — "₹X of recurring charges due before the 30th" (A10 runway), tap → Analytics | `snapshot.runway` | hidden when nothing is due |
-| 6 | **Recent spending** — the last five debit entries, same row as the Ledger, "See all" → Ledger | the Ledger's DEBIT paged query, limit 5 | one book per list; no mixed list |
+| 6 | **Captured automatically** — "72% of this month's spending arrived by itself" (by value; count on the second line), tap → Analytics capture coverage | `CaptureCoverage` (DATAVIZ-PLAN C1, shipped at P3) | debit only; hidden when the month has no spending |
+| 7 | **Recent spending** — the last five debit entries, same row as the Ledger, "See all" → Ledger (Expenses) | the Ledger's DEBIT paged query, limit 5 | one book per list; no mixed list |
+| 8 | **Recent income** — the last five credit entries, its own card, "See all" → Ledger (Income) | the Ledger's CREDIT paged query, limit 5 | a separate list, never interleaved with spending; hidden when the book is empty |
 | — | "Nothing here yet" | — | **only** when both books hold no live entries — a real condition, tested |
 
 Design and performance rules for it:
@@ -121,9 +123,9 @@ per card, including each card's hidden case; a guard that no Home figure is
 computed from both ledgers (alongside `LedgerIsolationTest`); goldens at 1×
 and 2×, reviewed; the startup benchmark re-run against the new Home.
 
-Open for the owner: whether capture coverage (DATAVIZ-PLAN C1, §7.3's open
-question) earns a Home slot, and whether "Recent" should also offer the Income
-book as a second, separate list.
+Decided by the owner (2026-09-30): capture coverage gets a Home slot (card 6,
+closing DATAVIZ-PLAN §7.3's open question), and Recent offers the Income book as
+a second, separate list (card 8).
 
 ---
 

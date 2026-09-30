@@ -348,7 +348,9 @@ small one — BUG9's rule as it applies to a Canvas.
 **7.3 — Where Family C lives.** C1 and C2 are user-facing and belong on
 Analytics. C3–C5 are diagnostics and belong on the P5 diagnostics screen. The
 open question is whether C1 deserves a home-screen slot; it is arguably the most
-*novel* thing the app can show, and burying it on a tab wastes it.
+*novel* thing the app can show, and burying it on a tab wastes it. **Decided
+(owner, 2026-09-30): yes** — a compact Home card, planned in `docs/V2-PLAN.md`
+BUG-C (Home v1, card 6); the full view stays on Analytics.
 
 **7.4 — Materialise item observations?** See §5. Decide at P4, on a measurement.
 
