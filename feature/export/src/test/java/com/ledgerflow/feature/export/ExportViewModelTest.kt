@@ -1,9 +1,12 @@
 package com.ledgerflow.feature.export
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.domain.export.ExportFormat
 import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.export.ExportResult
 import com.ledgerflow.core.domain.usecase.ExportCsvUseCase
+import com.ledgerflow.core.domain.usecase.ExportXlsxUseCase
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -37,7 +40,7 @@ class ExportViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = ExportViewModel(ExportCsvUseCase(export))
+    private fun viewModel() = ExportViewModel(ExportCsvUseCase(export), ExportXlsxUseCase(export))
 
     /**
      * The whole point of the screen: the tap raises the question, and the
@@ -105,8 +108,57 @@ class ExportViewModelTest {
         vm.onEvent(ExportEvent.DestinationChosen("content://docs/export.zip"))
         dispatcher.scheduler.advanceUntilIdle()
 
-        assertThat(export.exported).containsExactly("content://docs/export.zip")
-        assertThat(vm.state.value.status).isEqualTo(ExportStatus.Done(11, 1_482))
+        // Excel is the default format (ADR-0004).
+        assertThat(export.exported).containsExactly("xlsx:content://docs/export.zip")
+        assertThat(vm.state.value.status).isEqualTo(ExportStatus.Done(11, 1_482, ExportFormat.XLSX))
+    }
+
+    @Test
+    fun choosingCsv_writesCsvAndSaysFiles() = runTest(dispatcher) {
+        export.result = ExportResult.Success(fileCount = 21, rowCount = 40)
+        val vm = viewModel()
+
+        vm.onEvent(ExportEvent.FormatSelected(ExportFormat.CSV))
+        vm.onEvent(ExportEvent.DestinationChosen("content://docs/export.zip"))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(export.exported).containsExactly("csv:content://docs/export.zip")
+        assertThat(vm.state.value.status).isEqualTo(ExportStatus.Done(21, 40, ExportFormat.CSV))
+    }
+
+    /**
+     * The file the user just named in the picker has that format's extension, so
+     * the export must be the format the picker was opened for -- not whatever
+     * the control says by the time the export starts.
+     */
+    @Test
+    fun theFormatIsTheOneThePickerWasOpenedFor() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(ExportEvent.FormatSelected(ExportFormat.CSV))
+
+        vm.onEvent(ExportEvent.DestinationChosen("content://docs/export.zip"))
+        vm.onEvent(ExportEvent.FormatSelected(ExportFormat.XLSX))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(export.exported).containsExactly("csv:content://docs/export.zip")
+    }
+
+    @Test
+    fun theFormatCannotChangeWhileAnExportRuns() = runTest(dispatcher) {
+        // Held open until released, so the export is genuinely mid-run.
+        val release = CompletableDeferred<Unit>()
+        export.gate = release
+        val vm = viewModel()
+        vm.onEvent(ExportEvent.DestinationChosen("content://docs/export.xlsx"))
+        dispatcher.scheduler.runCurrent()
+        assertThat(vm.state.value.status).isEqualTo(ExportStatus.Working)
+
+        vm.onEvent(ExportEvent.FormatSelected(ExportFormat.CSV))
+        assertThat(vm.state.value.format).isEqualTo(ExportFormat.XLSX)
+
+        release.complete(Unit)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertThat(vm.state.value.status).isInstanceOf(ExportStatus.Done::class.java)
     }
 
     /**
@@ -178,11 +230,23 @@ class ExportViewModelTest {
 
         val exported: MutableList<String> = mutableListOf()
 
+        /** When set, every export suspends until it completes. */
+        var gate: CompletableDeferred<Unit>? = null
+
         override suspend fun exportCsv(destinationUri: String): ExportResult {
-            exported += destinationUri
+            exported += "csv:$destinationUri"
+            gate?.await()
             return result
         }
 
         override fun suggestedFileName(): String = "LedgerFlow-export-2026-08-21.zip"
+
+        override suspend fun exportXlsx(destinationUri: String): ExportResult {
+            exported += "xlsx:$destinationUri"
+            gate?.await()
+            return result
+        }
+
+        override fun suggestedXlsxFileName(): String = "LedgerFlow-export-2026-08-21.xlsx"
     }
 }

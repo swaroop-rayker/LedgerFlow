@@ -55,6 +55,10 @@ camerax = "1.5.0"
 # entries -- it draws and decodes a matrix, nothing more. The camera it is fed
 # from is CameraX, already here for receipt capture, so no new permission.
 zxing = "3.5.3"
+# ADR-0004: the XLSX export's writer. Writer-only, Apache-2.0, ~130 KB plus
+# opczip (its streaming zip); owner's choice over a hand-rolled SpreadsheetML
+# writer, 2026-09-30. Apache POI stays banned (dex bloat + xmlbeans).
+fastexcel = "0.20.2"
 
 # Persistence & crypto
 room = "2.8.4"
@@ -90,6 +94,7 @@ android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_li
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
 opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+fastexcel = { group = "org.dhatim", name = "fastexcel", version.ref = "fastexcel" }
 # Devanagari, which is the SCRIPT -- ML Kit models are per script, not per
 # language, so this one artifact covers Hindi, Marathi, Nepali, Sanskrit and
 # Konkani. There is no `text-recognition-hindi`; it was probed and does not

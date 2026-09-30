@@ -32,6 +32,27 @@ public interface ExportRepository {
 
     /** `LedgerFlow-export-2026-08-21.zip` — dated, so two exports never collide. */
     public fun suggestedFileName(): String
+
+    /**
+     * Writes one XLSX workbook to [destinationUri] (ADR-0004): monthly totals
+     * and a category × month pivot **per book** — never a netted figure — then
+     * every table as its own sheet, in the CSV export's shape.
+     *
+     * [ExportResult.Success.fileCount] counts the workbook's sheets.
+     */
+    public suspend fun exportXlsx(destinationUri: String): ExportResult
+
+    /** `LedgerFlow-export-2026-09-30.xlsx`. */
+    public fun suggestedXlsxFileName(): String
+}
+
+/** What the user can take the ledger out as (SPEC.md §5.9). */
+public enum class ExportFormat {
+    /** One workbook: summaries first, then every table as a sheet (ADR-0004). */
+    XLSX,
+
+    /** One CSV per table, zipped (ADR-0017). */
+    CSV,
 }
 
 /**
@@ -45,7 +66,7 @@ public interface ExportRepository {
 public sealed interface ExportResult {
 
     /**
-     * @param fileCount how many CSV files the zip holds.
+     * @param fileCount how many CSV files the zip holds, or sheets the workbook holds.
      * @param rowCount total rows across all of them, excluding header lines.
      */
     public data class Success(val fileCount: Int, val rowCount: Int) : ExportResult

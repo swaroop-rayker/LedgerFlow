@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ledgerflow.core.domain.export.ExportFormat
 
 /**
  * The stateful half: hoists the ViewModel and hands the screen state and a
@@ -26,11 +27,13 @@ public fun ExportRoute(onBack: () -> Unit) {
     // the clock, and re-deriving it on every recomposition would let the
     // suggested filename change under the user at midnight while the picker is
     // open.
-    val suggestedFileName = remember { viewModel.suggestedFileName }
+    val suggestedFileNames = remember {
+        ExportFormat.entries.associateWith(viewModel::suggestedFileName)
+    }
 
     ExportScreen(
         state = state,
-        suggestedFileName = suggestedFileName,
+        suggestedFileName = suggestedFileNames.getValue(state.format),
         onEvent = viewModel::onEvent,
         onBack = onBack,
     )

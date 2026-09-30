@@ -29,10 +29,13 @@ import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.export.ExportFormat
 
 /**
- * Export the ledger as zipped CSV (SPEC.md §5.9, ADR-0017).
+ * Export the ledger as one Excel workbook (ADR-0004) or zipped CSV (ADR-0017),
+ * SPEC.md §5.9.
  *
  * Stateless: state in, one event lambda out (CLAUDE.md §5).
  *
@@ -82,7 +85,7 @@ public fun ExportScreen(
                 modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
             ) {
-                CsvFileCard(suggestedFileName)
+                FileCard(state, suggestedFileName, onEvent)
                 state.status.let { status -> StatusCard(status, onEvent) }
             }
         }
@@ -109,13 +112,20 @@ public fun ExportScreen(
  * the whole of the user's protection.
  */
 @Composable
-private fun CsvFileCard(suggestedFileName: String) {
+private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (ExportEvent) -> Unit) {
     LfCard {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            // The format is chosen on the card that describes it, so the
+            // description under the control always answers for the selection.
+            LfSegmentedControl(
+                options = FORMATS.map { it.title },
+                selectedIndex = FORMATS.indexOf(state.format),
+                onSelect = { index -> onEvent(ExportEvent.FormatSelected(FORMATS[index])) },
+            )
             Text(
-                text = "CSV file",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                text = state.format.description,
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textSecondary,
             )
             // `Start`, not the default `Center`: these are facts sitting under a
             // heading, not controls the eye has to find, and centring would
@@ -151,7 +161,7 @@ private fun StatusCard(status: ExportStatus, onEvent: (ExportEvent) -> Unit) {
                     // The counts are the receipt. "Done" alone gives the user no
                     // way to tell a real export from one that wrote empty files.
                     text = "${status.rowCount} ${rowNoun(status.rowCount)} across " +
-                        "${status.fileCount} files.",
+                        "${status.fileCount} ${status.format.containerNoun}.",
                     style = LfTheme.typography.bodyM,
                     color = LfTheme.colors.textSecondary,
                 )
@@ -205,7 +215,7 @@ private fun ExportBar(state: ExportUiState, onEvent: (ExportEvent) -> Unit) {
             ),
     ) {
         LfButton(
-            text = if (state.status == ExportStatus.Working) "Exporting…" else "Export CSV",
+            text = if (state.status == ExportStatus.Working) "Exporting…" else "Export ${state.format.title}",
             modifier = Modifier.fillMaxWidth(),
             loading = state.status == ExportStatus.Working,
             enabled = state.status != ExportStatus.Working,
@@ -258,13 +268,21 @@ private fun DestinationPicker(
     suggestedFileName: String,
     onEvent: (ExportEvent) -> Unit,
 ) {
-    val create = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(ZIP_MIME),
+    // One launcher per format: a CreateDocument contract's MIME type is fixed
+    // at construction, and it is what the picker files the document as.
+    val createXlsx = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(ExportFormat.XLSX.mime),
+    ) { uri -> onEvent(ExportEvent.DestinationChosen(uri?.toString())) }
+    val createCsv = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(ExportFormat.CSV.mime),
     ) { uri -> onEvent(ExportEvent.DestinationChosen(uri?.toString())) }
 
     if (state.pickerRequest) {
         LaunchedEffect(Unit) {
-            create.launch(suggestedFileName)
+            when (state.format) {
+                ExportFormat.XLSX -> createXlsx.launch(suggestedFileName)
+                ExportFormat.CSV -> createCsv.launch(suggestedFileName)
+            }
             onEvent(ExportEvent.PickerLaunched)
         }
     }
@@ -272,7 +290,33 @@ private fun DestinationPicker(
 
 private fun rowNoun(count: Int): String = if (count == 1) "row" else "rows"
 
-private const val ZIP_MIME = "application/zip"
+/** The control's order; XLSX first, as the default. */
+private val FORMATS = listOf(ExportFormat.XLSX, ExportFormat.CSV)
+
+private val ExportFormat.title: String
+    get() = when (this) {
+        ExportFormat.XLSX -> "Excel"
+        ExportFormat.CSV -> "CSV"
+    }
+
+private val ExportFormat.description: String
+    get() = when (this) {
+        ExportFormat.XLSX -> "One workbook. Monthly totals and spending and income by category " +
+            "come first, then every table on its own sheet."
+        ExportFormat.CSV -> "One file per table, zipped. For feeding another tool."
+    }
+
+private val ExportFormat.containerNoun: String
+    get() = when (this) {
+        ExportFormat.XLSX -> "sheets"
+        ExportFormat.CSV -> "files"
+    }
+
+private val ExportFormat.mime: String
+    get() = when (this) {
+        ExportFormat.XLSX -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ExportFormat.CSV -> "application/zip"
+    }
 
 // ── Previews (CLAUDE.md §5) ───────────────────────────────────────────────
 
@@ -284,7 +328,7 @@ private fun ExportPreview() {
     LfTheme {
         ExportScreen(
             state = ExportUiState(),
-            suggestedFileName = "LedgerFlow-export-2026-08-21.zip",
+            suggestedFileName = "LedgerFlow-export-2026-08-21.xlsx",
             onEvent = {},
             onBack = {},
         )
@@ -298,8 +342,10 @@ private fun ExportPreview() {
 private fun ExportDonePreview() {
     LfTheme {
         ExportScreen(
-            state = ExportUiState(status = ExportStatus.Done(fileCount = 11, rowCount = 1_482)),
-            suggestedFileName = "LedgerFlow-export-2026-08-21.zip",
+            state = ExportUiState(
+                status = ExportStatus.Done(fileCount = 24, rowCount = 1_482, format = ExportFormat.XLSX),
+            ),
+            suggestedFileName = "LedgerFlow-export-2026-08-21.xlsx",
             onEvent = {},
             onBack = {},
         )

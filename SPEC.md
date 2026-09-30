@@ -934,7 +934,7 @@ The schema was always currency-tagged, so the storage cost of this is zero. What
 | Artifact | Format | Encryption | Trigger |
 |---|---|---|---|
 | Data export | CSV (one file per table, zipped) — **shipped, ADR-0017** | none (user's choice, warned) | Manual, SAF destination |
-| Data export | XLSX (multi-sheet: entries, line items, categories, merchants, budgets, summary pivots) | none | Manual, SAF destination |
+| Data export | XLSX — **shipped, ADR-0004**: Monthly totals (Spent, Received — no net), Spending by month and Income by month (category × month, one book each), then every table as a sheet | none (user's choice, warned) | Manual, SAF destination — the default format on the Export screen |
 | **Full backup** | `.lfbk` (custom container; **v1 phrase-keyed, v2 sealed to a phrase-derived public key** — ADR-0027) | **AES-256-GCM.** v1's key is `HKDF-SHA256(24-word phrase seed)`; v2's comes from DHKEM(P-256, HKDF-SHA256) to a key only the phrase reproduces. Never a passphrase (§7.2). | **Nightly, unattended (ADR-0027), once enrolled** — plus **manual: "Back up now"** in More, which asks for the 24 words each time, into a user-granted SAF tree (ADR-0025). ~~Nightly `PeriodicWorkRequest`~~ — struck by ADR-0025 because a scheduled job cannot seal a *phrase-derived* `.lfbk`, and **restored by ADR-0027** on a different key: sealed to a public key, so the job needs no secret at all |
 | **Receipt images** | one `.lfba` per attachment, in an `attachments/` subfolder of the same tree (ADR-0023) | AES-256-GCM, key = `HKDF-SHA256(seed, salt = per file, info = "lfbk-attachment-v1")` | Written once per image, alongside a `.lfbk` write |
 
@@ -1040,7 +1040,7 @@ Three properties this format must have, each of which the earlier draft lacked:
 
 Backup is **key-independent of the Android Keystore** — this is what makes cross-device and post-factory-reset restore possible (§7.4).
 
-**XLSX library note:** Apache POI is unusable on Android (dex bloat + xmlbeans). Use `org.dhatim:fastexcel` (writer-only, lightweight) or hand-roll SpreadsheetML into a zip. Decide in ADR-004.
+**XLSX writer — decided, ADR-0004:** `org.dhatim:fastexcel` 0.20.2 (writer-only, Apache-2.0, ~130 KB + `opczip`), owner's choice 2026-09-30; Apache POI stays banned. Summaries read `daily_rollup` one book at a time, so they are Analytics' figures. Money cells are `BigDecimal.valueOf(minor, exponent)` with the currency's own decimal places (`CurrencyExponent`) — never a `Float`/`Double` in the app (Law 3). Verified 2026-09-30 by a real export from release code on the device: 23 sheets, every part parses, totals match the seeded data.
 
 #### CSV export, as shipped (ADR-0017)
 
@@ -1925,7 +1925,7 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | 0001 | Flutter vs Native Compose | ✅ **Accepted** — Native Kotlin + Compose (§2) |
 | 0002 | Separate tables vs partitioned single table for DEBIT/CREDIT ledgers | ✅ **Accepted** — one `ledger_entry` partitioned by a mandatory `ledger` column, read through per-ledger `@DatabaseView`s (§6.1) |
 | 0003 | Key hierarchy & recovery model | ✅ **Accepted** — multi-wrap, phrase-primary (§7.2) |
-| 0004 | XLSX generation library on Android | Open — needed by P5. Unblocked by nothing: the CSV export (ADR-0017) shares no writer with it |
+| 0004 | XLSX generation library on Android | ✅ **Accepted** — `fastexcel` (owner, 2026-09-30); raw tables plus per-book month × category pivots, never a netted figure |
 | 0005 | Charting library | ✅ **Accepted** — **no library**: a hand-rolled Compose `Canvas` layer in `:core:designsystem`. §11's pre-binning rule means a zoom gesture re-queries `daily_rollup` rather than transforming held data, which is the one thing a chart library exists to own; and a Cartesian library covers only 3 of the 7 surfaces (§10, §11) |
 | 0006 | Rollup strategy: incremental triggers vs worker-driven rebuild | ✅ **Accepted** — **recompute, not delta**: a ledger write re-aggregates the `(local_date, ledger)` buckets it touched from the base tables in the same transaction, and the nightly pass is the same routine over every date. Base tables win on disagreement, always (§5.6, `CLAUDE.md` §2 Laws 1 and 2) |
 | 0007 | Ingest source strategy & Play distribution | ✅ **Accepted** — dual co-equal sources, flavour split at P1 (§3.1) |

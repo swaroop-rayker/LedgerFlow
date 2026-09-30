@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.export
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.export.ExportFormat
 
 /**
  * The export screen (SPEC.md §5.9, ADR-0017).
@@ -31,6 +32,13 @@ public data class ExportUiState(
      * behind it -- the same shape `OnboardingScreen` uses for the Recovery Kit.
      */
     val pickerRequest: Boolean = false,
+
+    /**
+     * What the file will be. XLSX first (ADR-0004): it opens as a finished
+     * spreadsheet with the summaries on top, which is what most people want;
+     * CSV stays for anyone feeding another tool.
+     */
+    val format: ExportFormat = ExportFormat.XLSX,
 )
 
 /** Where the export has got to. */
@@ -44,7 +52,12 @@ public sealed interface ExportStatus {
      */
     public data object Working : ExportStatus
 
-    public data class Done(val fileCount: Int, val rowCount: Int) : ExportStatus
+    /** @param fileCount CSV files in the zip, or sheets in the workbook, per [format]. */
+    public data class Done(
+        val fileCount: Int,
+        val rowCount: Int,
+        val format: ExportFormat = ExportFormat.CSV,
+    ) : ExportStatus
 
     /** A sentence, already made readable by the ViewModel. */
     public data class Failed(val message: String) : ExportStatus
@@ -68,4 +81,7 @@ public sealed interface ExportEvent {
 
     /** Clears a finished or failed run so the screen can be used again. */
     public data object StatusDismissed : ExportEvent
+
+    /** The user picked Excel or CSV. Ignored while an export is running. */
+    public data class FormatSelected(val format: ExportFormat) : ExportEvent
 }

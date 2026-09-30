@@ -16,6 +16,10 @@ dependencies {
     // half lives in :core:ui with the camera.
     implementation(libs.zxing.core)
 
+    // The XLSX export's writer (ADR-0004). Writer-only; nothing here reads a
+    // spreadsheet.
+    implementation(libs.fastexcel)
+
     // The layer where Android, crypto and Room types are allowed to meet the
     // domain ports -- and the only one. Everything above sees :core:domain.
     api(project(":core:domain"))

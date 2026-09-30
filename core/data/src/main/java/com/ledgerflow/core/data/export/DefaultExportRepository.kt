@@ -5,7 +5,11 @@ import android.net.Uri
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.database.backup.BackupPayload
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
+import com.ledgerflow.core.database.entity.AppMetaEntity
+import com.ledgerflow.core.model.CurrencyExponent
+import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.export.ExportResult
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -22,7 +26,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
- * Zipped per-table CSV, written to a SAF destination (SPEC.md §5.9, ADR-0017).
+ * Zipped per-table CSV (ADR-0017) or one XLSX workbook (ADR-0004), written to a
+ * SAF destination (SPEC.md §5.9).
  *
  * **Streamed into the document, not staged in a temp file.** That is the
  * opposite of what `DatabaseBackupManager` does, and the difference is
@@ -90,6 +95,62 @@ public class DefaultExportRepository @Inject constructor(
     }
 
     /**
+     * One workbook: per-book summaries, then every table (ADR-0004).
+     *
+     * The same guarantees as [exportCsv] — streamed into the document, never
+     * staged in `filesDir`, truncating, on [io], typed result. The summaries
+     * read `daily_rollup` one book at a time through its ledger-bound query,
+     * so the figures are Analytics' figures and no read mixes the books.
+     */
+    override suspend fun exportXlsx(destinationUri: String): ExportResult = withContext(io) {
+        val database = session.whenUnlocked().first()
+            ?: return@withContext ExportResult.VaultLocked
+
+        runCatching {
+            val payload = DatabaseBackupManager(database).export()
+            val rollups = database.dailyRollupDao()
+            val debit = rollups.allFor(LedgerType.DEBIT)
+            val credit = rollups.allFor(LedgerType.CREDIT)
+            val names = categoryNames(payload)
+            val pivots = listOf(
+                XlsxPivots.monthlyTotals(debit, credit),
+                XlsxPivots.byCategoryAndMonth(XlsxPivots.SPENDING_SHEET, LedgerType.DEBIT, debit, names),
+                XlsxPivots.byCategoryAndMonth(XlsxPivots.INCOME_SHEET, LedgerType.CREDIT, credit, names),
+            )
+            val documents = CsvTables.documents(payload)
+            val baseCurrency = payload.appMeta.firstOrNull { it.key == AppMetaEntity.KEY_BASE_CURRENCY }?.value
+
+            val stream = context.contentResolver.openOutputStream(Uri.parse(destinationUri), "wt")
+                ?: return@runCatching ExportResult.Failure("The chosen location could not be opened")
+
+            val sheets = stream.use { raw ->
+                BufferedOutputStream(raw).use { buffered ->
+                    XlsxWorkbookWriter(baseExponent = CurrencyExponent.of(baseCurrency ?: DEFAULT_CURRENCY))
+                        .write(buffered, pivots, documents)
+                }
+            }
+            ExportResult.Success(fileCount = sheets, rowCount = documents.sumOf { it.rows.size })
+        }.getOrElse { error ->
+            ExportResult.Failure(error.message ?: error::class.simpleName.orEmpty())
+        }
+    }
+
+    /**
+     * Category id -> the name a pivot row shows. A hidden (soft-deleted)
+     * category keeps its history in the rollup, so it keeps a row, marked —
+     * otherwise a hidden "Food" and a live "Food" read as one category twice.
+     */
+    private fun categoryNames(payload: BackupPayload): Map<String, String> =
+        payload.categories.associate { row ->
+            row.id to if (row.deletedAt == 0L) row.name else "${row.name} (hidden)"
+        }
+
+    override fun suggestedXlsxFileName(): String {
+        val today = FILE_DATE.format(Instant.ofEpochMilli(clock.nowMillis()))
+        return "LedgerFlow-export-$today.xlsx"
+    }
+
+    /**
      * Dated, and deliberately not timed.
      *
      * Two exports on one day collide, and SAF's own picker resolves that by
@@ -103,6 +164,9 @@ public class DefaultExportRepository @Inject constructor(
     }
 
     private companion object {
+        /** What onboarding defaults to (§0); used only if the vault somehow records none. */
+        private const val DEFAULT_CURRENCY = "INR"
+
         /**
          * Device zone, unlike the ISO columns inside the files.
          *
