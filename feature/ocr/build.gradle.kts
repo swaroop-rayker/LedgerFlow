@@ -2,13 +2,35 @@ import java.util.Properties
 
 plugins {
     id("ledgerflow.android.feature")
+    // §12: this module's screens have goldens (P5 step 4).
+    alias(libs.plugins.roborazzi)
 }
 
 android {
     namespace = "com.ledgerflow.feature.ocr"
+
+    testOptions.unitTests {
+        // Robolectric needs the merged resources and the manifest to compose
+        // anything; see :core:ui for the reasoning.
+        isIncludeAndroidResources = true
+
+        // Forwarded, not hardcoded -- see :core:designsystem for why.
+        all { test ->
+            listOf(
+                "javax.net.ssl.trustStore",
+                "javax.net.ssl.trustStorePassword",
+            ).forEach { key ->
+                System.getProperty(key)?.let { test.systemProperty(key, it) }
+            }
+        }
+    }
 }
 
 dependencies {
+    // The shared screenshot harness and its accessibility checks (P5 step 4).
+    testImplementation(project(":core:testing"))
+    testImplementation(libs.androidx.compose.ui.test.manifest)
+
     // ── OCR (ADR-0021) ───────────────────────────────────────────────────────
     // The BUNDLED recognizer. The model ships inside the APK, so recognition
     // works with no network and on a device with no Play Services -- which is

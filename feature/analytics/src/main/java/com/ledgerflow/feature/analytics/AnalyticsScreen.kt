@@ -3,6 +3,8 @@ package com.ledgerflow.feature.analytics
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +42,7 @@ import com.ledgerflow.core.designsystem.chart.LfTreemap
 import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
@@ -394,30 +397,35 @@ private fun ParserGapRow(gap: ParserGap, currency: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = gap.name,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "${gap.manualCount} of ${gap.totalCount} typed by hand",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        // The amount never truncates (BUG9): a shortened merchant name is
-        // recoverable, a shortened figure is a wrong number on screen.
-        Text(
-            text = MoneyFormat.symbolised(gap.manualAmount.minor, currency),
-            style = LfTheme.typography.amountM,
-            color = LfTheme.colors.textPrimary,
-            maxLines = 1,
-            softWrap = false,
+        // The amount never truncates (BUG9), and since P5 step 4 the name does
+        // not either: it drops the amount below it instead of being squeezed.
+        LfAdaptiveRow(
+            modifier = Modifier.weight(1f),
+            leading = {
+                Column {
+                    Text(
+                        text = gap.name,
+                        style = LfTheme.typography.bodyM,
+                        color = LfTheme.colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "${gap.manualCount} of ${gap.totalCount} typed by hand",
+                        style = LfTheme.typography.label,
+                        color = LfTheme.colors.textSecondary,
+                    )
+                }
+            },
+            trailing = {
+                Text(
+                    text = MoneyFormat.symbolised(gap.manualAmount.minor, currency),
+                    style = LfTheme.typography.amountM,
+                    color = LfTheme.colors.textPrimary,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            },
         )
     }
 }
@@ -515,9 +523,7 @@ private fun RunwaySummary(snapshot: AnalyticsSnapshot, currency: String) {
         softWrap = false,
     )
     Text(
-        // "expected", not "due": these are detected patterns, not a schedule
-        // the app has been told about.
-        text = "${snapshot.runway.size} recurring charges expected",
+        text = runwayCountLabel(snapshot.runway.size),
         style = LfTheme.typography.label,
         color = LfTheme.colors.textSecondary,
     )
@@ -525,6 +531,14 @@ private fun RunwaySummary(snapshot: AnalyticsSnapshot, currency: String) {
         RecurringRow(merchant = merchant, currency = currency)
     }
 }
+
+/**
+ * The runway's count line. "expected", not "due": these are detected patterns,
+ * not a schedule the app has been told about. Singular for one (BUG40 — it read
+ * "1 recurring charges expected").
+ */
+internal fun runwayCountLabel(count: Int): String =
+    if (count == 1) "1 recurring charge expected" else "$count recurring charges expected"
 
 @Composable
 private fun RecurringRow(merchant: RecurringMerchant, currency: String) {
@@ -535,27 +549,39 @@ private fun RecurringRow(merchant: RecurringMerchant, currency: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = merchant.name,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "about every ${merchant.intervalDays} days",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
-                maxLines = 1,
-            )
-        }
+        LfAdaptiveRow(
+            modifier = Modifier.weight(1f),
+            leading = { RecurringName(merchant) },
+            trailing = {
+                Text(
+                    text = MoneyFormat.symbolised(merchant.typicalAmount.minor, currency),
+                    style = LfTheme.typography.amountM,
+                    color = LfTheme.colors.textSecondary,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            },
+        )
+    }
+}
+
+/** A recurring merchant's name and interval -- the leading half of [RecurringRow]. */
+@Composable
+private fun RecurringName(merchant: RecurringMerchant) {
+    Column {
         Text(
-            text = MoneyFormat.symbolised(merchant.typicalAmount.minor, currency),
-            style = LfTheme.typography.amountM,
-            color = LfTheme.colors.textSecondary,
+            text = merchant.name,
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.textPrimary,
             maxLines = 1,
-            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // May wrap: with one line and no ellipsis, font scale 2.0 cut it
+        // to "about every" -- the number was the part that went.
+        Text(
+            text = "about every ${merchant.intervalDays} days",
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textTertiary,
         )
     }
 }
@@ -670,12 +696,14 @@ private fun SectionCard(title: String?, content: @Composable () -> Unit) {
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
             if (title != null) {
+                // Wraps, never ellipsises: at font scale 2.0 "By payment method"
+                // and "Usually typed by hand" were cut to "By payment meth..."
+                // (P5 step 4's goldens). A heading is allowed to wrap; BUG17's
+                // rule is only that it breaks between words, which these do.
                 Text(
                     text = title,
                     style = LfTheme.typography.titleM,
                     color = LfTheme.colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             content()
@@ -690,16 +718,22 @@ private fun SectionCard(title: String?, content: @Composable () -> Unit) {
  * preference: the two books answer different questions and their difference
  * answers neither. Two lines, each labelled, each absolute.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BookTotals(snapshot: AnalyticsSnapshot, currency: String) {
     val inTotal = snapshot.parallelBooks.sumOf { it.credit.minor }
     val outTotal = snapshot.parallelBooks.sumOf { it.debit.minor }
-    Row(
+    // A flow, not two weighted halves: each figure keeps its natural width,
+    // and when both do not fit, "Out" moves to its own line whole. The halves
+    // cut both totals to "₹88,600." at font scale 2.0 -- an amount must never
+    // lose digits (P5 step 4's goldens). Still two figures, never a third.
+    FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
     ) {
-        BookTotal("In", inTotal, currency, LfTheme.colors.credit, Modifier.weight(1f))
-        BookTotal("Out", outTotal, currency, LfTheme.colors.debit, Modifier.weight(1f))
+        BookTotal("In", inTotal, currency, LfTheme.colors.credit)
+        BookTotal("Out", outTotal, currency, LfTheme.colors.debit)
     }
 }
 
@@ -907,16 +941,29 @@ private fun DimensionRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
-        LfCategoryDot(name = total.name, colorArgb = color.toArgb())
-        Text(
-            text = total.name,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        // Name beside the amount, or above it when both will not fit: at font
+        // scale 2.0 the weighted name was squeezed to "Groc..." (P5 step 4).
+        // The dot is part of the name, so on a stacked row it stays beside
+        // the name rather than centring between the name and the amount.
+        LfAdaptiveRow(
             modifier = Modifier.weight(1f),
+            leading = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                ) {
+                    LfCategoryDot(name = total.name, colorArgb = color.toArgb())
+                    Text(
+                        text = total.name,
+                        style = LfTheme.typography.bodyM,
+                        color = LfTheme.colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            },
+            trailing = { DeltaAndAmount(total = total, currency = currency) },
         )
-        DeltaAndAmount(total = total, currency = currency)
     }
 }
 

@@ -413,3 +413,68 @@ private fun DeletedEntry.spokenAs(title: String, stamp: String, selected: Boolea
 
 private const val BIN_ROW_TYPE = "binned"
 private const val BIN_SEPARATOR = " · "
+
+// ── Previews (CLAUDE.md §5) ───────────────────────────────────────────────
+//
+// Missing until P5 step 4, though the annotations were already imported. The
+// bin is the one screen that shows both books (ADR-0015), so the preview does.
+
+private const val PREVIEW_NOW = 1_787_000_000_000L
+private const val PREVIEW_DAY = 86_400_000L
+
+private val previewBinned = listOf(
+    DeletedEntry(
+        id = "b1",
+        ledger = LedgerType.DEBIT,
+        amount = Money(1_240_50),
+        currency = "INR",
+        occurredAt = PREVIEW_NOW - 2 * PREVIEW_DAY,
+        deletedAt = PREVIEW_NOW - PREVIEW_DAY,
+        categoryName = "Groceries",
+        categoryColorArgb = 0xFF3E6AD6.toInt(),
+        subcategoryName = "Staples",
+        merchantName = "Big Bazaar",
+        note = null,
+    ),
+    DeletedEntry(
+        id = "b2",
+        ledger = LedgerType.CREDIT,
+        amount = Money(2_400_00),
+        currency = "INR",
+        occurredAt = PREVIEW_NOW - 5 * PREVIEW_DAY,
+        deletedAt = PREVIEW_NOW - PREVIEW_DAY,
+        categoryName = "Interest",
+        categoryColorArgb = 0xFF3E6AD6.toInt(),
+        subcategoryName = null,
+        merchantName = null,
+        note = null,
+    ),
+)
+
+@PreviewScreenSizes
+@PreviewFontScale
+@PreviewLightDark
+@Composable
+private fun BinPreview() {
+    LfTheme {
+        BinScreen(
+            state = BinUiState(
+                entries = previewBinned,
+                selected = setOf(previewBinned.first().selectionKey()),
+                isLoaded = true,
+            ),
+            onEvent = {},
+            onBack = {},
+        )
+    }
+}
+
+/** The state most users see: nothing deleted. */
+@PreviewFontScale
+@PreviewLightDark
+@Composable
+private fun BinEmptyPreview() {
+    LfTheme {
+        BinScreen(state = BinUiState(isLoaded = true), onEvent = {}, onBack = {})
+    }
+}

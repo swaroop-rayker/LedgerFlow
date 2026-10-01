@@ -125,6 +125,42 @@ public object LfAxisTicks {
         }
     }
 
+    /**
+     * Of the labels [labelledIndices] chose, the ones that can be drawn without
+     * overlapping, given where each will actually sit.
+     *
+     * [spans] are the labels' horizontal extents in drawing order, **after**
+     * the chart has clamped the first and last inside the plot — clamping is
+     * what pushes an end label inward onto its neighbour. Returns positions in
+     * [spans] to draw.
+     *
+     * The first is always kept: it states where the range starts. The last is
+     * kept in preference to the label before it, since it states where the
+     * range ends; if even the first and last collide, only the first is drawn.
+     * Anything closer than [gapPx] to the label before it is dropped.
+     *
+     * BUG41: [labelsThatFit] estimates from one width and returns at least two,
+     * so on Analytics at font scale 2.0 — half the plot taken by the money
+     * gutter — "21 Jul" and "19 Aug" were both chosen and drawn over each
+     * other. Lowering that floor instead also dropped labels that fitted
+     * (`chart-stacked-2x` lost "12 Aug"), so the answer is measured here, on
+     * real positions, rather than estimated there.
+     */
+    public fun withoutOverlaps(spans: List<ClosedFloatingPointRange<Float>>, gapPx: Float): Set<Int> {
+        if (spans.isEmpty()) return emptySet()
+        val kept = mutableListOf(0)
+        fun clearOf(i: Int): Boolean = spans[i].start >= spans[kept.last()].endInclusive + gapPx
+        for (i in 1 until spans.size - 1) {
+            if (clearOf(i)) kept += i
+        }
+        val last = spans.size - 1
+        if (last > 0) {
+            while (kept.size > 1 && !clearOf(last)) kept.removeAt(kept.size - 1)
+            if (clearOf(last)) kept += last
+        }
+        return kept.toSet()
+    }
+
     private const val DEFAULT_TARGET = 4
 
     /**

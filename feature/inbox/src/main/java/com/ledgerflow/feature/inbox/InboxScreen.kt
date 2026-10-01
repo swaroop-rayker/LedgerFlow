@@ -38,6 +38,7 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
@@ -459,26 +460,29 @@ private fun RowBody(
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
-    Row(
+    // Payee beside the amount, or above it when both will not fit: at font
+    // scale 2.0 the payee was squeezed to "BIG BA..." (P5 step 4).
+    LfAdaptiveRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = row.title(),
-            style = LfTheme.typography.bodyL,
-            color = LfTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false).padding(end = LfTheme.spacing.sm),
-        )
-        Text(
-            text = row.amountLabel(),
-            style = LfTheme.typography.amountM,
-            color = row.amountColor(),
-            maxLines = 1,
-        )
-    }
+        leading = {
+            Text(
+                text = row.title(),
+                style = LfTheme.typography.bodyL,
+                color = LfTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        trailing = {
+            Text(
+                text = row.amountLabel(),
+                style = LfTheme.typography.amountM,
+                color = row.amountColor(),
+                maxLines = 1,
+                softWrap = false,
+            )
+        },
+    )
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -494,7 +498,7 @@ private fun RowBody(
         // 2.0 (BUG9).
         Text(
             // The stamp leads, and that ordering is the whole decision: this
-            // line is `maxLines = 1` and shares the row with the actions, so
+            // line is short of room and shares the row with the actions, so
             // something gets ellipsised on a long one. Putting when-it-happened
             // first means the account number is what goes, which is the least
             // useful of the three and the one still visible on the review
@@ -502,7 +506,9 @@ private fun RowBody(
             text = row.detailLine(),
             style = LfTheme.typography.label,
             color = LfTheme.colors.textTertiary,
-            maxLines = 1,
+            // Two lines, not one: at font scale 2.0 one line cut the stamp to
+            // "19 Aug, 9:..." -- the hour went before the account number did.
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(end = LfTheme.spacing.sm),
         )

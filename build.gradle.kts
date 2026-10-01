@@ -41,6 +41,67 @@ plugins {
  * A regex is cruder than type resolution, but a crude gate that runs beats a
  * sophisticated one that does not. Revisit when detekt supports AGP 9.
  */
+/**
+ * **CLAUDE.md §3's dependency rule, enforced** (P5 step 4, 2026-10-01).
+ *
+ * §3 described this rule as "enforced by a Gradle check" for months while no
+ * such check existed; it held only because nobody broke it. Production
+ * (non-test) project dependencies only:
+ *
+ * - a `:feature:*` module depends on no other `:feature:*` module;
+ * - `:core:model` depends on no project; `:core:domain` only on `:core:model`
+ *   and `:core:common` (its one AndroidX carve-out, ADR-0014, is a library);
+ * - no `:core:*` module depends on a `:feature:*` module or on `:app`;
+ * - nothing outside tests depends on `:core:testing`.
+ *
+ * Read from each project's *declared* dependencies once every project is
+ * evaluated, and captured as plain strings so the configuration cache can store
+ * the task. Test configurations (`test*`, `androidTest*`, `*Test*`) are skipped:
+ * a feature's tests may use `:core:testing`, which is the point of it.
+ */
+val moduleEdges = mutableListOf<String>()
+gradle.projectsEvaluated {
+    rootProject.subprojects.forEach { project ->
+        project.configurations
+            .filterNot { "test" in it.name.lowercase() }
+            .forEach { configuration ->
+                configuration.dependencies.withType<ProjectDependency>().forEach { dependency ->
+                    moduleEdges += "${project.path} ${dependency.path} ${configuration.name}"
+                }
+            }
+    }
+}
+
+tasks.register("moduleDependencyRuleCheck") {
+    group = "verification"
+    description = "Fails on a dependency CLAUDE.md §3 forbids (features on features, core on features, ...)."
+    val edges = moduleEdges
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val violations = edges.distinct().mapNotNull { edge ->
+            val (from, to, configuration) = edge.split(" ")
+            val why = when {
+                from.startsWith(":feature:") && to.startsWith(":feature:") ->
+                    "features never depend on features; shared code belongs in :core:*"
+                from == ":core:model" -> ":core:model depends on nothing"
+                from == ":core:domain" && to !in setOf(":core:model", ":core:common") ->
+                    ":core:domain depends on :core:model and :core:common only (ADR-0014)"
+                from.startsWith(":core:") && (to.startsWith(":feature:") || to == ":app") ->
+                    "core modules never depend on features or the app"
+                to == ":core:testing" -> ":core:testing is for tests only"
+                else -> null
+            }
+            why?.let { "$from -> $to ($configuration): $it" }
+        }
+        if (violations.isNotEmpty()) {
+            violations.forEach { logger.error("::error::$it") }
+            throw GradleException("moduleDependencyRuleCheck found ${violations.size} violation(s).")
+        }
+        logger.lifecycle("moduleDependencyRuleCheck: ${edges.distinct().size} edges, clean.")
+    }
+}
+
 tasks.register("bannedApiCheck") {
     group = "verification"
     description = "Fails on `!!` and cacheDir outside tests (CLAUDE.md §2 Laws 5 and 7)."
@@ -277,6 +338,7 @@ tasks.register("preMergeCheck") {
         .map { it.path }
 
     dependsOn("bannedApiCheck")
+    dependsOn("moduleDependencyRuleCheck")
     dependsOn("restrictedPermissionCheck")
     // The merged-manifest half of the permission rule (see EXPECTED_PERMISSIONS'
     // docs). All four variants: `release` is what ships, and `debug` is what is

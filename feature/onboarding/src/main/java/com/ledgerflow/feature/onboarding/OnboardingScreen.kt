@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -175,7 +176,9 @@ private fun primaryActionOf(
     )
 
     OnboardingStep.PhraseDisplay -> PrimaryAction(
-        label = "I've written them down",
+        // Seventeen characters, so it fits a phone at font scale 2.0 (BUG44:
+        // "I've written them down" was clipped to "I've written them do").
+        label = "I wrote them down",
         enabled = state.phraseRevealed,
         loading = false,
         onClick = { onEvent(OnboardingEvent.PhraseAcknowledged) },
@@ -310,6 +313,10 @@ private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // A full-size target (BUG43): the radio has no onClick, so
+                        // it brings no 48 dp minimum, and this row is a choice the
+                        // user cannot change later (CLAUDE.md §0).
+                        .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
                         .selectable(
                             selected = selected,
                             onClick = { onEvent(OnboardingEvent.CurrencySelected(currency.code)) },
@@ -440,8 +447,11 @@ private fun RecoveryKitStep(onEvent: (OnboardingEvent) -> Unit) {
         onClick = { onEvent(OnboardingEvent.RecoveryKitRequested(RecoveryKitFormat.Text)) },
         style = LfButtonStyle.Tonal,
     )
+    // "Skip the kit", not "Skip — I've written them down": the long form needed
+    // 405 dp at font scale 2.0 and was clipped (BUG44). Skipping still raises
+    // the explicit warning before anything is dismissed.
     LfButton(
-        text = "Skip — I've written them down",
+        text = "Skip the kit",
         onClick = { onEvent(OnboardingEvent.RecoveryKitDismissed) },
         style = LfButtonStyle.Text,
     )

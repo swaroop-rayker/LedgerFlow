@@ -2,7 +2,8 @@ package com.ledgerflow.core.ui.phrase
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.runtime.Composable
@@ -87,26 +88,28 @@ public fun LfPhraseEntry(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EnteredWords(words: List<String>, onWordRemove: (Int) -> Unit) {
     if (words.isEmpty()) return
-    // A flow layout would be prettier; a column of rows is what survives a 2.0x
-    // font scale without a chip being clipped mid-word (§9.6).
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-        words.chunked(WORDS_PER_ROW).forEachIndexed { rowIndex, row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-                row.forEachIndexed { columnIndex, word ->
-                    val position = rowIndex * WORDS_PER_ROW + columnIndex
-                    LfChip(
-                        label = word,
-                        leading = "${position + 1}",
-                        style = LfChipStyle.Selected,
-                        contentDescription = "Word ${position + 1}, $word. Tap to remove.",
-                        onClick = { onWordRemove(position) },
-                        modifier = Modifier.phraseSecret(),
-                    )
-                }
-            }
+    // A flow of whole chips (BUG42). This was fixed rows of three, on the
+    // belief that rows survive font scale 2.0 better; at phone width the third
+    // chip of a row was given zero width and the word vanished. A chip's label
+    // never wraps (BUG9), so the flow moves whole chips to the next line and
+    // none is clipped -- in reading order, so "Word 4" still follows "Word 3".
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+    ) {
+        words.forEachIndexed { position, word ->
+            LfChip(
+                label = word,
+                leading = "${position + 1}",
+                style = LfChipStyle.Selected,
+                contentDescription = "Word ${position + 1}, $word. Tap to remove.",
+                onClick = { onWordRemove(position) },
+                modifier = Modifier.phraseSecret(),
+            )
         }
     }
 }
@@ -129,4 +132,3 @@ private fun Suggestions(suggestions: List<String>, onSuggestionTap: (String) -> 
     }
 }
 
-private const val WORDS_PER_ROW = 3

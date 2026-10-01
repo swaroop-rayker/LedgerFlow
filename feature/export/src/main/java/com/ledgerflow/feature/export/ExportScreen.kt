@@ -133,7 +133,9 @@ private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (
             // `LfActionRow` so they wrap as whole chips at font scale 2.0 rather
             // than breaking a label (BUG9).
             LfActionRow(alignment = LfActionAlignment.Start) {
-                LfChip(label = "Opens in any spreadsheet")
+                // Short enough for font scale 2.0 (BUG44: "Opens in any
+                // spreadsheet" needed 321 dp of a 248 dp chip and was clipped).
+                LfChip(label = "Any spreadsheet")
                 LfChip(label = "Not encrypted", style = LfChipStyle.Warning)
             }
             Text(

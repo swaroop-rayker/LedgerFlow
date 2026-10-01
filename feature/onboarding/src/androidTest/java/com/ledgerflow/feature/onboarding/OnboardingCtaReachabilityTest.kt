@@ -85,7 +85,7 @@ class OnboardingCtaReachabilityTest {
                 mnemonic = List(24) { PLACEHOLDER_WORD },
                 phraseRevealed = true,
             ),
-            "I've written them down",
+            "I wrote them down",
         )
     }
 

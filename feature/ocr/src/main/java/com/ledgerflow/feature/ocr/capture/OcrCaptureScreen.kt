@@ -109,26 +109,19 @@ public fun OcrCaptureScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         ) {
+            // Back on its own band above the title, as Diagnostics and Restore
+            // place it (BUG17), rather than floating under the cards.
+            LfActionRow(
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+                alignment = LfActionAlignment.Start,
+            ) {
+                LfButton(text = "Back", style = LfButtonStyle.Inline, onClick = onBack)
+            }
             LfScreenTitle(title = "Scan a receipt")
 
-            Viewfinder(state = state, onEvent = onEvent)
-
-            state.result?.let {
-                ResultCard(
-                    summary = it,
-                    canSave = state.canSave,
-                    saved = state.saved != null,
-                    onEvent = onEvent,
-                )
-            }
-            state.failure?.let { FailureCard(it) }
-            // An inline card rather than a snackbar, matching FailureCard
-            // above: the user is scanning a stack, and "the last one landed"
-            // is worth keeping on screen while they line up the next.
-            state.saved?.let { SavedCard(it) }
-
-            ImportRow(
-                enabled = state.canImport,
+            CaptureContent(
+                state = state,
+                onEvent = onEvent,
                 onGallery = {
                     galleryLauncher.launch(
                         androidx.activity.result.PickVisualMediaRequest(
@@ -138,11 +131,44 @@ public fun OcrCaptureScreen(
                 },
                 onDocument = { documentLauncher.launch(IMPORT_MIME_TYPES) },
             )
-
-            LfActionRow(alignment = LfActionAlignment.Start) {
-                LfButton(text = "Back", style = LfButtonStyle.Text, onClick = onBack)
-            }
         }
+    }
+}
+
+/**
+ * Everything under the title: the camera, what it read, and the import row.
+ *
+ * Inset like every other screen's cards. They ran edge to edge here, the one
+ * screen that did, under a title inset by `lg` (P5 step 4).
+ */
+@Composable
+private fun CaptureContent(
+    state: OcrCaptureUiState,
+    onEvent: (OcrCaptureEvent) -> Unit,
+    onGallery: () -> Unit,
+    onDocument: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+    ) {
+        Viewfinder(state = state, onEvent = onEvent)
+
+        state.result?.let {
+            ResultCard(
+                summary = it,
+                canSave = state.canSave,
+                saved = state.saved != null,
+                onEvent = onEvent,
+            )
+        }
+        state.failure?.let { FailureCard(it) }
+        // An inline card rather than a snackbar, matching FailureCard above:
+        // the user is scanning a stack, and "the last one landed" is worth
+        // keeping on screen while they line up the next.
+        state.saved?.let { SavedCard(it) }
+
+        ImportRow(enabled = state.canImport, onGallery = onGallery, onDocument = onDocument)
     }
 }
 

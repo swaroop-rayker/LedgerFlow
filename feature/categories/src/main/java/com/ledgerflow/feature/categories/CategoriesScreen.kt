@@ -128,7 +128,10 @@ private fun AddBar(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit)
     val label = when (state.section) {
         TaxonomySection.Categories -> "Add category"
         TaxonomySection.Merchants -> "Add merchant"
-        TaxonomySection.PaymentMethods -> "Add payment method"
+        // "Add method", not "Add payment method": under the Payment tab the
+        // noun is already said, and the long form was clipped at font scale
+        // 2.0 (BUG44).
+        TaxonomySection.PaymentMethods -> "Add method"
     }
     // Tighter vertically than horizontally, deliberately. A uniform `lg` inset
     // put 24dp above the button and 24dp below it, and `LfScaffold` already

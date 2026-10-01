@@ -1634,6 +1634,11 @@ the phrase the user has just replaced.
 | **BUG37** — a nightly pass killed mid-way lost the whole night | Found on 2026-09-27 from the idle playSafe test copy's WorkManager record, with no log. Its pass had started and re-aimed itself at the next day, but never finished (`period_count = 0`, `run_attempt_count = 1`, `stop_reason = STOP_REASON_UNKNOWN`, which is what a process killed mid-pass leaves). BUG31's fix re-aimed **first**, on the argument that a pass which dies should already point at tomorrow. That was backwards: a killed pass had already said "tomorrow", WorkManager honours the override before any backoff, and nothing retried it that night. | (a) The pass re-aims **last**, after it completes, whether by success, skip or recorded failure. A killed pass keeps tonight's aim, which is already due, so it runs again in the next window the same night. (b) **A cap:** after three interrupted attempts since the last completed pass (WorkManager's own `runAttemptCount`), the next start gives up until tomorrow without backing up, so a pass that is killed every time does not retry all night. No new stored state. | `Bug31_NightlyBackupStaysAnchoredTest` (Robolectric, real WorkManager): `Bug37_aPassKilledMidBackup_isRetriedTheSameNight_notTomorrow` (due tonight, one attempt counted) replaces the 09-23 case that asserted the opposite. `Bug37_afterThreeInterruptedAttempts_itWaitsForTomorrow` (three real attempts, the fourth aims at tomorrow, the count resets) states the owner's number rather than reading the constant, because reading it let a mutation to a cap of one pass. Mutation-swept: the old order, no cap, a cap of one and never re-aiming each turn a named case red. **On the device:** read `run_attempt_count` and `stop_reason` in `no_backup/androidx.work.workdb` each morning (`TESTING.md` D12); no overnight cable is needed. |
 | **BUG38** — receipt OCR failed in every release build | Found 2026-09-29 while benchmarking the `benchmark` build type (release code): the app's log showed `NoSuchMethodException: CommonComponentRegistrar.<init>` at startup. ML Kit starts through Firebase component discovery, which instantiates each `ComponentRegistrar` reflectively by its no-argument constructor. `firebase-components` 16.1.0 ships `-keep class * implements ComponentRegistrar` with no member list, and in R8 full mode (AGP's default) that keeps the class but not its constructor, so R8 removed it. The first recognition then threw a `NullPointerException`. Debug is not shrunk, so no build the owner had ever used showed it, and every OCR test runs unshrunk code. | `app/proguard-rules.pro`, now applied to release (and inherited by `benchmark`): `-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }`. Giving release a rules file also made R8 report Jetpack WindowManager's device-supplied extension classes as missing, so the two `-dontwarn` lines R8 itself generated sit beside it. | `Bug38_OcrWorksInAShrunkBuildTest` (`:benchmark`, device): launches `OcrProbeActivity` (benchmark build type only) in `com.ledgerflow.bench`, release code under release's R8 rules, and requires the app's own `ReceiptTextRecognizer` to read a drawn "TOTAL 245.00". **Mutation-checked on the device:** without the keep rule it reports `OCR failed: NullPointerException` and the test is red; with it, `OCR ok: TOTAL 245.00`. |
 | **BUG39** — every `budget.csv` row carried two unlabelled extra cells | Found 2026-09-30 while reading the CSV tables to reuse them for XLSX (P5 step 2). `ba441c0` added `last_alerted_threshold` and `alert_period_start` to the budget document and wrote each value twice, so 13 headers sat over 15 cells. Nothing checked a row's width: `ExportCoversEveryTableTest` exports an **empty** payload, where no row exists to be the wrong width. | The two duplicated cells removed. | `Bug39_EveryCsvRowIsAsWideAsItsHeaderTest` exports a payload with one fully populated row in **every** table, built from `BackupPayload`'s serial descriptors rather than by hand (so a later table or column is covered without editing the test), and requires every row to match its header. Red before the fix with exactly "budget.csv: a row has 15 cells for 13 headers"; every other table passed. |
+| **BUG40** — "1 recurring charges expected" | Found 2026-10-01 in P5 step 4's first Analytics golden, whose fixture had one charge due. The runway card counted its charges into a fixed plural, so the most common runway — one subscription — read wrongly. | `runwayCountLabel`: singular for one. | `Bug40_OneRecurringChargeIsSingularTest` (JVM). Red with the old always-plural wording, green with the fix. |
+| **BUG41** — two axis dates drawn on top of each other ("21 Jul19 Aug") | Found 2026-10-01 in Analytics' 2.0 golden. Inside its card, the money gutter takes half the time chart's plot. `LfAxisTicks.labelsThatFit` estimates from one label width and returns **at least two**, so both end dates were chosen and then clamped into the same space. A first fix lowered that floor to one, and it also dropped "12 Aug" from `chart-stacked-2x`, where both labels fitted. So the estimate was the wrong place to fix it. | `LfAxisTicks.withoutOverlaps`: the chosen labels are placed where they will actually sit, after clamping, and any that would touch the label before it is skipped. The first is always kept, and the last is preferred over its neighbour. `labelsThatFit` is unchanged. | `LfAxisTicksTest`: `Bug41_endLabelsClampedOntoEachOther_onlyTheFirstIsDrawn`, `Bug41_labelsThatFit_areAllDrawn` (the case the first fix broke), and two more. Mutation-checked: drawing every chosen label turns the two overlap cases red. Every existing chart golden is unchanged, so "1 Aug / 12 Aug" survives. |
+| **BUG42** — at font scale 2.0 every third word of the phrase vanished | Found 2026-10-01 by P5 step 4's touch-target check on "Back up now": the third word chip was laid out **0 × 54 dp**. `LfPhraseEntry` put the entered words in fixed rows of three, on the stated belief that rows "survive a 2.0x font scale". At phone width two chips filled the row, and the third got no width at all. That entry is shared by "Back up now", Recovery and restore, so a person typing their 24 words at large text could not see every third one. | A `FlowRow` of whole chips, in reading order. Chip labels never wrap (BUG9), so an overflowing chip moves to the next line instead of shrinking. | `Bug42_EveryEnteredWordIsVisibleAtLargeTextTest` (Robolectric, 4 cases at the widths hosts actually give it: 312 dp and 280 dp). **Two harness lessons on the way:** a version at full screen width passed on the unfixed code, and so did one without `GraphicsMode.NATIVE`, under which text measures zero wide and every chip came out 48 dp. With both corrected it failed on all three 2.0 cases and passes fixed. |
+| **BUG43** — the base-currency list and restore's backup list were rows too small to choose from safely | Found 2026-10-01 by P5 step 4's touch-target check at font scale 1.0. Each currency was a 40 dp row flush against the next. Each backup was a 24 dp row with 4 dp gaps, right above two buttons. Both rows carry a `RadioButton` with `onClick = null`. That is right for TalkBack, which then reads the row once, but it drops Material's 48 dp minimum, so the row shrank to its content. These two choices cost more than an ordinary mis-tap: the base currency is fixed once chosen (CLAUDE.md §0), and the chosen backup is the one restored. | `defaultMinSize(minHeight = minTouchTarget)` on both rows. | `Bug43_FirstRunChoiceRowsAreFullSizeTargetsTest` (Robolectric, both lists). Red before the fix with heights 40 dp and 24 dp. |
+| **BUG44** — five control labels clipped at font scale 2.0 | Found 2026-10-01 once P5 step 4 gave every golden a check that measures unwrappable text against its slot. Onboarding's pinned button was cut to "I've written them do" (it needs 304 dp and had 264). The others: Export's "Opens in any spreadsheet" (321 for 248), Organise's "Add payment method" (286 for 264), and the Recovery Kit step's "Skip — I've written them down" (405 for 288). These were recorded into goldens without complaint: BUG9 stops a label from *wrapping*, which turns overflow into silent clipping, and nothing measured it. | BUG9's residual-case remedy, shortening the labels: "I wrote them down", "Any spreadsheet", "Add method", "Skip the kit" (the skip still raises its warning). The check, `assertNoUnwrappableTextIsClipped`, now runs in `captureScreenGolden` on every screen golden. It applies BUG35's measurement (max intrinsic width against the width given), because node bounds and `didOverflowWidth` cannot see clipping. | `AccessibilityChecksTest.Bug44_anUnwrappableLabelWiderThanItsSlot_fails`, plus a wrapping text and a fitting label that must pass, and the 72 screen goldens that run the check. |
 
 ### 8.1 Pre-migration snapshot — operating design
 
@@ -1851,7 +1856,7 @@ The unbundled variant needs the network *for recognition itself* and needs Play 
 | DB migration | `MigrationTestHelper`, full v1→vN chain with seeded data | **Blocking.** No merge without it. |
 | Backup/restore | Instrumented round-trip with row-level equality assertion | **Blocking on every PR.** |
 | UI | Compose UI tests (`createAndroidComposeRule`), semantics-based selectors only | Critical flows: SMS→approve, OCR→approve, manual entry, export |
-| Screenshot | Roborazzi/Paparazzi, 5 configs (phone/tablet × light/dark × fontScale 2.0) | Diff gate |
+| Screenshot | Roborazzi on Robolectric. Components in `:core:designsystem` and `:core:ui`; **every screen** since P5 step 4 (light, font scale 1.0 and 2.0, a 360 dp phone, UTC). Each screen capture runs three structural checks first (see below) | Diff gate |
 | Performance | Macrobenchmark (startup, scroll, baseline profile) | Regression gate ±10% |
 | Manual matrix | `TESTING.md`: install-over-install, force-stop, "Don't keep activities", OTA update, airplane mode, low storage, permission revoke/regrant, 2.0x font, RTL | Pre-release checklist |
 
@@ -1924,6 +1929,42 @@ trace.
 **Recursive-testing rule:** every bug fixed gets a test named after it (`Bug6_DraftSurvivesProcessDeathTest`). The bug table in §8 maps 1:1 to test classes. The suite only grows.
 
 ---
+
+**Screen goldens and their checks (P5 step 4, 2026-10-01).** Every screen
+golden is taken through `captureScreenGolden` in `:core:testing`, the one home of
+`LfScreenshotOptions` (BUG33's tolerance; the three copies it replaced are gone).
+Before the image is compared, the capture asserts:
+
+1. **No two tappable nodes share a touch area.** Compose already stretches a
+   lone small target to 48 dp; what it cannot fix is two targets closer than
+   48 dp, where a tap between them is ambiguous.
+2. **Every tappable node is labelled**, by its own text or a description.
+3. **No unwrappable text is clipped** (BUG44): control labels and amounts are
+   `softWrap = false`, so overflow is silent. Measured as BUG35 measured it.
+
+The checks are proved able to fail and not to cry wolf (`AccessibilityChecksTest`).
+The touch-target check's first version measured laid-out size and called every
+40 dp Material `IconButton` a defect; a tap 2 dp outside one still hit it, so
+that version was withdrawn before it reached this table. Fixture rules: the
+default time zone is pinned to UTC for the capture (Robolectric pins the locale
+but not the zone), a paged list is given finished load states (a static
+`PagingData` without them reports `Loading` forever), and phrase screens use only
+the public BIP-39 test word. What the checks do not cover — TalkBack's spoken
+order and wording, Bold text, contrast — stays on `TESTING.md` (H2, H4), with
+contrast (Compose's accessibility checker reported nothing under Robolectric; §16).
+
+**Name-and-amount rows degrade by stacking, everywhere (P5 step 4, owner
+delegated the call).** `LfAdaptiveRow` in `:core:designsystem` is the Ledger's
+`EntryRowBody` lifted unchanged: the amount is measured first, and the name
+stays beside it only if it then fits on one line; otherwise the amount drops
+below, right-aligned. Analytics' category, payment-method, recurring and
+parser-gap rows and the Inbox's payee row use it, so at font scale 2.0 no name
+is squeezed to "Groc…" or "BIG BA…"; at 1.0 nothing changes. The Inbox detail
+line may take two lines, which at 1.0 already shows what one line was cutting
+("· A/C 6402") at no extra height. **Deliberately not changed:** labels drawn
+over a bar's fill (Top merchants, capture coverage) still ellipsize, as
+`LfHorizontalBarChart`'s design states. The receipt scan screen's cards are
+inset like every other screen's, with Back above the title.
 
 ## 13. Delivery Phases
 
@@ -2190,3 +2231,14 @@ Added at P3, while verifying §5.7's budget form on the device:
     The options are not equal and the choice is the owner's. **A manual "Back up now" that asks for the 24 words each time** — validate the checksum, derive the seed, write the `.lfbk` and ADR-0023's images, zero the seed — is honest and needs no new key material, at the cost of §5.9's nightly promise, which would have to be struck rather than deferred. **Storing a backup key** so a worker can run unattended is the obvious alternative and is a third wrap on the DEK path, which ADR-0011 and §7 forbid; it would need a superseding ADR arguing why a device-local convenience factor may protect a file that leaves the device. **Keeping the phrase in memory for a session** is the same objection in a shorter-lived form. Whatever is chosen also decides what the Dashboard banner may claim.
 
     The machinery below the trigger is built and tested either way: `LfbkContainer`, `DatabaseBackupManager`, and — since this session — `AttachmentBackup` with its `.lfba` container and phrase-derived key, covered by `AttachmentBackupRoundTripTest` on the device (back up, wipe, restore onto a *fresh vault with a different DEK*, every image byte-for-byte). What is missing is the decision about when it runs and how it gets the words.
+
+**Compose's accessibility checker (P5 step 4, 2026-10-01) — tried, not adopted.**
+Owner-approved as a test-only dependency (`ui-test-junit4-accessibility`) on
+condition that it works under Robolectric, where the screen goldens run. A spike
+rendered a deliberately bad screen — an unlabelled 8 dp tap target and text at
+near-background contrast — enabled the checks, and asked for them: **nothing was
+reported.** A checker that passes everything off-device would read as coverage
+while giving none, so it was removed with its catalog entry. It is the only
+automated route to **contrast** (§9.6's AA minimum); the open choice is to run
+it as an *instrumented* test on the phone (it is built for that), at the cost of
+a device run per check. Until then contrast is a manual row (`TESTING.md` H4).

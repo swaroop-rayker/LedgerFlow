@@ -74,7 +74,9 @@ LedgerFlow/
                                     decision); see testdata/receipts/README.md
 ```
 
-**Dependency rule (enforced by a Gradle check):**
+**Dependency rule (enforced by `moduleDependencyRuleCheck`, part of `preMergeCheck`):**
+This line claimed a Gradle check for months before one existed; it was added at
+P5 step 4 (2026-10-01). It reads declared, non-test project dependencies.
 - `:feature:*` → `:core:*` only. **Features never depend on features.**
 - `:core:model` depends on nothing (pure Kotlin, no Android).
 - `:core:domain` depends on `:core:model` + `:core:common` — **plus
@@ -105,6 +107,7 @@ LedgerFlow/
                                           # to make a diff pass: a real change is a distance near 1.
 .\gradlew detekt lintSmsFullDebug         # static analysis
 .\gradlew bannedApiCheck                  # `!!` / cacheDir bans (Laws 5 & 7)
+.\gradlew moduleDependencyRuleCheck       # §3's module dependency rule
 .\gradlew assembleSmsFullRelease "-Pledgerflow.enableComposeCompilerReports=true"
                                           # Compose stability report -> <module>/build/compose_compiler/
                                           # (quote the -P: PowerShell splits it at the dot otherwise)

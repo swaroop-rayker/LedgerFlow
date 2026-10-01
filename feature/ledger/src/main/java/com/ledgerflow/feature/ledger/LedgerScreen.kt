@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -38,12 +37,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
+import androidx.paging.LoadStates
 import androidx.paging.PagingData
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
@@ -827,54 +827,9 @@ internal fun EntryRowBody(
     trailing: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val gapPx = with(LocalDensity.current) { LfTheme.spacing.sm.roundToPx() }
-
-    Layout(
-        modifier = modifier,
-        contents = listOf(leading, trailing),
-    ) { (leadingMeasurables, trailingMeasurables), constraints ->
-        val width = constraints.maxWidth
-        val leadingMeasurable = leadingMeasurables.first()
-
-        val trailingPlaceable = trailingMeasurables.first().measure(Constraints(maxWidth = width))
-        val remaining = width - trailingPlaceable.width - gapPx
-        // The floor is what the leading block *actually needs* on one line, not
-        // a constant. A fixed 96dp was a guess about naming width, and the
-        // leading block here is a timestamp: at font scale 2.0 a narrow amount
-        // left 144dp beside a stamp that needed 200, so the row stayed
-        // side-by-side and clipped "19 Aug, 10:15 am" to "19 Aug, 10:1…" --
-        // clipping the one field the line exists to show.
-        //
-        // A long note raises this and stacks the row earlier than it used to.
-        // That is the right way round: stacking costs a line, clipping costs
-        // the information.
-        val stacked = remaining < leadingMeasurable.maxIntrinsicWidth(constraints.maxHeight)
-
-        val leadingPlaceable =
-            leadingMeasurable.measure(Constraints(maxWidth = if (stacked) width else remaining))
-
-        if (stacked) {
-            val height = leadingPlaceable.height + gapPx + trailingPlaceable.height
-            layout(width, height) {
-                leadingPlaceable.place(0, 0)
-                // Right-aligned even when stacked, so the amount stays in the
-                // optical column it occupies on every other row.
-                trailingPlaceable.place(
-                    x = width - trailingPlaceable.width,
-                    y = leadingPlaceable.height + gapPx,
-                )
-            }
-        } else {
-            val height = maxOf(leadingPlaceable.height, trailingPlaceable.height)
-            layout(width, height) {
-                leadingPlaceable.place(0, (height - leadingPlaceable.height) / 2)
-                trailingPlaceable.place(
-                    x = width - trailingPlaceable.width,
-                    y = (height - trailingPlaceable.height) / 2,
-                )
-            }
-        }
-    }
+    // Lifted to the design system at P5 step 4 so Analytics and the Inbox
+    // degrade the same way; the reasoning above is the original's.
+    LfAdaptiveRow(leading = leading, trailing = trailing, modifier = modifier)
 }
 
 /**
@@ -1023,6 +978,17 @@ private fun previewItem(
     note = note,
 )
 
+/**
+ * Preview pages with a **finished** load stated. A static `PagingData` without
+ * explicit load states reports `refresh = Loading` forever, and [EntryList]
+ * waits for a settled load before showing an empty book -- so the two empty
+ * previews rendered a blank page until P5 step 4's goldens showed it.
+ */
+private fun previewPages(rows: List<LedgerListItem>): Flow<PagingData<LedgerListItem>> {
+    val done = LoadState.NotLoading(endOfPaginationReached = true)
+    return flowOf(PagingData.from(rows, sourceLoadStates = LoadStates(done, done, done)))
+}
+
 /** One row per band, so every header renders in the previews. */
 private val previewExpenses = listOf(
     previewItem("1", 1_240_50, 0, "Big Bazaar", "Groceries"),
@@ -1052,7 +1018,7 @@ private fun LedgerPreview() {
                 windowDays = PREVIEW_WINDOW_DAYS,
                 isLoaded = true,
             ),
-            entries = flowOf(PagingData.from(previewExpenses)),
+            entries = previewPages(previewExpenses),
             onEvent = {},
             onOpenDraft = {},
             onReviewCandidate = {},
@@ -1074,7 +1040,7 @@ private fun LedgerIncomePreview() {
                 windowDays = PREVIEW_WINDOW_DAYS,
                 isLoaded = true,
             ),
-            entries = flowOf(PagingData.from(previewIncome)),
+            entries = previewPages(previewIncome),
             onEvent = {},
             onOpenDraft = {},
             onReviewCandidate = {},
@@ -1097,7 +1063,7 @@ private fun LedgerEmptyPreview() {
                 windowDays = PREVIEW_WINDOW_DAYS,
                 isLoaded = true,
             ),
-            entries = flowOf(PagingData.empty()),
+            entries = previewPages(emptyList()),
             onEvent = {},
             onOpenDraft = {},
             onReviewCandidate = {},
@@ -1120,7 +1086,7 @@ private fun LedgerOutsideWindowPreview() {
                 windowDays = PREVIEW_WINDOW_DAYS,
                 isLoaded = true,
             ),
-            entries = flowOf(PagingData.empty()),
+            entries = previewPages(emptyList()),
             onEvent = {},
             onOpenDraft = {},
             onReviewCandidate = {},

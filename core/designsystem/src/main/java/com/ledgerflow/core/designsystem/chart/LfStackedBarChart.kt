@@ -195,20 +195,24 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawColumnLabels(
     val visible = LfAxisTicks.labelledIndices(columns.size, allowed)
     val slot = plot.slotWidth(columns.size)
 
-    columns.forEachIndexed { index, column ->
-        if (index !in visible) return@forEachIndexed
-        val layout = measurer.measure(column.label, labelStyle)
+    // Positioned first, drawn second: clamping moves an end label inward, so
+    // whether two labels overlap is only known once both are placed (BUG41).
+    val placed = visible.sorted().map { index ->
+        val layout = measurer.measure(columns[index].label, labelStyle)
         val centre = plot.left + index * slot + slot / 2f
-        drawText(
-            textLayoutResult = layout,
-            topLeft = Offset(
-                // Clamped to the plot so the first and last labels stay inside
-                // the chart rather than being half-cut by its edge.
-                x = (centre - layout.size.width / 2f)
-                    .coerceIn(plot.left, plot.left + plot.width - layout.size.width),
-                y = plot.height + AXIS_GAP_PX,
-            ),
-        )
+        // Clamped to the plot so the first and last labels stay inside the
+        // chart rather than being half-cut by its edge.
+        val x = (centre - layout.size.width / 2f)
+            .coerceIn(plot.left, plot.left + plot.width - layout.size.width)
+        layout to x
+    }
+    val drawable = LfAxisTicks.withoutOverlaps(
+        spans = placed.map { (layout, x) -> x..(x + layout.size.width) },
+        gapPx = AXIS_GAP_PX,
+    )
+    placed.forEachIndexed { position, (layout, x) ->
+        if (position !in drawable) return@forEachIndexed
+        drawText(textLayoutResult = layout, topLeft = Offset(x = x, y = plot.height + AXIS_GAP_PX))
     }
 }
 

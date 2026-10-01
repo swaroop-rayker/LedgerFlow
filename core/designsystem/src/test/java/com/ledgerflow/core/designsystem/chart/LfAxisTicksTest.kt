@@ -108,4 +108,44 @@ class LfAxisTicksTest {
     fun labellingIsTotalWhenEverythingFits() {
         assertThat(LfAxisTicks.labelledIndices(count = 5, allowed = 10)).hasSize(5)
     }
+
+    /**
+     * **BUG41: two dates drawn on top of each other ("21 Jul19 Aug").**
+     *
+     * Analytics' time chart at font scale 2.0, inside its card: the money
+     * gutter takes half the plot. Both end labels were chosen, then clamped
+     * into the same space. Positions are those after clamping, in px.
+     */
+    @Test
+    fun Bug41_endLabelsClampedOntoEachOther_onlyTheFirstIsDrawn() {
+        val first = 0f..70f
+        val last = 40f..110f
+
+        assertThat(LfAxisTicks.withoutOverlaps(listOf(first, last), gapPx = 4f)).containsExactly(0)
+    }
+
+    /**
+     * The other half, which a first fix got wrong: labels that do fit are all
+     * drawn. Lowering `labelsThatFit`'s floor dropped "12 Aug" from
+     * `chart-stacked-2x`, where it fitted.
+     */
+    @Test
+    fun Bug41_labelsThatFit_areAllDrawn() {
+        val spans = listOf(0f..60f, 100f..160f, 200f..260f)
+
+        assertThat(LfAxisTicks.withoutOverlaps(spans, gapPx = 4f)).containsExactly(0, 1, 2)
+    }
+
+    /** The end of the range outranks a middle label it would collide with. */
+    @Test
+    fun theLastLabelDisplacesItsNeighbour_notTheFirst() {
+        val spans = listOf(0f..60f, 100f..160f, 150f..210f)
+
+        assertThat(LfAxisTicks.withoutOverlaps(spans, gapPx = 4f)).containsExactly(0, 2)
+    }
+
+    @Test
+    fun noLabels_drawNothing() {
+        assertThat(LfAxisTicks.withoutOverlaps(emptyList(), gapPx = 4f)).isEmpty()
+    }
 }
