@@ -29,6 +29,10 @@
 # a job-level `if`, say) still gets through. It is aimed at the failure that
 # actually happened, and at the class it belongs to.
 #
+# Plus one semantic check, BUG45 (SPEC.md §8): ci.yml's screenshot and
+# unit-test commands keep `--continue` and the arguments that stop a known red
+# module from hiding the rest, and :feature:ocr still honours goldensOnly.
+#
 # A guard that cannot check must not pass
 # ---------------------------------------
 # It needs a Python with PyYAML. If none is found it FAILS rather than printing
@@ -105,6 +109,44 @@ if failed:
     print("")
     print("Workflow guard FAILED. GitHub will not load a workflow like this; every")
     print("push would \"fail\" in zero seconds with no jobs run (BUG32).")
+    sys.exit(1)
+
+# BUG45: a job that stops at its first red module compares nothing after it.
+# From 537fb17 the screenshot job stopped at ReceiptCorpusTest (red in CI until
+# the private corpus reaches it) and never compared onboarding's or settings'
+# goldens, while the unit-test jobs never ran :core:model:test at all. Each
+# command below must keep the arguments that closed those holes.
+REQUIRED = {
+    "screenshot": ("verifyRoborazzi", ["--continue", "-Pledgerflow.goldensOnly"]),
+    "unit-test": ("DebugUnitTest", [":core:model:test", "--continue"]),
+}
+CI = ".github/workflows/ci.yml"
+with open(CI, encoding="utf-8") as f:
+    ci_jobs = (yaml.safe_load(f) or {}).get("jobs") or {}
+for job, (marker, args) in REQUIRED.items():
+    runs = [s.get("run", "") for s in (ci_jobs.get(job) or {}).get("steps") or [] if isinstance(s, dict)]
+    commands = [r for r in runs if marker in r]
+    if not commands:
+        failed = True
+        print(f"::error::{CI} job '{job}' has no step running {marker} (BUG45)")
+    for command in commands:
+        for arg in args:
+            if arg not in command.split():
+                failed = True
+                print(f"::error::{CI} job '{job}' runs {marker} without {arg} (BUG45)")
+
+# The property is only worth passing if the build still reads it.
+OCR = "feature/ocr/build.gradle.kts"
+with open(OCR, encoding="utf-8") as f:
+    ocr = f.read()
+if 'gradleProperty("ledgerflow.goldensOnly")' not in ocr or "ReceiptCorpusTest" not in ocr:
+    failed = True
+    print(f"::error::{OCR} no longer excludes ReceiptCorpusTest under ledgerflow.goldensOnly (BUG45)")
+
+if failed:
+    print("")
+    print("Workflow guard FAILED (BUG45): a CI job would stop at its first red module,")
+    print("or skip one, and report nothing about the rest.")
     sys.exit(1)
 PY
 
