@@ -88,6 +88,28 @@ needs accumulated history.
 | A8 | **Recurring detection** | Suspected recurring merchants: ≥3 occurrences, interval σ/μ < 0.25 | **base tables**, not rollups — interval clustering needs individual dates per merchant | list | P3 |
 | A9 | **Window & filter machinery** | 8 time windows + custom; previous-period toggle on every one; 10 simultaneously-composable filters | `daily_rollup` + base tables | — | P3 |
 | A10 | **Recurring cash-flow runway** | "₹18,400 of detected recurring charges fall before the 30th" | derived from A8 | list | P5 |
+| A11 | **Merchant-category breakdown** | Where the money went by kind of place: donut plus a ranked list with share and Δ, treemap toggle; drill to merchants, then entries; Uncategorised as its own bucket with a "Categorise in Merchants" action. Optional A1 lens: spend over time stacked by merchant category | `daily_rollup` **joined through `merchant.merchant_category_id` at query time** — no new rollup dimension | `LfDonutChart` + list, `LfTreemap`, `LfHorizontalBarChart` (all shipped) | **v2** (V2-PLAN §5, V2-6) |
+
+**A11 (planned with V2-PLAN §5, owner 2026-10-01).** Merchant categories are a
+flat taxonomy *of merchants*, separate from spending categories, and assigned by
+hand in the Merchants section only — capture, review and entry never categorise.
+Two decisions carry into the chart:
+
+*Retroactive, so a join and not a column.* A merchant category describes the
+merchant as it is now; re-categorising a merchant moves all its history, because
+the user is correcting a label. `daily_rollup` already sums per `merchant_id`,
+so the section groups through the merchant row at query time. Adding a
+`merchant_category_id` column to the rollup would freeze stale labels and need a
+recompute on every change — and it would widen the rollup, which §2 forbids.
+
+*Uncategorised is shown, never dropped.* New merchants arrive uncategorised, so
+early on most spending is in that bucket. Hiding it would make the section's
+total disagree with the page's; showing it, with a way into the Merchants
+section, turns the gap into the user's to-do list.
+
+Bound per book like every rollup read (`LedgerIsolationTest`), and re-measured
+against the 5Y budget on LF Bench once the bench seed carries merchant
+categories.
 
 A8's note matters and is easy to miss: **recurring detection is the one Family A
 surface that cannot read `daily_rollup`.** The rollup is a daily *sum* per

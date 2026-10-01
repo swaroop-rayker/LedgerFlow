@@ -224,16 +224,117 @@ reminder (shares §3.4's reminders).
 
 ## 5. Merchant categories
 
-A flat taxonomy for merchants (e.g. "Food delivery", "Groceries", "Fuel"),
-**no subcategories**, managed with the same UI and interactions as Categories
-(`TaxonomyCard`, rename, colour, delete with reassignment), and shown wherever
-a merchant is picked — the entry form, review, filters, Analytics merchant
-views. Schema: `merchant_category` table + nullable `merchant.merchant_category_id`
-(v12 migration, `CREATE/INSERT SELECT/DROP/RENAME`), backup payload fields with
-migration-equal defaults. **Question for the owner:** is this separate from the
-existing "default category for a merchant" (which files its entries under a
-*spending* category)? The plan assumes yes — merchant categories describe the
-merchant, spending categories describe the money — and changes nothing else.
+**Decided by the owner (2026-10-01), closing this section's open question.**
+Merchant categories are a **separate taxonomy from spending categories**:
+a merchant category says what kind of place a merchant *is* ("Groceries",
+"Pharmacy", "Fuel"); a spending category says what the *money* was for, per
+entry. Neither replaces the other, and the existing "default category for a
+merchant" (which pre-fills an entry's *spending* category) is unchanged.
+
+### 5.1 The taxonomy
+
+A flat list — **no subcategories** — managed with the same UI and interactions
+as Categories (`TaxonomyCard`, rename, colour, hide, delete). Deleting a
+merchant category asks where its merchants go: another merchant category, or
+**Uncategorised**. A merged merchant keeps the survivor's category (the merge
+already moves aliases, BUG28); a hidden merchant keeps its category.
+
+### 5.2 Categorising is manual, and happens in one place
+
+**Categorisation is done by the user, in the Merchants section — nowhere else.**
+Nothing infers a merchant's category: not the parser, not OCR, not the entry
+form.
+
+- **Capture and review do not categorise.** SMS, notification and receipt
+  extraction fill the *merchant* and stop there (as today); a new merchant —
+  captured or typed — is created **Uncategorised**. The review screen and the
+  entry form never ask for a merchant category and never show a prompt to
+  choose one; adding a step there would slow the approval the app exists to
+  make fast.
+- **The Merchants section is where it happens.** Each merchant row shows its
+  category and offers "Set category"; an **Uncategorised (n)** filter at the top
+  of the section lists exactly the merchants still to do, so the work can be
+  cleared in one sitting; multi-select assigns one category to several at once
+  (same selection pattern as the Inbox and the bin).
+- **Seed list:** a short default set the user can rename, hide or extend —
+  Groceries, Food delivery, Restaurants & cafés, Fuel, Pharmacy & health,
+  Utilities & bills, Shopping, Travel & transport, Entertainment, Education,
+  Services, Government & tax. No merchant is pre-assigned to any of them.
+
+### 5.3 Where merchant categories are used
+
+- **Manual entry (and review) — browsing, not categorising.** The merchant
+  picker keeps search as its first control, and adds **browse by merchant
+  category**: the merchant list grouped under category headers (Uncategorised
+  last), so a user who cannot remember a name can find it by kind. Picking a
+  merchant is all that happens; the picker never edits a merchant's category.
+- **Analytics** — §5.4.
+- **Filters** — "Merchant category" joins the Analytics filter sheet (A9), and
+  the Ledger list filters, as one more dimension.
+
+### 5.4 Merchant-category spending analytics (new; `docs/DATAVIZ-PLAN.md` A11)
+
+A **"By merchant category"** section on Analytics — where the money went, by
+kind of place, beside "By category" (what it was for).
+
+- **Graphic and list:** donut plus a ranked list with share and Δ against the
+  previous period, exactly A2's shape; treemap toggle as A3. The list is the
+  content; the donut orients (CLAUDE.md §5 charts rules).
+- **Drill-down:** merchant category → its merchants (ranked, A4's
+  `LfHorizontalBarChart`) → a merchant's entries (Paging over base tables).
+- **Uncategorised is a bucket, not a hole:** shown last, with how many
+  merchants it holds and a "Categorise in Merchants" action that opens the
+  Merchants section on its Uncategorised filter. Without it the section's total
+  would silently disagree with the page total.
+- **One book at a time** (Law 2): it follows the Analytics book tab; no figure
+  combines debit and credit. Merchants mostly appear on the debit side; a
+  credit book with no categorised merchants simply shows the Uncategorised
+  bucket.
+- **Optional lens on A1:** "Spend over time" stacked by merchant category as an
+  alternative to stacking by spending category — a toggle, not a new chart.
+- **Export:** the XLSX gains a "Spending by merchant category" pivot in
+  ADR-0004's shape (one book, category × month, totals within the book), and
+  the raw `merchant_category` table rides along automatically (it is in the
+  backup payload, so `ExportCoversEveryTableTest` covers it).
+
+**Data — no new rollup dimension.** `daily_rollup` already sums per
+`merchant_id`; the section groups those rows through
+`merchant.merchant_category_id` at query time (`JOIN merchant`, `LEFT JOIN
+merchant_category`, a literal `'DEBIT'`/`'CREDIT'` bound per CLAUDE.md's rule and
+`LedgerIsolationTest`). This is deliberate:
+
+- **Retroactive by design.** A merchant category describes the merchant as it
+  is now, so re-categorising a merchant moves *all* its history — the user is
+  correcting a label, not recording a change in their spending. (Spending
+  categories are the opposite: per entry, fixed when approved.) A rollup column
+  would freeze the old label and need a recompute on every change; the join
+  cannot be stale.
+- **`daily_rollup` is not widened** (CLAUDE.md, charts rules) — merchant
+  category is a property of the merchant, not of the money.
+- **Performance:** one extra join on a small table; re-measure the 5Y query
+  (< 300 ms, SPEC §11) on LF Bench, whose seed gains merchant categories.
+
+### 5.5 Schema and tests
+
+Schema **v12**: `merchant_category` (id, name, color_argb, sort_order,
+created_at, updated_at, deleted_at — the same shape and soft-delete rule as
+`category`, flat) and nullable `merchant.merchant_category_id`. Migration by
+`CREATE new / INSERT SELECT / DROP / RENAME`, with `MigrationTest`, the
+committed `12.json`, and `BackupPayload` fields defaulting to what the migration
+writes (`NULL` for every existing merchant — all start Uncategorised).
+`OlderSchemaBackupRestoresTest` gains a v11 payload.
+
+Tests: categorisation only ever changes from the Merchants section (a guard
+that ingest, review and entry never write `merchant_category_id`); delete with
+reassignment and to Uncategorised; merge keeps the survivor's category;
+re-categorising moves a merchant's history in the section (the retroactive
+rule, pinned); the Uncategorised bucket makes the section sum to the page
+total; Law 2 guard on the new query; picker browse groups and Uncategorised
+last; goldens at 1x and 2x for the section, the picker's browse mode and the
+Merchants section's Uncategorised filter; semantics per donut segment.
+
+**Not planned:** budgets per merchant category, and any automatic suggestion of
+a merchant's category. Either would be its own owner decision.
 
 ---
 
@@ -270,7 +371,7 @@ merchant, spending categories describe the money — and changes nothing else.
 | V2-3 | Appearance, Currency & region, Notifications, App lock, About | D4 |
 | V2-4 | Data & sync: Drive, Import (CSV/XLSX), Restore entry | D1, D8; P5 XLSX |
 | V2-5 | Receipts management | D5 |
-| V2-6 | Merchant categories (schema v12) | §5 question |
+| V2-6 | Merchant categories (schema v12): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; owner to confirm §5.2's seed list |
 | V2-7 | More: recurring, goals, debts, utilities (schema v13+) | D2 for converter |
 | V2-8 | Recommended additions the owner picks; Play listing for v2 | owner |
 
