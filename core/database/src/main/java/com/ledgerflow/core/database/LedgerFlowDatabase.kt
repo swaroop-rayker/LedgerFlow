@@ -11,6 +11,7 @@ import com.ledgerflow.core.database.dao.CategoryDao
 import com.ledgerflow.core.database.dao.CategoryGroupDao
 import com.ledgerflow.core.database.dao.DailyRollupDao
 import com.ledgerflow.core.database.dao.DraftEntryDao
+import com.ledgerflow.core.database.dao.IngestDiagnosticsDao
 import com.ledgerflow.core.database.dao.LedgerEntryDao
 import com.ledgerflow.core.database.dao.LedgerTaxonomyDao
 import com.ledgerflow.core.database.dao.MerchantAliasDao
@@ -92,6 +93,11 @@ import com.ledgerflow.core.database.entity.SmsRawEntity
     exportSchema = true,
 )
 @TypeConverters(LedgerFlowConverters::class)
+// One abstract accessor per DAO is Room's contract, not behaviour: this class
+// is the registry of DAOs, and the twentieth (diagnostics, P5) crossed the
+// counter. Splitting a registry to satisfy a cohesion rule would be the same
+// wrong move detekt.yml's DAO note rejects.
+@Suppress("TooManyFunctions")
 public abstract class LedgerFlowDatabase : RoomDatabase() {
 
     public abstract fun appMetaDao(): AppMetaDao
@@ -128,6 +134,12 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun attachmentDao(): AttachmentDao
 
     public abstract fun itemCategoryMemoryDao(): ItemCategoryMemoryDao
+
+    /**
+     * P5 — the diagnostics screen's read-only aggregates. A DAO, not a table:
+     * no schema change, and nothing here writes.
+     */
+    public abstract fun ingestDiagnosticsDao(): IngestDiagnosticsDao
 
     public companion object {
         /**

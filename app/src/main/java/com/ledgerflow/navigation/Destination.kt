@@ -70,9 +70,22 @@ public sealed interface Destination {
     @Serializable
     public data object BackUpNow : Destination
 
-    /** The approval queue, reached from the centre action's dial (§9.3). */
+    /**
+     * The approval queue, reached from the centre action's dial (§9.3) — and
+     * from the diagnostics screen, which opens it on the Suppressed filter.
+     *
+     * [filter] is an `InboxFilter` name, or null for the queue. **The property
+     * name is a contract**, as [Entry.draftId] is: `InboxViewModel.FILTER_ARG`
+     * reads it by string, and `InboxFilterArgumentTest` fails the build if the
+     * two drift. A string rather than the enum so the route stays a plain
+     * serializable type without a custom `NavType`.
+     */
     @Serializable
-    public data object Inbox : Destination
+    public data class Inbox(val filter: String? = null) : Destination
+
+    /** Ingest diagnostics (P5), reached from More. */
+    @Serializable
+    public data object Diagnostics : Destination
 
     /**
      * Receipt capture (§5.3), reached from the centre action's dial.

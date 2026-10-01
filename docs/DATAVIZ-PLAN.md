@@ -122,9 +122,9 @@ is computed on-device, in an app with no `INTERNET` permission in release
 |---|---|---|---|---|
 | C1 | **Capture coverage** | Share of spending, by value and by count, that arrived automatically vs. was typed by hand | `ledger_entry.source` | **P3 — shipped** |
 | C2 | **Parser gap list** | Merchants you almost always enter manually — i.e. exactly where the ruleset is blind | `ledger_entry.source` + `merchant_id` | **P3 — shipped** |
-| C3 | **Dedupe evidence** | "47 double-notifications suppressed this month" | `pending_transaction.suppressed_by_id` | P5 |
-| C4 | **Confidence distribution** | Histogram of parser confidence; the low tail names the senders to fix | `pending_transaction.confidence` | P5 |
-| C5 | **Pipeline latency** | Capture → pending → approved, and where the queue stalls | `pending_transaction` timestamps | P5 |
+| C3 | **Dedupe evidence** | "47 double-notifications suppressed this month" | `pending_transaction.suppressed_by_id` | **P5 — shipped** |
+| C4 | **Confidence distribution** | Histogram of parser confidence; the low tail names the senders to fix | `pending_transaction.confidence` | **P5 — shipped** |
+| C5 | **Pipeline latency** | Capture → pending → approved, and where the queue stalls | `pending_transaction` timestamps | **P5 — shipped** |
 
 **C1 and C2 need no new schema and no OCR — they run on the vault as it exists
 today,** which makes them the cheapest differentiated thing in the entire
@@ -189,6 +189,11 @@ improves the product that draws the chart.
 
 C3–C5 are diagnostic rather than financial. They belong on the diagnostics
 screen §11 already schedules for P5, not on the Analytics tab — see §7.
+**Shipped at P5 (2026-09-30)** on More → Diagnostics, as counts and durations
+with no money and no message text; `SPEC.md` §5.6 "Ingest diagnostics, as
+shipped" records the decisions. C3 reads the raw rows' `parse_status` rather
+than only `suppressed_by_id`, so a duplicate whose candidate was erased is
+still counted; C5's latency is capture → Inbox on this device's clock.
 
 ### Family D — identity
 

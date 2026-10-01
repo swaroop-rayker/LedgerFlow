@@ -42,6 +42,7 @@ public fun MoreScreen(
     onDeletedEntries: () -> Unit,
     onNotificationAccess: () -> Unit,
     onBackUp: () -> Unit,
+    onDiagnostics: () -> Unit,
     onEvent: (MoreEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -81,7 +82,7 @@ public fun MoreScreen(
                 onClick = onBudgets,
             )
             // §16 Q23. Directly above Export, because the two are easy to
-            // confuse and must not be: Export writes plain CSV anyone can read;
+            // confuse and must not be: Export writes a plain spreadsheet anyone can read;
             // this writes the encrypted backup only the 24 words can open.
             MoreRow(
                 title = "Back up now",
@@ -90,7 +91,7 @@ public fun MoreScreen(
             )
             MoreRow(
                 title = "Export",
-                subtitle = "Save your data as CSV",
+                subtitle = "Save your data as an Excel workbook or CSV",
                 onClick = onExport,
             )
             // **"Deleted entries", not "Erase deleted entries".** The row used
@@ -121,6 +122,13 @@ public fun MoreScreen(
                 title = "Receipts",
                 subtitle = receiptsSubtitle(state),
                 onClick = { onEvent(MoreEvent.ReceiptDeleteRequested) },
+            )
+            // P5. Last: it answers "is capture working?" in detail, which is a
+            // question for after the rows above, and it changes nothing.
+            MoreRow(
+                title = "Diagnostics",
+                subtitle = "How automatic capture is working",
+                onClick = onDiagnostics,
             )
         }
     }
@@ -325,6 +333,7 @@ private fun MorePreview() {
             onDeletedEntries = {},
             onNotificationAccess = {},
             onBackUp = {},
+            onDiagnostics = {},
             onEvent = {},
         )
     }
@@ -345,6 +354,7 @@ private fun MoreEmptyBinPreview() {
             onDeletedEntries = {},
             onNotificationAccess = {},
             onBackUp = {},
+            onDiagnostics = {},
             onEvent = {},
         )
     }

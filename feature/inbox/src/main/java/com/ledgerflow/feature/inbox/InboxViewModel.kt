@@ -1,5 +1,6 @@
 package com.ledgerflow.feature.inbox
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.inbox.InboxError
@@ -44,9 +45,22 @@ public class InboxViewModel @Inject constructor(
     private val discardPending: DiscardPendingUseCase,
     private val restorePending: RestorePendingUseCase,
     private val erasePending: ErasePendingUseCase,
+    // Last and defaulted, so the tests that build this directly are untouched;
+    // Hilt supplies the real one from the back stack entry.
+    savedStateHandle: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
-    private val filter = MutableStateFlow(InboxFilter.PENDING)
+    /**
+     * Opens on the filter the route names, if any -- the diagnostics screen's
+     * "Show in Inbox" arrives on Suppressed. The queue otherwise, and for any
+     * name this build does not know: an old or mistyped argument should land on
+     * the Inbox, not crash it.
+     */
+    private val filter = MutableStateFlow(
+        savedStateHandle.get<String>(FILTER_ARG)
+            ?.let { name -> InboxFilter.entries.firstOrNull { it.name == name } }
+            ?: InboxFilter.PENDING,
+    )
     private val transient = MutableStateFlow(TransientState())
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -269,7 +283,14 @@ public class InboxViewModel @Inject constructor(
         val confirmation: InboxConfirmation? = null,
     )
 
-    private companion object {
-        const val STOP_TIMEOUT_MS = 5_000L
+    public companion object {
+        /**
+         * The route argument naming the filter to open on, read by string for
+         * the reason `ReviewViewModel.PENDING_ID_ARG` gives. `Destination.Inbox`'s
+         * property is the other half; `InboxFilterArgumentTest` holds them together.
+         */
+        public const val FILTER_ARG: String = "filter"
+
+        private const val STOP_TIMEOUT_MS = 5_000L
     }
 }

@@ -51,7 +51,7 @@ internal object InboxDeepLink {
             .substringBefore('#')
 
         return when {
-            remainder.isEmpty() || remainder == "/" -> Destination.Inbox
+            remainder.isEmpty() || remainder == "/" -> Destination.Inbox()
             !remainder.startsWith('/') -> null
             else -> remainder.drop(1)
                 .takeIf { it.isNotEmpty() && '/' !in it }

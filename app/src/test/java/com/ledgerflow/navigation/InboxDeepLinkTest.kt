@@ -34,8 +34,8 @@ class InboxDeepLinkTest {
     /** The group summary's target: it stands for several, so it names none. */
     @Test
     fun parse_theBareInboxLink_routesToTheQueue() {
-        assertThat(InboxDeepLink.parse("ledgerflow://inbox")).isEqualTo(Destination.Inbox)
-        assertThat(InboxDeepLink.parse("ledgerflow://inbox/")).isEqualTo(Destination.Inbox)
+        assertThat(InboxDeepLink.parse("ledgerflow://inbox")).isEqualTo(Destination.Inbox())
+        assertThat(InboxDeepLink.parse("ledgerflow://inbox/")).isEqualTo(Destination.Inbox())
     }
 
     /**

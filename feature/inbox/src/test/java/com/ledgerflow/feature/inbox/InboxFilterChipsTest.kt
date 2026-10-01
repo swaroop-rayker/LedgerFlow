@@ -1,5 +1,6 @@
 package com.ledgerflow.feature.inbox
 
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingTransaction
@@ -84,7 +85,7 @@ class InboxFilterChipsTest {
         approvedEntryId = null,
     )
 
-    private fun TestScope.viewModel(): InboxViewModel {
+    private fun TestScope.viewModel(route: SavedStateHandle = SavedStateHandle()): InboxViewModel {
         val vm = InboxViewModel(
             observePending = ObservePendingUseCase(pending),
             observePendingCount = ObservePendingCountUseCase(pending),
@@ -97,6 +98,7 @@ class InboxFilterChipsTest {
             discardPending = DiscardPendingUseCase(pending),
             restorePending = RestorePendingUseCase(pending),
             erasePending = ErasePendingUseCase(pending),
+            savedStateHandle = route,
         )
         backgroundScope.launch { vm.state.collect { } }
         return vm
@@ -210,5 +212,38 @@ class InboxFilterChipsTest {
         assertThat(vm.state.value.counts[InboxFilter.PENDING]).isEqualTo(2)
         assertThat(vm.state.value.counts[InboxFilter.DISCARDED]).isEqualTo(1)
         assertThat(vm.state.value.rows).hasSize(2)
+    }
+
+    // ── Opening on a filter the route names ─────────────────────────────────
+
+    /** The diagnostics screen's "Show in Inbox" lands on the duplicates it counted. */
+    @Test
+    fun aRouteNamingSuppressed_opensOnSuppressed() = runTest(dispatcher) {
+        pending.put(row("winner"))
+        pending.put(row("loser", suppressedById = "winner"))
+
+        val vm = viewModel(SavedStateHandle(mapOf(InboxViewModel.FILTER_ARG to InboxFilter.SUPPRESSED.name)))
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.filter).isEqualTo(InboxFilter.SUPPRESSED)
+        assertThat(vm.state.value.rows.map { it.id }).containsExactly("loser")
+    }
+
+    /** No argument is the queue, as every route into the Inbox was before. */
+    @Test
+    fun aRouteNamingNothing_opensOnTheQueue() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.filter).isEqualTo(InboxFilter.PENDING)
+    }
+
+    /** An argument this build does not know opens the queue rather than crashing the Inbox. */
+    @Test
+    fun aRouteNamingAnUnknownFilter_opensOnTheQueue() = runTest(dispatcher) {
+        val vm = viewModel(SavedStateHandle(mapOf(InboxViewModel.FILTER_ARG to "ARCHIVED")))
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.filter).isEqualTo(InboxFilter.PENDING)
     }
 }

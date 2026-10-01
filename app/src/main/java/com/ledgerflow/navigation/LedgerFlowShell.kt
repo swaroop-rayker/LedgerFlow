@@ -35,6 +35,7 @@ import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.feature.analytics.AnalyticsCustomRangeSheet
 import com.ledgerflow.feature.analytics.AnalyticsEvent
 import com.ledgerflow.feature.analytics.AnalyticsFilterSheet
@@ -66,6 +67,9 @@ import com.ledgerflow.feature.settings.MoreScreen
 import com.ledgerflow.feature.settings.backup.BackupNowScreen
 import com.ledgerflow.feature.settings.backup.BackupNowViewModel
 import com.ledgerflow.feature.settings.MoreViewModel
+import com.ledgerflow.feature.settings.diagnostics.DiagnosticsEvent
+import com.ledgerflow.feature.settings.diagnostics.DiagnosticsScreen
+import com.ledgerflow.feature.settings.diagnostics.DiagnosticsViewModel
 
 /**
  * The unlocked app: bottom bar, centre action, nav graph (SPEC.md §9.3).
@@ -116,7 +120,7 @@ internal fun LedgerFlowShell(
             },
             onInbox = {
                 dialOpen = false
-                navController.navigate(Destination.Inbox)
+                navController.navigate(Destination.Inbox())
             },
             onScanReceipt = {
                 dialOpen = false
@@ -287,6 +291,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             onDeletedEntries = { navController.navigate(Destination.DeletedEntries) },
             onBackUp = { navController.navigate(Destination.BackUpNow) },
             onNotificationAccess = { navController.navigate(Destination.NotificationAccess) },
+            onDiagnostics = { navController.navigate(Destination.Diagnostics) },
             onEvent = viewModel::onEvent,
         )
     }
@@ -383,6 +388,24 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         BackupNowScreen(state = state, onEvent = viewModel::onEvent)
     }
     composable<Destination.Export> { ExportRoute(onBack = navController::popBackStack) }
+    composable<Destination.Diagnostics> {
+        val viewModel: DiagnosticsViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        // A report is a snapshot: re-read whenever the screen comes back, as
+        // messages keep arriving while the user is elsewhere.
+        LifecycleResumeEffect(Unit) {
+            viewModel.onEvent(DiagnosticsEvent.Resumed)
+            onPauseOrDispose { }
+        }
+        DiagnosticsScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onOpenSuppressed = {
+                navController.navigate(Destination.Inbox(filter = InboxFilter.SUPPRESSED.name))
+            },
+            onBack = navController::popBackStack,
+        )
+    }
     // §5.2. Full-screen rather than a tab destination: it sends the user to a
     // system Settings page in another task, and a bottom bar under that is an
     // invitation to navigate away mid-grant and never come back to the
@@ -497,7 +520,8 @@ private val Destination.label: String
         Destination.Export -> "Export"
         Destination.DeletedEntries -> "Deleted"
         Destination.BackUpNow -> "Back up"
-        Destination.Inbox -> "Inbox"
+        is Destination.Inbox -> "Inbox"
+        Destination.Diagnostics -> "Diagnostics"
         is Destination.InboxReview -> "Review"
         Destination.ScanReceipt -> "Scan"
         Destination.NotificationAccess -> "Notifications"

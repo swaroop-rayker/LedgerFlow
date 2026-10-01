@@ -9,6 +9,7 @@ import com.ledgerflow.core.crypto.keystore.KeystoreKek
 import com.ledgerflow.core.data.analytics.DefaultAnalyticsRepository
 import com.ledgerflow.core.data.analytics.DefaultBudgetRepository
 import com.ledgerflow.core.data.analytics.DefaultRollupRepository
+import com.ledgerflow.core.data.diagnostics.DefaultIngestDiagnosticsRepository
 import com.ledgerflow.core.data.backup.BackupDocumentReader
 import com.ledgerflow.core.data.backup.BackupFolderResolver
 import com.ledgerflow.core.data.backup.DefaultBackupRepository
@@ -31,6 +32,7 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.BudgetRepository
 import com.ledgerflow.core.domain.analytics.RollupRepository
+import com.ledgerflow.core.domain.diagnostics.IngestDiagnosticsRepository
 import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.backup.RestoreRepository
 import com.ledgerflow.core.domain.export.ExportRepository
@@ -165,6 +167,16 @@ public interface RollupModule {
      */
     @Binds
     public fun budgetRepository(impl: DefaultBudgetRepository): BudgetRepository
+
+    /**
+     * The ingest diagnostics report (P5). Beside analytics because it is the
+     * same kind of thing — a read-only report over derived counts — and it
+     * writes nothing.
+     */
+    @Binds
+    public fun ingestDiagnosticsRepository(
+        impl: DefaultIngestDiagnosticsRepository,
+    ): IngestDiagnosticsRepository
 }
 
 /**
