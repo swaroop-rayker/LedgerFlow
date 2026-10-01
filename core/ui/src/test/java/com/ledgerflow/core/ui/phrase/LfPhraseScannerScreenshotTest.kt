@@ -18,7 +18,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.designsystem.theme.LfTheme
-import com.ledgerflow.core.ui.lineitem.LfScreenshotOptions
+import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith

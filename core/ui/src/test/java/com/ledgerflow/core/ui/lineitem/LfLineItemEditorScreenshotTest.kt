@@ -1,5 +1,6 @@
 package com.ledgerflow.core.ui.lineitem
 
+import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width

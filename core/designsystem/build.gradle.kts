@@ -80,6 +80,8 @@ dependencies {
  */
 dependencies {
     testImplementation(libs.robolectric)
+    // The one LfScreenshotOptions (BUG33) and the shared screenshot harness.
+    testImplementation(project(":core:testing"))
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.rule)

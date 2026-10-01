@@ -1,18 +1,17 @@
 package com.ledgerflow.feature.settings.diagnostics
 
+import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.designsystem.theme.LfTheme
@@ -68,10 +67,13 @@ class DiagnosticsScreenTest {
         }
     }
 
-    private fun capture(name: String, state: DiagnosticsUiState, fontScale: Float) {
-        show(state, fontScale)
-        composeRule.onRoot().captureRoboImage("$GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
-    }
+    /** Through the shared harness, so every golden also passes §9.6's touch-target and label checks. */
+    private fun capture(name: String, state: DiagnosticsUiState, fontScale: Float) =
+        composeRule.captureScreenGolden(name, fontScale) {
+            LfTheme {
+                DiagnosticsScreen(state = state, onEvent = {}, onOpenSuppressed = {}, onBack = {})
+            }
+        }
 
     private val full = DiagnosticsUiState(report = DiagnosticsReport.Ready(PreviewDiagnostics))
 
@@ -185,5 +187,4 @@ class DiagnosticsScreenTest {
 private const val ROBOLECTRIC_SDK = 34
 private const val TALL_1X = "w360dp-h1800dp"
 private const val TALL_2X = "w360dp-h3600dp"
-private const val GOLDEN_DIR = "src/test/screenshots"
 private const val SCREEN_TITLE = "Diagnostics"

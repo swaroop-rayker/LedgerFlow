@@ -1,4 +1,4 @@
-package com.ledgerflow.core.designsystem
+package com.ledgerflow.core.testing.screenshot
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.dropbox.differ.Color

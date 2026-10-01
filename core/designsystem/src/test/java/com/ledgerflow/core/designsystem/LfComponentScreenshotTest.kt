@@ -1,5 +1,6 @@
 package com.ledgerflow.core.designsystem
 
+import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
