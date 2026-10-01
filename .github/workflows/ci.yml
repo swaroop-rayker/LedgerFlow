@@ -232,7 +232,11 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v6
 
-      - run: ./gradlew test${{ matrix.flavour }}DebugUnitTest --stacktrace
+      # :core:model is a plain JVM module, so the flavour aggregate does not
+      # include its tests; preMergeCheck runs them, and until 2026-10-01 CI did
+      # not. --continue: the known ReceiptCorpusTest red must not stop other
+      # modules' tests from running.
+      - run: ./gradlew test${{ matrix.flavour }}DebugUnitTest :core:model:test --continue --stacktrace
 
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -254,7 +258,11 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v6
 
-      - run: ./gradlew verifyRoborazziSmsFullDebug --stacktrace
+      # --continue: one module's failure must not hide another's diffs. Until
+      # 2026-10-01 the job stopped at :feature:ocr and never compared
+      # onboarding's or settings' goldens. goldensOnly leaves ReceiptCorpusTest
+      # to the unit-test jobs (see :feature:ocr's build file).
+      - run: ./gradlew verifyRoborazziSmsFullDebug --continue -Pledgerflow.goldensOnly --stacktrace
 
       - uses: actions/upload-artifact@v7
         if: failure()

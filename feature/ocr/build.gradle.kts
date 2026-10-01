@@ -125,3 +125,17 @@ tasks.withType<Test>().configureEach {
             .withPathSensitivity(PathSensitivity.RELATIVE)
     }
 }
+
+/**
+ * CI's `screenshot` job runs this module's unit tests too, because its screens
+ * have goldens -- and so it hit `theCorpusIsReachableInCi`, red until the
+ * private corpus reaches CI, and stopped before onboarding's and settings'
+ * goldens were compared (found 2026-10-01, run 36870957475). That job checks
+ * goldens, so it passes `-Pledgerflow.goldensOnly` and leaves the corpus out.
+ * The corpus gate is not weakened: the `unit-test` jobs still run it in CI.
+ */
+if (providers.gradleProperty("ledgerflow.goldensOnly").isPresent) {
+    tasks.withType<Test>().configureEach {
+        filter.excludeTestsMatching("com.ledgerflow.feature.ocr.corpus.ReceiptCorpusTest")
+    }
+}
