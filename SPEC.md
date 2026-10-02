@@ -119,7 +119,7 @@ Rationale: in the current Indian payments landscape, a `NotificationListenerServ
 | Permission | `RECEIVE_SMS` (Play-restricted) | `BIND_NOTIFICATION_LISTENER_SERVICE` (user-granted via Settings, **not** Play-restricted) |
 | Coverage | Bank SMS alerts | UPI apps, bank apps, card apps, wallet apps |
 | Flavour | `smsFull` only | **both** flavours |
-| Delivery | sideload / internal testing | Play-eligible |
+| Delivery | GitHub Releases (sideload) and **Samsung Galaxy Store** (`com.ledgerflow`, the arm64 split; owner, 2026-10-02, `docs/galaxy/`) | Google Play (`com.ledgerflow.playsafe`, `docs/play/`) |
 
 **What the owner's device actually does, measured at P2-5 — the premise above does not hold there.** On the owner's phone the payment app posts **no transaction notifications at all**. What appears in the shade is the *SMS's own notification*, posted by the messaging app, carrying a body identical to the SMS that follows it. So on that device notifications are not a higher-recall second source; they are the same source twice.
 
@@ -131,7 +131,7 @@ Two consequences worth recording:
 - **If a user adds their messaging app to the allowlist** — reachable once P5 ships the Settings editor, and a natural thing to try — every bank SMS is then captured twice, from two different origins, so `body_hash` will not absorb it. P2-5's cross-source dedupe does: verified against the owner's real HDFC body, the notification copy falls to `generic-verb-then-amount` (amount and direction only, confidence 0.45), which shares the SMS candidate's `amount|direction` bucket and contradicts none of its fields, so it is suppressed in favour of the confidence-0.9 SMS extraction. The gap is a body that matches *no* rule at all: it would extract no amount, take a non-colliding key, and stand as a second row. That is the deliberate cost of keeping §5.1's never-drop rule ahead of dedupe for amountless candidates, and it is the safe direction — a visible duplicate rather than an invisible drop. Allowlisting a general messaging app also means LedgerFlow reads the notification body of *every* SMS, personal ones included, which is the guarantee §5.2 exists to make and a reason the curated default contains no such package.
 
 **Product flavours** (`productFlavors { smsFull; playSafe }`):
-- `smsFull` — Source A + Source B. Sideload / internal-testing track. Full feature set.
+- `smsFull` — Source A + Source B. GitHub Releases and Samsung Galaxy Store, signed with the owner's own key. Full feature set. Galaxy gets the arm64 split, because the universal APK is about 197 MB and two thirds of it is x86 code (`release.yml`).
 - `playSafe` — Source B + OCR + manual only. No restricted permissions. Play-eligible.
 
 **Architectural requirement (P1, not P5):** both sources implement `TransactionIngestSource`, emitting a common `RawIngestEvent(sourceType, sender, body, receivedAt, packageName?)`. Everything downstream — allowlist, rule engine, dedupe, `pending_transaction`, notification, review UI — is source-agnostic and lives in shared source sets. Only the two capture adapters are flavour-scoped.

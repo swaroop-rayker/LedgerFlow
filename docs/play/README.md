@@ -18,6 +18,10 @@ playSafe's **upload key**, with Google holding the Play signing key (Play App
 Signing); the account is a **new personal** one, so production needs a 14-day,
 12-tester closed test first.
 
+**Samsung Galaxy Store** is a second channel for the smsFull build
+(`com.ledgerflow`), from the same tag and the same key: `docs/galaxy/`. Steps
+1 to 3 below serve both stores. The privacy policy covers both builds.
+
 ## 0. Already true (checked 2026-10-02)
 
 - `targetSdk` 37, above Play's minimum.
@@ -65,9 +69,10 @@ The alias is `ledgerflow` if you used the command above.
 ## 3. Tag the release
 
 `version.properties` is `versionCode=1`, `versionName=0.1.0`. Pushing tag
-`v0.1.0` runs `release.yml`: guards, signed build of both flavours plus the
-playSafe AAB, `verifyReleaseSigning`, the durability suite on an emulator, and
-a **public** GitHub Release with the APKs, the AAB and both mapping files.
+`v0.1.0` runs `release.yml`: guards; two signed builds, each verified (the
+playSafe AAB and APK for Play, then smsFull's universal APK and per-ABI splits,
+including the Galaxy Store arm64 file); the durability suite on an emulator;
+and a **public** GitHub Release with the APKs, the AAB and both mapping files.
 Ask Claude to tag it, or:
 
 ```bash

@@ -182,10 +182,23 @@ if not rel_tasks:
 for task in sorted(rel_tasks - dry_run):
     failed = True
     print(f"::error::{REL} runs '{task}', which ci.yml's static-analysis dry run (-m) does not resolve (BUG46)")
+# Since 2026-10-02 the Galaxy Store upload is smsFull's arm64 split, so a
+# command that builds smsFull's release needs -Pledgerflow.abiSplits. And AGP
+# refuses to build an AAB with splits on, so a command that bundles must not
+# have it -- which is why release.yml builds in two runs.
 for c in rel_commands:
-    if any("Release" in t for t in c) and "-Pledgerflow.requireReleaseSigning" not in c:
+    if not any("Release" in t for t in c):
+        continue
+    joined = " ".join(c)
+    if "-Pledgerflow.requireReleaseSigning" not in c:
         failed = True
-        print(f"::error::{REL} builds a release without -Pledgerflow.requireReleaseSigning: {' '.join(c)} (BUG46)")
+        print(f"::error::{REL} builds a release without -Pledgerflow.requireReleaseSigning: {joined} (BUG46)")
+    if "SmsFullRelease" in joined and "-Pledgerflow.abiSplits" not in c:
+        failed = True
+        print(f"::error::{REL} builds smsFull's release without -Pledgerflow.abiSplits, so no Galaxy APK: {joined}")
+    if any(t.startswith("bundle") for t in c) and "-Pledgerflow.abiSplits" in c:
+        failed = True
+        print(f"::error::{REL} bundles with -Pledgerflow.abiSplits, which AGP refuses: {joined}")
 
 APP = "app/build.gradle.kts"
 with open(APP, encoding="utf-8") as f:

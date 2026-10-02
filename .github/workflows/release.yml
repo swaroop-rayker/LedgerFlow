@@ -65,21 +65,50 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
-      - name: Build signed artifacts (both flavours)
+      # Two Gradle runs, because AGP refuses to build an AAB while ABI splits
+      # are on ("Please disable building multiple APKs when building an
+      # Android app bundle", issuetracker 402800800 -- hit 2026-10-02).
+      #
+      # Play: playSafe's AAB (Play builds per-device APKs from it) and its
+      # universal APK, no splits.
+      #
+      # BUG46: until 2026-10-02 nothing read keystore.properties, so release
+      # was -unsigned. verifyReleaseSigning<Variant> checks every APK and the
+      # playSafe AAB and rejects the debug key. ci.yml dry-runs these task
+      # names on every PR, so they cannot rot.
+      - name: Build and verify Play artifacts (playSafe)
         run: |
           ./gradlew \
-            assembleSmsFullRelease \
             bundlePlaySafeRelease \
             assemblePlaySafeRelease \
+            :app:verifyReleaseSigningPlaySafeRelease \
             -Pledgerflow.requireReleaseSigning \
             --stacktrace
 
-      # BUG46: until 2026-10-02 nothing read keystore.properties, so these were
-      # -unsigned and this step could never pass. :app:verifyReleaseSigning
-      # checks every APK and the playSafe AAB, and rejects the debug key.
-      # ci.yml dry-runs these task names on every PR, so they cannot rot.
-      - name: Verify signature
-        run: ./gradlew :app:verifyReleaseSigning -Pledgerflow.requireReleaseSigning --stacktrace
+      # Sideload and Galaxy Store: smsFull with -Pledgerflow.abiSplits, which
+      # adds per-ABI APKs beside the universal one (owner, 2026-10-02). Galaxy
+      # gets the arm64 split: the universal APK is ~197 MB, ~130 MB of it
+      # x86/x86_64 code no Galaxy phone runs. GitHub keeps the universal APK.
+      - name: Build and verify sideload and Galaxy artifacts (smsFull)
+        run: |
+          ./gradlew \
+            assembleSmsFullRelease \
+            :app:verifyReleaseSigningSmsFullRelease \
+            -Pledgerflow.requireReleaseSigning \
+            -Pledgerflow.abiSplits \
+            --stacktrace
+
+      # The Galaxy Store upload (docs/galaxy/README.md). Fails rather than
+      # publishing a release without it, and holds it to the arm64 split's
+      # SPEC §11 budget, the same 50 MiB CI's assemble job applies.
+      - name: Galaxy Store APK (smsFull, arm64 split)
+        run: |
+          set -euo pipefail
+          GALAXY=app/build/outputs/apk/smsFull/release/app-smsFull-arm64-v8a-release.apk
+          test -f "$GALAXY" || { echo "::error::$GALAXY was not built. Did -Pledgerflow.abiSplits get dropped?"; exit 1; }
+          SIZE=$(stat -c%s "$GALAXY")
+          printf '%s -> %s KiB\n' "$GALAXY" "$((SIZE / 1024))"
+          test "$SIZE" -le $((50 * 1024 * 1024)) || { echo "::error::$GALAXY exceeds the 50 MiB budget (SPEC §11)"; exit 1; }
 
       # ── The release build must survive the same durability gates ──
       - name: Enable KVM

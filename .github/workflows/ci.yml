@@ -220,7 +220,7 @@ jobs:
         run: |
           ./gradlew -m \
             assembleSmsFullRelease bundlePlaySafeRelease assemblePlaySafeRelease \
-            :app:verifyReleaseSigning \
+            :app:verifyReleaseSigningPlaySafeRelease :app:verifyReleaseSigningSmsFullRelease \
             :core:database:connectedSmsFullDebugAndroidTest \
             :core:crypto:connectedSmsFullDebugAndroidTest
 
