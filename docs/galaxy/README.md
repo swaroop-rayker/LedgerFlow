@@ -71,8 +71,9 @@ GitHub Release.
    `https://github.com/swaroop-rayker/LedgerFlow/blob/main/docs/play/privacy-policy.md`;
    support email (shown publicly, owner's choice); age rating, adults.
 3. Data Safety tab: from `data-safety.md`.
-4. Screenshots and icon: the same set as Play (`docs/play/README.md` §5). The
-   icon is still undecided.
+4. Icon and screenshots: the same set as Play (`docs/play/README.md` §5):
+   `docs/brand/store-icon-512.png` and `docs/store/screenshots/`. Seller
+   Portal shows its own size rules on upload; resize there if it asks.
 5. Submit for review. Then run `TESTING.md` A8 on the Galaxy-delivered install.
 
 ## Every release after the first

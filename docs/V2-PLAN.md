@@ -157,6 +157,14 @@ reminders, overspending alerts (spend rate projected past a budget before month
 end), capture notifications (exists). Each a switch plus timing where it has
 one. All local (WorkManager), no push service.
 
+**Notification allowlist editor (deferred here by the owner, 2026-10-02).** v1
+ships a built-in list of payment and banking apps and no way to change it, and
+the store listings say exactly that. SPEC §3.1 has long said a user could add a
+messaging app "once P5 ships the Settings editor"; P5 did not ship it. The
+editor belongs in this section, and §3.1's consequences (a bank SMS captured
+twice; reading every SMS notification, personal ones included) are its design
+brief, not afterthoughts.
+
 ### 3.5 Security & privacy
 **App lock** (§7.6, specified since v1, not yet built): `BiometricPrompt` with
 device-credential fallback, gating the **UI only — never the DEK** (CLAUDE.md
@@ -183,6 +191,10 @@ and FAQ (bundled, offline), Report a bug (opens the user's email/GitHub with
 device info **they review before sending** — no telemetry), Privacy policy,
 Terms, open-source Licenses (generated from the dependency graph at build
 time — dependency choice to approve).
+
+**Public contact email (owner to decide, probably in v2; 2026-10-02).** Both
+store listings and `docs/play/privacy-policy.md` need one, and all three carry
+a placeholder until then. Whatever is chosen is shown publicly.
 
 ---
 

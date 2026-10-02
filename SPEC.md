@@ -1795,6 +1795,9 @@ Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — ach
 **Measured 2026-09-29 (P5)** — SM-S721B (Android 16, adaptive 60/120 Hz
 panel), `com.ledgerflow.bench` (release code, R8 on, not debuggable), a
 throwaway vault of 2,005 synthetic entries over five years, smsFull only.
+(Reseeded 2026-10-02 for the store screenshots: generic made-up merchants,
+each filed under its own category, instead of real brands at random. Same
+rules, 1,927 entries; measurements after that date are on this vault.)
 
 | Metric | Result | Budget |
 |---|---|---|

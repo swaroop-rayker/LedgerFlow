@@ -47,7 +47,6 @@ PRIVATE BY DESIGN
 • No account, no sign-in, no cloud sync.
 • The database is encrypted on the phone.
 • Your entries, messages and receipt images are processed on the phone and never uploaded.
-• An optional app lock puts the ledger behind your fingerprint or screen lock.
 
 YOU HOLD THE KEY
 At setup you write down a 24-word recovery phrase. It is the only way to restore your data on a new phone, and LedgerFlow cannot recover it for you. Encrypted backups go to a folder you choose, and can be restored on another phone with the phrase.

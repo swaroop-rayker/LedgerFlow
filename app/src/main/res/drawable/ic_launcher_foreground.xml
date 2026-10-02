@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LedgerFlow's icon, "two books" (owner's choice, 2026-10-02): a debit page and
+  a credit page side by side and never touching: the rule that the two
+  ledgers never mix (CLAUDE.md Law 2). Original geometry, drawn for this app;
+  colours are the dark theme's debit and credit (LfColors). Each page is one
+  even-odd path, so the three ruled lines are holes rather than dark strokes:
+  the monochrome layer reuses the same path data unchanged.
+
+  Adaptive-icon canvas 108 x 108; everything sits inside the 66 dp safe circle
+  (furthest corner 32.6 dp from the centre), so no launcher mask clips it.
+  docs/brand/ledgerflow-icon.svg is the same geometry for the store graphics.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF7A85"
+        android:fillType="evenOdd"
+        android:pathData="M36,34H48A4,4 0,0 1,52 38V72A4,4 0,0 1,48 76H36A4,4 0,0 1,32 72V38A4,4 0,0 1,36 34Z M37,42.25H47A1.75,1.75 0,0 1,47 45.75H37A1.75,1.75 0,0 1,37 42.25Z M37,50.25H44A1.75,1.75 0,0 1,44 53.75H37A1.75,1.75 0,0 1,37 50.25Z M37,58.25H47A1.75,1.75 0,0 1,47 61.75H37A1.75,1.75 0,0 1,37 58.25Z" />
+    <path
+        android:fillColor="#5FD0A6"
+        android:fillType="evenOdd"
+        android:pathData="M60,30H72A4,4 0,0 1,76 34V68A4,4 0,0 1,72 72H60A4,4 0,0 1,56 68V34A4,4 0,0 1,60 30Z M61,38.25H71A1.75,1.75 0,0 1,71 41.75H61A1.75,1.75 0,0 1,61 38.25Z M61,46.25H68A1.75,1.75 0,0 1,68 49.75H61A1.75,1.75 0,0 1,61 46.25Z M61,54.25H71A1.75,1.75 0,0 1,71 57.75H61A1.75,1.75 0,0 1,61 54.25Z" />
+</vector>

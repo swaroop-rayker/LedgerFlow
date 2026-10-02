@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <title>LedgerFlow icon: two books</title>
+  <desc>Master for the store graphics. Same geometry as app/src/main/res/drawable/ic_launcher_foreground.xml on the ic_launcher_background colour. Original artwork drawn for LedgerFlow, 2026-10-02.</desc>
+  <rect width="108" height="108" fill="#15171C"/>
+  <path fill="#FF7A85" fill-rule="evenodd" d="M36,34H48A4,4 0,0 1,52 38V72A4,4 0,0 1,48 76H36A4,4 0,0 1,32 72V38A4,4 0,0 1,36 34Z M37,42.25H47A1.75,1.75 0,0 1,47 45.75H37A1.75,1.75 0,0 1,37 42.25Z M37,50.25H44A1.75,1.75 0,0 1,44 53.75H37A1.75,1.75 0,0 1,37 50.25Z M37,58.25H47A1.75,1.75 0,0 1,47 61.75H37A1.75,1.75 0,0 1,37 58.25Z"/>
+  <path fill="#5FD0A6" fill-rule="evenodd" d="M60,30H72A4,4 0,0 1,76 34V68A4,4 0,0 1,72 72H60A4,4 0,0 1,56 68V34A4,4 0,0 1,60 30Z M61,38.25H71A1.75,1.75 0,0 1,71 41.75H61A1.75,1.75 0,0 1,61 38.25Z M61,46.25H68A1.75,1.75 0,0 1,68 49.75H61A1.75,1.75 0,0 1,61 46.25Z M61,54.25H71A1.75,1.75 0,0 1,71 57.75H61A1.75,1.75 0,0 1,61 54.25Z"/>
+</svg>

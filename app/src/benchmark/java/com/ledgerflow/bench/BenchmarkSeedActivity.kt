@@ -90,7 +90,13 @@ class BenchmarkSeedActivity : ComponentActivity() {
 
         val debitIds = ensureCategories(LedgerType.DEBIT, DEBIT_CATEGORIES)
         val creditIds = ensureCategories(LedgerType.CREDIT, CREDIT_CATEGORIES)
-        val merchantIds = MERCHANTS.mapNotNull { merchants.createOrGet(it).valueOrNull()?.id }
+        val debitIdByName = categories.observe(LedgerType.DEBIT).first().associate { it.name to it.id }
+        // (merchant id, its category id): a purchase is filed where it belongs.
+        val shops = MERCHANTS.mapNotNull { (name, category) ->
+            val merchantId = merchants.createOrGet(name).valueOrNull()?.id
+            val categoryId = debitIdByName[category]
+            if (merchantId != null && categoryId != null) merchantId to categoryId else null
+        }
 
         // Resumable: each finished day is recorded, so a run cut short (the
         // benchmark's timeout, a killed process) continues where it stopped
@@ -105,11 +111,12 @@ class BenchmarkSeedActivity : ComponentActivity() {
         while (!day.isAfter(today)) {
             val requests = buildList {
                 repeat(random.nextInt(MAX_DEBITS_PER_DAY + 1)) {
+                    val (merchantId, categoryId) = shops.random(random)
                     add(
                         request(
                             LedgerType.DEBIT,
                             Money(random.nextLong(MIN_DEBIT_MINOR, MAX_DEBIT_MINOR)),
-                            day, random, debitIds.random(random), merchantIds.random(random),
+                            day, random, categoryId, merchantId,
                         ),
                     )
                 }
@@ -179,10 +186,35 @@ class BenchmarkSeedActivity : ComponentActivity() {
             "Rent", "Groceries", "Dining", "Transport", "Utilities", "Shopping", "Health", "Entertainment",
         )
         val CREDIT_CATEGORIES = listOf("Salary", "Interest")
+
+        /**
+         * Merchant to category. **Generic, made-up names, never a real business**
+         * (owner, 2026-10-02): this vault is what the store screenshots are
+         * taken from, so a brand here would put someone's trademark on the
+         * listing. It used to hold real brands drawn at random against any
+         * category, which read as "Ola · Shopping". Rent has no merchant: it is
+         * the monthly entry below.
+         */
         val MERCHANTS = listOf(
-            "Zepto", "Swiggy", "Zomato", "Uber", "Ola", "BigBasket", "Amazon", "Flipkart", "DMart",
-            "Apollo Pharmacy", "BESCOM", "Airtel", "Jio", "PVR", "BookMyShow", "Starbucks",
-            "Reliance Fresh", "IRCTC", "Myntra", "Decathlon",
+            "Corner Grocers" to "Groceries",
+            "Green Basket Market" to "Groceries",
+            "Fresh Farm Dairy" to "Groceries",
+            "Spice Route Kitchen" to "Dining",
+            "Daily Brew Cafe" to "Dining",
+            "Tiffin Corner" to "Dining",
+            "City Cabs" to "Transport",
+            "Metro Rail" to "Transport",
+            "Highway Fuel" to "Transport",
+            "City Power" to "Utilities",
+            "Home Broadband" to "Utilities",
+            "Mobile Recharge" to "Utilities",
+            "Fashion Street" to "Shopping",
+            "Electronics Hub" to "Shopping",
+            "Book Nook" to "Shopping",
+            "Neighbourhood Pharmacy" to "Health",
+            "Family Clinic" to "Health",
+            "Cinema Hall" to "Entertainment",
+            "Game Zone" to "Entertainment",
         )
     }
 }

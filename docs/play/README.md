@@ -95,10 +95,27 @@ git push origin v0.1.0
 6. Then **Closed testing** with at least 12 testers for 14 days, then apply
    for production.
 
-## 5. Graphics (not done)
+## 5. Graphics (done 2026-10-02, shared with Galaxy Store)
 
-| Asset | Play's requirement | Status |
+| Asset | Requirement | File |
 |---|---|---|
-| App icon | 512 × 512 PNG | **Blocked**: the app has no launcher icon at all (it shows Android's default). Owner decision. |
-| Feature graphic | 1024 × 500 PNG or JPEG | Follows from the icon. |
-| Phone screenshots | 2 to 8, 16:9 or 9:16, each side 320 to 3,840 px | To capture from **LF Bench** (synthetic data, public test phrase), never the real vault. Needs the phone. |
+| App icon | 512 × 512 PNG, full square (the store masks it) | `docs/brand/store-icon-512.png` |
+| Feature graphic (Play only) | 1024 × 500 PNG or JPEG | `docs/brand/feature-graphic-1024x500.png` |
+| Phone screenshots | 2 to 8; each side 320 to 3,840 px; long side no more than twice the short | `docs/store/screenshots/1-…6-….png`, 1080 × 2104 (1.95 : 1), in upload order |
+
+**The icon is "two books"** (owner's choice, 2026-10-02): a debit page and a
+credit page side by side and never touching, in the app's own debit and credit
+colours. It is original artwork made of plain shapes, drawn for LedgerFlow. The
+launcher icon (`app/src/main/res/drawable/ic_launcher_*.xml`, adaptive, with a
+themed-icon layer) and `docs/brand/ledgerflow-icon.svg` share identical path
+data. The PNGs come from `docs/brand/render_store_graphics.py` (run it from the
+repository root); the feature graphic is set in Inter, which the app already
+ships under the SIL Open Font License. A trademark search of the name and mark
+(the IP India register, for instance) is the owner's to do before publishing.
+
+**The screenshots are from LF Bench**, never the real vault: its synthetic data,
+reseeded on 2026-10-02 with generic made-up merchants (no real brand appears),
+on SM-S721B at the owner's settings (font scale 1.15, Bold text on). They are
+cropped to the app's own area, without the status bar or navigation bar: the
+phone's full 1080 × 2340 frame is 2.17 : 1, over Play's limit. Retake them from
+LF Bench whenever a screen changes materially.
