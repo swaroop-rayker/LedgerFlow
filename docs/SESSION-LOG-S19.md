@@ -1,4 +1,4 @@
-# Session log — S19 (2026-10-01 → 10-02): P5 steps 4–5 — every screen has a golden, CI tells the truth, target 37
+# Session log — S19 (2026-10-01 → 10-02): P5 steps 4–6 — every screen has a golden, CI tells the truth, target 37, two stores
 
 Starts where S18's log ends (step 3, `021272b`/`736e55c`). Schema **v11,
 unchanged** throughout. Step 4 (accessibility pass and screen goldens) and the
@@ -100,29 +100,84 @@ What was verified, on Android 16 and the dev box:
   about 10-08); no benchmark numbers were taken (nothing in the bump touches
   startup or the frame path).
 
-## 5. State
+## 5. Step 6 — the stores (`2b99ee6`, `de60801`, `4fd37bb`, and the icon commit)
+
+**BUG46, found by preparing to ship.** `release.yml` had never run, and could
+not have shipped: release had no `signingConfig` (the `keystore.properties` it
+wrote was read by nothing, so every APK was `-unsigned`), its durability step
+named `connected*ReleaseAndroidTest` tasks that do not exist, and both
+flavours' `mapping.txt` were copied to one name. Fixed with
+`-Pledgerflow.requireReleaseSigning`, `:app:verifyReleaseSigning<Variant>`
+(apksig for APKs, the JAR signature for the AAB, the debug key rejected), a
+dry run of every `release.yml` task name in CI's static analysis, and a
+BUG46 section in `guard-workflows.sh`. Proved with a throwaway key, deleted
+after: green when signed, red on the debug key and when unsigned.
+
+**Google Play** (owner, 2026-10-02): playSafe as `com.ledgerflow.playsafe`, one
+key (smsFull's signer and Play's upload key, Google holding the app signing
+key), ML Kit's usage reporting **kept and declared**, a new personal account
+(internal testing, then a 12-tester 14-day closed test). Every arm64 native
+library is 16 KB-aligned. `docs/play/`: listing, Data safety, declarations,
+privacy policy, the owner's sequence.
+
+**Samsung Galaxy Store** (owner, same day): smsFull as `com.ledgerflow`, the
+GitHub release's package and key, so neither store updates the other's
+install. The universal APK is 196.8 MB, about 130 MB of it x86 code, so Galaxy
+gets the arm64 split (43.1 MB). AGP refuses to build an AAB with ABI splits on,
+found by running it, so `release.yml` builds in two runs. Free to publish, but
+Samsung requires commercial seller status (D-U-N-S or business documents) even
+for free apps. `docs/galaxy/`.
+
+**The icon** (owner chose "two books" of three original concepts): debit and
+credit pages side by side, never touching, in the app's own colours. Adaptive,
+with a themed-icon layer; the app had shipped with Android's default icon until
+now. Store PNGs rendered from the same path data
+(`docs/brand/render_store_graphics.py`), text in the bundled Inter (OFL).
+
+**Screenshots**, six, from LF Bench, cropped to the app's own area (1080 × 2104;
+the full frame's 2.17 : 1 is over Play's limit). LF Bench was reseeded first: its
+merchants were real brands drawn against random categories ("Ola · Shopping"),
+which would have put other companies' trademarks on the listing. Now generic
+made-up names, each filed under its own category; 1,927 entries.
+
+**What writing the listings corrected** (each checked against the code):
+- No allowlist editor shipped, so the notification list is described as
+  built in (editor deferred to v2).
+- **There is no app lock.** The repository has no biometric code; §7.6 was
+  never built (V2-PLAN §3.5 says so). The listing briefly claimed one, on the
+  strength of a fingerprint prompt seen on the owner's phone, which is the
+  phone's, not the app's. Memory corrected.
+- Every incoming SMS is stored encrypted on the phone; only bank senders'
+  are parsed; bodies are purged after 90 days (D-09). "Other messages are
+  ignored" was not true and is not what the policy says.
+
+## 6. State
 
 | | |
 |---|---|
-| Gate | `preMergeCheck --no-build-cache` green at the bump; guards (schema, versionCode, workflows) pass |
-| CI | `06cc187`: screenshot green over all 13 modules; unit-test jobs red only on the corpus gate (owner-only blocker); `instrumented`/`assemble` still never run |
-| Pushed | through `06cc187` |
-| Committed, not pushed | the `targetSdk` 37 bump and this log |
-| Device | `com.ledgerflow.debug` (real vault) and LF Bench at target 37, installed over the top. LF PlaySafe untouched, still at 36, running D11 |
+| Gate | `preMergeCheck --no-build-cache` green at each code commit; guards (schema, versionCode, workflows) pass |
+| CI | `4fd37bb`: guards, static analysis (with the release dry run), screenshot and compose stability green; unit-test jobs red only on the corpus gate (owner-only blocker); `instrumented`/`assemble` still never run |
+| Pushed | through `4fd37bb`; the icon and screenshot commit and this log await the owner's go-ahead |
+| Device | `com.ledgerflow.debug` (real vault, target 37, new icon), installed over the top, `firstInstallTime` 2026-08-25 unchanged. LF Bench reseeded (generic merchants, 1,927 entries). LF PlaySafe untouched, still at 36, running D11 |
 
-## 6. Outstanding
+## 7. Outstanding
 
-1. **P5 step 6:** Play listing and the playSafe release track; the owner does
-   the console side.
-2. **TESTING B7** on the phone's Android 17 update, after B1. Until then no
-   Android 17 behaviour is verified, Q24 included.
-3. **Owner decisions:** V2-PLAN D1–D8; the merchant-category seed list
-   (V2-PLAN §5.2); ghost Inbox fixtures (BUG-B: Google Pay 6/6 weak, SBI YONO
-   3/3, HDFCBK 4/33 per Diagnostics); the 120 Hz bar and a second test phone;
-   contrast as an instrumented check, or H4 by hand.
-4. **CI corpus blocker** (private corpus repo and token). `ubuntu-latest`
+1. **Before the first upload (owner):** make the release key and set the four
+   GitHub secrets (`docs/play/README.md` §1–2); choose the public contact
+   email (deferred, probably v2 — both stores need one to publish); a
+   trademark check of the name and icon. Then the `v0.1.0` tag.
+2. **Galaxy Store:** commercial seller status (D-U-N-S or business documents).
+   If review rejects `RECEIVE_SMS`, the fallback is a playSafe build under
+   `com.ledgerflow.galaxy`, not built.
+3. **TESTING B7** on the phone's Android 17 update, after B1; A7 and A8 on the
+   first store installs.
+4. **Owner decisions:** V2-PLAN D1–D8; the merchant-category seed list
+   (V2-PLAN §5.2); ghost Inbox fixtures (BUG-B); the 120 Hz bar and a second
+   test phone; contrast as an instrumented check, or H4 by hand.
+5. **CI corpus blocker** (private corpus repo and token). `ubuntu-latest`
    moves to Ubuntu 26 on 2026-10-19.
-5. **Owner TESTING rows:** H2, H4, D5, D9b, D11's result.
-6. Carried from step 4: the draft row's "Draft" marker ellipsizes at 2.0;
-   Export's file name breaks mid-date at 2.0; Entry's SaveBar padding (measure
-   on device first). `CsvWriter`'s two decimals (v2).
+6. **Owner TESTING rows:** H2, H4, D5, D9b, D11's result.
+7. **v2 now also holds:** the notification allowlist editor and the app lock
+   (§7.6, never built). Carried from step 4: the draft row's "Draft" marker
+   ellipsizes at 2.0; Export's file name breaks mid-date at 2.0; Entry's
+   SaveBar padding (measure on device first). `CsvWriter`'s two decimals.
