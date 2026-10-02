@@ -1,4 +1,7 @@
+import com.android.apksig.ApkVerifier
 import com.android.build.api.artifact.SingleArtifact
+import java.util.Properties
+import java.util.jar.JarFile
 
 plugins {
     // AGP 9+ has built-in Kotlin support. Applying org.jetbrains.kotlin.android
@@ -10,6 +13,34 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+/**
+ * Release signing (BUG46).
+ *
+ * `release.yml` has always written `keystore.properties` from the repository's
+ * secrets, and nothing read it: the release build type had no signing config,
+ * so every release APK came out `-unsigned` and the workflow's own signature
+ * step could never have passed. It never ran, so nobody found out.
+ *
+ * The file is gitignored (the `guards` job fails if one is tracked) and holds
+ * `storeFile`, `storePassword`, `keyAlias`, `keyPassword`. Absent, release
+ * stays unsigned, which is right for a dev box that only builds release to
+ * check R8. `-Pledgerflow.requireReleaseSigning`, which `release.yml` passes,
+ * turns that absence into a failure, so a tag can never publish an unsigned
+ * build. One key, owner's decision (2026-10-02): it signs sideloaded `smsFull`
+ * APKs and is `playSafe`'s Play upload key; Google holds the Play signing key.
+ */
+val releaseSigning: Properties? = providers
+    .fileContents(rootProject.layout.projectDirectory.file("keystore.properties"))
+    .asText.orNull
+    ?.let { text -> Properties().apply { load(text.reader()) } }
+
+if (releaseSigning == null && providers.gradleProperty("ledgerflow.requireReleaseSigning").isPresent) {
+    throw GradleException(
+        "ledgerflow.requireReleaseSigning is set but keystore.properties does not exist. " +
+            "A release must be signed (BUG46).",
+    )
+}
+
 android {
     namespace = "com.ledgerflow"
 
@@ -17,10 +48,25 @@ android {
         applicationId = "com.ledgerflow"
     }
 
+    signingConfigs {
+        releaseSigning?.let { props ->
+            fun required(key: String): String = requireNotNull(props.getProperty(key)?.takeIf { it.isNotBlank() }) {
+                "keystore.properties has no '$key' (BUG46)."
+            }
+            create("release") {
+                storeFile = file(required("storeFile"))
+                storePassword = required("storePassword")
+                keyAlias = required("keyAlias")
+                keyPassword = required("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         // Before `benchmark`, which copies release with initWith (BUG38).
         getByName("release") {
             proguardFiles("proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
 
         // What :benchmark measures (P5, SPEC §11). Release's code -- R8 on, not
@@ -191,6 +237,86 @@ androidComponents {
             }
         }
     }
+}
+
+/**
+ * BUG46's check: what a release produces is signed, and not with the debug key.
+ *
+ * `verifyReleaseSigning<Variant>` reads the variant's APKs with AGP's own
+ * `apksig` (the verifier `apksigner` wraps) and, for `playSafe`, the AAB that
+ * goes to Play, whose JAR signature the JDK can check. `verifyReleaseSigning`
+ * runs both; `release.yml` runs it, and CI dry-runs it on every PR so the task
+ * names `release.yml` uses cannot rot unseen again.
+ */
+val releaseSigningChecks = mutableListOf<String>()
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        val variantName = variant.name
+        val apkDir = variant.artifacts.get(SingleArtifact.APK)
+        // The AAB is what Play receives, and only playSafe goes to Play.
+        val bundle = if (variant.flavorName == "playSafe") variant.artifacts.get(SingleArtifact.BUNDLE) else null
+        val taskName = "verifyReleaseSigning${variantName.replaceFirstChar(Char::uppercaseChar)}"
+        releaseSigningChecks += taskName
+
+        tasks.register(taskName) {
+            group = "verification"
+            description = "Fails unless $variantName's release artifacts are signed with a non-debug key (BUG46)."
+            inputs.files(apkDir)
+            bundle?.let { inputs.file(it) }
+            outputs.upToDateWhen { false }
+
+            doLast {
+                val problems = mutableListOf<String>()
+                fun checkSubject(what: String, subjects: List<String>) {
+                    when {
+                        subjects.isEmpty() -> problems += "$what has no signer"
+                        subjects.any { "CN=Android Debug" in it } -> problems += "$what is signed with the DEBUG key"
+                        else -> logger.lifecycle("verifyReleaseSigning($variantName): $what signed by ${subjects.joinToString()}")
+                    }
+                }
+
+                val apks = apkDir.get().asFile.listFiles { f -> f.extension == "apk" }.orEmpty()
+                if (apks.isEmpty()) problems += "no APK was produced"
+                apks.forEach { apk ->
+                    if (apk.name.contains("unsigned")) problems += "${apk.name} is unsigned"
+                    val result = ApkVerifier.Builder(apk).build().verify()
+                    if (!result.isVerified) {
+                        problems += "${apk.name} does not verify: ${result.errors.joinToString { it.toString() }}"
+                    } else {
+                        checkSubject(apk.name, result.signerCertificates.map { it.subjectX500Principal.name })
+                    }
+                }
+
+                bundle?.get()?.asFile?.let { aab ->
+                    val subjects = JarFile(aab, true).use { jar ->
+                        // A JAR's signers are only known once each entry has been read in full.
+                        jar.entries().toList().filterNot { it.isDirectory || it.name.startsWith("META-INF/") }
+                            .flatMap { entry ->
+                                jar.getInputStream(entry).use { it.readBytes() }
+                                entry.codeSigners.orEmpty().map { signer ->
+                                    (signer.signerCertPath.certificates.first() as java.security.cert.X509Certificate)
+                                        .subjectX500Principal.name
+                                }.ifEmpty { listOf("") }
+                            }
+                    }
+                    if ("" in subjects) problems += "${aab.name} has an unsigned entry"
+                    checkSubject(aab.name, subjects.filter { it.isNotEmpty() }.distinct())
+                }
+
+                if (problems.isNotEmpty()) {
+                    problems.forEach { logger.error("::error::verifyReleaseSigning($variantName): $it") }
+                    throw GradleException("verifyReleaseSigning($variantName): ${problems.size} problem(s) (BUG46).")
+                }
+            }
+        }
+    }
+}
+
+tasks.register("verifyReleaseSigning") {
+    group = "verification"
+    description = "BUG46: every release artifact is signed, and not with the debug key."
+    dependsOn(releaseSigningChecks)
 }
 
 dependencies {

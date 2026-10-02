@@ -143,6 +143,57 @@ if 'gradleProperty("ledgerflow.goldensOnly")' not in ocr or "ReceiptCorpusTest" 
     failed = True
     print(f"::error::{OCR} no longer excludes ReceiptCorpusTest under ledgerflow.goldensOnly (BUG45)")
 
+# BUG46: release.yml runs only on a tag, and it shipped unsigned builds and
+# named Gradle tasks that never existed, unseen, because nothing ran it. Every
+# task it names must be dry-run (-m) by ci.yml's static-analysis job, and every
+# command that builds or checks a release must require signing.
+def gradle_commands(text):
+    """Each ./gradlew invocation in a script, continuation lines joined, as tokens."""
+    joined = []
+    for line in text.splitlines():
+        if joined and joined[-1].rstrip().endswith(chr(92)):
+            joined[-1] = joined[-1].rstrip()[:-1] + " " + line
+        else:
+            joined.append(line)
+    out = []
+    for line in joined:
+        tokens = line.split()
+        if "./gradlew" in tokens:
+            out.append(tokens[tokens.index("./gradlew") + 1:])
+    return out
+
+def scripts_of(jobs):
+    for job in jobs.values():
+        for step in (job or {}).get("steps") or []:
+            if isinstance(step, dict):
+                yield step.get("run", "") or ""
+                yield ((step.get("with") or {}).get("script", "")) or ""
+
+REL = ".github/workflows/release.yml"
+with open(REL, encoding="utf-8") as f:
+    rel_jobs = (yaml.safe_load(f) or {}).get("jobs") or {}
+rel_commands = [c for s in scripts_of(rel_jobs) for c in gradle_commands(s)]
+rel_tasks = {t for c in rel_commands for t in c if not t.startswith("-")}
+dry_run = {t for s in scripts_of({"static-analysis": ci_jobs.get("static-analysis")})
+           for c in gradle_commands(s) if "-m" in c for t in c if not t.startswith("-")}
+if not rel_tasks:
+    failed = True
+    print(f"::error::{REL} names no Gradle task; the guard cannot see it (BUG46)")
+for task in sorted(rel_tasks - dry_run):
+    failed = True
+    print(f"::error::{REL} runs '{task}', which ci.yml's static-analysis dry run (-m) does not resolve (BUG46)")
+for c in rel_commands:
+    if any("Release" in t for t in c) and "-Pledgerflow.requireReleaseSigning" not in c:
+        failed = True
+        print(f"::error::{REL} builds a release without -Pledgerflow.requireReleaseSigning: {' '.join(c)} (BUG46)")
+
+APP = "app/build.gradle.kts"
+with open(APP, encoding="utf-8") as f:
+    app = f.read()
+if 'gradleProperty("ledgerflow.requireReleaseSigning")' not in app or 'signingConfigs.findByName("release")' not in app:
+    failed = True
+    print(f"::error::{APP} no longer signs release from keystore.properties, or no longer honours requireReleaseSigning (BUG46)")
+
 if failed:
     print("")
     print("Workflow guard FAILED (BUG45): a CI job would stop at its first red module,")

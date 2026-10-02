@@ -212,6 +212,18 @@ jobs:
       # halves now say the same thing, which is the whole point of that task.
       - run: ./gradlew detekt lintSmsFullDebug lintPlaySafeDebug --stacktrace
 
+      # BUG46: release.yml runs only on a tag, so a task name it uses can rot
+      # for months unseen -- its "durability suite" named tasks that never
+      # existed. A dry run (-m) resolves every name without building anything.
+      # guard-workflows.sh requires every task release.yml names to be here.
+      - name: Release task names resolve (dry run)
+        run: |
+          ./gradlew -m \
+            assembleSmsFullRelease bundlePlaySafeRelease assemblePlaySafeRelease \
+            :app:verifyReleaseSigning \
+            :core:database:connectedSmsFullDebugAndroidTest \
+            :core:crypto:connectedSmsFullDebugAndroidTest
+
       - uses: actions/upload-artifact@v7
         if: always()
         with: { name: lint-reports, path: '**/build/reports/**' }

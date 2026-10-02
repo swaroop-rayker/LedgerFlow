@@ -71,15 +71,15 @@ jobs:
             assembleSmsFullRelease \
             bundlePlaySafeRelease \
             assemblePlaySafeRelease \
+            -Pledgerflow.requireReleaseSigning \
             --stacktrace
 
+      # BUG46: until 2026-10-02 nothing read keystore.properties, so these were
+      # -unsigned and this step could never pass. :app:verifyReleaseSigning
+      # checks every APK and the playSafe AAB, and rejects the debug key.
+      # ci.yml dry-runs these task names on every PR, so they cannot rot.
       - name: Verify signature
-        run: |
-          set -euo pipefail
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
-          for f in $(find . -path '*/release/*.apk'); do
-            "$APKSIGNER" verify --verbose "$f"
-          done
+        run: ./gradlew :app:verifyReleaseSigning -Pledgerflow.requireReleaseSigning --stacktrace
 
       # ── The release build must survive the same durability gates ──
       - name: Enable KVM
@@ -88,7 +88,11 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
 
-      - name: Durability suite against RELEASE build
+      # The tagged commit's durability suite. It runs the DEBUG variant: library
+      # modules build no release test variant, and the connected*Release tasks
+      # this step used to name never existed (BUG46). Release CODE (R8) is
+      # covered on the device by :benchmark's Bug38_OcrWorksInAShrunkBuildTest.
+      - name: Durability suite (tagged commit, debug variant)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
@@ -97,8 +101,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            ./gradlew :core:database:connectedSmsFullReleaseAndroidTest --stacktrace
-            ./gradlew :core:crypto:connectedSmsFullReleaseAndroidTest   --stacktrace
+            ./gradlew :core:database:connectedSmsFullDebugAndroidTest --stacktrace
+            ./gradlew :core:crypto:connectedSmsFullDebugAndroidTest   --stacktrace
 
       - name: Collect artifacts
         run: |
@@ -108,10 +112,14 @@ jobs:
           find . -path '*/release/*.aab' -exec cp {} dist/ \;
           # mapping.txt is MANDATORY — without it, R8-obfuscated crash reports
           # from the diagnostics screen (BUG7) are unreadable forever.
-          find . -name mapping.txt -path '*release*' | while read -r m; do
-            MODULE=$(echo "$m" | cut -d/ -f2)
-            cp "$m" "dist/mapping-${MODULE}-${GITHUB_REF_NAME}.txt"
+          # Named by VARIANT (.../mapping/<variant>/mapping.txt). This used the
+          # module name, which is `app` for both flavours, so one flavour's
+          # mapping overwrote the other's (BUG46).
+          find . -name mapping.txt -path '*/mapping/*Release/*' | while read -r m; do
+            VARIANT=$(basename "$(dirname "$m")")
+            cp "$m" "dist/mapping-${VARIANT}-${GITHUB_REF_NAME}.txt"
           done
+          test "$(ls dist/mapping-*.txt | wc -l)" -ge 2 || { echo "::error::expected a mapping file per flavour"; exit 1; }
           find . -name 'baseline-prof.txt' -exec cp {} dist/ \; || true
           ls -la dist/
 
