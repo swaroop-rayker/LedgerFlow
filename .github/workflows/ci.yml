@@ -282,7 +282,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [26, 36]   # minSdk floor and current target. Nightly adds 34.
+        api: [26, 36]   # minSdk floor and the primary device (target is 37, SPEC §3.2). Nightly adds 34.
     steps:
       - uses: actions/checkout@v7
         with: { lfs: true }

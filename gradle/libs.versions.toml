@@ -18,12 +18,13 @@ jvmTarget = "17"
 # SDK levels (SPEC.md §3)
 # compileSdk is 37 because AndroidX (Compose BOM 2026.08.00, lifecycle 2.11.0)
 # is now built against it and AGP refuses to compile against an older platform.
-# targetSdk deliberately stays at 36: compiling against newer APIs is separate
-# from opting in to new runtime behaviour, and the targetSdk bump to 37 is its
-# own piece of work with its own testing (SPEC.md §3, P5).
+# targetSdk 37 since P5 step 5, as its own change (SPEC.md §3). Android 17's
+# target-37 changes that touch this app are listed there; the one with teeth is
+# the SMS OTP hold-back (§16 Q24). Edge-to-edge and predictive back were already
+# enforced at 36.
 minSdk = "26"
 compileSdk = "37"
-targetSdk = "36"
+targetSdk = "37"
 
 # AndroidX
 coreKtx = "1.19.0"

@@ -99,7 +99,7 @@ Revisiting this decision requires a new ADR superseding ADR-0001 and a full rewr
 |---|---|---|
 | `minSdk` | **26** (Android 8.0) | Notification channels, `java.time` desugaring, Keystore AES-GCM maturity. Covers ~97% of devices. |
 | `compileSdk` | **37** (Android 17) | Forced, not chosen: AndroidX (Compose BOM 2026.08.00, lifecycle 2.11.0) is built against 37 and AGP refuses to compile against an older platform. |
-| `targetSdk` | **36** (Android 16), bump to 37 at P5 | Compiling against newer APIs is independent of opting in to new runtime behaviour. The `targetSdk` bump carries edge-to-edge enforcement and new foreground-service rules, so it gets its own testing pass rather than riding along with a dependency upgrade. |
+| `targetSdk` | **37** (Android 17), since P5 step 5 | Compiling against newer APIs is independent of opting in to new runtime behaviour, so the bump was its own change with its own testing pass (§3.2), not part of a dependency upgrade. This row once said the bump "carries edge-to-edge enforcement and new foreground-service rules". It carried neither: both edge-to-edge and predictive back were already enforced at target 36, and Android 17 adds no foreground-service rule. |
 | Language | Kotlin (latest stable), JVM target 17, core library desugaring **on** | |
 | Build | Gradle Kotlin DSL + Version Catalog (`libs.versions.toml`) + Convention Plugins | Reproducible, no version drift. |
 | ABI | `arm64-v8a` primary, `armeabi-v7a` fallback, App Bundle splits | |
@@ -476,6 +476,33 @@ A candidate with **no extracted amount** gets a deliberately non-colliding key, 
 **What this accepts:** two genuinely different payments of the same amount and direction, inside three minutes, with nothing distinguishing them, will merge. §3.1 makes that recoverable rather than lossy — the suppressed row is retained and visible. A missed merge shows the user a duplicate; a wrong merge hides a row that is still there. Neither is free and only one is invisible.
 
 **A known false negative:** where the bank SMS names a payee ("RAMESH KUMAR") and the app's notification shows a VPA ("ramesh@okhdfcbank"), the two normalise differently and read as a contradiction, so the payment is not merged. That errs toward showing two rows, which is the safe direction, and is left for P2-9 to revisit once the corpus holds 50+50 real messages rather than being guessed at now.
+
+### 3.2 targetSdk 37 (P5 step 5, 2026-10-01)
+
+Android 17's changes, from Google's lists for apps targeting 37 and for all
+apps, mapped against what this app does:
+
+| Change | Here |
+|---|---|
+| A standard SMS classified as an OTP is withheld for three hours (broadcast held, provider filtered). Target 37. | **The one with teeth.** The SMS adapter only listens for the broadcast. Harmless for a real OTP; a loss only if a transaction alert is misclassified. §16 Q24. |
+| Edge-to-edge and predictive back | Nothing new. Both were enforced at target 36, which this app already met (`LfScaffold`, BUG29). |
+| Sensitive notification text hidden from listeners | Android 15+, every app. Not a target-37 change; already in effect on the primary device. |
+| Background activity launch hardened for `IntentSender` | `[Review]` is a notification content intent started by the user's tap, which stays allowed. |
+| `System.load()` of a writable native file fails; per-device app memory limits (all apps) | Native code (SQLCipher, ML Kit, OpenCV) loads from the APK. OCR is the heaviest memory user. |
+| `static final` fields unmodifiable by reflection; new lock-free `MessageQueue` | Neither in this app's code; a dependency that does either fails only at run time on 17. |
+| `setContentCaptureEnabled(false)` no longer works | Never called. `phraseSecret()` uses `sensitiveContent`. |
+| Local-network permission, Keystore limit (50,000 keys), ECH, certificate transparency, widget `RemoteViews` memory, background audio, Bluetooth, Contacts provider | Not applicable: no networking of ours, a handful of keys, no widgets, audio, Bluetooth or contacts. |
+| Orientation and resizability ignored at sw ≥ 600 dp | No lock is declared, so nothing changes. |
+| Foreground services, WorkManager, SAF, CameraX, BiometricPrompt | No change in Android 17. |
+
+**Permissions are unchanged by the bump**: `EXPECTED_MERGED_PERMISSIONS` needed
+no edit, and its four pinned variants (both flavours, debug and release) pass along with `restrictedPermissionCheck`. R8 builds the release and `benchmark` variants at 37.
+
+**What was verified, and where.** The primary device runs Android 16, where a
+target-37 app behaves as a target-36 one. Verification there proves only that
+nothing else broke. **Behaviour that exists only on Android 17 is not verified**:
+the owner chose (2026-10-01) to check it on the phone's own Android 17 update
+rather than an emulator, and `TESTING.md` B7 is that pass.
 
 ---
 
@@ -1976,7 +2003,7 @@ inset like every other screen's, with Back above the title.
 | **P2 — Automated ingest** | Shared rule engine, `ParseIngestWorker`, cross-source dedupe, Inbox, notification actions, approve/discard — **plus both capture adapters: SMS receiver (`smsFull`) and `NotificationIngestService` (both flavours)**. Permission UX, listener rebind and the §5.2 health banner shipped at P2-8. | 50-SMS + 50-notification golden corpus passing. Dedupe test: same UPI txn via both sources → exactly one pending row. **Met at P2-9, with the corpus's composition stated rather than implied.** The dedupe test shipped at P2-5 (`Dedupe_SameTxnAcrossSources_ProducesOnePending`). The corpus reached **52 SMS + 53 notifications** as a **mixed** corpus — the owner's decision, because `adb` cannot deliver an SMS or post a notification as another app, so a hundred real messages would have put this exit months away. Every fixture declares `provenance`; `CorpusProvenanceTest` floors the real count so it can never quietly shrink and requires each real fixture to record what was substituted out of it, since this repository is public. **The honest number is 4 real SMS and 0 real notifications** — §16 Q15 is what an unmarked synthetic corpus costs, and the floor is what stops this one becoming the same thing. Expanding it immediately surfaced two live truncation defects (§16 Q17), which is the argument that it was worth doing. `TESTING.md` F23 is what starts turning the real column. |
 | **P3 — Analytics** | Rollup table + worker, all chart views, filters, period comparison, budgets + alerts. **Plus the three P3 differentiators** — capture coverage, the parser gap list and the two-book parallel view — which need no new schema and no OCR (`docs/DATAVIZ-PLAN.md` Family C, D). Charting is hand-rolled `Lf*` Canvas, no dependency (ADR-0005). | 5Y query < 300 ms, **measured on the device**. Reviewed goldens at 1x and 2x for every new chart. |
 | **P4 — OCR** | CameraX, file/PDF import, line-item extraction, review editor, category memory (`item_category_memory`), attachments (`attachment`, ADR-0023). **Schema v11 adds `attachment` and `item_category_memory`** — and *not* `pending_line_item`, which ADR-0022 declines to build: v8's `review_draft_json` already carries itemised lines and OCR's extraction rides `extracted_json`, so an itemised candidate needs no table (§16 Q7). **This is what unlocks the item-grain analytics** (`docs/DATAVIZ-PLAN.md` Family B): personal price index, price-vs-quantity bridge, cross-merchant and pack-size unit pricing. | ≥90% recall on receipt corpus — which is also the real gate on the price views, since they are worthless on a corpus that misreads quantities. |
-| **P5 — Polish & harden** | Baseline profiles, screenshot suite, a11y pass, XLSX export, diagnostics screen — which is where the **ingest diagnostics** live (dedupe evidence, parser confidence distribution, pipeline latency; **shipped**, §5.6), plus the recurring cash-flow runway. Play listing + `playSafe` release track, API 37 readiness | All §11 budgets met. |
+| **P5 — Polish & harden** | Baseline profiles, screenshot suite, a11y pass, XLSX export, diagnostics screen — which is where the **ingest diagnostics** live (dedupe evidence, parser confidence distribution, pipeline latency; **shipped**, §5.6), plus the recurring cash-flow runway. Play listing + `playSafe` release track, API 37 readiness (**`targetSdk` 37 since step 5**, 2026-10-02, §3.2; the Android 17 pass waits for the device update, `TESTING.md` B7) | All §11 budgets met. |
 
 ### 13.1 P0 exit criteria
 
@@ -2243,3 +2270,23 @@ while giving none, so it was removed with its catalog entry. It is the only
 automated route to **contrast** (§9.6's AA minimum); the open choice is to run
 it as an *instrumented* test on the phone (it is built for that), at the cost of
 a device run per check. Until then contrast is a manual row (`TESTING.md` H4).
+
+24. **Android 17 holds back SMS it classifies as an OTP, and the SMS adapter
+    only ever sees the broadcast.** For apps targeting API 37 (P5 step 5), a
+    standard SMS "containing an OTP" is withheld for three hours: the
+    `SMS_RECEIVED_ACTION` broadcast is held and the SMS provider is filtered.
+    The default SMS app and a few others are exempt; LedgerFlow is not. Google
+    does not publish the classifier, nor whether the held broadcast is
+    delivered when the three hours end or the message merely becomes readable
+    in the provider. `smsFull` holds `RECEIVE_SMS` only, never `READ_SMS`, so
+    in the second case a held message is never captured by SMS at all. That
+    touches §5.1's never-drop rule only if a **transaction alert** is
+    misclassified, for example one carrying "never share your OTP". A real OTP
+    being delayed costs nothing, because it is not a transaction.
+    **Owner's assessment (2026-10-01): no real risk now or in the near future.**
+    Recorded rather than solved. Nothing here can be observed on Android 16,
+    and the owner chose to verify target-37 behaviour on the phone's own
+    Android 17 update rather than on an emulator; this device cannot be sent
+    an SMS by `adb`, so the check waits for a real alert. If one is ever held,
+    the remedies are coverage decisions for the owner: allowlist the bank's
+    own app for notification ingest (§5.2), or accept the delay.
