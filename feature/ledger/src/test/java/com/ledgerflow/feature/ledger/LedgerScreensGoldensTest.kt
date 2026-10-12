@@ -6,11 +6,16 @@ import androidx.paging.LoadStates
 import androidx.paging.PagingData
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.inbox.PendingTransaction
+import com.ledgerflow.core.domain.ingest.ExtractedDirection
+import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.ledger.DraftSummary
 import com.ledgerflow.core.model.DeletedEntry
+import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
 import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
@@ -122,6 +127,32 @@ class LedgerScreensGoldensTest {
         ),
     )
 
+    /**
+     * A bank-SMS candidate beside the draft (BUG47): the "To review" row had no
+     * golden, which is how its marker going missing at 2.0 went unseen.
+     * A generic payee, never a real business.
+     */
+    private val candidate = UnsavedRow.Candidate(
+        PendingTransaction(
+            id = "p1",
+            source = EntrySource.SMS,
+            extracted = ExtractedTransaction(
+                amount = Money(1_865_00),
+                direction = ExtractedDirection.DEBIT,
+                merchantRaw = "CORNER GROCERS",
+                occurredAt = NOW - 3 * HOUR,
+                confidence = 0.9,
+            ),
+            confidence = 0.9,
+            status = PendingStatus.PENDING,
+            needsManualFill = false,
+            suppressedById = null,
+            createdAt = NOW - 3 * HOUR,
+            reviewedAt = null,
+            approvedEntryId = null,
+        ),
+    )
+
     private val binEntries = listOf(
             DeletedEntry(
                 id = "b1",
@@ -162,10 +193,12 @@ class LedgerScreensGoldensTest {
         isLoaded = true,
     )
 
-    @Test fun expenses_1x() = ledger("ledger-expenses-1x", state(LedgerType.DEBIT, true, listOf(draft)), expenses, 1f)
+    private val expensesState = state(LedgerType.DEBIT, true, listOf(draft, candidate))
+
+    @Test fun expenses_1x() = ledger("ledger-expenses-1x", expensesState, expenses, 1f)
 
     @Config(qualifiers = PHONE_2X)
-    @Test fun expenses_2x() = ledger("ledger-expenses-2x", state(LedgerType.DEBIT, true, listOf(draft)), expenses, 2f)
+    @Test fun expenses_2x() = ledger("ledger-expenses-2x", expensesState, expenses, 2f)
 
     @Test fun income_1x() = ledger("ledger-income-1x", state(LedgerType.CREDIT, true), income, 1f)
 

@@ -139,13 +139,28 @@ private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (
                 LfChip(label = "Not encrypted", style = LfChipStyle.Warning)
             }
             Text(
-                text = suggestedFileName,
+                text = breakBeforeDate(suggestedFileName),
                 style = LfTheme.typography.label,
                 color = LfTheme.colors.textTertiary,
             )
         }
     }
 }
+
+/**
+ * The file name with one break opportunity, just before its date (BUG48).
+ *
+ * A file name has no spaces, and the line breaker will not break at a hyphen
+ * followed by a digit, so at font scale 2.0 the only break left was inside the
+ * year: "LedgerFlow-export-202" / "6-08-21.xlsx". A zero-width space before the
+ * date lets the line end at "export-" instead. Display only: the name handed to
+ * the file picker is [ExportViewModel.suggestedFileName], untouched.
+ */
+internal fun breakBeforeDate(fileName: String): String =
+    fileName.replace(DATE_IN_NAME, ZERO_WIDTH_SPACE + "$0")
+
+private val DATE_IN_NAME = Regex("""\d{4}-\d{2}-\d{2}""")
+private const val ZERO_WIDTH_SPACE = "\u200B"
 
 @Composable
 private fun StatusCard(status: ExportStatus, onEvent: (ExportEvent) -> Unit) {

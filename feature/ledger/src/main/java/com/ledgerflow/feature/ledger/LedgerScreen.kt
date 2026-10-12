@@ -26,11 +26,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -344,7 +346,7 @@ private fun CandidateRow(
     val stamp = candidate.effective.occurredAt
         ?.let { TimeStamp.ofCapture(it, capturedAt = candidate.createdAt, withDate = true) }
         ?: TimeStamp.of(candidate.createdAt, withDate = true)
-    val detail = "$stamp$SEPARATOR$TO_REVIEW_MARKER"
+    val detail = candidateDetail(stamp)
 
     Row(
         modifier = Modifier
@@ -369,31 +371,31 @@ private fun CandidateRow(
         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // The draft row's shape (BUG47): title across the top, then the detail
+        // line and the amount on the adaptive body, which moves the amount
+        // below only when both will not fit. With the amount in a column of
+        // its own, the detail line got about 150 dp at font scale 2.0.
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 style = LfTheme.typography.bodyL,
                 color = LfTheme.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
-            Text(
+            EntryRowBody(
                 // The marker is what stops two rows that look alike opening
                 // different screens with no warning. It rides the line the
                 // stamp is already on, so it costs no height.
-                text = detail,
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                leading = { UnsavedDetail(text = detail, color = LfTheme.colors.textTertiary) },
+                trailing = {
+                    Text(
+                        text = amount,
+                        style = LfTheme.typography.amountM,
+                        color = LfTheme.colors.textSecondary,
+                        maxLines = 1,
+                    )
+                },
             )
         }
-        Text(
-            text = amount,
-            style = LfTheme.typography.amountM,
-            color = LfTheme.colors.textSecondary,
-            maxLines = 1,
-        )
     }
 }
 
@@ -501,7 +503,7 @@ private fun PendingRow(
     // "Draft, ... 2:49 pm, Draft" -- heard on the device, where a duplicated
     // word is more obviously wrong than it looks in source.
     val stamp = occurredStamp(draft.datedAt, withDate = true)
-    val detail = stamp + SEPARATOR + DRAFT_MARKER
+    val detail = pendingDetail(stamp)
 
     Row(
         modifier = Modifier
@@ -735,12 +737,33 @@ private fun EntrySwatch(item: LedgerListItem) {
  */
 @Composable
 private fun PendingStatus(stamp: String) {
+    UnsavedDetail(text = stamp, color = LfTheme.colors.accent)
+}
+
+/** A draft's detail line: when it is dated, then the marker. */
+internal fun pendingDetail(stamp: String): String = stamp + SEPARATOR + DRAFT_MARKER
+
+/** A candidate's detail line: when it happened, then the marker. */
+internal fun candidateDetail(stamp: String): String = stamp + SEPARATOR + TO_REVIEW_MARKER
+
+/**
+ * The detail line of an Unsaved row: the stamp, then the `Draft` / `To review`
+ * marker (`960b5ee`). The stamp leads, so on a narrow line it is never the part
+ * that goes.
+ */
+@Composable
+internal fun UnsavedDetail(
+    text: String,
+    color: Color,
+    onTextLayout: (TextLayoutResult) -> Unit = {},
+) {
     Text(
-        text = stamp,
+        text = text,
         style = LfTheme.typography.label,
-        color = LfTheme.colors.accent,
-        maxLines = NOTE_MAX_LINES,
+        color = color,
+        maxLines = UNSAVED_DETAIL_MAX_LINES,
         overflow = TextOverflow.Ellipsis,
+        onTextLayout = onTextLayout,
     )
 }
 
@@ -930,6 +953,13 @@ private const val PENDING_TYPE = "pending"
 private const val CANDIDATE_TYPE = "candidate"
 private const val SEPARATOR = " · "
 private const val NOTE_MAX_LINES = 1
+
+/**
+ * Two, so at large text the `Draft` / `To review` marker wraps rather than being
+ * the part the ellipsis takes (BUG47). At font scale 1.0 the line still fits on
+ * one, so this costs no height where the row is usually seen.
+ */
+internal const val UNSAVED_DETAIL_MAX_LINES = 2
 
 
 /**
