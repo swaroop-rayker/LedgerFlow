@@ -28,6 +28,7 @@ import com.ledgerflow.core.domain.ingest.PendingCandidate
 import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
+import com.ledgerflow.core.domain.usecase.RecordCaptureGapUseCase
 import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.model.RawParseStatus
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -60,6 +61,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     private val clock: Clock,
     private val ids: Uuid7Generator,
     private val candidateWriter: PendingCandidateWriter,
+    private val recordCaptureGap: RecordCaptureGapUseCase,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : RawIngestRepository {
 
@@ -79,11 +81,30 @@ public class DefaultRawIngestRepository @Inject constructor(
      */
     private suspend fun openVault(): LedgerFlowDatabase? = session.openForBackgroundWork()
 
+    /**
+     * [openVault] for the two **capture** entry points, which also report a
+     * refusal (SPEC.md §16 Q16).
+     *
+     * A message reaches exactly one of them -- an SMS is [record]ed, a
+     * notification's package is checked by [isPackageAllowed] first and goes
+     * no further when the vault is shut -- so each lost message is counted
+     * once. [RecordCaptureGapUseCase] decides whether the state the vault was
+     * left in lost anything (before onboarding, nothing is being captured).
+     * The worker's paths use [openVault] and record nothing: a parse pass that
+     * cannot open the vault retries, and loses no message.
+     */
+    private suspend fun openForCapture(): LedgerFlowDatabase? =
+        openVault() ?: run {
+            recordCaptureGap(session.state.value)
+            null
+        }
+
     override suspend fun isPackageAllowed(packageName: String): Boolean = withContext(io) {
         // A locked vault cannot answer, and the honest answer is "no". Reading a
         // notification we could not then store would be the §5.2 rule broken for
-        // nothing.
-        val database = openVault() ?: return@withContext false
+        // nothing. The refusal is reported (Q16), and nothing about the
+        // notification goes with it -- not even its package.
+        val database = openForCapture() ?: return@withContext false
         runCatching { database.packageAllowlistDao().isAllowed(packageName) }
             .getOrDefault(false)
     }
@@ -96,7 +117,7 @@ public class DefaultRawIngestRepository @Inject constructor(
     }
 
     override suspend fun record(event: RawIngestEvent): CaptureOutcome = withContext(io) {
-        val database = openVault()
+        val database = openForCapture()
             ?: return@withContext CaptureOutcome.Failed("vault is locked")
 
         val id = ids.generate()

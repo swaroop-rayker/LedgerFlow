@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.backup.ObserveLastBackupUseCase
+import com.ledgerflow.core.domain.usecase.AcknowledgeCaptureGapUseCase
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
+import com.ledgerflow.core.domain.usecase.ObserveCaptureGapUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +33,8 @@ import kotlinx.coroutines.launch
 public class DashboardViewModel @Inject constructor(
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
     private val lastBackup: ObserveLastBackupUseCase,
+    private val observeCaptureGap: ObserveCaptureGapUseCase,
+    private val acknowledgeCaptureGap: AcknowledgeCaptureGapUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DashboardUiState())
@@ -62,6 +66,16 @@ public class DashboardViewModel @Inject constructor(
                 judgeBackup()
             }
         }
+        // Written from a receiver while this screen may be open, so observed
+        // rather than read on resume (§16 Q16).
+        viewModelScope.launch {
+            observeCaptureGap().collect { gap -> _state.update { it.copy(captureGap = gap) } }
+        }
+    }
+
+    /** "Got it" on the capture-gap card: the user has seen the window. */
+    public fun acknowledgeCaptureGap() {
+        viewModelScope.launch { acknowledgeCaptureGap.invoke() }
     }
 
     private fun judgeBackup() {

@@ -1,7 +1,9 @@
 package com.ledgerflow.core.datastore.di
 
+import com.ledgerflow.core.datastore.CaptureGapDataStore
 import com.ledgerflow.core.datastore.ListenerHealthDataStore
 import com.ledgerflow.core.datastore.NotificationSetupDataStore
+import com.ledgerflow.core.domain.ingest.CaptureGapStore
 import com.ledgerflow.core.domain.ingest.ListenerHealthStore
 import com.ledgerflow.core.domain.ingest.NotificationSetupStore
 import dagger.Binds
@@ -23,6 +25,10 @@ internal abstract class DatastoreModule {
 
     @Binds
     internal abstract fun listenerHealthStore(store: ListenerHealthDataStore): ListenerHealthStore
+
+    /** §16 Q16's window; within ADR-0020's rule (see the ADR's key table). */
+    @Binds
+    internal abstract fun captureGapStore(store: CaptureGapDataStore): CaptureGapStore
 
     @Binds
     internal abstract fun notificationSetupStore(

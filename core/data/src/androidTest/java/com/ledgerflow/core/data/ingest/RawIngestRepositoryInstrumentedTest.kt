@@ -13,6 +13,8 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PendingTransactionEntity
 import com.ledgerflow.core.database.entity.SenderAllowlistEntity
+import com.ledgerflow.core.domain.ingest.CaptureGap
+import com.ledgerflow.core.domain.ingest.CaptureGapStore
 import com.ledgerflow.core.domain.ingest.CaptureOutcome
 import com.ledgerflow.core.domain.ingest.DedupeKey
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
@@ -22,6 +24,7 @@ import com.ledgerflow.core.domain.ingest.InstrumentHint
 import com.ledgerflow.core.domain.ingest.PendingCandidate
 import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
+import com.ledgerflow.core.domain.usecase.RecordCaptureGapUseCase
 import com.ledgerflow.core.domain.vault.VaultInitRequest
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
@@ -33,6 +36,7 @@ import java.security.KeyStore
 import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -63,6 +67,19 @@ class RawIngestRepositoryInstrumentedTest {
     private lateinit var repository: DefaultRawIngestRepository
     private var now = NOW
 
+    /** §16 Q16's window, in memory: what the repository reports, nothing else. */
+    private val gaps = object : CaptureGapStore {
+        val state = MutableStateFlow<CaptureGap?>(null)
+        override val gap = state
+        override suspend fun recordMissed(atMillis: Long) {
+            state.value = state.value?.let { it.copy(lastMissedAt = atMillis, missed = it.missed + 1) }
+                ?: CaptureGap(atMillis, atMillis, 1)
+        }
+        override suspend fun clear() {
+            state.value = null
+        }
+    }
+
     @Before
     fun setUp() = runBlocking {
         keyDirectory.deleteRecursively()
@@ -92,6 +109,7 @@ class RawIngestRepositoryInstrumentedTest {
             // The real writer, not a stand-in: the dedupe under test lives in
             // it now, and it is shared with the OCR path below.
             candidateWriter = PendingCandidateWriter(Clock { now }, ids),
+            recordCaptureGap = RecordCaptureGapUseCase(gaps, Clock { now }),
             io = Dispatchers.IO,
         )
     }
@@ -352,6 +370,27 @@ class RawIngestRepositoryInstrumentedTest {
             .isInstanceOf(CaptureOutcome.Failed::class.java)
         assertThat(repository.purgeExpiredBodies()).isEqualTo(0)
         assertThat(repository.triageCapturedSms(limit = 10)).isEqualTo(0)
+    }
+
+    /**
+     * **BUG50 (§16 Q16) on the real vault:** with the Keystore wrap gone, each
+     * capture entry point reports the refusal once, and the worker's paths
+     * report nothing. The key files stay, so this is the "wrap is gone" state
+     * Recovery handles, not a vault that never existed.
+     */
+    @Test
+    fun Bug50_aCaptureTheVaultRefused_isRecordedOnceAndWithoutContent() = runBlocking {
+        session.close()
+        deleteKeystoreEntry()
+
+        assertThat(repository.isPackageAllowed("com.google.android.apps.nbu.paisa.user")).isFalse()
+        assertThat(repository.record(sms("Rs 240 debited")))
+            .isInstanceOf(CaptureOutcome.Failed::class.java)
+        // Worker paths: they retry, so they lose nothing and record nothing.
+        assertThat(repository.isSenderAllowed("VM-HDFCBK")).isFalse()
+        assertThat(repository.triageCapturedSms(limit = 10)).isEqualTo(0)
+
+        assertThat(gaps.state.value).isEqualTo(CaptureGap(firstMissedAt = now, lastMissedAt = now, missed = 2))
     }
 
     /**

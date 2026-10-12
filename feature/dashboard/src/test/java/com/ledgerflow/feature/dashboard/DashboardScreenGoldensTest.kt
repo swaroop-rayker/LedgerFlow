@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupReminder
+import com.ledgerflow.core.domain.ingest.CaptureGap
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
 import com.ledgerflow.core.testing.screenshot.PHONE_1X
@@ -54,4 +55,19 @@ class DashboardScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun bothBanners_2x() = capture("home-banners-2x", bothBanners, 2f)
+
+    /**
+     * §16 Q16's card (BUG50), above the others: 2 Oct 04:44 to 3 Oct 02:32 UTC,
+     * the harness's zone. Shown with a backup reminder so the stacking is seen.
+     */
+    private val captureGap = DashboardUiState(
+        captureHealth = NotificationCaptureHealth.CONNECTED,
+        backupReminder = BackupReminder.Stale(daysAgo = 12),
+        captureGap = CaptureGap(firstMissedAt = 1_790_916_240_000L, lastMissedAt = 1_790_994_720_000L, missed = 7),
+    )
+
+    @Test fun captureGap_1x() = capture("home-capture-gap-1x", captureGap, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun captureGap_2x() = capture("home-capture-gap-2x", captureGap, 2f)
 }

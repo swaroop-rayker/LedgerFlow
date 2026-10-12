@@ -95,8 +95,8 @@ stating as a rule rather than a precedent:
 
 ### The permitted key surface
 
-Four keys, and `DatastoreKeySurfaceTest` fails the build when a fifth appears
-without this list being amended:
+Seven keys since 2026-10-12 (four at first), and `DatastoreKeySurfaceTest` fails
+the build when another appears without this list being amended:
 
 | Key | Why it is not vault data |
 |---|---|
@@ -104,6 +104,9 @@ without this list being amended:
 | `listener_last_disconnected_at` | The same. |
 | `listener_grant_observed_at` | When the app first saw its own grant held. |
 | `notification_setup_seen` | Whether the first-run explainer has been shown. |
+| `capture_gap_first_missed_at` | §16 Q16: when background capture first failed to open the vault. A fact about the app's own machinery failing. |
+| `capture_gap_last_missed_at` | The same, the most recent failure. |
+| `capture_gap_missed` | How many captures failed in that window. Personal messages included, because a shut vault is exactly when nothing can tell them apart. |
 
 The fourth arrived in the same commit as the first three and is worth its own
 line, because it is the one that is *about the user* rather than about the
@@ -114,6 +117,15 @@ would mark the explainer as already seen on a device where notification access
 has never been granted — suppressing the one screen that grants it, at exactly
 the moment it is needed. This store does not travel, so a new device asks again.
 That is the correct behaviour and it is not available from the vault.
+
+**The three `capture_gap_*` keys (§16 Q16, owner's design 2026-10-12)** are the
+"home to land in" this ADR's Consequences anticipated. They pass the rule on
+the same ground as the listener timestamps: they record *that* and *when* the
+app's capture failed, never a sender, a package, a body or an amount. The
+arrival time of a message the app failed to keep is the closest they come to
+the user, and it is a timestamp about the app, kept so Home can say "check
+your bank app for this window". They also must not travel in a `.lfbk`: a
+window from another phone would be a false alarm on this one.
 
 The decision is not close on availability and *is* close on tidiness — one
 storage mechanism is easier to reason about than two. If a future need for
@@ -150,7 +162,7 @@ which point the two stores need one restore path instead of none.
 
 - **`DatastoreKeySurfaceTest`** (`:core:datastore`) scans this module's sources
   for `*PreferencesKey("...")` declarations of **any** type and asserts the set
-  matches the four keys named above — in both directions, so a stale permitted
+  matches the keys named above (seven since 2026-10-12) — in both directions, so a stale permitted
   entry is caught as well as a new key. A guard whose only reference is the
   thing it guards is a restatement, so the permitted set is written out by name
   in the test rather than read from a list the production code exposes: if it

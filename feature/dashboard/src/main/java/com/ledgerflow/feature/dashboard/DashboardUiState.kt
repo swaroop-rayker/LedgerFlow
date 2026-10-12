@@ -2,6 +2,7 @@ package com.ledgerflow.feature.dashboard
 
 import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.domain.backup.BackupReminder
+import com.ledgerflow.core.domain.ingest.CaptureGap
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 
 /**
@@ -37,6 +38,12 @@ public data class DashboardUiState(
      * so a first frame never flashes "No backup yet" at someone who has one.
      */
     val backupReminder: BackupReminder? = null,
+
+    /**
+     * When background capture could not reach the vault (§16 Q16), until the
+     * user closes it. Null means nothing was lost, or the user has seen it.
+     */
+    val captureGap: CaptureGap? = null,
 ) {
 
     /**

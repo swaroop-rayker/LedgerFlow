@@ -42,6 +42,11 @@ class DatastoreKeySurfaceTest {
         "listener_last_disconnected_at",
         "listener_grant_observed_at",
         "notification_setup_seen",
+        // SPEC §16 Q16 (2026-10-12): when background capture could not open the
+        // vault, and how often. Never what was missed; see the ADR's key table.
+        "capture_gap_first_missed_at",
+        "capture_gap_last_missed_at",
+        "capture_gap_missed",
     )
 
     private val moduleSources: List<File> by lazy {

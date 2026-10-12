@@ -23,8 +23,10 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupReminder
+import com.ledgerflow.core.domain.ingest.CaptureGap
 import com.ledgerflow.core.domain.ingest.ListenerHealth
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 
@@ -56,6 +58,7 @@ public fun DashboardRoute(
         state = state,
         onSetUpNotifications = onSetUpNotifications,
         onBackUpNow = onBackUpNow,
+        onAcknowledgeCaptureGap = viewModel::acknowledgeCaptureGap,
         modifier = modifier,
     )
 }
@@ -80,6 +83,7 @@ public fun DashboardScreen(
     onSetUpNotifications: () -> Unit,
     modifier: Modifier = Modifier,
     onBackUpNow: () -> Unit = {},
+    onAcknowledgeCaptureGap: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -88,6 +92,16 @@ public fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
     ) {
         LfScreenTitle(title = "Home")
+
+        // First: a loss has already happened, where the cards below it are
+        // about what to do next.
+        state.captureGap?.let { gap ->
+            CaptureGapCard(
+                gap = gap,
+                onAcknowledge = onAcknowledgeCaptureGap,
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
 
         state.backupReminder?.let { reminder ->
             BackupReminderCard(
@@ -213,6 +227,44 @@ private fun BackupReminderCard(
             }
         }
     }
+}
+
+/**
+ * §16 Q16's card: background capture could not reach the vault in this window.
+ *
+ * The window, never the count: a shut vault fails every capture, personal
+ * messages included, so a number would overstate missed payments. It tells the
+ * user where to look instead. The same card shape and `warn` colour as the
+ * backup reminder beside it, and it stays until "Got it" -- a later successful
+ * capture does not undo a message that was already lost.
+ */
+@Composable
+private fun CaptureGapCard(
+    gap: CaptureGap,
+    onAcknowledge: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val first = TimeStamp.of(gap.firstMissedAt, withDate = true)
+    val last = TimeStamp.of(gap.lastMissedAt, withDate = true)
+    LfCard(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = captureGapSentence(first, last),
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.warn,
+            )
+            LfActionRow(alignment = LfActionAlignment.End) {
+                LfButton(text = "Got it", style = LfButtonStyle.Inline, onClick = onAcknowledge)
+            }
+        }
+    }
+}
+
+/** The card's words, from two formatted stamps; one stamp when they are the same. */
+internal fun captureGapSentence(first: String, last: String): String {
+    val window = if (first == last) "At $first" else "Between $first and $last"
+    return "$window, LedgerFlow couldn't record messages in the background. Payments " +
+        "from that time may be missing: check your bank or payment app."
 }
 
 /**

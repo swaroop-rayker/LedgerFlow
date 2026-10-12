@@ -10,9 +10,12 @@ import com.ledgerflow.core.domain.ingest.IngestSourceType
 import com.ledgerflow.core.domain.ingest.ListenerHealthRecord
 import com.ledgerflow.core.domain.ingest.ListenerHealthStore
 import com.ledgerflow.core.domain.ingest.TransactionIngestSource
+import com.ledgerflow.core.domain.usecase.AcknowledgeCaptureGapUseCase
 import com.ledgerflow.core.domain.usecase.GetIngestSourceStatusUseCase
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
+import com.ledgerflow.core.domain.usecase.ObserveCaptureGapUseCase
 import com.ledgerflow.core.testing.backup.FakeBackupRepository
+import com.ledgerflow.core.testing.ingest.FakeCaptureGapStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -71,7 +74,13 @@ class DashboardBackupReminderTest {
             clock = clock,
             processUptime = ProcessUptime { 0L },
         )
-        return DashboardViewModel(health, ObserveLastBackupUseCase(backups, clock))
+        val gaps = FakeCaptureGapStore()
+        return DashboardViewModel(
+            health,
+            ObserveLastBackupUseCase(backups, clock),
+            ObserveCaptureGapUseCase(gaps),
+            AcknowledgeCaptureGapUseCase(gaps),
+        )
     }
 
     @Test
