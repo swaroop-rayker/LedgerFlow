@@ -1,5 +1,7 @@
 package com.ledgerflow.feature.dashboard
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +28,7 @@ import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupReminder
+import com.ledgerflow.core.domain.diagnostics.CrashSummary
 import com.ledgerflow.core.domain.ingest.CaptureGap
 import com.ledgerflow.core.domain.ingest.ListenerHealth
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
@@ -49,6 +52,12 @@ public fun DashboardRoute(
     val viewModel: DashboardViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    // BUG7(c): Android's own picker chooses where the report goes; nothing is
+    // written anywhere the user did not pick, and nothing is sent (Law 6).
+    val saveReport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri -> uri?.let { viewModel.saveCrashReports(it.toString()) } }
+
     LifecycleResumeEffect(Unit) {
         viewModel.refresh()
         onPauseOrDispose { }
@@ -59,6 +68,8 @@ public fun DashboardRoute(
         onSetUpNotifications = onSetUpNotifications,
         onBackUpNow = onBackUpNow,
         onAcknowledgeCaptureGap = viewModel::acknowledgeCaptureGap,
+        onSaveCrashReports = { saveReport.launch(viewModel.crashReportFileName()) },
+        onDismissCrashReports = viewModel::dismissCrashReports,
         modifier = modifier,
     )
 }
@@ -84,6 +95,8 @@ public fun DashboardScreen(
     modifier: Modifier = Modifier,
     onBackUpNow: () -> Unit = {},
     onAcknowledgeCaptureGap: () -> Unit = {},
+    onSaveCrashReports: () -> Unit = {},
+    onDismissCrashReports: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -99,6 +112,16 @@ public fun DashboardScreen(
             CaptureGapCard(
                 gap = gap,
                 onAcknowledge = onAcknowledgeCaptureGap,
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
+
+        state.crashReports?.let { reports ->
+            CrashReportCard(
+                reports = reports,
+                saveFailed = state.crashSaveFailed,
+                onSave = onSaveCrashReports,
+                onDismiss = onDismissCrashReports,
                 modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
             )
         }
@@ -258,6 +281,56 @@ private fun CaptureGapCard(
             }
         }
     }
+}
+
+/**
+ * BUG7(c)'s offer, on the launch after a crash.
+ *
+ * Says what the report is before asking anything of the user: kept on the
+ * phone, nothing personal in it, theirs to save or throw away. `textSecondary`
+ * rather than `warn` -- the app is running again, and the cards above it are
+ * about things that are still wrong.
+ */
+@Composable
+private fun CrashReportCard(
+    reports: CrashSummary,
+    saveFailed: Boolean,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val latest = TimeStamp.of(reports.latestAt, withDate = true)
+    LfCard(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = crashReportSentence(reports.count, latest),
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textSecondary,
+            )
+            if (saveFailed) {
+                Text(
+                    text = "The report couldn't be saved there. It is still on this phone.",
+                    style = LfTheme.typography.bodyM,
+                    color = LfTheme.colors.warn,
+                )
+            }
+            LfActionRow(alignment = LfActionAlignment.End) {
+                LfButton(text = "Dismiss", style = LfButtonStyle.Inline, onClick = onDismiss)
+                LfButton(text = "Save report", style = LfButtonStyle.Inline, onClick = onSave)
+            }
+        }
+    }
+}
+
+/** The crash card's words: once, or how many times and the latest. */
+internal fun crashReportSentence(count: Int, latest: String): String {
+    val stopped = if (count == 1) {
+        "LedgerFlow stopped unexpectedly on $latest."
+    } else {
+        "LedgerFlow stopped unexpectedly $count times, most recently on $latest."
+    }
+    return "$stopped A report with no personal data was kept on this phone. You can save it " +
+        "to share with the developer."
 }
 
 /** The card's words, from two formatted stamps; one stamp when they are the same. */

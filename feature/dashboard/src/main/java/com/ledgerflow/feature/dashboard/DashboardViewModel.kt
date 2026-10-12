@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.backup.ObserveLastBackupUseCase
+import com.ledgerflow.core.domain.diagnostics.DismissCrashReportsUseCase
+import com.ledgerflow.core.domain.diagnostics.ObserveCrashReportsUseCase
+import com.ledgerflow.core.domain.diagnostics.SaveCrashReportsUseCase
 import com.ledgerflow.core.domain.usecase.AcknowledgeCaptureGapUseCase
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
 import com.ledgerflow.core.domain.usecase.ObserveCaptureGapUseCase
@@ -35,6 +38,9 @@ public class DashboardViewModel @Inject constructor(
     private val lastBackup: ObserveLastBackupUseCase,
     private val observeCaptureGap: ObserveCaptureGapUseCase,
     private val acknowledgeCaptureGap: AcknowledgeCaptureGapUseCase,
+    private val observeCrashReports: ObserveCrashReportsUseCase,
+    private val saveCrashReports: SaveCrashReportsUseCase,
+    private val dismissCrashReports: DismissCrashReportsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DashboardUiState())
@@ -70,6 +76,28 @@ public class DashboardViewModel @Inject constructor(
         // rather than read on resume (§16 Q16).
         viewModelScope.launch {
             observeCaptureGap().collect { gap -> _state.update { it.copy(captureGap = gap) } }
+        }
+        viewModelScope.launch {
+            observeCrashReports().collect { reports -> _state.update { it.copy(crashReports = reports) } }
+        }
+    }
+
+    /** What the file picker suggests for "Save report". */
+    public fun crashReportFileName(): String = saveCrashReports.suggestedFileName()
+
+    /** The user picked a file: write the reports there, and let them go only if that worked. */
+    public fun saveCrashReports(destinationUri: String) {
+        viewModelScope.launch {
+            val saved = saveCrashReports.invoke(destinationUri)
+            _state.update { it.copy(crashSaveFailed = !saved) }
+        }
+    }
+
+    /** "Dismiss" on the crash card. */
+    public fun dismissCrashReports() {
+        viewModelScope.launch {
+            dismissCrashReports.invoke()
+            _state.update { it.copy(crashSaveFailed = false) }
         }
     }
 

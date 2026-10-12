@@ -2,6 +2,7 @@ package com.ledgerflow.feature.dashboard
 
 import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.domain.backup.BackupReminder
+import com.ledgerflow.core.domain.diagnostics.CrashSummary
 import com.ledgerflow.core.domain.ingest.CaptureGap
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 
@@ -44,6 +45,15 @@ public data class DashboardUiState(
      * user closes it. Null means nothing was lost, or the user has seen it.
      */
     val captureGap: CaptureGap? = null,
+
+    /**
+     * Crash reports kept on the phone since the app last stopped unexpectedly
+     * (BUG7(c)), until the user saves or dismisses them.
+     */
+    val crashReports: CrashSummary? = null,
+
+    /** The last "Save report" could not write; the reports are still there. */
+    val crashSaveFailed: Boolean = false,
 ) {
 
     /**

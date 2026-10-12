@@ -5,6 +5,9 @@ import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.time.ProcessUptime
 import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.backup.ObserveLastBackupUseCase
+import com.ledgerflow.core.domain.diagnostics.DismissCrashReportsUseCase
+import com.ledgerflow.core.domain.diagnostics.ObserveCrashReportsUseCase
+import com.ledgerflow.core.domain.diagnostics.SaveCrashReportsUseCase
 import com.ledgerflow.core.domain.ingest.IngestSourceStatus
 import com.ledgerflow.core.domain.ingest.IngestSourceType
 import com.ledgerflow.core.domain.ingest.ListenerHealthRecord
@@ -15,6 +18,7 @@ import com.ledgerflow.core.domain.usecase.GetIngestSourceStatusUseCase
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
 import com.ledgerflow.core.domain.usecase.ObserveCaptureGapUseCase
 import com.ledgerflow.core.testing.backup.FakeBackupRepository
+import com.ledgerflow.core.testing.diagnostics.FakeCrashReportRepository
 import com.ledgerflow.core.testing.ingest.FakeCaptureGapStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -75,11 +79,15 @@ class DashboardBackupReminderTest {
             processUptime = ProcessUptime { 0L },
         )
         val gaps = FakeCaptureGapStore()
+        val crashes = FakeCrashReportRepository()
         return DashboardViewModel(
             health,
             ObserveLastBackupUseCase(backups, clock),
             ObserveCaptureGapUseCase(gaps),
             AcknowledgeCaptureGapUseCase(gaps),
+            ObserveCrashReportsUseCase(crashes),
+            SaveCrashReportsUseCase(crashes),
+            DismissCrashReportsUseCase(crashes),
         )
     }
 

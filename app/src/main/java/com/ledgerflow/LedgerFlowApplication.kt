@@ -8,6 +8,7 @@ import android.os.strictmode.Violation
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.ledgerflow.core.data.diagnostics.CrashRecorder
 import com.ledgerflow.feature.analytics.work.RollupWorker
 import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.ingest.notify.InboxNotifications
@@ -18,8 +19,8 @@ import javax.inject.Inject
 /**
  * Application entry point and Hilt's object-graph root.
  *
- * The crash handler arrives with the step that introduces it. What is here now
- * is the `@HiltAndroidApp` trigger, StrictMode, and WorkManager's configuration.
+ * The `@HiltAndroidApp` trigger, BUG7(c)'s crash recorder, StrictMode, and
+ * WorkManager's configuration.
  *
  * **WorkManager is configured here rather than initialised by its manifest
  * provider**, and the provider is removed in the manifest for that reason. Its
@@ -48,6 +49,10 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // BUG7(c), first so it covers everything after it. Records a scrubbed
+        // report to filesDir/crash, then hands the crash on unchanged; Home
+        // offers the report on the next launch. Never sent anywhere (Law 6).
+        CrashRecorder.install(this)
         if (isDebuggable()) enableStrictMode()
         // SPEC.md §5.1's `inbox_high`, created before the first message rather
         // than before the first post: a channel that does not exist yet cannot

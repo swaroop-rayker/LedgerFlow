@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupReminder
+import com.ledgerflow.core.domain.diagnostics.CrashSummary
 import com.ledgerflow.core.domain.ingest.CaptureGap
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
@@ -70,4 +71,15 @@ class DashboardScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun captureGap_2x() = capture("home-capture-gap-2x", captureGap, 2f)
+
+    /** BUG7(c)'s offer after two crashes, the latest 2 Oct 04:44 UTC. */
+    private val crashReports = DashboardUiState(
+        captureHealth = NotificationCaptureHealth.CONNECTED,
+        crashReports = CrashSummary(count = 2, latestAt = 1_790_916_240_000L),
+    )
+
+    @Test fun crashReports_1x() = capture("home-crash-reports-1x", crashReports, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun crashReports_2x() = capture("home-crash-reports-2x", crashReports, 2f)
 }

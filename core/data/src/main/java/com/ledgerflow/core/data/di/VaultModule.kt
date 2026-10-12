@@ -9,6 +9,7 @@ import com.ledgerflow.core.crypto.keystore.KeystoreKek
 import com.ledgerflow.core.data.analytics.DefaultAnalyticsRepository
 import com.ledgerflow.core.data.analytics.DefaultBudgetRepository
 import com.ledgerflow.core.data.analytics.DefaultRollupRepository
+import com.ledgerflow.core.data.diagnostics.DefaultCrashReportRepository
 import com.ledgerflow.core.data.diagnostics.DefaultIngestDiagnosticsRepository
 import com.ledgerflow.core.data.backup.BackupDocumentReader
 import com.ledgerflow.core.data.backup.BackupFolderResolver
@@ -32,6 +33,7 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.BudgetRepository
 import com.ledgerflow.core.domain.analytics.RollupRepository
+import com.ledgerflow.core.domain.diagnostics.CrashReportRepository
 import com.ledgerflow.core.domain.diagnostics.IngestDiagnosticsRepository
 import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.backup.RestoreRepository
@@ -177,6 +179,10 @@ public interface RollupModule {
     public fun ingestDiagnosticsRepository(
         impl: DefaultIngestDiagnosticsRepository,
     ): IngestDiagnosticsRepository
+
+    /** BUG7(c)'s crash reports: files outside the vault, scrubbed, never sent. */
+    @Binds
+    public fun crashReportRepository(impl: DefaultCrashReportRepository): CrashReportRepository
 }
 
 /**
