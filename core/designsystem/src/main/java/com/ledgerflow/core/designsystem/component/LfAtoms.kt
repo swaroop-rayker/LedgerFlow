@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
@@ -111,7 +113,16 @@ public fun LfScaffold(
         snackbarHost = {
             snackbarHostState?.let { SnackbarHost(it) }
         },
-        content = content,
+        content = { padding ->
+            // BUG49: mark what this scaffold paid for as consumed, so a scaffold
+            // nested inside -- every full-screen destination sits inside the
+            // shell's -- does not pay for the same system bars again. The caller
+            // still applies `padding` itself, as before; this only tells the
+            // descendants it has been applied.
+            Box(Modifier.fillMaxSize().consumeWindowInsets(padding)) {
+                content(padding)
+            }
+        },
     )
 }
 

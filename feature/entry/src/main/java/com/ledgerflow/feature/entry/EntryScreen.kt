@@ -514,7 +514,12 @@ private fun LineItemEditorEvent.toEntryEvent(): EntryEvent = when (this) {
 
 @Composable
 private fun SaveBar(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
-    Column(modifier = Modifier.padding(LfTheme.spacing.md)) {
+    // `xs` vertically, like every other pinned bar (the review screen's actions
+    // are this bar's closest sibling): LfScaffold has already inset it for the
+    // navigation bar. It was `md` all round, measured on SM-S721B 2026-10-12.
+    Column(
+        modifier = Modifier.padding(horizontal = LfTheme.spacing.md, vertical = LfTheme.spacing.xs),
+    ) {
         LfActionRow {
             LfButton(
                 text = "Cancel",
