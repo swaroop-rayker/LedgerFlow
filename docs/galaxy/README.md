@@ -56,7 +56,12 @@ stay private sellers.
 2. Apply for **commercial seller status** with a **D-U-N-S number** (verifying
    one can take up to 10 business days) or business registration documents.
    If a D-U-N-S number is not available to you as an individual, Samsung's
-   answer is to contact the Seller Portal team about the options.
+   answer is to contact the Seller Portal team about the options
+   (Seller Portal → Help → Contact us). Outside the US a D-U-N-S number may
+   cost money. Everything submitted must be in English, and the
+   representative's name must match the Key Principal on the D-U-N-S profile:
+   a person's name, not a business name or an email address (checked
+   2026-10-14).
 
 ## 2. Build
 
@@ -66,7 +71,13 @@ GitHub Release.
 
 ## 3. Seller Portal (owner)
 
-1. Add a new Android app. Binary tab: upload the arm64 APK.
+1. Add New App → Android → default language English. Binary tab → Add
+   Binary: upload the arm64 APK; resolutions "Check All"; **Google Mobile
+   Services: yes** (ML Kit depends on Play services), which means it cannot be
+   sold in China. **Package names are unique across all sellers**: if
+   `com.ledgerflow` is already registered by someone else, the upload is
+   refused, and the fallback is the playSafe-style build under its own package
+   (§"What is unknown" above), not a rename of the GitHub/sideload app.
 2. App information: text from `listing.md`; privacy policy URL
    `https://github.com/swaroop-rayker/LedgerFlow/blob/main/docs/play/privacy-policy.md`;
    support email (shown publicly, owner's choice); age rating, adults.
