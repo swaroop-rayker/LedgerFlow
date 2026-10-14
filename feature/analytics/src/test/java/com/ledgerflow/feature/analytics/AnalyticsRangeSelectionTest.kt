@@ -206,6 +206,8 @@ class AnalyticsRangeSelectionTest {
             merchants = emptyList(),
             paymentMethods = emptyList(),
         )
+
+        override suspend fun total(ledger: LedgerType, window: AnalyticsWindow): Money = Money(0L)
     }
 
     private companion object {

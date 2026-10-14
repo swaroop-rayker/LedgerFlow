@@ -93,6 +93,21 @@ class AnalyticsSnapshotTest {
     }
 
     /**
+     * Home's comparison figure (V2-PLAN BUG-C) is the snapshot's total by the
+     * same path, per book: the split bill once, the binned row not at all, and
+     * the credit only in its own book.
+     */
+    @Test
+    fun total_equalsTheSnapshotTotal_perBook() = runBlocking<Unit> {
+        seed()
+
+        assertThat(analytics.total(LedgerType.DEBIT, window()).minor).isEqualTo(145_000L)
+        assertThat(analytics.total(LedgerType.CREDIT, window()).minor).isEqualTo(500_000L)
+        assertThat(analytics.total(LedgerType.DEBIT, window()))
+            .isEqualTo(analytics.snapshot(LedgerType.DEBIT, window(), comparePrevious = false).total)
+    }
+
+    /**
      * **The assertion §5.6's `txn_count` rule exists for.**
      *
      * Three live debits were approved and one was binned, so two remain. Summing

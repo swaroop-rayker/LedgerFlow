@@ -360,4 +360,17 @@ public interface AnalyticsRepository {
         comparePrevious: Boolean,
         filters: AnalyticsFilters = AnalyticsFilters.None,
     ): AnalyticsSnapshot
+
+    /**
+     * One book's unfiltered total over [window]: [AnalyticsSnapshot.total]
+     * without the rest of the snapshot.
+     *
+     * For a caller that needs a figure rather than a screen. Home compares the
+     * month to date with the same days of last month, and a calendar month has
+     * no [AnalyticsWindow.previous] (that is the preceding window of equal
+     * length), so the comparison is a second window; building a whole snapshot
+     * for it would run recurring detection and every breakdown to read one
+     * number. Per book, like everything here (Law 2).
+     */
+    public suspend fun total(ledger: LedgerType, window: AnalyticsWindow): Money
 }

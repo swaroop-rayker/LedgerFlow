@@ -484,6 +484,63 @@ public interface LedgerEntryDao {
     public fun pagingCredits(since: Int): PagingSource<Int, LedgerListRow>
 
     /**
+     * The newest [limit] rows of the debit book, as [pagingDebits] shapes them
+     * (Home's "Recent spending", V2-PLAN BUG-C).
+     *
+     * The same select list, joins and ordering, written out rather than shared
+     * through a constant: `LedgerIsolationTest` reads statements from their
+     * literals, and a statement assembled from a constant is one it cannot see
+     * whole. No `since`, because "the last five" has no window; `LIMIT` is what
+     * bounds it, so the three line-item subqueries run five times.
+     */
+    @Query(
+        "SELECT e.id AS id, e.amount_minor AS amount_minor, e.currency AS currency, " +
+            "e.local_date AS local_date, e.occurred_at AS occurred_at, e.note AS note, " +
+            "c.name AS category_name, c.color_argb AS category_color_argb, " +
+            "m.canonical_name AS merchant_name, " +
+            "(SELECT lc.name FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_name, " +
+            "(SELECT lc.color_argb FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_color_argb, " +
+            "(SELECT COUNT(DISTINCT li.category_id) FROM line_item li " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL) AS line_item_category_count " +
+            "FROM debit_entries e " +
+            "LEFT JOIN category c ON c.id = e.category_id " +
+            "LEFT JOIN merchant m ON m.id = e.merchant_id " +
+            "ORDER BY e.local_date DESC, e.occurred_at DESC " +
+            "LIMIT :limit",
+    )
+    public fun observeRecentDebits(limit: Int): Flow<List<LedgerListRow>>
+
+    /** The credit book's mirror of [observeRecentDebits]. */
+    @Query(
+        "SELECT e.id AS id, e.amount_minor AS amount_minor, e.currency AS currency, " +
+            "e.local_date AS local_date, e.occurred_at AS occurred_at, e.note AS note, " +
+            "c.name AS category_name, c.color_argb AS category_color_argb, " +
+            "m.canonical_name AS merchant_name, " +
+            "(SELECT lc.name FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_name, " +
+            "(SELECT lc.color_argb FROM line_item li JOIN category lc ON lc.id = li.category_id " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL " +
+            "GROUP BY li.category_id ORDER BY SUM(li.total_minor) DESC, MIN(li.position) ASC " +
+            "LIMIT 1) AS line_item_category_color_argb, " +
+            "(SELECT COUNT(DISTINCT li.category_id) FROM line_item li " +
+            "WHERE li.entry_id = e.id AND li.category_id IS NOT NULL) AS line_item_category_count " +
+            "FROM credit_entries e " +
+            "LEFT JOIN category c ON c.id = e.category_id " +
+            "LEFT JOIN merchant m ON m.id = e.merchant_id " +
+            "ORDER BY e.local_date DESC, e.occurred_at DESC " +
+            "LIMIT :limit",
+    )
+    public fun observeRecentCredits(limit: Int): Flow<List<LedgerListRow>>
+
+    /**
      * Whether this book holds anything at all, ignoring the list's window.
      *
      * It exists to tell two empty states apart, and they are not the same

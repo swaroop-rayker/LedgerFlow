@@ -228,6 +228,19 @@ public class DefaultLedgerRepository @Inject constructor(
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeRecent(ledger: LedgerType, limit: Int): Flow<List<LedgerListItem>> =
+        session.whenUnlocked().flatMapLatest { database ->
+            val dao = database?.ledgerEntryDao() ?: return@flatMapLatest flowOf(emptyList())
+            // One statement per book, the predicate inside the view (ADR-0002),
+            // as for the paged list these rows mirror.
+            val rows = when (ledger) {
+                LedgerType.DEBIT -> dao.observeRecentDebits(limit)
+                LedgerType.CREDIT -> dao.observeRecentCredits(limit)
+            }
+            rows.map { list -> list.map { it.toDomain(ledger) } }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeRecentCombos(ledger: LedgerType, limit: Int): Flow<List<EntryCombo>> =
         session.whenUnlocked().flatMapLatest { database ->
             val dao = database?.ledgerEntryDao() ?: return@flatMapLatest flowOf(emptyList())

@@ -124,6 +124,17 @@ public class DefaultAnalyticsRepository @Inject constructor(
     }
 
     /**
+     * The same sum [AnalyticsSnapshot.total] is, by the same path, so Home's
+     * comparison can never disagree with the figure Analytics shows for the
+     * same days. An unopenable vault answers zero, as [snapshot] answers empty.
+     */
+    override suspend fun total(ledger: LedgerType, window: AnalyticsWindow): Money =
+        withContext(io) {
+            val database = session.openForBackgroundWork() ?: return@withContext Money(0L)
+            windowTotal(database.dailyRollupDao(), ledger, window, AnalyticsFilters.None)
+        }
+
+    /**
      * A8's detection, over a **longer history than the selected window**.
      *
      * A monthly subscription needs three months of dates to be visible, so

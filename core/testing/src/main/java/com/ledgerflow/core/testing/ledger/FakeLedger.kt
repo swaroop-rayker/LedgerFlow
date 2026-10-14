@@ -190,6 +190,22 @@ public class FakeLedgerRepository : LedgerRepository {
     override fun observeHasEntries(ledger: LedgerType): Flow<Boolean> =
         revision.map { hasEntriesOverride[ledger] ?: entries[ledger].orEmpty().isNotEmpty() }
 
+    /** Every (book, limit) Home asked for, so a test can prove each card's book. */
+    public val recentReads: MutableList<Pair<LedgerType, Int>> = mutableListOf()
+
+    override fun observeRecent(ledger: LedgerType, limit: Int): Flow<List<LedgerListItem>> {
+        recentReads += ledger to limit
+        // Per book and newest first, as the real view-backed query orders them.
+        return revision.map {
+            entries[ledger].orEmpty()
+                .sortedWith(
+                    compareByDescending<LedgerListItem> { it.localDate }
+                        .thenByDescending { it.occurredAt },
+                )
+                .take(limit)
+        }
+    }
+
     override fun observeRecentCombos(ledger: LedgerType, limit: Int): Flow<List<EntryCombo>> =
         revision.map { combos[ledger].orEmpty().take(limit) }
 

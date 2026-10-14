@@ -164,6 +164,20 @@ public interface LedgerRepository {
     public fun observeHasEntries(ledger: LedgerType): Flow<Boolean>
 
     /**
+     * The newest [limit] live entries of one book, newest first: Home's
+     * "Recent spending" and "Recent income" (V2-PLAN BUG-C).
+     *
+     * The same rows, in the same order, as [observeEntries], without its window
+     * or its paging: a card of five is not a list anyone scrolls, and Paging 3
+     * inside a card that is not lazy would load pages nothing displays. It
+     * re-emits whenever the book changes, which is also how Home learns that an
+     * approval happened while it was on screen.
+     *
+     * One book per call. Two cards, never one interleaved list (Law 2).
+     */
+    public fun observeRecent(ledger: LedgerType, limit: Int): Flow<List<LedgerListItem>>
+
+    /**
      * The combinations this ledger has actually seen, most-used first.
      *
      * Feeds the repeat-expense chips that make §5.4's ≤4-tap target reachable.
