@@ -512,8 +512,19 @@ the v1→v11 migration chain, the backup and attachment round-trips, BUG50's
 refused-vault capture; `Bug38_OcrWorksInAShrunkBuildTest` (release code, R8)
 green; every tab, the entry form with and without the keyboard, and Back,
 geometrically identical to Android 16 (bars, insets, the pinned bar riding
-the keyboard). **Still open**: a real bank SMS and a real payment notification
-arriving on 17, and so §16 Q24 (the OTP hold-back) — they need real messages.
+the keyboard).
+
+**A real payment on 17 (2026-10-14 17:27).** The owner paid by UPI. The bank
+SMS's `SMS_RECEIVED` broadcast was enqueued at 17:27:49.2 and went to the real
+install's `SmsIngestReceiver` (LF Bench and a leftover test APK were listed as
+recipients but hold `RECEIVE_SMS` `granted=false`, so Android does not deliver
+to them); `ParseIngestWorker` ran at 17:27:50.2 — 1 matched, 1 created — and the
+owner saw it in the Inbox. **About one second from arrival to a pending row; not
+held back.** Observed from broadcast history (action, times, recipients) and
+the worker's count-only log; no message text was read. The payment app posted
+no notification, as on 16, so the notification path and cross-source dedupe
+were not exercised on 17. **Still open**: a payment-app notification on 17, and
+Q24's hold-back itself, which only an SMS the platform classes as an OTP can show.
 
 ---
 
@@ -2304,6 +2315,10 @@ a device run per check. Until then contrast is a manual row (`TESTING.md` H4).
     misclassified, for example one carrying "never share your OTP". A real OTP
     being delayed costs nothing, because it is not a transaction.
     **Owner's assessment (2026-10-01): no real risk now or in the near future.**
+    **Observed 2026-10-14 on Android 17:** a real bank debit alert reached the
+    receiver within a second and was not held, so the normal path is unaffected
+    (SPEC §3.2). The hold-back itself has not been seen: that needs an SMS the
+    platform classes as an OTP.
     Recorded rather than solved. Nothing here can be observed on Android 16,
     and the owner chose to verify target-37 behaviour on the phone's own
     Android 17 update rather than on an emulator; this device cannot be sent
