@@ -137,18 +137,24 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          find . -path '*/release/*.apk' -exec cp {} dist/ \;
-          find . -path '*/release/*.aab' -exec cp {} dist/ \;
+          find app/build/outputs/apk -path '*/release/*.apk' -exec cp {} dist/ \;
+          # BUG53: the bundle lives in outputs/bundle/<variant>/, which has no
+          # /release/ segment, so v0.1.0 published every APK and no AAB.
+          find app/build/outputs/bundle -path '*Release/*.aab' -exec cp {} dist/ \;
           # mapping.txt is MANDATORY — without it, R8-obfuscated crash reports
           # from the diagnostics screen (BUG7) are unreadable forever.
-          # Named by VARIANT (.../mapping/<variant>/mapping.txt). This used the
-          # module name, which is `app` for both flavours, so one flavour's
-          # mapping overwrote the other's (BUG46).
-          find . -name mapping.txt -path '*/mapping/*Release/*' | while read -r m; do
+          # Named by VARIANT (outputs/mapping/<variant>/mapping.txt). This used
+          # the module name, `app` for both flavours, so one overwrote the other
+          # (BUG46); the next pattern also caught Gradle's intermediate copies,
+          # four extra ~76 MB files on v0.1.0 (BUG53). Only the final outputs now.
+          for m in app/build/outputs/mapping/*Release/mapping.txt; do
             VARIANT=$(basename "$(dirname "$m")")
             cp "$m" "dist/mapping-${VARIANT}-${GITHUB_REF_NAME}.txt"
           done
-          test "$(ls dist/mapping-*.txt | wc -l)" -ge 2 || { echo "::error::expected a mapping file per flavour"; exit 1; }
+          # BUG53: what a release must contain, checked before it is published.
+          test "$(ls dist/*.aab 2>/dev/null | wc -l)" -eq 1 || { echo "::error::expected exactly one AAB (Play)"; exit 1; }
+          test "$(ls dist/mapping-*.txt | wc -l)" -eq 2 || { echo "::error::expected exactly one mapping file per flavour"; exit 1; }
+          test -f dist/app-smsFull-arm64-v8a-release.apk || { echo "::error::the Galaxy Store APK is missing"; exit 1; }
           find . -name 'baseline-prof.txt' -exec cp {} dist/ \; || true
           ls -la dist/
 

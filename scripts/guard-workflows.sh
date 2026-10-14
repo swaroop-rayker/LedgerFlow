@@ -207,6 +207,20 @@ if 'gradleProperty("ledgerflow.requireReleaseSigning")' not in app or 'signingCo
     failed = True
     print(f"::error::{APP} no longer signs release from keystore.properties, or no longer honours requireReleaseSigning (BUG46)")
 
+# BUG53: v0.1.0 published no AAB and four duplicate mapping files, because the
+# collection step's patterns were wrong and nothing checked what was collected.
+# The release job now checks its own contents before publishing; this keeps
+# those checks in place.
+collect = "\n".join(s for s in scripts_of(rel_jobs) if "dist/" in s)
+for needle, why in (
+    ("ls dist/*.aab", "the check that exactly one AAB (Play) was collected"),
+    ("ls dist/mapping-*.txt | wc -l)\" -eq 2", "the check for exactly one mapping file per flavour"),
+    ("dist/app-smsFull-arm64-v8a-release.apk", "the check that the Galaxy Store APK was collected"),
+):
+    if needle not in collect:
+        failed = True
+        print(f"::error::{REL} no longer has {why} before publishing (BUG53)")
+
 if failed:
     print("")
     print("Workflow guard FAILED (BUG45): a CI job would stop at its first red module,")
