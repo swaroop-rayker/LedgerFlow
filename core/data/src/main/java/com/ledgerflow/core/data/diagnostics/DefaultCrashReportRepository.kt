@@ -8,6 +8,7 @@ import com.ledgerflow.core.domain.diagnostics.CrashReportRepository
 import com.ledgerflow.core.domain.diagnostics.CrashSummary
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.io.OutputStream
 import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
@@ -25,15 +26,35 @@ import kotlinx.coroutines.withContext
  * The reports were written by a process that has since died, so this one only
  * reads them: once, lazily, the first time Home asks, and again after a save
  * or a dismiss changes the folder.
+ *
+ * **Constructing it touches no disk (BUG51).** Hilt builds it on the main
+ * thread while Home composes, and resolving `context.filesDir` there is a disk
+ * read: in debug, StrictMode's penaltyDeath killed the app every time Home
+ * opened. The folder is resolved on first use, which is always inside
+ * `withContext(io)`. Its two Android touchpoints are functions so a JVM test
+ * can prove both.
  */
 @Singleton
-public class DefaultCrashReportRepository @Inject constructor(
-    @param:ApplicationContext private val context: Context,
+public class DefaultCrashReportRepository internal constructor(
+    directory: () -> File,
+    private val openOutput: (destinationUri: String) -> OutputStream?,
     private val clock: Clock,
-    @param:IoDispatcher private val io: CoroutineDispatcher,
+    private val io: CoroutineDispatcher,
 ) : CrashReportRepository {
 
-    private val files = CrashReportFiles(File(context.filesDir, CrashReportFiles.DIRECTORY))
+    @Inject public constructor(
+        @ApplicationContext context: Context,
+        clock: Clock,
+        @IoDispatcher io: CoroutineDispatcher,
+    ) : this(
+        directory = { File(context.filesDir, CrashReportFiles.DIRECTORY) },
+        // "wt" truncates: the picker can hand back an existing file.
+        openOutput = { uri -> context.contentResolver.openOutputStream(Uri.parse(uri), "wt") },
+        clock = clock,
+        io = io,
+    )
+
+    private val files by lazy { CrashReportFiles(directory()) }
 
     private val state = MutableStateFlow<CrashSummary?>(null)
     @Volatile private var read = false
@@ -50,9 +71,7 @@ public class DefaultCrashReportRepository @Inject constructor(
 
     override suspend fun exportTo(destinationUri: String): Boolean = withContext(io) {
         runCatching {
-            // "wt" truncates: the picker can hand back an existing file.
-            val stream = context.contentResolver.openOutputStream(Uri.parse(destinationUri), "wt")
-                ?: return@runCatching false
+            val stream = openOutput(destinationUri) ?: return@runCatching false
             stream.bufferedWriter(Charsets.UTF_8).use { out ->
                 files.reports().forEachIndexed { index, report ->
                     if (index > 0) out.write("\n----------------------------------------\n\n")
