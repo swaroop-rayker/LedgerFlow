@@ -82,6 +82,11 @@ jobs:
       - name: versionCode monotonicity guard (BUG3)
         run: bash scripts/guard-version.sh
 
+      # BUG52: the guard compared a tag build with itself and stopped every
+      # release. These run the real script in throwaway repositories.
+      - name: versionCode guard regression tests (BUG52)
+        run: bash scripts/test-guard-version.sh
+
       # Ground truth for a receipt is committed before the extractor that reads
       # it. Bootstrapping a fixture from the extractor's own output is fast,
       # undetectable afterwards, and makes the corpus measure the extractor

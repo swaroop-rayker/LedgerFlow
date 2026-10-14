@@ -30,9 +30,15 @@ fi
 
 echo "HEAD versionCode: $CURRENT"
 
-# Compare against the most recent release tag.
+# Compare against the most recent *previous* release tag (BUG52).
+#
+# `--no-contains HEAD` leaves out any tag at HEAD or after it. On a tag build the
+# newest tag IS the one being released, and comparing a release against itself
+# failed every release: v0.1.0's first run stopped here with "HEAD=1, v0.1.0=1"
+# (2026-10-14). On a branch build it changes nothing -- earlier releases are
+# ancestors of HEAD and still compared.
 git fetch --tags --quiet 2>/dev/null || true
-LAST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | head -1 || true)
+LAST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname --no-contains HEAD | head -1 || true)
 
 if [ -z "$LAST_TAG" ]; then
   echo "No prior release tag. Skipping comparison (first release)."
