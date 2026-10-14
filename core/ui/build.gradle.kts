@@ -44,6 +44,9 @@ dependencies {
     // has already resolved -- names, formatted amounts -- so it stays usable
     // from any feature without dragging a domain vocabulary along with it.
     implementation(project(":core:designsystem"))
+    // LfEntryRow draws a LedgerListItem (V2-PLAN BUG-C: the Ledger and Home
+    // share the row). :core:designsystem already depends on it.
+    implementation(project(":core:model"))
 
     // Reading a Recovery Kit's QR code instead of typing 24 words (ADR-0028).
     // The camera stack is already in the APK for receipt capture and needs no
