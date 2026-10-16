@@ -19,6 +19,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -89,16 +90,9 @@ public fun LfBudgetBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.clearAndSetSemantics { },
             )
-            Text(
-                // "₹4,200 of ₹6,000" -- both figures, because a percentage
-                // alone hides the scale, and the headroom left is what someone
-                // actually wants off this row.
+            BudgetAmounts(
                 text = "$formattedSpent of $formattedBudget",
-                style = LfTheme.typography.label,
                 color = if (over) colors.warn else colors.textSecondary,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.clearAndSetSemantics { },
             )
         }
 
@@ -116,6 +110,34 @@ public fun LfBudgetBar(
             }
         }
     }
+}
+
+/**
+ * "₹4,200 of ₹6,000" -- both figures, because a percentage alone hides the
+ * scale, and the headroom left is what someone actually wants off this row.
+ *
+ * **Wraps at "of", never clips (BUG55).** It was `softWrap = false`, so once the
+ * pair was wider than the whole row the end of the budget was simply cut off:
+ * "₹8,200.00 of ₹10,000.0" at font scale 2.0 in Home's card. The [FlowRow]
+ * above already moves the pair below the name when they will not share a line;
+ * this is the step after that, when the pair alone is wider than the row. The
+ * only spaces are either side of "of", so the break lands between the amounts
+ * and never inside one. Where the pair fits, nothing about it changes.
+ */
+@Composable
+internal fun BudgetAmounts(
+    text: String,
+    color: Color,
+    onTextLayout: (TextLayoutResult) -> Unit = {},
+) {
+    Text(
+        text = text,
+        style = LfTheme.typography.label,
+        color = color,
+        maxLines = AMOUNT_MAX_LINES,
+        onTextLayout = onTextLayout,
+        modifier = Modifier.clearAndSetSemantics { },
+    )
 }
 
 @Composable
@@ -159,5 +181,8 @@ private fun ProjectionTick(fraction: Float, color: Color) {
 }
 
 private const val TICK_WIDTH_PX = 4
+
+/** Spent on one line, the budget on the next: the most the pair can need. */
+private const val AMOUNT_MAX_LINES = 2
 
 private val DefaultBarHeight: Dp = 8.dp
