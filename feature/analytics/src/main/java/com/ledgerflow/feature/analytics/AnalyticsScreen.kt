@@ -493,7 +493,7 @@ private fun BudgetRow(progress: BudgetProgress, currency: String) {
         formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
         formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
         fraction = progress.fraction,
-        projectedFraction = progress.projectedFraction(),
+        projectedFraction = progress.projectedFraction,
         color = LfCategoryPalette.colorForId(
             progress.budget.categoryId,
             progress.categoryColorArgb,
@@ -616,14 +616,6 @@ private fun AnalyticsSnapshot.toHeatmapDays(currency: String): List<LfHeatmapDay
         }
     }
 }
-
-/** Today's pace as a fraction of the budget — a chart coordinate, not money. */
-private fun BudgetProgress.projectedFraction(): Float =
-    if (budget.amount.minor <= 0L) {
-        0f
-    } else {
-        (projectedSpend.minor.toDouble() / budget.amount.minor.toDouble()).toFloat()
-    }
 
 @Composable
 private fun AnalyticsSnapshot.toMerchantBars(currency: String): List<LfBarDatum> {

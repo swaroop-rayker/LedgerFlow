@@ -1,23 +1,23 @@
 package com.ledgerflow.feature.dashboard
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.analytics.HomeSummary
 import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.diagnostics.CrashSummary
 import com.ledgerflow.core.domain.ingest.CaptureGap
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
+import com.ledgerflow.core.model.LedgerListItem
 
 /**
- * Home's state (SPEC.md §9.3, §5.2).
+ * Home's state (SPEC.md §9.3, §5.2; V2-PLAN BUG-C).
  *
- * **The screen's first real content, and deliberately only this.** The Dashboard
- * was a parameterless placeholder because its intended content — recent
- * entries, quick stats, budget rings — reads from `daily_rollup`, which arrives
- * with the rollup worker at P3. §5.2's health banner does not wait for that, and
- * giving the screen a state for one banner is the smaller of the two available
- * mistakes: the alternative was a database call inside a composable, which the
- * placeholder's own KDoc ruled out in advance.
+ * The banners came first (§5.2), and Home v1's figures joined them in one
+ * class, as this KDoc promised at P1: it grew fields, not a second ViewModel.
  *
- * When P3 lands, this class grows fields. It does not grow a second ViewModel.
+ * **Null means "not read yet", never "nothing there".** Every Home v1 field
+ * starts null, so the first frame shows neither an empty state nor zeros to a
+ * user whose vault is full; the empty state needs both books to have answered
+ * empty ([showsEmptyState]).
  */
 @Immutable
 public data class DashboardUiState(
@@ -54,7 +54,50 @@ public data class DashboardUiState(
 
     /** The last "Save report" could not write; the reports are still there. */
     val crashSaveFailed: Boolean = false,
+
+    /** Inbox items waiting for a tap (Law 1). */
+    val pendingCount: Int = 0,
+
+    /** The month's figures; null until the first read lands. */
+    val summary: HomeSummary? = null,
+
+    /** `app_meta.baseCurrency`; every Home amount is in it (§1.3). */
+    val baseCurrency: String = DEFAULT_CURRENCY,
+
+    /** The debit book's newest entries; null until read. */
+    val recentSpending: List<LedgerListItem>? = null,
+
+    /** The credit book's newest entries, a separate list (Law 2); null until read. */
+    val recentIncome: List<LedgerListItem>? = null,
 ) {
+
+    /**
+     * "Nothing here yet", only when **both** books have answered and neither
+     * holds a live entry (BUG54). Home drew it unconditionally until v2.
+     *
+     * The recent lists carry no window, so an empty one is an empty book: no
+     * separate "has entries" read is needed to decide this.
+     */
+    public val showsEmptyState: Boolean
+        get() = recentSpending?.isEmpty() == true && recentIncome?.isEmpty() == true
+
+    /** The month card and everything under it: whenever the vault has anything. */
+    public val showsSummary: Boolean
+        get() = recentSpending != null && recentIncome != null && !showsEmptyState
+
+    public val showsReview: Boolean get() = pendingCount > 0
+
+    public val showsBudgets: Boolean get() = summary?.budgets?.isNotEmpty() == true
+
+    public val showsRunway: Boolean get() = summary?.runway?.isNotEmpty() == true
+
+    /** Hidden when the month has no spending: "0% arrived by itself" says nothing. */
+    public val showsCoverage: Boolean get() = summary?.captureCoverage?.isEmpty == false
+
+    public val showsRecentSpending: Boolean get() = recentSpending?.isNotEmpty() == true
+
+    public val showsRecentIncome: Boolean get() = recentIncome?.isNotEmpty() == true
+
 
     /**
      * Whether the banner is on screen at all.
@@ -67,4 +110,9 @@ public data class DashboardUiState(
     public val showsCaptureBanner: Boolean
         get() = captureHealth == NotificationCaptureHealth.NOT_GRANTED ||
             captureHealth == NotificationCaptureHealth.DEAD
+
+    public companion object {
+        /** Matches `EntryUiState.DEFAULT_CURRENCY`; onboarding always sets one. */
+        public const val DEFAULT_CURRENCY: String = "INR"
+    }
 }

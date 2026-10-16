@@ -66,6 +66,19 @@ public data class BudgetProgress(
             (spent.minor.toDouble() / effectiveAmount.minor.toDouble()).toFloat()
         }
 
+    /**
+     * Today's pace as a fraction of the budget, for the projection tick on
+     * `LfBudgetBar`. A chart coordinate, not money. Against [Budget.amount],
+     * as the bar's printed budget is; it lived as a private copy on Budgets
+     * and Analytics until Home needed a third (V2-PLAN BUG-C).
+     */
+    public val projectedFraction: Float
+        get() = if (budget.amount.minor <= 0L) {
+            0f
+        } else {
+            (projectedSpend.minor.toDouble() / budget.amount.minor.toDouble()).toFloat()
+        }
+
     /** The highest threshold this budget has crossed, or null. */
     public fun crossedThreshold(): Int? = budget.alertThresholds
         .sortedDescending()

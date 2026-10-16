@@ -4,34 +4,56 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ledgerflow.core.designsystem.chart.LfBudgetBar
+import com.ledgerflow.core.designsystem.chart.LfCategoryPalette
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.analytics.BookMonth
+import com.ledgerflow.core.domain.analytics.BudgetProgress
+import com.ledgerflow.core.domain.analytics.CaptureCoverage
+import com.ledgerflow.core.domain.analytics.HomeSummary
 import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.diagnostics.CrashSummary
 import com.ledgerflow.core.domain.ingest.CaptureGap
 import com.ledgerflow.core.domain.ingest.ListenerHealth
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
+import com.ledgerflow.core.model.LedgerListItem
+import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.ui.entry.LfEntryRow
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /**
  * Home, wired (SPEC.md §5.2).
@@ -48,6 +70,10 @@ public fun DashboardRoute(
     onSetUpNotifications: () -> Unit,
     onBackUpNow: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenInbox: () -> Unit = {},
+    onOpenBudgets: () -> Unit = {},
+    onOpenAnalytics: () -> Unit = {},
+    onOpenLedger: (LedgerType) -> Unit = {},
 ) {
     val viewModel: DashboardViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -70,23 +96,30 @@ public fun DashboardRoute(
         onAcknowledgeCaptureGap = viewModel::acknowledgeCaptureGap,
         onSaveCrashReports = { saveReport.launch(viewModel.crashReportFileName()) },
         onDismissCrashReports = viewModel::dismissCrashReports,
+        onOpenInbox = onOpenInbox,
+        onOpenBudgets = onOpenBudgets,
+        onOpenAnalytics = onOpenAnalytics,
+        onOpenLedger = onOpenLedger,
         modifier = modifier,
     )
 }
 
 /**
- * Home (SPEC.md §9.3).
+ * Home (SPEC.md §9.3; V2-PLAN BUG-C).
  *
- * The real content -- recent entries, quick stats, budget rings -- reads from
- * `daily_rollup`, which arrives with the rollup worker at P3. Until then the
- * body says so rather than showing invented figures.
+ * The banners first, then the month: what is waiting for a tap, the two books'
+ * figures side by side and never combined (Law 2), the debit-only extras
+ * (budgets, what is due, how much arrived by itself), and the newest entries of
+ * each book as two separate lists. Each card hides when it has nothing to say,
+ * and "Nothing here yet" appears only when both books are empty — until v2 it
+ * was drawn whatever the vault held (BUG54).
  *
- * §5.2's health banner is the screen's first real content, and it sits **above**
- * the empty state rather than inside it. The two are unrelated: "no entries yet"
- * is a fact about the ledger, and "capture is not working" is a fact about the
- * pipeline that fills it. Folding the second into the first is precisely the
- * confusion `CLAUDE.md` §7 forbids — a dead listener must not look like an empty
- * Inbox, and by the same argument it must not look like an empty ledger.
+ * §5.2's health banner sits **above** the content rather than inside it. "No
+ * entries yet" is a fact about the ledger, and "capture is not working" is a
+ * fact about the pipeline that fills it. Folding the second into the first is
+ * precisely the confusion `CLAUDE.md` §7 forbids — a dead listener must not
+ * look like an empty Inbox, and by the same argument it must not look like an
+ * empty ledger.
  */
 @Composable
 public fun DashboardScreen(
@@ -97,6 +130,10 @@ public fun DashboardScreen(
     onAcknowledgeCaptureGap: () -> Unit = {},
     onSaveCrashReports: () -> Unit = {},
     onDismissCrashReports: () -> Unit = {},
+    onOpenInbox: () -> Unit = {},
+    onOpenBudgets: () -> Unit = {},
+    onOpenAnalytics: () -> Unit = {},
+    onOpenLedger: (LedgerType) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -142,13 +179,400 @@ public fun DashboardScreen(
             )
         }
 
+        HomeBody(
+            state = state,
+            onOpenInbox = onOpenInbox,
+            onOpenBudgets = onOpenBudgets,
+            onOpenAnalytics = onOpenAnalytics,
+            onOpenLedger = onOpenLedger,
+        )
+
+        // The last card clears the bottom bar's shadow rather than touching it.
+        Spacer(modifier = Modifier.height(LfTheme.spacing.md))
+    }
+}
+
+/**
+ * Home v1 (V2-PLAN BUG-C), under the banners: what is waiting, the month, and
+ * each book's newest entries. Emits straight into the screen's column, so its
+ * cards share the banners' spacing.
+ */
+@Composable
+private fun HomeBody(
+    state: DashboardUiState,
+    onOpenInbox: () -> Unit,
+    onOpenBudgets: () -> Unit,
+    onOpenAnalytics: () -> Unit,
+    onOpenLedger: (LedgerType) -> Unit,
+) {
+    val cardInset = Modifier.padding(horizontal = LfTheme.spacing.lg)
+
+    // Not inside the summary branch: a first-day user with only pending
+    // suggestions has nothing in either book and still has work waiting.
+    if (state.showsReview) {
+        ReviewCard(count = state.pendingCount, onOpenInbox = onOpenInbox, modifier = cardInset)
+    }
+
+    if (state.showsEmptyState) {
         LfEmptyState(
             title = "Nothing here yet",
             body = "Your recent spending, budgets and quick stats appear here once " +
                 "there are entries to summarise.",
         )
     }
+
+    if (state.showsSummary) {
+        MonthCard(summary = state.summary, currency = state.baseCurrency, modifier = cardInset)
+        state.summary?.let { summary ->
+            SpendingCards(
+                state = state,
+                summary = summary,
+                onOpenBudgets = onOpenBudgets,
+                onOpenAnalytics = onOpenAnalytics,
+                modifier = cardInset,
+            )
+        }
+    }
+
+    state.recentSpending?.takeIf { state.showsRecentSpending }?.let { rows ->
+        RecentSection(
+            title = "Recent spending",
+            rows = rows,
+            onSeeAll = { onOpenLedger(LedgerType.DEBIT) },
+            modifier = cardInset,
+        )
+    }
+    state.recentIncome?.takeIf { state.showsRecentIncome }?.let { rows ->
+        RecentSection(
+            title = "Recent income",
+            rows = rows,
+            onSeeAll = { onOpenLedger(LedgerType.CREDIT) },
+            modifier = cardInset,
+        )
+    }
 }
+
+/** The debit book's extras, each only when it has something to say. */
+@Composable
+private fun SpendingCards(
+    state: DashboardUiState,
+    summary: HomeSummary,
+    onOpenBudgets: () -> Unit,
+    onOpenAnalytics: () -> Unit,
+    modifier: Modifier,
+) {
+    if (state.showsBudgets) {
+        BudgetsCard(
+            budgets = summary.budgets,
+            currency = state.baseCurrency,
+            onOpenBudgets = onOpenBudgets,
+            modifier = modifier,
+        )
+    }
+    if (state.showsRunway) {
+        RunwayCard(
+            summary = summary,
+            currency = state.baseCurrency,
+            onOpenAnalytics = onOpenAnalytics,
+            modifier = modifier,
+        )
+    }
+    if (state.showsCoverage) {
+        CoverageCard(coverage = summary.captureCoverage, onOpenAnalytics = onOpenAnalytics, modifier = modifier)
+    }
+}
+
+/** Inbox items waiting (Law 1: nothing reaches a book without this tap). */
+@Composable
+private fun ReviewCard(count: Int, onOpenInbox: () -> Unit, modifier: Modifier = Modifier) {
+    LfCard(modifier = modifier) {
+        LineWithAction(
+            action = "Open Inbox",
+            onAction = onOpenInbox,
+        ) {
+            Text(
+                text = "To review: $count",
+                style = LfTheme.typography.bodyL,
+                color = LfTheme.colors.textPrimary,
+            )
+        }
+    }
+}
+
+/**
+ * The month so far, one line per book, each against the same days of last
+ * month (owner, 2026-10-14).
+ *
+ * **Two figures, labelled in words, and no third.** *Spent* and *Received* are
+ * never netted (Law 2), and the colour is a second cue rather than the only one
+ * (§9.6). One book per line, the word left and the amount right as on every
+ * other row in the app; side by side the two read as a pair that should be
+ * compared, and stacked at large text they zig-zagged.
+ *
+ * Drawn with placeholders before [summary] arrives, at the same height, so
+ * nothing below it moves when the figures land.
+ */
+@Composable
+private fun MonthCard(summary: HomeSummary?, currency: String, modifier: Modifier = Modifier) {
+    val colors = LfTheme.colors
+    val period = summary?.let { periodLabel(it.window.from, it.window.to) }
+    val previousPeriod = summary?.let { periodLabel(it.previousWindow.from, it.previousWindow.to) }
+    LfCard(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            Text(
+                text = period?.let { "This month, $it" } ?: "This month",
+                style = LfTheme.typography.label,
+                color = colors.textSecondary,
+            )
+            BookFigure(
+                label = "Spent",
+                book = summary?.spending,
+                previousPeriod = previousPeriod,
+                currency = currency,
+                color = colors.debit,
+            )
+            BookFigure(
+                label = "Received",
+                book = summary?.income,
+                previousPeriod = previousPeriod,
+                currency = currency,
+                color = colors.credit,
+            )
+            Text(
+                text = summary?.let { "Spent today: " + MoneyFormat.symbolised(it.spentToday.minor, currency) }
+                    ?: PLACEHOLDER_LINE,
+                style = LfTheme.typography.label,
+                color = colors.textSecondary,
+            )
+        }
+    }
+}
+
+/**
+ * One book's figure, its word, and how it compares; one announcement for all
+ * three.
+ *
+ * `amountM`, the row size, not `amountL`: the amount is `softWrap = false`, and
+ * at font scale 2.0 `amountL` would need more than the card's width for a
+ * figure like ₹12,34,567.00. Hierarchy comes from the word beside it and the
+ * book's colour rather than from size.
+ */
+@Composable
+private fun BookFigure(
+    label: String,
+    book: BookMonth?,
+    previousPeriod: String?,
+    currency: String,
+    color: Color,
+) {
+    val comparison = if (book != null && previousPeriod != null) {
+        comparisonSentence(book.total.minor, book.previousTotal.minor, currency, previousPeriod)
+    } else {
+        PLACEHOLDER_LINE
+    }
+    val spoken = book?.let {
+        "$label this month, " + MoneyFormat.spoken(it.total.minor, currency) + ". " + comparison
+    } ?: "$label this month, loading"
+    Column(modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }) {
+        LfAdaptiveRow(
+            leading = {
+                Text(text = label, style = LfTheme.typography.bodyL, color = LfTheme.colors.textPrimary)
+            },
+            trailing = {
+                Text(
+                    text = book?.let { MoneyFormat.symbolised(it.total.minor, currency) } ?: PLACEHOLDER_AMOUNT,
+                    style = LfTheme.typography.amountM,
+                    color = color,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            },
+        )
+        Text(
+            text = comparison,
+            style = LfTheme.typography.label,
+            color = LfTheme.colors.textTertiary,
+            textAlign = TextAlign.End,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
+ * The budgets closest to their limit, in the bar Budgets and Analytics draw
+ * (the owner chose it over a ring, 2026-10-14). Debit only (§5.7).
+ */
+@Composable
+private fun BudgetsCard(
+    budgets: List<BudgetProgress>,
+    currency: String,
+    onOpenBudgets: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LfCard(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            SectionHeading(title = "Budgets", action = "All budgets", onAction = onOpenBudgets)
+            budgets.forEach { progress ->
+                LfBudgetBar(
+                    label = progress.categoryName,
+                    formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
+                    formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
+                    fraction = progress.fraction,
+                    projectedFraction = progress.projectedFraction,
+                    color = LfCategoryPalette.colorForId(
+                        progress.budget.categoryId,
+                        progress.categoryColorArgb,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Detected charges due before the month ends (A10's runway, read to the
+ * month's end). "Expected", not "due": a pattern, not a schedule.
+ */
+@Composable
+private fun RunwayCard(
+    summary: HomeSummary,
+    currency: String,
+    onOpenAnalytics: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LfCard(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = MoneyFormat.symbolised(summary.runwayTotal.minor, currency) +
+                    " expected by " + dayLabel(summary.runwayThrough),
+                style = LfTheme.typography.bodyL,
+                color = LfTheme.colors.textPrimary,
+            )
+            LineWithAction(action = "Open Analytics", onAction = onOpenAnalytics) {
+                Text(
+                    text = runwayDetail(summary.runway.map { it.name }),
+                    style = LfTheme.typography.label,
+                    color = LfTheme.colors.textSecondary,
+                )
+            }
+        }
+    }
+}
+
+/** C1 on Home (owner, 2026-09-30): the month's spending by value, count beneath. */
+@Composable
+private fun CoverageCard(coverage: CaptureCoverage, onOpenAnalytics: () -> Unit, modifier: Modifier = Modifier) {
+    LfCard(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = "${coverage.automaticPercentByValue}% of this month's spending was captured automatically",
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textPrimary,
+            )
+            LineWithAction(action = "Details", onAction = onOpenAnalytics) {
+                Text(
+                    text = "${coverage.automatic.count} of ${coverage.totalCount} " +
+                        if (coverage.totalCount == 1) "entry" else "entries",
+                    style = LfTheme.typography.label,
+                    color = LfTheme.colors.textSecondary,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One book's newest entries, in the Ledger's own row (`LfEntryRow`).
+ *
+ * Not wrapped in a card: each row is already the Ledger's bordered row, and a
+ * card around bordered rows is two outlines for one list. The heading keeps the
+ * cards' inset and type, so the section reads as part of the same screen.
+ * Read-only: deleting is the Ledger's.
+ */
+@Composable
+private fun RecentSection(
+    title: String,
+    rows: List<LedgerListItem>,
+    onSeeAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        SectionHeading(title = title, action = "See all", onAction = onSeeAll)
+        rows.forEach { row -> key(row.id) { LfEntryRow(item = row, withDate = true) } }
+    }
+}
+
+/**
+ * A section's name with its one action on the same line.
+ *
+ * One action, so it cannot wrap mid-actions (the case CLAUDE.md §5 gives the
+ * heading its own line for); [LfAdaptiveRow] drops the whole control below the
+ * name when both will not fit, which is the BUG9 way to degrade.
+ */
+@Composable
+private fun SectionHeading(title: String, action: String, onAction: () -> Unit) {
+    LineWithAction(action = action, onAction = onAction) {
+        Text(text = title, style = LfTheme.typography.label, color = LfTheme.colors.textSecondary)
+    }
+}
+
+/**
+ * A line of content with one `Inline` action at its end, on the same line
+ * while both fit and below it, whole, when they do not.
+ *
+ * A card that is one fact and one action costs one line this way; with the
+ * action in a row of its own it cost two and a half (measured on the first
+ * Home goldens, 2026-10-16).
+ */
+@Composable
+private fun LineWithAction(action: String, onAction: () -> Unit, content: @Composable () -> Unit) {
+    LfAdaptiveRow(
+        leading = content,
+        trailing = { LfButton(text = action, style = LfButtonStyle.Inline, onClick = onAction) },
+    )
+}
+
+/**
+ * A figure against the same days of last month, in words rather than a
+ * percentage: a book that was empty last month has no percentage change, and
+ * Analytics shows a change the same way (an amount, not a ratio).
+ */
+internal fun comparisonSentence(current: Long, previous: Long, currency: String, period: String): String {
+    val delta = current - previous
+    return when {
+        delta > 0 -> MoneyFormat.symbolised(delta, currency) + " more than " + period
+        delta < 0 -> MoneyFormat.symbolised(-delta, currency) + " less than " + period
+        else -> "Same as $period"
+    }
+}
+
+/** `1–16 Oct`, or `1 Nov` for a one-day window. Both ends are in one month. */
+internal fun periodLabel(from: Int, to: Int): String {
+    val start = LocalDate.ofEpochDay(from.toLong())
+    val end = LocalDate.ofEpochDay(to.toLong())
+    val month = end.format(MONTH)
+    return if (from == to) "${end.dayOfMonth} $month" else "${start.dayOfMonth}–${end.dayOfMonth} $month"
+}
+
+/** `31 Oct`. */
+internal fun dayLabel(epochDay: Int): String {
+    val date = LocalDate.ofEpochDay(epochDay.toLong())
+    return "${date.dayOfMonth} ${date.format(MONTH)}"
+}
+
+/** "1 recurring charge: Rent" / "2 recurring charges: Netflix, Rent". */
+internal fun runwayDetail(names: List<String>): String =
+    if (names.size == 1) {
+        "1 recurring charge: ${names.single()}"
+    } else {
+        "${names.size} recurring charges: ${names.joinToString(", ")}"
+    }
+
+private val MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM")
+
+/** Holds a figure's line until the figure arrives, so the card keeps its height. */
+private const val PLACEHOLDER_AMOUNT = "—"
+private const val PLACEHOLDER_LINE = " "
 
 /**
  * §5.2's health banner.

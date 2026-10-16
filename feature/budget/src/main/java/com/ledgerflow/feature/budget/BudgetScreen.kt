@@ -120,7 +120,7 @@ private fun BudgetCard(
                     currency,
                 ),
                 fraction = progress.fraction,
-                projectedFraction = progress.projectedFraction(),
+                projectedFraction = progress.projectedFraction,
                 color = LfCategoryPalette.colorForId(
                     progress.budget.categoryId,
                     progress.categoryColorArgb,
@@ -167,14 +167,6 @@ private fun periodSummary(progress: BudgetProgress): String {
     val base = "Day ${progress.daysElapsed} of $length"
     return if (progress.onCourseToOverrun) "$base · on course to overrun" else base
 }
-
-/** Today's pace as a fraction of the budget — a chart coordinate, not money. */
-private fun BudgetProgress.projectedFraction(): Float =
-    if (budget.amount.minor <= 0L) {
-        0f
-    } else {
-        (projectedSpend.minor.toDouble() / budget.amount.minor.toDouble()).toFloat()
-    }
 
 @PreviewScreenSizes
 @PreviewFontScale

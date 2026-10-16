@@ -233,6 +233,14 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
         DashboardRoute(
             onSetUpNotifications = { navController.navigate(Destination.NotificationAccess) },
             onBackUpNow = { navController.navigate(Destination.BackUpNow) },
+            onOpenInbox = { navController.navigate(Destination.Inbox()) },
+            onOpenBudgets = { navController.navigate(Destination.Budgets) },
+            // Tabs, so switched to rather than stacked: Back from Analytics
+            // leaves the app as it does after a bottom-bar tap.
+            onOpenAnalytics = { navController.switchTab(Destination.Analytics) },
+            // The book argument is honoured in the next step (V2-PLAN BUG-C
+            // step 4); until then the Ledger opens on the book it last showed.
+            onOpenLedger = { _ -> navController.switchTab(Destination.Ledger) },
         )
     }
     composable<Destination.Ledger> {

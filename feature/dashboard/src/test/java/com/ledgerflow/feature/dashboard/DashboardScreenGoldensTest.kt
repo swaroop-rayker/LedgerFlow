@@ -21,9 +21,11 @@ import org.robolectric.annotation.GraphicsMode
  * Home's goldens at font scale 1.0 and 2.0 (§12, P5 step 4), each capture also
  * running §9.6's touch-target and label checks.
  *
- * Home is the banners and an empty state until v2's Home v1 (`docs/V2-PLAN.md`
- * BUG-C), so these are its real states today: nothing to say, and both banners
- * at once — the tallest it gets, and the case where two actions compete.
+ * The banner goldens are an **empty vault** (both books answered, neither has
+ * an entry), which is what they showed before Home v1 and still show: the
+ * banners above "Nothing here yet". Home v1 (`docs/V2-PLAN.md` BUG-C) adds a
+ * full month, every card at once and the tallest Home gets, and the frame
+ * before the figures land.
  *
  * **Review the diff; never re-record blind** (`CLAUDE.md` §12).
  */
@@ -40,9 +42,12 @@ class DashboardScreenGoldensTest {
             LfTheme { DashboardScreen(state = state, onSetUpNotifications = {}, onBackUpNow = {}) }
         }
 
-    private val quiet = DashboardUiState(captureHealth = NotificationCaptureHealth.CONNECTED)
+    /** Both books read, both empty: what every pre-v2 golden here depicted. */
+    private val emptyVault = DashboardUiState(recentSpending = emptyList(), recentIncome = emptyList())
 
-    private val bothBanners = DashboardUiState(
+    private val quiet = emptyVault.copy(captureHealth = NotificationCaptureHealth.CONNECTED)
+
+    private val bothBanners = emptyVault.copy(
         captureHealth = NotificationCaptureHealth.NOT_GRANTED,
         backupReminder = BackupReminder.Stale(daysAgo = 12),
     )
@@ -61,7 +66,7 @@ class DashboardScreenGoldensTest {
      * §16 Q16's card (BUG50), above the others: 2 Oct 04:44 to 3 Oct 02:32 UTC,
      * the harness's zone. Shown with a backup reminder so the stacking is seen.
      */
-    private val captureGap = DashboardUiState(
+    private val captureGap = emptyVault.copy(
         captureHealth = NotificationCaptureHealth.CONNECTED,
         backupReminder = BackupReminder.Stale(daysAgo = 12),
         captureGap = CaptureGap(firstMissedAt = 1_790_916_240_000L, lastMissedAt = 1_790_994_720_000L, missed = 7),
@@ -73,7 +78,7 @@ class DashboardScreenGoldensTest {
     @Test fun captureGap_2x() = capture("home-capture-gap-2x", captureGap, 2f)
 
     /** BUG7(c)'s offer after two crashes, the latest 2 Oct 04:44 UTC. */
-    private val crashReports = DashboardUiState(
+    private val crashReports = emptyVault.copy(
         captureHealth = NotificationCaptureHealth.CONNECTED,
         crashReports = CrashSummary(count = 2, latestAt = 1_790_916_240_000L),
     )
@@ -82,4 +87,29 @@ class DashboardScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun crashReports_2x() = capture("home-crash-reports-2x", crashReports, 2f)
+
+    // ── Home v1 (V2-PLAN BUG-C) ─────────────────────────────────────────────
+
+    /**
+     * Every card at once, 16 October: three to review, both books' figures
+     * against 1–16 September, three budgets, two charges due, coverage, and
+     * both recent lists. The tallest Home gets, so the 2.0 capture is where a
+     * clipped figure or a wrapped control label would show.
+     */
+    @Test fun month_1x() = capture("home-month-1x", HomeFixtures.populated, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun month_2x() = capture("home-month-2x", HomeFixtures.populated, 2f)
+
+    /**
+     * The frame before the figures land: the books have answered, the summary
+     * has not. The month card is at its full height with placeholders, so
+     * nothing below it moves when the numbers arrive.
+     */
+    private val figuresLoading = HomeFixtures.populated.copy(summary = null, pendingCount = 0)
+
+    @Test fun loading_1x() = capture("home-loading-1x", figuresLoading, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun loading_2x() = capture("home-loading-2x", figuresLoading, 2f)
 }

@@ -2,6 +2,7 @@ package com.ledgerflow.feature.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.backup.ObserveLastBackupUseCase
 import com.ledgerflow.core.domain.diagnostics.DismissCrashReportsUseCase
@@ -10,11 +11,16 @@ import com.ledgerflow.core.domain.diagnostics.SaveCrashReportsUseCase
 import com.ledgerflow.core.domain.usecase.AcknowledgeCaptureGapUseCase
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
 import com.ledgerflow.core.domain.usecase.ObserveCaptureGapUseCase
+import com.ledgerflow.core.model.LedgerType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -41,10 +47,20 @@ public class DashboardViewModel @Inject constructor(
     private val observeCrashReports: ObserveCrashReportsUseCase,
     private val saveCrashReports: SaveCrashReportsUseCase,
     private val dismissCrashReports: DismissCrashReportsUseCase,
+    private val home: HomeReads,
 ) : ViewModel() {
+
+    private val ledger = home.ledger
 
     private val _state = MutableStateFlow(DashboardUiState())
     public val state: StateFlow<DashboardUiState> = _state.asStateFlow()
+
+    /**
+     * Asks for the month's figures again (V2-PLAN BUG-C). Fired by every
+     * change to either book and by every resume; `collectLatest` drops a read
+     * the next request has made stale, so a burst of approvals reads once.
+     */
+    private val summaryRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     /**
      * The last verified backup, once read. Kept rather than only its verdict,
@@ -80,6 +96,33 @@ public class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             observeCrashReports().collect { reports -> _state.update { it.copy(crashReports = reports) } }
         }
+        viewModelScope.launch {
+            home.observePendingCount().collect { count -> _state.update { it.copy(pendingCount = count) } }
+        }
+        // Two reads, one per book, never one list of both (Law 2). Either
+        // re-emits on any write to the ledger, which is also how an approval
+        // made from a notification while Home is open reaches the figures.
+        viewModelScope.launch {
+            combine(
+                ledger.observeRecent(LedgerType.DEBIT, RECENT_ROWS),
+                ledger.observeRecent(LedgerType.CREDIT, RECENT_ROWS),
+            ) { spending, income -> spending to income }
+                .collect { (spending, income) ->
+                    _state.update { it.copy(recentSpending = spending, recentIncome = income) }
+                    summaryRequests.tryEmit(Unit)
+                }
+        }
+        viewModelScope.launch {
+            summaryRequests
+                .onStart { emit(Unit) }
+                .collectLatest { loadSummary() }
+        }
+    }
+
+    private suspend fun loadSummary() {
+        val currency = ledger.baseCurrency() ?: DashboardUiState.DEFAULT_CURRENCY
+        val summary = home.getHomeSummary(today = LocalDates.of(home.clock.nowMillis()))
+        _state.update { it.copy(summary = summary, baseCurrency = currency) }
     }
 
     /** What the file picker suggests for "Save report". */
@@ -119,5 +162,12 @@ public class DashboardViewModel @Inject constructor(
         }
         // Time passed while the app was away; the same date may now be stale.
         judgeBackup()
+        // ...and "this month" may now be next month.
+        summaryRequests.tryEmit(Unit)
+    }
+
+    private companion object {
+        /** V2-PLAN's "last five". Home orients; the Ledger is the list. */
+        const val RECENT_ROWS = 5
     }
 }
