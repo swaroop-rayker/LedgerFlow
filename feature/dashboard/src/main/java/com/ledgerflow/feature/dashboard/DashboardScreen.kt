@@ -1,5 +1,6 @@
 package com.ledgerflow.feature.dashboard
 
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -88,6 +89,12 @@ public fun DashboardRoute(
         viewModel.refresh()
         onPauseOrDispose { }
     }
+
+    // "Fully drawn" is Home with its figures, not the first frame of banners
+    // (docs/PERF-120HZ-PLAN.md §6), so startup is measured to a real Home.
+    // The summary arrives even for an empty or unopenable vault (an empty
+    // snapshot), so this always fires.
+    ReportDrawnWhen { state.summary != null }
 
     DashboardScreen(
         state = state,

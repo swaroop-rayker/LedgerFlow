@@ -99,6 +99,12 @@ which draws two full screens every frame for most of a second. v2 replaces it
 
 1. `reportFullyDrawn()` once the vault is open and the first screen has data,
    so "time to full display" measures Home rather than the unlock frame.
+   **Done 2026-10-16** with Home v1 (`ReportDrawnWhen` on Home's figures).
+   First reading, LF Bench on SM-S721B (Android 17, thermal status 0, cold
+   launches after one warm-up): first frame 126-167 ms, fully drawn
+   2.61-2.69 s. Not a regression (nothing measured full display before) but
+   2.5 s of placeholders on the start screen; the split between vault open,
+   the two recent-entry reads and the month snapshot needs a trace.
 2. A startup profile (`includeInStartupProfile`) for dex layout, measured
    against the current baseline-only profile.
 

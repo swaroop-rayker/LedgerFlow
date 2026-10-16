@@ -18,8 +18,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -57,8 +57,17 @@ public class DashboardViewModel @Inject constructor(
 
     /**
      * Asks for the month's figures again (V2-PLAN BUG-C). Fired by every
-     * change to either book and by every resume; `collectLatest` drops a read
-     * the next request has made stale, so a burst of approvals reads once.
+     * change to either book and by every resume.
+     *
+     * **Queued behind the read in progress, never cancelling it.** At launch
+     * three requests land together (the first read, the first resume, both
+     * books' first emission); with `collectLatest` each one threw away the
+     * read in progress and began again. Now that read finishes and shows, and
+     * requests arriving meanwhile collapse into one follow-up read (the buffer
+     * holds one; `conflate` keeps it that way), so a burst of approvals reads
+     * once more, not once each. Measured on LF Bench, this did **not** change
+     * time to full display (~2.65 s either way, 2026-10-16): the cost is in the
+     * read itself, not in restarting it.
      */
     private val summaryRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -115,7 +124,8 @@ public class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             summaryRequests
                 .onStart { emit(Unit) }
-                .collectLatest { loadSummary() }
+                .conflate()
+                .collect { loadSummary() }
         }
     }
 

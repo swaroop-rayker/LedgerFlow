@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
@@ -60,6 +61,7 @@ import com.ledgerflow.feature.inbox.ReviewScreen
 import com.ledgerflow.feature.inbox.ReviewViewModel
 import com.ledgerflow.feature.ledger.BinScreen
 import com.ledgerflow.feature.ledger.BinViewModel
+import com.ledgerflow.feature.ledger.LedgerEvent
 import com.ledgerflow.feature.ledger.LedgerScreen
 import com.ledgerflow.feature.ledger.LedgerViewModel
 import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
@@ -238,33 +240,19 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             // Tabs, so switched to rather than stacked: Back from Analytics
             // leaves the app as it does after a bottom-bar tap.
             onOpenAnalytics = { navController.switchTab(Destination.Analytics) },
-            // The book argument is honoured in the next step (V2-PLAN BUG-C
-            // step 4); until then the Ledger opens on the book it last showed.
-            onOpenLedger = { _ -> navController.switchTab(Destination.Ledger) },
+            // On the book whose "See all" was tapped: a one-shot request on the
+            // tab's entry, because restoreState ignores route arguments.
+            onOpenLedger = { book ->
+                navController.switchTab(Destination.Ledger)
+                LedgerBookRequest.place(
+                    navController.getBackStackEntry<Destination.Ledger>().savedStateHandle,
+                    book,
+                )
+            },
         )
     }
-    composable<Destination.Ledger> {
-        val viewModel: LedgerViewModel = hiltViewModel()
-        val state by viewModel.state.collectAsStateWithLifecycle()
-        LedgerScreen(
-            state = state,
-            entries = viewModel.entries,
-            onEvent = viewModel::onEvent,
-            // The Ledger lists unsaved entries but does not edit them -- that is
-            // the entry form's job, and features never reach each other
-            // directly. It hands up an id; the graph decides where it goes
-            // (CLAUDE.md §3).
-            onOpenDraft = { draftId ->
-                navController.navigate(Destination.Entry(draftId = draftId))
-            },
-            // The Ledger lists §5.1's queue but never reviews it -- the same
-            // rule the drafts row follows. It hands up an id; the graph decides
-            // where it goes, which is the same InboxReview destination the
-            // notification's deep link lands on (CLAUDE.md §3).
-            onReviewCandidate = { pendingId ->
-                navController.navigate(Destination.InboxReview(pendingId))
-            },
-        )
+    composable<Destination.Ledger> { entry ->
+        LedgerRoute(navController = navController, handle = entry.savedStateHandle)
     }
     composable<Destination.Analytics> {
         val viewModel: AnalyticsViewModel = hiltViewModel()
@@ -486,6 +474,47 @@ private fun NavHostController.switchTab(destination: Destination) {
         launchSingleTop = true
         restoreState = true
     }
+}
+
+/**
+ * The Ledger tab: the two books (§5.5).
+ *
+ * A named composable for the reason [BudgetRoute] is one, and because it now
+ * also reads Home's "See all" request ([LedgerBookRequest]) off its own
+ * back-stack entry's [handle] and applies it as the segmented control's own
+ * event, once.
+ */
+@Composable
+private fun LedgerRoute(navController: NavHostController, handle: SavedStateHandle) {
+    val viewModel: LedgerViewModel = hiltViewModel()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val requested by handle
+        .getStateFlow<String?>(LedgerBookRequest.KEY, null)
+        .collectAsStateWithLifecycle()
+    LaunchedEffect(requested) {
+        LedgerBookRequest.consume(handle)?.let { book ->
+            viewModel.onEvent(LedgerEvent.LedgerSelected(book))
+        }
+    }
+    LedgerScreen(
+        state = state,
+        entries = viewModel.entries,
+        onEvent = viewModel::onEvent,
+        // The Ledger lists unsaved entries but does not edit them -- that is
+        // the entry form's job, and features never reach each other
+        // directly. It hands up an id; the graph decides where it goes
+        // (CLAUDE.md §3).
+        onOpenDraft = { draftId ->
+            navController.navigate(Destination.Entry(draftId = draftId))
+        },
+        // The Ledger lists §5.1's queue but never reviews it -- the same
+        // rule the drafts row follows. It hands up an id; the graph decides
+        // where it goes, which is the same InboxReview destination the
+        // notification's deep link lands on (CLAUDE.md §3).
+        onReviewCandidate = { pendingId ->
+            navController.navigate(Destination.InboxReview(pendingId))
+        },
+    )
 }
 
 /**

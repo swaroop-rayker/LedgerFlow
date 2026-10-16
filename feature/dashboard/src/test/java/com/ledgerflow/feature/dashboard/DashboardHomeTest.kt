@@ -131,6 +131,46 @@ class DashboardHomeTest {
         assertThat(vm.state.value.summary?.income?.total).isEqualTo(Money(1L))
     }
 
+    /**
+     * A change arriving while the figures are being read waits for that read
+     * rather than cancelling it.
+     *
+     * At launch three requests land together (the first read, the first
+     * resume, both books' first emission). Cancelling the read in progress on
+     * each threw that work away; now it finishes and shows, and one follow-up
+     * read covers whatever arrived meanwhile. (It did not change LF Bench's
+     * time to full display, ~2.65 s before and after; that cost is elsewhere.)
+     */
+    @Test
+    fun aChangeDuringARead_doesNotRestartIt() = runTest(dispatcher) {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var completed = 0
+        val slow = object : com.ledgerflow.core.domain.analytics.AnalyticsRepository by analytics {
+            override suspend fun snapshot(
+                ledger: LedgerType,
+                window: com.ledgerflow.core.domain.analytics.AnalyticsWindow,
+                comparePrevious: Boolean,
+                filters: com.ledgerflow.core.domain.analytics.AnalyticsFilters,
+            ): com.ledgerflow.core.domain.analytics.AnalyticsSnapshot {
+                gate.await()
+                return analytics.snapshot(ledger, window, comparePrevious, filters).also { completed++ }
+            }
+        }
+        val vm = viewModel(GetHomeSummaryUseCase(slow))
+        advanceUntilIdle()
+
+        // A burst while the first read is held: an approval, then a resume.
+        ledger.emitEntries(LedgerType.DEBIT, HomeFixtures.spending)
+        vm.refresh()
+        advanceUntilIdle()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.summary).isNotNull()
+        // The held read finished, and one more covered the burst: two, not one.
+        assertThat(completed).isEqualTo(2)
+    }
+
     /** Opened on the 31st, resumed on the 1st: "this month" moves with it. */
     @Test
     fun aResumeInANewMonth_readsTheNewMonth() = runTest(dispatcher) {
@@ -243,7 +283,7 @@ class DashboardHomeTest {
         override suspend fun status(): IngestSourceStatus = IngestSourceStatus.READY
     }
 
-    private fun viewModel(): DashboardViewModel {
+    private fun viewModel(summary: GetHomeSummaryUseCase = GetHomeSummaryUseCase(analytics)): DashboardViewModel {
         val clock = Clock { now }
         val gaps = FakeCaptureGapStore()
         val crashes = FakeCrashReportRepository()
@@ -262,7 +302,7 @@ class DashboardHomeTest {
             DismissCrashReportsUseCase(crashes),
             HomeReads(
                 ObservePendingCountUseCase(FakePendingRepository()),
-                GetHomeSummaryUseCase(analytics),
+                summary,
                 ledger,
                 clock,
             ),
