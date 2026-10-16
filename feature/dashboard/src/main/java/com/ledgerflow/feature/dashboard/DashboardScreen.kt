@@ -370,9 +370,12 @@ private fun BookFigure(
     } else {
         PLACEHOLDER_LINE
     }
-    val spoken = book?.let {
-        "$label this month, " + MoneyFormat.spoken(it.total.minor, currency) + ". " + comparison
-    } ?: "$label this month, loading"
+    val spoken = if (book != null && previousPeriod != null) {
+        "$label this month, " + MoneyFormat.spoken(book.total.minor, currency) + ". " +
+            comparisonSentence(book.total.minor, book.previousTotal.minor, currency, previousPeriod, spoken = true)
+    } else {
+        "$label this month, loading"
+    }
     Column(modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }) {
         LfAdaptiveRow(
             leading = {
@@ -537,11 +540,23 @@ private fun LineWithAction(action: String, onAction: () -> Unit, content: @Compo
  * percentage: a book that was empty last month has no percentage change, and
  * Analytics shows a change the same way (an amount, not a ratio).
  */
-internal fun comparisonSentence(current: Long, previous: Long, currency: String, period: String): String {
+internal fun comparisonSentence(
+    current: Long,
+    previous: Long,
+    currency: String,
+    period: String,
+    spoken: Boolean = false,
+): String {
     val delta = current - previous
+    // Spoken, the amount is words ("5,310.00 rupees"): screen readers skip the
+    // ₹ glyph often enough that §9.6 asks for it everywhere TalkBack reads one.
+    // Found on LF Bench's Home, where the figure was spoken and its comparison
+    // was not.
+    fun amount(minor: Long) =
+        if (spoken) MoneyFormat.spoken(minor, currency) else MoneyFormat.symbolised(minor, currency)
     return when {
-        delta > 0 -> MoneyFormat.symbolised(delta, currency) + " more than " + period
-        delta < 0 -> MoneyFormat.symbolised(-delta, currency) + " less than " + period
+        delta > 0 -> amount(delta) + " more than " + period
+        delta < 0 -> amount(-delta) + " less than " + period
         else -> "Same as $period"
     }
 }

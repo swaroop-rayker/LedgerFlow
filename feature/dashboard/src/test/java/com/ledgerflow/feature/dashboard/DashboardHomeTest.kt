@@ -205,6 +205,18 @@ class DashboardHomeTest {
         assertThat(comparisonSentence(500_00L, 0L, "INR", "1–16 Sep")).isEqualTo("₹500.00 more than 1–16 Sep")
     }
 
+    /**
+     * What TalkBack hears names the amount in words, not the ₹ glyph (§9.6).
+     * The figure was spoken and its comparison was not; seen on LF Bench.
+     */
+    @Test
+    fun theSpokenComparison_saysTheAmountInWords() {
+        val spoken = comparisonSentence(37_000_00L, 42_310_00L, "INR", "1–16 Sep", spoken = true)
+
+        assertThat(spoken).isEqualTo("5,310.00 rupees less than 1–16 Sep")
+        assertThat(spoken).doesNotContain("₹")
+    }
+
     @Test
     fun periodLabels() {
         val oct1 = LocalDate.of(2026, 10, 1).toEpochDay().toInt()
