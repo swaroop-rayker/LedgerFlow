@@ -103,8 +103,14 @@ which draws two full screens every frame for most of a second. v2 replaces it
    First reading, LF Bench on SM-S721B (Android 17, thermal status 0, cold
    launches after one warm-up): first frame 126-167 ms, fully drawn
    2.61-2.69 s. Not a regression (nothing measured full display before) but
-   2.5 s of placeholders on the start screen; the split between vault open,
-   the two recent-entry reads and the month snapshot needs a trace.
+   2.5 s of placeholders on the start screen. **Explained and fixed
+   2026-10-16 (BUG56, ADR-0029).** Markers split it as: Keystore unwrap
+   268 ms, then five SQLCipher key derivations of ~425 ms each, one after
+   another (the guard's open, Room's writer, three readers), then 36 ms for
+   everything Home reads. The derivation now runs once per launch. Fully
+   drawn went from 2.65–2.75 s to **0.71–0.73 s** (interleaved, thermal
+   status 0), with the first frame unchanged. What remains: Keystore ~0.27 s
+   and one derivation ~0.4 s.
 2. A startup profile (`includeInStartupProfile`) for dex layout, measured
    against the current baseline-only profile.
 
