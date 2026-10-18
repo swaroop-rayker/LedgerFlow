@@ -208,7 +208,16 @@ public class VaultSession @Inject constructor(
         }
     }
 
-    override suspend fun openOnLaunch() {
+    /**
+     * **On [io] from the first line, not only around each blocking call.** The
+     * UI calls this from `viewModelScope` while the main thread is still
+     * drawing the first frame, and each `withContext(io)` below used to resume
+     * on main in between: the Keystore unwrap began ~25 ms after this was
+     * called, of which the wordlist and the two file checks took 3-4 ms.
+     * Measured on LF Bench, 2026-10-18, and fully drawn moved by about as
+     * much. Nothing here needs the main thread; [_state] is a `StateFlow`.
+     */
+    override suspend fun openOnLaunch(): Unit = withContext(io) {
         mutex.withLock {
             // Pull the BIP-39 wordlist off the APK here, on IO, so that every
             // later call -- a Recovery keystroke, a phrase validation -- is pure
@@ -222,12 +231,12 @@ public class VaultSession @Inject constructor(
             // and one that died mid-way must not be opened at all (§16 Q11).
             if (withContext(io) { restoreMarker.exists() }) {
                 if (database == null) _state.value = VaultState.RestoreInterrupted
-                return
+                return@withLock
             }
 
             if (database != null) {
                 _state.value = VaultState.Unlocked
-                return
+                return@withLock
             }
             if (!withContext(io) { dekManager.isInitialized() }) {
                 // No phrase wrap on disk: the §7.4 gate was never completed.
@@ -235,7 +244,7 @@ public class VaultSession @Inject constructor(
                 // phrase is the mandatory factor, so its absence is the only
                 // honest definition of "not set up".
                 _state.value = VaultState.NeedsOnboarding
-                return
+                return@withLock
             }
 
             _state.value = VaultState.Working

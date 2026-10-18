@@ -111,6 +111,29 @@ which draws two full screens every frame for most of a second. v2 replaces it
    drawn went from 2.65–2.75 s to **0.71–0.73 s** (interleaved, thermal
    status 0), with the first frame unchanged. What remains: Keystore ~0.27 s
    and one derivation ~0.4 s.
+   **Split again 2026-10-18** (LF Bench at 2a9a197, 11 marked cold launches):
+   ~45 ms to `openOnLaunch`; ~25 ms more before the Keystore unwrap started.
+   That gap was not the wordlist warm-up, which takes 3-4 ms. The unlock
+   resumed on the main thread after each `withContext(io)` while main drew
+   the first frame. Then the Keystore unwrap, 262 ms: KEK-A is **StrongBox**
+   (`KeyInfo.securityLevel` 2), and AES-GCM costs one ~60 ms secure-element
+   round trip each for begin, AAD, update and finish. It is per-operation
+   (a warm unwrap is also ~270 ms); a TEE key does the same in 14-33 ms.
+   Then the one derivation, **~205 ms in release code**: the 645 ms quoted
+   in ADR-0029 was a debug test APK. Then the open (~10 ms), Home's reads
+   (~100 ms) and ~50 ms to the frame that reports.
+   - `openOnLaunch` now runs on IO from its first line: the unwrap starts at
+     ~48 ms, not ~75. Fully drawn median 725 → 698 ms (2 interleaved rounds
+     of 4 after a warm-up, thermal status 0).
+   - Measured and **not** worth it: overlapping the warm-up with the unwrap
+     (no change), reading Home's currency and summary concurrently (they
+     contend; no change), and a buffer-reusing `Pbkdf2` loop (no faster, and
+     the function is pinned by golden vectors).
+   - The two remaining large costs are both crypto. StrongBox could only go
+     by weakening KEK-A to the TEE, which is not proposed. The derivation
+     could only go by carrying the derived key in the KEK-A blob, which
+     needs an ADR superseding ADR-0029. Neither is planned; both are the
+     owner's call.
 2. A startup profile (`includeInStartupProfile`) for dex layout, measured
    against the current baseline-only profile.
 
