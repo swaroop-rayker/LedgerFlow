@@ -34,6 +34,12 @@ starts.
 ## 2. Bugs (fixed first in v2)
 
 ### BUG-A — tab transitions blur and overlap
+**Status: fixed 2026-10-19 as SPEC §8 BUG57** — fade-through tabs, shared-axis
+slide elsewhere, snapped (never `None`) when animations are off; the v2
+Animations toggle plugs into `rememberNavMotion(animationsEnabled)` at V2-3.
+Left as it was: the bottom bar still disappears at the start of a forward
+slide rather than travelling with the outgoing screen.
+
 **Cause, from the code:** `LedgerFlowNavHost` sets no transitions, so
 Navigation Compose applies its default **700 ms cross-fade**: for most of a
 second both screens are drawn half-transparent over each other — the fuzzy,

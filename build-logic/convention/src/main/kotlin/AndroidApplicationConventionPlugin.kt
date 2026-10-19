@@ -1,5 +1,6 @@
 import com.android.build.api.dsl.ApplicationExtension
 import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+import com.ledgerflow.buildlogic.APP_LABEL
 import com.ledgerflow.buildlogic.configureAndroidApplication
 import com.ledgerflow.buildlogic.configureDetekt
 import com.ledgerflow.buildlogic.launcherLabel
@@ -28,6 +29,11 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
 
         extensions.configure<ApplicationExtension> {
             configureAndroidApplication(this)
+            // A default the per-variant value below overrides. The unit-test
+            // manifest merge reads the DSL, not the variant's placeholders,
+            // and fails on an unset `${appLabel}` the moment a Robolectric
+            // test in :app asks for merged resources (BUG57).
+            defaultConfig.manifestPlaceholders["appLabel"] = APP_LABEL
         }
 
         // Per variant, not per flavour: a flavour placeholder would rename the
