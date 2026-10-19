@@ -170,11 +170,14 @@ Analytics paid on every visit are gone: their draw went from 7–10 ms to 0.6 ms
 Its *first* draw still measures every label (~5 ms), and the other tabs' first
 frames are untouched.
 
-**Tried and not kept: Home as a `LazyColumn`.** Home's first frame went from
-18–29 ms to 13–14 ms (median) in every run, because the below-the-fold half of
-the page was no longer composed. But it stays over 8.3 ms, so late frames did
-not drop (33, 38 and 23 before, against 30 and 37 after). By this plan's rule
-it is not in. The patch and its test are kept for the owner's decision.
+**Home as a `LazyColumn`: in by the owner's decision, not by the late-frame
+rule.** Home's first frame went from 18–29 ms to 13–14 ms (median) in every
+run, because the below-the-fold half of the page was no longer composed. But
+it stays over 8.3 ms, so late frames did not drop (33, 38 and 23 before,
+against 30 and 37 after). By this plan's rule it would not be in. The owner
+took it for the shorter hitch: one missed vsync where there were two or three.
+Every golden was unchanged. `DashboardScreenFirstFrameTest` is red on the old
+`Column`.
 
 **Skipped: More.** All eight of its rows fit on one screen, so a lazy list would
 compose the same first frame.
