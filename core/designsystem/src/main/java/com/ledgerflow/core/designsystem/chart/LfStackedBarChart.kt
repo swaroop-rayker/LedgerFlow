@@ -1,20 +1,25 @@
 package com.ledgerflow.core.designsystem.chart
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.DrawResult
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -49,6 +54,18 @@ import kotlin.math.abs
  * **Nothing animates.** An animated first composition is a known source of
  * flaky Roborazzi diffs, and §12 wants goldens reviewed rather than re-recorded
  * until they settle.
+ *
+ * **Text is measured when the data changes, not on every draw.** Each draw used
+ * to measure every tick and column label twice. On a month's worth of columns
+ * that is more strings than [rememberTextMeasurer]'s cache holds, so every
+ * label was laid out again on every draw. Read from the tab-switch traces
+ * (2026-10-19, `docs/PERF-120HZ-PLAN.md` §5): Analytics redraws twice after
+ * every switch, once when it re-reads on resume and once when the read lands,
+ * and each redraw cost 6-13 ms of main thread for numbers that had not changed.
+ * The layouts now live in [drawWithCache], which keeps them until the size or
+ * the [StackedChart] changes, and that is remembered on *equal* inputs. A
+ * caller that recomposes with a new-but-equal list and a new format lambda
+ * therefore keeps the cache, which is the case the resume re-read produces.
  */
 @Composable
 public fun LfStackedBarChart(
@@ -64,8 +81,24 @@ public fun LfStackedBarChart(
     val labelStyle = LfTheme.typography.label.copy(color = colors.textTertiary)
     val ticks = LfAxisTicks.niceTicks(columns.maxOfOrNull { it.total } ?: 0L)
     val description = contentDescription ?: buildDescription(columns, formatAxisValue)
+    // Formatted here rather than in the draw block, so the chart below is keyed
+    // on the strings: a lambda only ever equals itself, and callers build a
+    // new one whenever their own state changes.
+    val tickLabels = ticks.map(formatAxisValue)
+    val chart = remember(columns, ticks, tickLabels, labelStyle, colors.outline, colors.surfaceOverlay) {
+        StackedChart(
+            columns = columns,
+            ticks = ticks,
+            tickLabels = tickLabels,
+            labelStyle = labelStyle,
+            gridColor = colors.outline,
+            trackColor = colors.surfaceOverlay,
+        )
+    }
 
-    Canvas(
+    // `Canvas` is this same Spacer with `drawBehind`; `drawWithCache` is the
+    // variant that can keep work between draws.
+    Spacer(
         modifier = modifier
             .fillMaxWidth()
             .height(height)
@@ -76,14 +109,36 @@ public fun LfStackedBarChart(
                 } else {
                     Modifier.viewportGestures(onViewportChange)
                 },
-            ),
-    ) {
-        if (columns.isEmpty()) return@Canvas
+            )
+            .drawWithCache { chart.layOut(this, measurer) },
+    )
+}
 
-        val plot = measurePlot(size, ticks, measurer, labelStyle, formatAxisValue)
-        drawGrid(plot, ticks, colors.outline, measurer, labelStyle, formatAxisValue)
-        drawColumns(plot, columns, ticks.last(), colors.surfaceOverlay)
-        drawColumnLabels(plot, columns, measurer, labelStyle)
+/** What the chart draws, held as one value so it can key the draw cache. */
+private class StackedChart(
+    val columns: List<LfBarColumn>,
+    val ticks: List<Long>,
+    val tickLabels: List<String>,
+    val labelStyle: TextStyle,
+    val gridColor: Color,
+    val trackColor: Color,
+) {
+
+    /** Measures everything once for this size; the returned block only draws. */
+    fun layOut(scope: CacheDrawScope, measurer: TextMeasurer): DrawResult {
+        if (columns.isEmpty()) return scope.onDrawBehind { }
+
+        val tickLayouts = tickLabels.map { measurer.measure(it, labelStyle) }
+        val plot = measurePlot(scope.size, tickLayouts, measurer, labelStyle)
+        val labels = placeColumnLabels(plot, columns.map { measurer.measure(it.label, labelStyle) })
+
+        return scope.onDrawBehind {
+            drawGrid(plot, ticks, tickLayouts, gridColor)
+            drawColumns(plot, columns, ticks.last(), trackColor)
+            labels.forEach { (layout, x) ->
+                drawText(textLayoutResult = layout, topLeft = Offset(x = x, y = plot.height + AXIS_GAP_PX))
+            }
+        }
     }
 }
 
@@ -106,14 +161,11 @@ private data class PlotGeometry(
 
 private fun measurePlot(
     size: Size,
-    ticks: List<Long>,
+    tickLayouts: List<TextLayoutResult>,
     measurer: TextMeasurer,
     labelStyle: TextStyle,
-    formatAxisValue: (Long) -> String,
 ): PlotGeometry {
-    val gutter = ticks.maxOf { tick ->
-        measurer.measure(formatAxisValue(tick), labelStyle).size.width
-    }.toFloat() + AXIS_GAP_PX
+    val gutter = tickLayouts.maxOf { it.size.width }.toFloat() + AXIS_GAP_PX
     val xLabelHeight = measurer.measure("0", labelStyle).size.height.toFloat() + AXIS_GAP_PX
     return PlotGeometry(
         left = gutter,
@@ -159,13 +211,11 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawColumns(
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid(
     plot: PlotGeometry,
     ticks: List<Long>,
+    tickLayouts: List<TextLayoutResult>,
     gridColor: Color,
-    measurer: TextMeasurer,
-    labelStyle: TextStyle,
-    formatAxisValue: (Long) -> String,
 ) {
     val axisMax = ticks.last()
-    ticks.forEach { tick ->
+    ticks.forEachIndexed { index, tick ->
         val y = plot.height - LfAxisTicks.fractionOf(tick, axisMax) * plot.height
         drawLine(
             color = gridColor,
@@ -173,7 +223,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid(
             end = Offset(plot.left + plot.width, y),
             strokeWidth = GRID_STROKE_PX,
         )
-        val layout = measurer.measure(formatAxisValue(tick), labelStyle)
+        val layout = tickLayouts[index]
         drawText(
             textLayoutResult = layout,
             topLeft = Offset(
@@ -184,21 +234,23 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid(
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawColumnLabels(
+/**
+ * Which column labels to draw, and where.
+ *
+ * Positioned first, drawn second: clamping moves an end label inward, so
+ * whether two labels overlap is only known once both are placed (BUG41).
+ */
+private fun placeColumnLabels(
     plot: PlotGeometry,
-    columns: List<LfBarColumn>,
-    measurer: TextMeasurer,
-    labelStyle: TextStyle,
-) {
-    val widest = columns.maxOf { measurer.measure(it.label, labelStyle).size.width }.toFloat()
-    val allowed = LfAxisTicks.labelsThatFit(columns.size, plot.width, widest)
-    val visible = LfAxisTicks.labelledIndices(columns.size, allowed)
-    val slot = plot.slotWidth(columns.size)
+    layouts: List<TextLayoutResult>,
+): List<Pair<TextLayoutResult, Float>> {
+    val widest = layouts.maxOf { it.size.width }.toFloat()
+    val allowed = LfAxisTicks.labelsThatFit(layouts.size, plot.width, widest)
+    val visible = LfAxisTicks.labelledIndices(layouts.size, allowed)
+    val slot = plot.slotWidth(layouts.size)
 
-    // Positioned first, drawn second: clamping moves an end label inward, so
-    // whether two labels overlap is only known once both are placed (BUG41).
     val placed = visible.sorted().map { index ->
-        val layout = measurer.measure(columns[index].label, labelStyle)
+        val layout = layouts[index]
         val centre = plot.left + index * slot + slot / 2f
         // Clamped to the plot so the first and last labels stay inside the
         // chart rather than being half-cut by its edge.
@@ -210,10 +262,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawColumnLabels(
         spans = placed.map { (layout, x) -> x..(x + layout.size.width) },
         gapPx = AXIS_GAP_PX,
     )
-    placed.forEachIndexed { position, (layout, x) ->
-        if (position !in drawable) return@forEachIndexed
-        drawText(textLayoutResult = layout, topLeft = Offset(x = x, y = plot.height + AXIS_GAP_PX))
-    }
+    return placed.filterIndexed { position, _ -> position in drawable }
 }
 
 /**

@@ -78,6 +78,9 @@ Target: a new Ledger row costs **≤ 1.5 ms** to compose + create + measure
 Apply §2's rules to the Inbox, Bin, Categories/merchants lists and the
 Analytics ranked lists; check the Analytics charts' draw cost (Canvas paths
 rebuilt per frame during pan?) against §11's pre-binning rule.
+The time chart's draw cost was its text, measured on every draw; fixed
+2026-10-19 (§5). `LfMirroredBarChart` and `LfTreemap` still measure in draw.
+The mirrored chart measures one string, which the measurer's cache holds.
 
 ## 4. GPU side
 
@@ -119,6 +122,69 @@ which both builds pay; not yet confirmed from the traces — weigh three times a
 much. BUG57 was a legibility defect and is fixed; tab-switch *jank* is this
 plan's §3 work (a cheaper first frame for Analytics and the Ledger), measured
 against this table.
+
+**Where the late frames are (2026-10-19, read from the "new" run's traces).**
+Each frame is attributed to the last tap before it. Tabs are in the order
+Ledger, Analytics, More, Home, twice. The worst main-thread frame per switch,
+10 switches per tab:
+
+| Tab | Right after the tap | When the transition ends (~200–300 ms) |
+|---|---|---|
+| Home | 28 ms (compose 9.6, measure 15.1) | 5 ms |
+| Analytics | 25 ms (measure 10.4, draw 7.6) | **12 ms, twice per visit** (draw 7.7) |
+| Ledger | 21 ms (measure 12.8: the visible rows are composed inside measure) | 5 ms |
+| More | 12 ms | 5 ms |
+
+Of the 40 late frames: ~19 were an incoming tab's first frame. ~13 were
+Analytics redrawing after its transition. ~8 were 1–2 ms frames that started
+late behind a big first frame.
+
+The Analytics redraw: the tab's resume effect fires as the transition ends.
+`load()` flips `isLoading` and then lands an equal snapshot, and each emission
+gave `LfStackedBarChart` a new list and lambda. Every draw then measured every
+tick and column label twice. A month of labels is more than the text measurer's
+cache holds, so all of them were measured again.
+
+**The first frame is usually classed `Dropped Frame`, not late.** The
+ripple's RenderThread-only frames keep the display fed while the main thread is
+busy, so a 20–37 ms frame often never counts in `framesLate`. `LateFrameMetric`
+now also reports **`framesOverBudget`**: main-thread `Choreographer#doFrame`
+slices longer than their own frame's budget. On identical code `framesLate`
+ranged 23–40 per run, because which long frames get classed late is close to
+random. Read both, and attribute from the traces before believing either.
+
+**Fixed: the chart measures text once per data change** (`drawWithCache`,
+keyed on equal inputs; `LfStackedBarChartRedrawTest` is red on the old chart).
+Every golden was unchanged. Interleaved A-B-B-A, LF Bench, thermal status 0,
+5 × 8 switches per run:
+
+| Build | Start temp | Late frames per iteration (sum) | Over budget (sum) | Late frames, Analytics end phase |
+|---|---|---|---|---|
+| before | 35.7 °C | 6, 8, 7, 12, 6 (39) | 63 | 8 |
+| after | 38.1 °C | 4, 7, 7, 7, 8 (33) | 48 | 3 |
+| after | 35.8 °C | 3, 10, 7, 8, 10 (38) | 45 | 1 |
+| before | 35.8 °C | 5, 8, 8, 9, 10 (40) | 59 | 9 |
+
+Late frames are 79 → 71, over-budget frames 122 → 93. The end-phase frames
+Analytics paid on every visit are gone: their draw went from 7–10 ms to 0.6 ms.
+Its *first* draw still measures every label (~5 ms), and the other tabs' first
+frames are untouched.
+
+**Tried and not kept: Home as a `LazyColumn`.** Home's first frame went from
+18–29 ms to 13–14 ms (median) in every run, because the below-the-fold half of
+the page was no longer composed. But it stays over 8.3 ms, so late frames did
+not drop (33, 38 and 23 before, against 30 and 37 after). By this plan's rule
+it is not in. The patch and its test are kept for the owner's decision.
+
+**Skipped: More.** All eight of its rows fit on one screen, so a lazy list would
+compose the same first frame.
+
+**Still open:**
+- Every tab's first frame (13–25 ms) is the remaining cost. For the Ledger that
+  is §2 (a cheaper row).
+- The others need per-composable timings that release traces do not carry.
+- The ~2–3 ms disposal of the outgoing tab when the transition ends
+  (`onForgotten`) shows up occasionally.
 
 ## 6. Startup
 
