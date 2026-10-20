@@ -119,9 +119,31 @@ Composition is not what is left, and moving formatting into the Paging `map`
 would also move the 24-hour setting and the band's `withDate` out of
 composition, for both the Ledger and Home.
 
-The shipped baseline profile predates `LfEntryRow`'s move to `:core:ui`
-(`0f1b224`), so the row's code is unprofiled in both builds above. Regenerating
-the profile is the next cheap step.
+The shipped baseline profile predated `LfEntryRow`'s move to `:core:ui`
+(`0f1b224`), so the row's code is unprofiled in both builds above.
+
+**Profile regenerated 2026-10-20**, after the row rewrite and Home's LazyColumn
+(`a6f7214`), with the generator's journey unchanged. The profile went from 10,843
+to 16,681 rules, most of the gain Compose. The row is now covered:
+`LfEntryRow` 0 → 19 rules, the drawn dot 0 → 9, the button 4 → 8, Home 15 → 41.
+It lost the pre-migration guard and the rollup reconcile, which run on an
+upgrade or a first launch and so not in that generator run. No bench-only
+rules. `TabSwitchBenchmark`, same code, old profile against new, A-B-B-A,
+thermal status 0. Runs start at ≤ 36.3 °C, with the cool-down capped at
+15 minutes (the owner's 20-minute limit per run):
+
+| Profile | Start temp | Late frames | Over budget | First frame, median: Ledger / Home / Analytics / More |
+|---|---|---|---|---|
+| old | 34.7 °C | 33 | 38 | 11.3 / 11.6 / 14.1 / 11.3 ms |
+| new | 36.2 °C | 30 | 40 | 13.1 / 11.6 / 17.6 / 9.6 ms |
+| new | 36.3 °C | 29 | 38 | 12.1 / 11.8 / 13.8 / 9.3 ms |
+| old | 36.5 °C | 38 | 47 | 14.6 / 11.7 / 19.1 / 11.2 ms |
+
+Late frames went 71 → 59, and both new runs are below both old ones. Over
+budget went 85 → 78. The gain is small and mostly in More (about 11.2 → 9.5 ms;
+More is not even in the generator's journey, so this is shared Compose code
+now compiled) and in Home's over-budget count. The Ledger and Analytics are
+level within their spread. Kept by rule 6.
 
 Not changed, but found: the old row's `LfAdaptiveRow` places the detail and the
 amount with `place`, not `placeRelative`. In RTL they keep their left and right,
