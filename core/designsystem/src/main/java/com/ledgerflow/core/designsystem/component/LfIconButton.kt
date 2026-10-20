@@ -1,20 +1,26 @@
 package com.ledgerflow.core.designsystem.component
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntSize
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import kotlin.math.roundToInt
 
 /**
  * An icon-only control (SPEC.md §9.4).
@@ -55,6 +61,15 @@ public fun LfIconButton(
  * scroll in: measured 2026-09-29 on the Ledger at 120 Hz, a 48×48 upload sat in
  * most of the frames that missed their deadline. A list remembers one painter
  * and hands it to every row, so it is built and uploaded once.
+ *
+ * **One node** (PERF-120HZ-PLAN §2.3). This was a 48dp `Box` around Material's
+ * `IconButton` around an `Icon`: five layout nodes and a lazily-built ripple per
+ * Ledger row, composed inside the frame that scrolls the row in. It is now one
+ * leaf that is clickable and draws its glyph, at the pixels the three drew:
+ * the glyph is centred in Material's 40dp state layer, which is centred in the
+ * 48dp target, and each centring rounds on its own -- at 2.625x that is
+ * 10.5 → 11 and then 31.5 → 32, a pixel away from centring once. The press is
+ * the same 40dp circle, as an unbounded ripple from the centre.
  */
 @Composable
 public fun LfIconButton(
@@ -65,20 +80,34 @@ public fun LfIconButton(
     tint: Color = LfTheme.colors.textSecondary,
 ) {
     val spacing = LfTheme.spacing
-    Box(
-        modifier = modifier.size(spacing.minTouchTarget),
-        contentAlignment = Alignment.Center,
-    ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.clip(CircleShape),
-            colors = IconButtonDefaults.iconButtonColors(contentColor = tint),
-        ) {
-            Icon(
-                painter = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(spacing.md),
+    // Material 3's icon-button state layer: 40dp inside the 48dp target.
+    val stateLayer = spacing.minTouchTarget - spacing.xs * 2
+    val glyph = spacing.md
+    Spacer(
+        modifier = modifier
+            .size(spacing.minTouchTarget)
+            .clickable(
+                onClick = onClick,
+                role = Role.Button,
+                // Null, so the interaction source and the ripple are only built
+                // when the control is first pressed -- not for every row drawn.
+                interactionSource = null,
+                indication = ripple(bounded = false, radius = stateLayer / 2),
             )
-        }
-    }
+            .semantics { this.contentDescription = contentDescription }
+            .drawWithCache {
+                val target = IntSize(size.width.roundToInt(), size.height.roundToInt())
+                val layer = IntSize(stateLayer.roundToPx(), stateLayer.roundToPx())
+                val ink = IntSize(glyph.roundToPx(), glyph.roundToPx())
+                val outer = Alignment.Center.align(layer, target, layoutDirection)
+                val inner = Alignment.Center.align(ink, layer, layoutDirection)
+                val inkSize = Size(ink.width.toFloat(), ink.height.toFloat())
+                val filter = ColorFilter.tint(tint)
+                onDrawBehind {
+                    translate(left = (outer.x + inner.x).toFloat(), top = (outer.y + inner.y).toFloat()) {
+                        with(icon) { draw(size = inkSize, colorFilter = filter) }
+                    }
+                }
+            },
+    )
 }

@@ -73,6 +73,61 @@ Target: a new Ledger row costs **≤ 1.5 ms** to compose + create + measure
 6. Each step measured with §1's A/B, cool, interleaved — kept only if it moves
    the late-frame count.
 
+**Done 2026-10-20: 1, 2, 3 and 5. Kept by the owner's decision, not by rule 6.**
+`LfEntryRow` is one `Layout` (swatch, three texts, delete control). Its measure
+policy is the old nesting's geometry written out, and the detail is measured
+once, without the intrinsic pass. `LfCategoryDot` is one leaf drawn by a
+`Modifier.Node`, with one glyph `TextMeasurer` per `LfTheme`. `LfIconButton`'s
+painter overload is one clickable leaf that draws its glyph. A row went from 13
+layout nodes to 6. No golden changed. `LfEntryRowLayoutTest`,
+`LfCategoryDotTest` and `LfIconButtonTest` each render the old composition
+beside the new and compare pixels to within anti-aliasing. Each fails on a
+planted defect: a mirrored RTL detail, an off-centre initial, and a glyph
+centred once instead of twice.
+
+Measured on `TabSwitchBenchmark`, LF Bench on SM-S721B, thermal status 0, 5 × 8
+switches per run. The builds were nested as base, A, A+B, A+B+C, A+B+C, A+B, A,
+base, so each step is an A-B-B-A against the one before it. The first runs
+started at 34.5–35.6 °C, the middle four at 35.8 °C and the last two at
+36.3 °C. The owner capped a run plus its cool-down at 20 minutes, and the phone
+plateaus near 35.7 °C while it charges. The Ledger's first frame after the
+tap, as the median of the 10 Ledger switches in each run:
+
+| Build | Worst frame | Measure | Frames > 8.3 ms | Late frames (Ledger) | Late frames (run) |
+|---|---|---|---|---|---|
+| base | 15.7, 17.8 ms | 9.8, 10.8 ms | 10, 12 | 8, 5 | 39, 30 |
+| A: one `Layout` | 14.2, 18.9 ms | 9.2, 11.6 ms | 10, 11 | 6, 5 | 30, 27 |
+| A+B: drawn dot | 13.8, 15.6 ms | 8.1, 9.6 ms | 10, 11 | 10, 7 | 36, 36 |
+| A+B+C: one-node button | 12.4, 13.7 ms | 7.7, 7.8 ms | 12, 10 | 12, 6 | 36, 25 |
+
+More's code did not change, and its first frame stayed level in every run
+(7.9–11.7 ms), so the phone was not drifting between builds. The two 36.3 °C
+runs (the second A and the second base) were slower on every tab. Compare them
+with each other only.
+
+**The row is about a quarter cheaper to measure, but the frame is still over
+budget.** The Ledger's first frame went from about 16.8 ms to 13 ms, and its
+measure from about 10.3 ms to 7.8 ms. It is still above 8.3 ms, so each Ledger
+switch still costs one over-budget frame. Late frames did not drop: whole-run
+counts are within their spread, and the Ledger's own are noise. The owner kept
+the change on these grounds: it moves §2's actual target (the cost of a row),
+it changes no pixel, and a later step compounds on it.
+
+What is left in the frame is measure (about 7.8 ms, mostly laying out each
+row's three texts) and composition (about 3.5 ms). **4 was not done.**
+Composition is not what is left, and moving formatting into the Paging `map`
+would also move the 24-hour setting and the band's `withDate` out of
+composition, for both the Ledger and Home.
+
+The shipped baseline profile predates `LfEntryRow`'s move to `:core:ui`
+(`0f1b224`), so the row's code is unprofiled in both builds above. Regenerating
+the profile is the next cheap step.
+
+Not changed, but found: the old row's `LfAdaptiveRow` places the detail and the
+amount with `place`, not `placeRelative`. In RTL they keep their left and right,
+so the amount stays on the right. The flat layout reproduces this on purpose,
+so that no pixel moves. Whether RTL should mirror them is a separate question.
+
 ## 3. Other lists and screens
 
 Apply §2's rules to the Inbox, Bin, Categories/merchants lists and the
