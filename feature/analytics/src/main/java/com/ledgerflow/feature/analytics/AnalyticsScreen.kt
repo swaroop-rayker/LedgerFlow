@@ -25,6 +25,7 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
@@ -1023,7 +1024,7 @@ private fun shortDateLabel(epochDay: Int): String {
     return "${date.dayOfMonth} " +
         date.month.getDisplayName(
             java.time.format.TextStyle.SHORT,
-            java.util.Locale.getDefault(),
+            DisplayLocale.current(),
         )
 }
 

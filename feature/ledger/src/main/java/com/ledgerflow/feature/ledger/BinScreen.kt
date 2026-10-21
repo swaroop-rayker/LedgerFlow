@@ -26,7 +26,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -43,6 +42,7 @@ import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.DeletedEntry
 import com.ledgerflow.core.model.LedgerType
@@ -263,7 +263,7 @@ private fun BinAmount(entry: DeletedEntry) {
         text = MoneyFormat.directional(entry.amount.minor, entry.currency, entry.ledger),
         style = LfTheme.typography.amountM,
         color = if (entry.ledger == LedgerType.DEBIT) colors.debit else colors.credit,
-        textAlign = TextAlign.End,
+        textAlign = LfTextAlign.end,
     )
 }
 

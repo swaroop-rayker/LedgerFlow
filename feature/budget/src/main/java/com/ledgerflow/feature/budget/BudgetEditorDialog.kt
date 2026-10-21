@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
@@ -296,7 +297,7 @@ private fun formatEpochDay(epochDay: Int): String {
     return "${date.dayOfMonth} " +
         date.month.getDisplayName(
             java.time.format.TextStyle.SHORT,
-            java.util.Locale.getDefault(),
+            DisplayLocale.current(),
         ) + " ${date.year}"
 }
 

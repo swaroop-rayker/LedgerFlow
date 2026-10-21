@@ -32,6 +32,7 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfKeyboards
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.format.bidiIsolated
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
@@ -333,7 +334,9 @@ private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent
                         modifier = Modifier.clearAndSetSemantics {},
                     )
                     Text(
-                        text = "${currency.symbol}  ${currency.displayName}",
+                        // Isolated: the dirham's Arabic symbol would otherwise make
+                        // this line right-to-left and put the name first (BUG61).
+                        text = "${bidiIsolated(currency.symbol)}  ${currency.displayName}",
                         style = LfTheme.typography.bodyL,
                         color = LfTheme.colors.textPrimary,
                     )

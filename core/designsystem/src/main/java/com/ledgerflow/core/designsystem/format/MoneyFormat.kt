@@ -55,7 +55,9 @@ public object MoneyFormat {
         currencyCode: String,
         locale: Locale = Locale.getDefault(),
     ): String {
-        val symbol = CurrencyDisplay.symbolOf(currencyCode)
+        // Isolated so a right-to-left symbol (the dirham's) cannot turn the whole
+        // amount into a right-to-left paragraph (BUG61).
+        val symbol = bidiIsolated(CurrencyDisplay.symbolOf(currencyCode))
         val sign = if (minor < 0) {
             DecimalFormatSymbols.getInstance(locale).minusSign.toString()
         } else {
@@ -96,7 +98,7 @@ public object MoneyFormat {
             LedgerType.DEBIT -> '-'
             LedgerType.CREDIT -> '+'
         }
-        return sign + CurrencyDisplay.symbolOf(currencyCode) +
+        return sign + bidiIsolated(CurrencyDisplay.symbolOf(currencyCode)) +
             magnitude(minor, currencyCode, locale)
     }
 

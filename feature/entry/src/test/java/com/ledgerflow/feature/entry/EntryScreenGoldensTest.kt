@@ -2,6 +2,7 @@ package com.ledgerflow.feature.entry
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.ui.unit.LayoutDirection
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
@@ -35,8 +36,13 @@ class EntryScreenGoldensTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun capture(name: String, state: EntryUiState, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun capture(
+        name: String,
+        state: EntryUiState,
+        fontScale: Float,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, direction) {
             LfTheme { EntryScreen(state = state, onEvent = {}, onDone = {}) }
         }
 
@@ -87,6 +93,9 @@ class EntryScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun filled_2x() = capture("entry-filled-2x", filled, 2f)
+
+    /** RTL (BUG61): the amount field starts on the right, its "₹" still before the number. */
+    @Test fun filledRtl_1x() = capture("entry-filled-rtl-1x", filled, 1f, LayoutDirection.Rtl)
 
     private companion object {
         const val NOW = 1_787_130_000_000L

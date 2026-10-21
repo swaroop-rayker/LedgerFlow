@@ -3,6 +3,7 @@ package com.ledgerflow.core.testing.screenshot
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.util.TimeZone
@@ -56,10 +58,14 @@ public const val PHONE_2X: String = "w360dp-h3600dp"
  * rows, a backup date) would render in IST where goldens are recorded and in
  * UTC on the Linux runner that verifies them — a golden that fails for the
  * hour of day, BUG33's kind of noise but not within any tolerance.
+ *
+ * [layoutDirection] is applied **outside** [content], so the caller's theme
+ * sees it the way it sees an Arabic or Hebrew phone's (BUG61, `-rtl` goldens).
  */
 public fun ComposeContentTestRule.captureScreenGolden(
     name: String,
     fontScale: Float,
+    layoutDirection: LayoutDirection = LayoutDirection.Ltr,
     content: @Composable () -> Unit,
 ) {
     val hostZone = TimeZone.getDefault()
@@ -67,7 +73,10 @@ public fun ComposeContentTestRule.captureScreenGolden(
     try {
         setContent {
             val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, fontScale),
+                LocalLayoutDirection provides layoutDirection,
+            ) {
                 content()
             }
         }

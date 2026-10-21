@@ -33,6 +33,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -328,7 +329,7 @@ internal fun backupLabel(fileName: String, zone: TimeZone = TimeZone.getDefault(
             .apply { timeZone = TimeZone.getTimeZone("UTC") }
             .parse(stamp)
     }.getOrNull() ?: return fileName
-    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, DisplayLocale.current())
         .apply { timeZone = zone }
         .format(parsed)
 }

@@ -21,13 +21,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.chart.LfBudgetBar
 import com.ledgerflow.core.designsystem.chart.LfCategoryPalette
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
@@ -40,6 +40,7 @@ import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
+import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.BookMonth
 import com.ledgerflow.core.domain.analytics.BudgetProgress
@@ -439,7 +440,7 @@ private fun BookFigure(
             text = comparison,
             style = LfTheme.typography.label,
             color = LfTheme.colors.textTertiary,
-            textAlign = TextAlign.End,
+            textAlign = LfTextAlign.end,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -609,14 +610,14 @@ internal fun comparisonSentence(
 internal fun periodLabel(from: Int, to: Int): String {
     val start = LocalDate.ofEpochDay(from.toLong())
     val end = LocalDate.ofEpochDay(to.toLong())
-    val month = end.format(MONTH)
+    val month = end.format(monthFormat())
     return if (from == to) "${end.dayOfMonth} $month" else "${start.dayOfMonth}–${end.dayOfMonth} $month"
 }
 
 /** `31 Oct`. */
 internal fun dayLabel(epochDay: Int): String {
     val date = LocalDate.ofEpochDay(epochDay.toLong())
-    return "${date.dayOfMonth} ${date.format(MONTH)}"
+    return "${date.dayOfMonth} ${date.format(monthFormat())}"
 }
 
 /** "1 recurring charge: Rent" / "2 recurring charges: Netflix, Rent". */
@@ -627,7 +628,8 @@ internal fun runwayDetail(names: List<String>): String =
         "${names.size} recurring charges: ${names.joinToString(", ")}"
     }
 
-private val MONTH: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM")
+/** A month's short name, in English while the app is (BUG61, `DisplayLocale`). */
+private fun monthFormat(): DateTimeFormatter = DateTimeFormatter.ofPattern("MMM", DisplayLocale.current())
 
 /** Holds a figure's line until the figure arrives, so the card keeps its height. */
 private const val PLACEHOLDER_AMOUNT = "—"

@@ -21,6 +21,7 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
@@ -112,7 +113,7 @@ private fun Header(state: LineItemEditorState) {
                 style = LfTheme.typography.bodyM,
                 color = if (state.balanced) LfTheme.colors.textSecondary else LfTheme.colors.warn,
                 modifier = Modifier.weight(1f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                textAlign = LfTextAlign.end,
             )
         }
     }
@@ -271,7 +272,7 @@ private fun FilingRow(label: String, value: String?, onClick: (() -> Unit)?) {
             style = LfTheme.typography.bodyM,
             color = if (value == null) LfTheme.colors.textTertiary else LfTheme.colors.textPrimary,
             modifier = Modifier.weight(1f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            textAlign = LfTextAlign.end,
         )
     }
 }

@@ -1,9 +1,11 @@
 package com.ledgerflow.core.designsystem.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import com.ledgerflow.core.designsystem.R
 
 /**
@@ -125,22 +127,37 @@ public val LfFontFamily: FontFamily = FontFamily(
  * reflects over the result and fails if a style was missed, including one a
  * future BOM adds.
  */
-internal val LfMaterialTypography: Typography = Typography().let { base ->
-    Typography(
-        displayLarge = base.displayLarge.copy(fontFamily = LfFontFamily),
-        displayMedium = base.displayMedium.copy(fontFamily = LfFontFamily),
-        displaySmall = base.displaySmall.copy(fontFamily = LfFontFamily),
-        headlineLarge = base.headlineLarge.copy(fontFamily = LfFontFamily),
-        headlineMedium = base.headlineMedium.copy(fontFamily = LfFontFamily),
-        headlineSmall = base.headlineSmall.copy(fontFamily = LfFontFamily),
-        titleLarge = base.titleLarge.copy(fontFamily = LfFontFamily),
-        titleMedium = base.titleMedium.copy(fontFamily = LfFontFamily),
-        titleSmall = base.titleSmall.copy(fontFamily = LfFontFamily),
-        bodyLarge = base.bodyLarge.copy(fontFamily = LfFontFamily),
-        bodyMedium = base.bodyMedium.copy(fontFamily = LfFontFamily),
-        bodySmall = base.bodySmall.copy(fontFamily = LfFontFamily),
-        labelLarge = base.labelLarge.copy(fontFamily = LfFontFamily),
-        labelMedium = base.labelMedium.copy(fontFamily = LfFontFamily),
-        labelSmall = base.labelSmall.copy(fontFamily = LfFontFamily),
-    )
+internal val LfMaterialTypography: Typography =
+    // The paragraph takes its text's direction, as every LfTypography style
+    // does (BUG61).
+    Typography().mapStyles { it.copy(fontFamily = LfFontFamily, textDirection = LfTextDirection) }
+
+/** [LfMaterialTypography] aligned to each direction's leading edge (BUG61), built once. */
+private val LfMaterialTypographyLtr: Typography =
+    LfMaterialTypography.mapStyles { it.copy(textAlign = LfTextAlign.startOf(LayoutDirection.Ltr)) }
+private val LfMaterialTypographyRtl: Typography =
+    LfMaterialTypography.mapStyles { it.copy(textAlign = LfTextAlign.startOf(LayoutDirection.Rtl)) }
+
+/** The Material type scale [LfTheme] provides under [direction]. */
+internal fun lfMaterialTypographyFor(direction: LayoutDirection): Typography = when (direction) {
+    LayoutDirection.Ltr -> LfMaterialTypographyLtr
+    LayoutDirection.Rtl -> LfMaterialTypographyRtl
 }
+
+private fun Typography.mapStyles(transform: (TextStyle) -> TextStyle): Typography = Typography(
+    displayLarge = transform(displayLarge),
+    displayMedium = transform(displayMedium),
+    displaySmall = transform(displaySmall),
+    headlineLarge = transform(headlineLarge),
+    headlineMedium = transform(headlineMedium),
+    headlineSmall = transform(headlineSmall),
+    titleLarge = transform(titleLarge),
+    titleMedium = transform(titleMedium),
+    titleSmall = transform(titleSmall),
+    bodyLarge = transform(bodyLarge),
+    bodyMedium = transform(bodyMedium),
+    bodySmall = transform(bodySmall),
+    labelLarge = transform(labelLarge),
+    labelMedium = transform(labelMedium),
+    labelSmall = transform(labelSmall),
+)

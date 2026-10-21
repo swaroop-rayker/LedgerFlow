@@ -24,11 +24,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -625,7 +625,7 @@ private fun HiddenCard(item: HiddenTaxonomy, onEvent: (CategoriesEvent) -> Unit)
  */
 @Composable
 private fun hiddenStamp(millis: Long): String {
-    val locale = LocalLocale.current.platformLocale
+    val locale = DisplayLocale.composed
     return remember(millis, locale) {
         DateTimeFormatter.ofPattern(HIDDEN_DATE_PATTERN, locale)
             .withZone(ZoneId.systemDefault())

@@ -10,7 +10,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -18,6 +17,7 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.RecoveryReason
@@ -142,7 +142,7 @@ private fun ScanMessage(message: String) {
         text = "$message Type the words instead.",
         style = LfTheme.typography.bodyM,
         color = LfTheme.colors.textSecondary,
-        textAlign = TextAlign.Start,
+        textAlign = LfTextAlign.start,
     )
 }
 
@@ -152,7 +152,7 @@ private fun FailureMessage(failure: RecoveryFailure) {
         text = failure.message(),
         style = LfTheme.typography.bodyM,
         color = LfTheme.colors.debit,
-        textAlign = TextAlign.Start,
+        textAlign = LfTextAlign.start,
     )
 }
 

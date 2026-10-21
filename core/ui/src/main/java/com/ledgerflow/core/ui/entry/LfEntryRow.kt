@@ -23,7 +23,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
@@ -35,6 +34,7 @@ import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.lfCategoryDot
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
+import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
@@ -356,7 +356,7 @@ private fun EntryAmount(item: LedgerListItem) {
         modifier = Modifier.clearAndSetSemantics {},
         style = LfTheme.typography.amountM,
         color = if (item.ledger == LedgerType.DEBIT) colors.debit else colors.credit,
-        textAlign = TextAlign.End,
+        textAlign = LfTextAlign.end,
     )
 }
 

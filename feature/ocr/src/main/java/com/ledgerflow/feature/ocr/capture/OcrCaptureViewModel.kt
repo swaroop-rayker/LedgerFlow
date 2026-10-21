@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -396,7 +397,7 @@ internal fun summaryOf(
  * the review then shows the capture date and the user should know to check it.
  */
 internal fun dateSentence(detection: ReceiptDates.Detection): String {
-    val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+    val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(DisplayLocale.current())
     return when (detection) {
         is ReceiptDates.Detection.Found -> "Dated ${detection.date.format(format)}"
         is ReceiptDates.Detection.Refused -> {

@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.designsystem.component.LfDialog
@@ -259,10 +260,11 @@ private fun DeleteReceiptsDialog(state: SettingsUiState, onEvent: (SettingsEvent
  *
  * **The never-backed-up case says what that means**, not merely "never": the
  * app keeps no copy anywhere else, and a user reading Settings is owed that
- * sentence before they lose the phone rather than after. Dates only, in the
- * device's locale; a backup's time of day does not change what to do next.
+ * sentence before they lose the phone rather than after. Dates only, in English
+ * in the phone's region (`DisplayLocale`, BUG61); a backup's time of day does
+ * not change what to do next.
  */
-internal fun backupSubtitle(state: SettingsUiState, locale: Locale = Locale.getDefault()): String {
+internal fun backupSubtitle(state: SettingsUiState, locale: Locale = DisplayLocale.current()): String {
     val last = state.lastBackupAt
         ?: return "No backup yet. Your data exists only on this phone."
     val date = DateFormat.getDateInstance(DateFormat.MEDIUM, locale).format(Date(last))
