@@ -261,6 +261,11 @@ it.
 - **Semantics per segment** (`SPEC.md` §9.6). A donut slice a screen reader can
   name. Charts are data, not decoration, and `clearAndSetSemantics` on one is a
   bug rather than a shortcut.
+- **A chart measures its text in `drawWithCache`, keyed on equal inputs,
+  never in a plain `Canvas` block.** Text measured in `Canvas` is measured
+  again on every draw. Once a chart has more labels than the measurer's cache
+  holds, a redraw for unchanged numbers cost Analytics 6–13 ms, twice per tab
+  switch (PERF-120HZ-PLAN §5). `LfStackedBarChartRedrawTest` is the pattern.
 - **Tick selection is unit-tested independently of rendering** (`AxisTicksTest`).
   It is the one piece here with a correct answer that does not depend on how it
   looks — ticks at 0/117/234 are wrong in a way no screenshot diff will call.

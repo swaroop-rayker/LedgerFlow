@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -142,51 +142,64 @@ public fun DashboardScreen(
     onOpenAnalytics: () -> Unit = {},
     onOpenLedger: (LedgerType) -> Unit = {},
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+    // A `LazyColumn`, not a scrolling `Column`, for the tab switch: a `Column`
+    // composes and measures every card and both recent lists on the frame Home
+    // appears, including everything below the fold -- the costliest first frame
+    // of the four tabs (28 ms, PERF-120HZ-PLAN §5). One item per card, under the
+    // same `spacedBy`, so the layout is the one the `Column` drew.
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
     ) {
-        LfScreenTitle(title = "Home")
+        item(key = "title", contentType = "title") {
+            LfScreenTitle(title = "Home")
+        }
 
         // First: a loss has already happened, where the cards below it are
         // about what to do next.
         state.captureGap?.let { gap ->
-            CaptureGapCard(
-                gap = gap,
-                onAcknowledge = onAcknowledgeCaptureGap,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-            )
+            item(key = "capture-gap", contentType = "banner") {
+                CaptureGapCard(
+                    gap = gap,
+                    onAcknowledge = onAcknowledgeCaptureGap,
+                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                )
+            }
         }
 
         state.crashReports?.let { reports ->
-            CrashReportCard(
-                reports = reports,
-                saveFailed = state.crashSaveFailed,
-                onSave = onSaveCrashReports,
-                onDismiss = onDismissCrashReports,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-            )
+            item(key = "crash-reports", contentType = "banner") {
+                CrashReportCard(
+                    reports = reports,
+                    saveFailed = state.crashSaveFailed,
+                    onSave = onSaveCrashReports,
+                    onDismiss = onDismissCrashReports,
+                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                )
+            }
         }
 
         state.backupReminder?.let { reminder ->
-            BackupReminderCard(
-                reminder = reminder,
-                onBackUpNow = onBackUpNow,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-            )
+            item(key = "backup-reminder", contentType = "banner") {
+                BackupReminderCard(
+                    reminder = reminder,
+                    onBackUpNow = onBackUpNow,
+                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                )
+            }
         }
 
         if (state.showsCaptureBanner) {
-            CaptureHealthBanner(
-                health = state.captureHealth,
-                onAction = onSetUpNotifications,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-            )
+            item(key = "capture-banner", contentType = "banner") {
+                CaptureHealthBanner(
+                    health = state.captureHealth,
+                    onAction = onSetUpNotifications,
+                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                )
+            }
         }
 
-        HomeBody(
+        homeBody(
             state = state,
             onOpenInbox = onOpenInbox,
             onOpenBudgets = onOpenBudgets,
@@ -195,97 +208,121 @@ public fun DashboardScreen(
         )
 
         // The last card clears the bottom bar's shadow rather than touching it.
-        Spacer(modifier = Modifier.height(LfTheme.spacing.md))
+        item(key = "end", contentType = "end") {
+            Spacer(modifier = Modifier.height(LfTheme.spacing.md))
+        }
     }
 }
 
 /**
  * Home v1 (V2-PLAN BUG-C), under the banners: what is waiting, the month, and
- * each book's newest entries. Emits straight into the screen's column, so its
+ * each book's newest entries. Emits straight into the screen's list, so its
  * cards share the banners' spacing.
  */
-@Composable
-private fun HomeBody(
+private fun LazyListScope.homeBody(
     state: DashboardUiState,
     onOpenInbox: () -> Unit,
     onOpenBudgets: () -> Unit,
     onOpenAnalytics: () -> Unit,
     onOpenLedger: (LedgerType) -> Unit,
 ) {
-    val cardInset = Modifier.padding(horizontal = LfTheme.spacing.lg)
-
     // Not inside the summary branch: a first-day user with only pending
     // suggestions has nothing in either book and still has work waiting.
     if (state.showsReview) {
-        ReviewCard(count = state.pendingCount, onOpenInbox = onOpenInbox, modifier = cardInset)
+        item(key = "review", contentType = "card") {
+            ReviewCard(
+                count = state.pendingCount,
+                onOpenInbox = onOpenInbox,
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
     }
 
     if (state.showsEmptyState) {
-        LfEmptyState(
-            title = "Nothing here yet",
-            body = "Your recent spending, budgets and quick stats appear here once " +
-                "there are entries to summarise.",
-        )
+        item(key = "empty", contentType = "empty") {
+            LfEmptyState(
+                title = "Nothing here yet",
+                body = "Your recent spending, budgets and quick stats appear here once " +
+                    "there are entries to summarise.",
+            )
+        }
     }
 
     if (state.showsSummary) {
-        MonthCard(summary = state.summary, currency = state.baseCurrency, modifier = cardInset)
+        item(key = "month", contentType = "month") {
+            MonthCard(
+                summary = state.summary,
+                currency = state.baseCurrency,
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
         state.summary?.let { summary ->
-            SpendingCards(
+            spendingCards(
                 state = state,
                 summary = summary,
                 onOpenBudgets = onOpenBudgets,
                 onOpenAnalytics = onOpenAnalytics,
-                modifier = cardInset,
             )
         }
     }
 
     state.recentSpending?.takeIf { state.showsRecentSpending }?.let { rows ->
-        RecentSection(
-            title = "Recent spending",
-            rows = rows,
-            onSeeAll = { onOpenLedger(LedgerType.DEBIT) },
-            modifier = cardInset,
-        )
+        item(key = "recent-spending", contentType = "recent") {
+            RecentSection(
+                title = "Recent spending",
+                rows = rows,
+                onSeeAll = { onOpenLedger(LedgerType.DEBIT) },
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
     }
     state.recentIncome?.takeIf { state.showsRecentIncome }?.let { rows ->
-        RecentSection(
-            title = "Recent income",
-            rows = rows,
-            onSeeAll = { onOpenLedger(LedgerType.CREDIT) },
-            modifier = cardInset,
-        )
+        item(key = "recent-income", contentType = "recent") {
+            RecentSection(
+                title = "Recent income",
+                rows = rows,
+                onSeeAll = { onOpenLedger(LedgerType.CREDIT) },
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
     }
 }
 
 /** The debit book's extras, each only when it has something to say. */
-@Composable
-private fun SpendingCards(
+private fun LazyListScope.spendingCards(
     state: DashboardUiState,
     summary: HomeSummary,
     onOpenBudgets: () -> Unit,
     onOpenAnalytics: () -> Unit,
-    modifier: Modifier,
 ) {
     if (state.showsBudgets) {
-        BudgetsCard(
-            budgets = summary.budgets,
-            currency = state.baseCurrency,
-            onOpenBudgets = onOpenBudgets,
-            modifier = modifier,
-        )
+        item(key = "budgets", contentType = "card") {
+            BudgetsCard(
+                budgets = summary.budgets,
+                currency = state.baseCurrency,
+                onOpenBudgets = onOpenBudgets,
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
     }
     if (state.showsRunway) {
-        RunwayCard(
-            summary = summary,
-            currency = state.baseCurrency,
-            onOpenAnalytics = onOpenAnalytics,
-            modifier = modifier,
-        )
+        item(key = "runway", contentType = "card") {
+            RunwayCard(
+                summary = summary,
+                currency = state.baseCurrency,
+                onOpenAnalytics = onOpenAnalytics,
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
     }
     if (state.showsCoverage) {
-        CoverageCard(coverage = summary.captureCoverage, onOpenAnalytics = onOpenAnalytics, modifier = modifier)
+        item(key = "coverage", contentType = "card") {
+            CoverageCard(
+                coverage = summary.captureCoverage,
+                onOpenAnalytics = onOpenAnalytics,
+                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            )
+        }
     }
 }
 
