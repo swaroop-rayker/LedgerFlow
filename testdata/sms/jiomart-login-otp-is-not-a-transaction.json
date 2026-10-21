@@ -1,0 +1,7 @@
+{
+  "sender": "JM-JIOMRT-S",
+  "provenance": "real",
+  "note": "REAL, from the owner's SMS inbox (2026-10-21). Wording and structure verbatim. Substituted: the six-digit code. The sender header was not supplied and is a placeholder. NOT a confirmed BUG58 ghost: no shipped sender pattern matches a JioMart header, so on a device this would be triaged SENDER_NOT_ALLOWLISTED and never reach the engine. Kept because it pins the classifier on a real OTP shape, and because a merchant OTP arriving through an allowlisted channel must be labelled rather than queued. It must extract NOTHING and be labelled an OTP.",
+  "nonTransaction": "OTP",
+  "expected": null
+}

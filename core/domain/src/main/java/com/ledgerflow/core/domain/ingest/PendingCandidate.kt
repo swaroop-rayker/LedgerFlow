@@ -1,6 +1,7 @@
 package com.ledgerflow.core.domain.ingest
 
 import com.ledgerflow.core.model.EntrySource
+import com.ledgerflow.core.model.NonTransactionKind
 
 /**
  * One candidate transaction on its way into `pending_transaction`
@@ -38,11 +39,16 @@ import com.ledgerflow.core.model.EntrySource
  *   **never branched on** (CLAUDE.md §0).
  * @param dedupeKey §3.1's cross-source key, computed by [DedupeKey]. *Storing*
  *   it is P2-4; acting on a collision is P2-5.
+ * @param nonTransactionKind set when the message was recognised as not a
+ *   transaction at all (BUG58, V2-PLAN D6). The row is written all the same --
+ *   §5.1's never-drop rule -- and waits under the Inbox's "Not transactions"
+ *   filter instead of in the queue, and it is never announced.
  */
 public data class PendingCandidate(
     val source: EntrySource,
     val extracted: ExtractedTransaction,
     val dedupeKey: String,
+    val nonTransactionKind: NonTransactionKind? = null,
 ) {
 
     /** 0.0 when nothing matched (§5.1). A score, not money — Law 3 does not apply. */

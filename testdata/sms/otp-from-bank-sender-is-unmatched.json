@@ -1,5 +1,6 @@
 {
   "sender": "VM-HDFCBK",
   "provenance": "synthetic",
+  "nonTransaction": "OTP",
   "expected": null
 }

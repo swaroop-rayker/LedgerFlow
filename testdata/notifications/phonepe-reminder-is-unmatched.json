@@ -2,5 +2,6 @@
   "sender": "PhonePe",
   "packageName": "com.phonepe.app",
   "provenance": "synthetic",
+  "nonTransaction": "STATEMENT_OR_DUE",
   "expected": null
 }

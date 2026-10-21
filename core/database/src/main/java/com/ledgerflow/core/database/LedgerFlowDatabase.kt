@@ -197,8 +197,15 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * to build it, because v8's `review_draft_json` already carries itemised
          * lines and OCR's extraction rides the versioned `extracted_json`. See
          * `MIGRATION_10_11`.
+         *
+         * v12 adds `pending_transaction.non_transaction_kind` — BUG58, V2-PLAN
+         * D6. The classifier's label for an OTP, balance notice, reminder,
+         * offer or failed payment from an allowlisted sender: the row is kept
+         * (§5.1) and waits under the Inbox's "Not transactions" filter instead
+         * of in the queue. Every existing row keeps `NULL`. A rebuild of one
+         * table, like v8 — see `MIGRATION_11_12`.
          */
-        public const val VERSION: Int = 11
+        public const val VERSION: Int = 12
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

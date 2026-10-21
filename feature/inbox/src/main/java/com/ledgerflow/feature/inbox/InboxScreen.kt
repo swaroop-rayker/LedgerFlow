@@ -57,6 +57,7 @@ import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.model.NonTransactionKind
 import com.ledgerflow.core.model.PendingStatus
 
 /**
@@ -532,7 +533,17 @@ private fun RowActions(
 ) {
     LfActionRow(alignment = LfActionAlignment.End, modifier = modifier) {
         when (row.status) {
-            PendingStatus.PENDING -> {
+            // BUG58, D6: a recognised OTP, balance notice, reminder or offer.
+            // One action, the way back -- reviewing an OTP is not a thing a
+            // user wants to do, and the row still opens review on a tap for
+            // the rare one that really is a payment.
+            PendingStatus.PENDING -> if (row.nonTransactionKind != null) {
+                LfButton(
+                    text = "Move back",
+                    style = LfButtonStyle.Inline,
+                    onClick = { onEvent(InboxEvent.MarkedAsTransaction(row.id)) },
+                )
+            } else {
                 LfButton(
                     text = "Review",
                     style = LfButtonStyle.Inline,
@@ -564,6 +575,7 @@ private fun RowActions(
 
 private fun InboxFilter.label(): String = when (this) {
     InboxFilter.PENDING -> "Pending"
+    InboxFilter.NOT_TRANSACTIONS -> "Not transactions"
     InboxFilter.SUPPRESSED -> "Suppressed"
     InboxFilter.DISCARDED -> "Discarded"
     InboxFilter.FAILED -> "Failed"
@@ -574,6 +586,7 @@ private fun InboxUiState.subtitle(): String? =
 
 private fun InboxUiState.emptyTitle(): String = when (filter) {
     InboxFilter.PENDING -> "Nothing to review"
+    InboxFilter.NOT_TRANSACTIONS -> "Nothing set aside"
     InboxFilter.SUPPRESSED -> "No duplicates"
     InboxFilter.DISCARDED -> "Nothing discarded"
     InboxFilter.FAILED -> "Nothing failed"
@@ -582,15 +595,34 @@ private fun InboxUiState.emptyTitle(): String = when (filter) {
 private fun InboxUiState.emptyBody(): String = when (filter) {
     InboxFilter.PENDING ->
         "Bank messages appear here for you to approve before they reach your ledger."
+    InboxFilter.NOT_TRANSACTIONS ->
+        "Codes, balance alerts, reminders and offers from your banks wait here, out of Pending."
     InboxFilter.SUPPRESSED ->
         "When one payment arrives twice, the copy is kept here rather than discarded."
     InboxFilter.DISCARDED -> "Items you reject stay here for 30 days."
     InboxFilter.FAILED -> "Messages the pipeline could not process at all would appear here."
 }
 
-/** The merchant if the parser found one, and an honest placeholder if it did not. */
+/**
+ * The merchant if the parser found one; what the message *was* when the
+ * classifier recognised it (BUG58); and an honest placeholder otherwise.
+ *
+ * The kind is the title rather than a tag on "Unknown payee" because it is the
+ * whole of what the row says: an OTP has no payee to be unknown.
+ */
 private fun PendingTransaction.title(): String =
-    effective.merchantRaw?.trim()?.takeIf { it.isNotEmpty() } ?: "Unknown payee"
+    effective.merchantRaw?.trim()?.takeIf { it.isNotEmpty() }
+        ?: nonTransactionKind?.label()
+        ?: "Unknown payee"
+
+private fun NonTransactionKind.label(): String = when (this) {
+    NonTransactionKind.OTP -> "One-time code"
+    NonTransactionKind.BALANCE -> "Balance notice"
+    NonTransactionKind.STATEMENT_OR_DUE -> "Bill or due date"
+    NonTransactionKind.PROMO -> "Offer or notice"
+    NonTransactionKind.FAILED_OR_DECLINED -> "Failed payment"
+    NonTransactionKind.PAYMENT_REQUEST -> "Payment request"
+}
 
 private fun PendingTransaction.amountLabel(): String {
     val amount = effective.amount ?: return "—"
@@ -651,7 +683,8 @@ private fun PendingTransaction.provenance(): String {
     }
     return buildList {
         add(origin)
-        if (needsManualFill) add("needs details")
+        // Not on a classified row: an OTP is not missing its details.
+        if (needsManualFill && nonTransactionKind == null) add("needs details")
         if (isSuppressed) add("duplicate")
         extracted.accountLast4?.let { add("A/C $it") }
     }.joinToString(" · ")

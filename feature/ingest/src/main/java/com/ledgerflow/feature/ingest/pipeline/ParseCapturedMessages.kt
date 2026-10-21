@@ -7,6 +7,7 @@ import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.ingest.PendingCandidate
 import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
+import com.ledgerflow.core.model.NonTransactionKind
 import com.ledgerflow.feature.ingest.parser.ExtractionResult
 import com.ledgerflow.feature.ingest.parser.ParserRuleEngine
 import javax.inject.Inject
@@ -31,6 +32,11 @@ public data class ParseReport(
     val suppressed: Int = 0,
     val alreadyPending: Int = 0,
     val failed: Int = 0,
+    /**
+     * Of [unmatched], how many the classifier recognised as not a transaction
+     * (BUG58). Written like any other, never announced.
+     */
+    val notTransactions: Int = 0,
 ) {
     public val total: Int get() = parsed + unmatched
 }
@@ -89,10 +95,12 @@ public class ParseCapturedMessages @Inject constructor(
         var suppressed = 0
         var alreadyPending = 0
         var failed = 0
+        var notTransactions = 0
 
         repository.capturedEvents(limit).forEach { captured ->
             val ruleId: String?
             val extracted: ExtractedTransaction
+            var nonTransactionKind: NonTransactionKind? = null
 
             when (val result = engine.extract(captured.event)) {
                 is ExtractionResult.Matched -> {
@@ -110,12 +118,23 @@ public class ParseCapturedMessages @Inject constructor(
                     extracted = ExtractedTransaction()
                     unmatched++
                 }
+
+                // BUG58, D6: the same empty candidate as Unmatched, and counted
+                // as one -- no rule matched -- but labelled, so it waits under
+                // "Not transactions" rather than in the queue.
+                is ExtractionResult.NotATransaction -> {
+                    ruleId = null
+                    extracted = ExtractedTransaction()
+                    nonTransactionKind = result.kind
+                    unmatched++
+                    notTransactions++
+                }
             }
 
             val outcome = repository.recordParseOutcome(
                 captured.rawId,
                 ruleId,
-                captured.candidate(extracted),
+                captured.candidate(extracted, nonTransactionKind),
             )
             when (outcome) {
                 is PendingWriteOutcome.Created -> {
@@ -124,7 +143,11 @@ public class ParseCapturedMessages @Inject constructor(
                     // so the incumbent became the suppressed row (§3.1). Counted
                     // here so the two numbers still add up to rows written.
                     if (outcome.supersededPendingId != null) suppressed++
-                    notifyCreated(outcome)
+                    // BUG58, D6: an OTP or an offer is not a transaction to
+                    // review, and announcing one is the ghost arriving through
+                    // the shade instead of the Inbox. Never posted.
+                    // `Bug58_GhostMessagesLandInNotTransactionsTest`.
+                    if (nonTransactionKind == null) notifyCreated(outcome)
                 }
 
                 // §3.1, and P2-7's sharpest rule: a suppressed duplicate is
@@ -144,7 +167,9 @@ public class ParseCapturedMessages @Inject constructor(
                 is PendingWriteOutcome.Failed -> failed++
             }
         }
-        return ParseReport(parsed, unmatched, created, suppressed, alreadyPending, failed)
+        return ParseReport(
+            parsed, unmatched, created, suppressed, alreadyPending, failed, notTransactions,
+        )
     }
 
     /**
@@ -178,9 +203,13 @@ public class ParseCapturedMessages @Inject constructor(
      * no merchant behind and §5.5's fuzzy suggestion still has something to
      * suggest at review time.
      */
-    private fun CapturedEvent.candidate(extracted: ExtractedTransaction) = PendingCandidate(
+    private fun CapturedEvent.candidate(
+        extracted: ExtractedTransaction,
+        nonTransactionKind: NonTransactionKind?,
+    ) = PendingCandidate(
         source = event.sourceType.toEntrySource(),
         extracted = extracted,
+        nonTransactionKind = nonTransactionKind,
         // Amount and direction only. The ±3 minute window and the
         // account/merchant comparison live where they work -- on `created_at`
         // and in DuplicateMatcher -- because measured against the real corpus

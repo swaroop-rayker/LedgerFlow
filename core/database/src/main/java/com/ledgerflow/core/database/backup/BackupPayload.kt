@@ -403,6 +403,14 @@ public data class PendingTransactionRow(
      * without any of the user's corrections to it.
      */
     val reviewDraftJson: String? = null,
+    /**
+     * v12 (BUG58). The classifier's "not a transaction" label, by name.
+     *
+     * Defaults to null -- what `MIGRATION_11_12` writes -- so every older
+     * `.lfbk` decodes and restores its rows into the queue, exactly where a
+     * migrated older database has them (CLAUDE.md §5, Room).
+     */
+    val nonTransactionKind: String? = null,
 )
 
 /**

@@ -74,6 +74,19 @@ public class RestorePendingUseCase @Inject constructor(
 }
 
 /**
+ * "Move back": the user says a row the classifier filed under "Not
+ * transactions" is a transaction after all (BUG58, V2-PLAN D6).
+ *
+ * The one-tap way back that makes the label safe to apply. It clears the label
+ * and nothing else; the row then waits in the queue like any unmatched message.
+ */
+public class MarkPendingAsTransactionUseCase @Inject constructor(
+    private val repository: PendingRepository,
+) {
+    public suspend operator fun invoke(id: String): Boolean = repository.markAsTransaction(id)
+}
+
+/**
  * **Erases candidates for good.** The Inbox's only irreversible operation.
  *
  * The counterpart to `PurgeDeletedEntriesUseCase` for the approval queue, and

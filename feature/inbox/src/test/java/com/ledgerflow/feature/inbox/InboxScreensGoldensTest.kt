@@ -11,6 +11,7 @@ import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.model.NonTransactionKind
 import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
 import com.ledgerflow.core.testing.screenshot.PHONE_1X
@@ -29,6 +30,10 @@ import org.robolectric.annotation.GraphicsMode
  * - **Queue** — a read SMS, a read notification and an unrecognised ("ghost")
  *   candidate, with counts on two other filters so the chip row is on screen.
  * - **Empty** — nothing waiting.
+ * - **Review, with the message** — a ghost from a notification, its text shown
+ *   above the form (BUG58, owner 2026-10-21).
+ * - **Not transactions** — BUG58's filter: labelled OTP, balance and offer rows,
+ *   each with its one action, "Move back".
  * - **Review** — a parsed candidate, and §5.1's never-drop case where nothing
  *   was extracted and every field is the user's to fill.
  *
@@ -58,6 +63,7 @@ class InboxScreensGoldensTest {
         extracted: ExtractedTransaction,
         confidence: Double,
         needsManualFill: Boolean = false,
+        kind: NonTransactionKind? = null,
     ) = PendingTransaction(
         id = id,
         source = source,
@@ -69,6 +75,7 @@ class InboxScreensGoldensTest {
         createdAt = NOW,
         reviewedAt = null,
         approvedEntryId = null,
+        nonTransactionKind = kind,
     )
 
     private val queue = InboxUiState(
@@ -109,6 +116,23 @@ class InboxScreensGoldensTest {
         loading = false,
     )
 
+    private val notTransactions = InboxUiState(
+        filter = InboxFilter.NOT_TRANSACTIONS,
+        rows = listOf(
+            NonTransactionKind.OTP to EntrySource.SMS,
+            NonTransactionKind.BALANCE to EntrySource.SMS,
+            NonTransactionKind.PROMO to EntrySource.NOTIFICATION,
+        ).mapIndexed { index, (kind, source) ->
+            candidate(
+                "n$index", source, ExtractedTransaction(), confidence = 0.0,
+                needsManualFill = true, kind = kind,
+            )
+        },
+        pendingCount = 1,
+        counts = mapOf(InboxFilter.PENDING to 1, InboxFilter.NOT_TRANSACTIONS to 3),
+        loading = false,
+    )
+
     private val categories = listOf(
         Category("c1", null, LedgerType.DEBIT, "Food", "cart", 0x00FF8800, 1, true),
         Category("c2", "c1", LedgerType.DEBIT, "Groceries", "cart", 0x00FF8800, 2, false),
@@ -145,6 +169,22 @@ class InboxScreensGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun empty_2x() = inbox("inbox-empty-2x", InboxUiState(loading = false), 2f)
+
+    @Test fun notTransactions_1x() = inbox("inbox-not-transactions-1x", notTransactions, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun notTransactions_2x() = inbox("inbox-not-transactions-2x", notTransactions, 2f)
+
+    private val withMessage = unparsed.copy(
+        sourceLabel = "From a notification",
+        capturedText = "Amazon\nYour package with 2 items was delivered. " +
+            "Tap to rate your delivery experience.",
+    )
+
+    @Test fun reviewWithMessage_1x() = review("review-with-message-1x", withMessage, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun reviewWithMessage_2x() = review("review-with-message-2x", withMessage, 2f)
 
     @Test fun reviewParsed_1x() = review("review-parsed-1x", parsed, 1f)
 

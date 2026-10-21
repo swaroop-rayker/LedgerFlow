@@ -64,9 +64,13 @@ public data class InboxUiState(
      * about, and the way to destroy a live candidate is to discard it first —
      * which is reversible for 30 days. The SQL enforces this too; this is only
      * what decides whether the UI offers it.
+     *
+     * `NOT_TRANSACTIONS` is excluded for the same reason (BUG58, D6): its rows
+     * are live candidates the classifier labelled, retained and never deleted,
+     * and a mis-labelled payment must not be one "Erase all" away from gone.
      */
     val canErase: Boolean
-        get() = filter != InboxFilter.PENDING
+        get() = filter != InboxFilter.PENDING && filter != InboxFilter.NOT_TRANSACTIONS
 
     /**
      * The chips worth drawing.
@@ -138,6 +142,9 @@ public sealed interface InboxEvent {
     public data class Discarded(val pendingId: String, val label: String) : InboxEvent
 
     public data class Restored(val pendingId: String) : InboxEvent
+
+    /** "Move back" on a row under "Not transactions" (BUG58). */
+    public data class MarkedAsTransaction(val pendingId: String) : InboxEvent
 
     /** The undo snackbar's action. */
     public data object UndoDiscard : InboxEvent

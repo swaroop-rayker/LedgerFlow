@@ -3,6 +3,7 @@ package com.ledgerflow.core.domain.inbox
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.ingest.toExtractedDirection
 import com.ledgerflow.core.model.EntrySource
+import com.ledgerflow.core.model.NonTransactionKind
 import com.ledgerflow.core.model.PendingStatus
 import kotlinx.coroutines.flow.Flow
 
@@ -60,6 +61,17 @@ public data class PendingTransaction(
      * never assigns one — so this is only ever the user's choice.
      */
     val editedCategoryName: String? = null,
+
+    /**
+     * What the pipeline recognised this message as, when it is not a
+     * transaction at all (BUG58, V2-PLAN D6): an OTP, a balance notice, a
+     * reminder, an offer, a failed payment.
+     *
+     * Non-null puts the row under [InboxFilter.NOT_TRANSACTIONS] and out of
+     * the queue. Null again once the user says it is a transaction after all
+     * ([PendingRepository.markAsTransaction]).
+     */
+    val nonTransactionKind: NonTransactionKind? = null,
 ) {
     public val isSuppressed: Boolean get() = suppressedById != null
 
@@ -103,7 +115,7 @@ public data class PendingTransaction(
 }
 
 /**
- * The Inbox's four filters (SPEC.md §5.1).
+ * The Inbox's filters (SPEC.md §5.1).
  *
  * [SUPPRESSED] is the odd one and deliberately so: the other three select on
  * `status`, and this one selects on `suppressed_by_id IS NOT NULL`. §3.1
@@ -112,8 +124,21 @@ public data class PendingTransaction(
  * dropped, which §5.1 forbids. This filter is that visibility.
  */
 public enum class InboxFilter {
-    /** Awaiting the user, and not suppressed. The queue proper. */
+    /** Awaiting the user, not suppressed, and not recognised as a non-transaction. The queue proper. */
     PENDING,
+
+    /**
+     * Recognised as not a transaction (BUG58, V2-PLAN D6) and still awaiting
+     * the user: OTPs, balance notices, reminders, offers, failed payments.
+     *
+     * The same kind of odd one as [SUPPRESSED], and for the same reason: it
+     * selects on `non_transaction_kind`, not on `status`. These rows came from
+     * allowlisted senders, so §5.1's never-drop rule keeps them — this filter
+     * is where they stay visible, out of the queue the user has to work
+     * through. Not emptiable in bulk: a mis-classified payment must not be one
+     * "erase all" away from gone.
+     */
+    NOT_TRANSACTIONS,
 
     /** Lost a cross-source dedupe (§3.1). Retained, never discarded. */
     SUPPRESSED,
@@ -195,6 +220,23 @@ public interface PendingRepository {
     public suspend fun find(id: String): PendingTransaction?
 
     /**
+     * The text of the message this candidate was read from, while it is
+     * retained (D-09's 90 days); null after that, and for a receipt.
+     *
+     * **Why the review screen shows it** (owner, 2026-10-21; BUG58). A
+     * candidate the parser could not read arrived as "nothing was extracted"
+     * with no way to see what it was: the owner could not tell an OTP from a
+     * payment, and could not report a ghost so it became a fixture. The text
+     * is the user's own message, already stored, from an allowlisted sender
+     * or package -- showing it in the app reads nothing new.
+     *
+     * A separate call, not a field on [PendingTransaction]: the lists never
+     * draw it, and loading every body for a list would be the cost §6.1
+     * refuses.
+     */
+    public suspend fun capturedText(id: String): String?
+
+    /**
      * §5.1: sets `DISCARDED` and **keeps the row**, auditable and restorable.
      *
      * Not a delete. The user rejecting a candidate is information — it is what
@@ -205,6 +247,17 @@ public interface PendingRepository {
 
     /** Undo, for the snackbar and for the Discarded filter. Back to `PENDING`. */
     public suspend fun restore(id: String): Boolean
+
+    /**
+     * "It's a transaction": moves a row the classifier filed under
+     * [InboxFilter.NOT_TRANSACTIONS] into the queue (BUG58).
+     *
+     * Only affects a `PENDING` row that carries a kind. **Does not announce
+     * it** -- the user is looking at it as they tap -- and does not re-run
+     * any rule: the row opens for manual fill, exactly like any other
+     * unmatched message.
+     */
+    public suspend fun markAsTransaction(id: String): Boolean
 
     /**
      * Persists the review screen's in-progress state (v8, BUG6).

@@ -10,6 +10,7 @@ import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.model.NonTransactionKind
 import com.ledgerflow.core.model.PendingStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -57,6 +58,7 @@ class InboxFilterCountsMatchTest {
         id: String,
         status: PendingStatus = PendingStatus.PENDING,
         suppressedById: String? = null,
+        kind: NonTransactionKind? = null,
     ) {
         vault.session.requireDatabase().pendingTransactionDao().insert(
             PendingTransactionEntity(
@@ -79,6 +81,7 @@ class InboxFilterCountsMatchTest {
                 createdAt = vault.now,
                 reviewedAt = null,
                 approvedEntryId = null,
+                nonTransactionKind = kind,
             ),
         )
     }
@@ -95,6 +98,10 @@ class InboxFilterCountsMatchTest {
         seed("discarded", PendingStatus.DISCARDED)
         seed("approved", PendingStatus.APPROVED)
         seed("failed", PendingStatus.FAILED)
+        // BUG58: a live labelled row -- in NOT_TRANSACTIONS, never in PENDING --
+        // and a discarded one, which is in DISCARDED and nowhere else.
+        seed("otp", kind = NonTransactionKind.OTP)
+        seed("offer-discarded", PendingStatus.DISCARDED, kind = NonTransactionKind.PROMO)
     }
 
     @Test
@@ -126,8 +133,10 @@ class InboxFilterCountsMatchTest {
         assertThat(counts[InboxFilter.PENDING]).isEqualTo(3)
         // Both suppressed rows, whatever their status.
         assertThat(counts[InboxFilter.SUPPRESSED]).isEqualTo(2)
-        // Both discarded rows, including the one that is also suppressed.
-        assertThat(counts[InboxFilter.DISCARDED]).isEqualTo(2)
+        // The live labelled row only (BUG58).
+        assertThat(counts[InboxFilter.NOT_TRANSACTIONS]).isEqualTo(1)
+        // Every discarded row, including the suppressed one and the labelled one.
+        assertThat(counts[InboxFilter.DISCARDED]).isEqualTo(3)
         assertThat(counts[InboxFilter.FAILED]).isEqualTo(1)
     }
 

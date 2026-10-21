@@ -62,7 +62,10 @@ public class FakePendingRepository(
     ): List<PendingTransaction> =
         filter { row ->
             when (filter) {
-                InboxFilter.PENDING -> row.status == PendingStatus.PENDING && !row.isSuppressed
+                InboxFilter.PENDING -> row.status == PendingStatus.PENDING &&
+                    !row.isSuppressed && row.nonTransactionKind == null
+                InboxFilter.NOT_TRANSACTIONS -> row.status == PendingStatus.PENDING &&
+                    row.nonTransactionKind != null
                 InboxFilter.SUPPRESSED -> row.isSuppressed
                 InboxFilter.DISCARDED -> row.status == PendingStatus.DISCARDED
                 InboxFilter.FAILED -> row.status == PendingStatus.FAILED
@@ -88,11 +91,24 @@ public class FakePendingRepository(
 
     override suspend fun find(id: String): PendingTransaction? = rows.value[id]
 
+    /** What [capturedText] answers, keyed by candidate id. Absent means "not retained". */
+    public val capturedTexts: MutableMap<String, String> = mutableMapOf()
+
+    override suspend fun capturedText(id: String): String? = capturedTexts[id]
+
     override suspend fun discard(id: String): Boolean =
         transition(id, from = PendingStatus.PENDING, to = PendingStatus.DISCARDED)
 
     override suspend fun restore(id: String): Boolean =
         transition(id, from = PendingStatus.DISCARDED, to = PendingStatus.PENDING)
+
+    /** Scoped like the real statement: a `PENDING` row that carries a label. */
+    override suspend fun markAsTransaction(id: String): Boolean {
+        val row = rows.value[id] ?: return false
+        if (row.status != PendingStatus.PENDING || row.nonTransactionKind == null) return false
+        rows.value = rows.value + (id to row.copy(nonTransactionKind = null))
+        return true
+    }
 
     /**
      * Persists the review screen's typing (v8, BUG6).
@@ -138,6 +154,8 @@ public class FakePendingRepository(
                     InboxFilter.FAILED -> row.status == PendingStatus.FAILED
                     InboxFilter.SUPPRESSED -> row.isSuppressed
                     InboxFilter.PENDING -> false
+                    // BUG58, D6: never deleted in bulk, like the real one.
+                    InboxFilter.NOT_TRANSACTIONS -> false
                 }
             }
             .map { it.id }

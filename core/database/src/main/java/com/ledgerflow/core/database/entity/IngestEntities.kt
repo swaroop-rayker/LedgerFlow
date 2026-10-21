@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.ledgerflow.core.model.EntrySource
+import com.ledgerflow.core.model.NonTransactionKind
 import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.model.RawParseStatus
 
@@ -412,4 +413,20 @@ public data class PendingTransactionEntity(
      */
     @ColumnInfo(name = "review_draft_json")
     val reviewDraftJson: String? = null,
+
+    /**
+     * What the classifier recognised this message as, when it is not a
+     * transaction at all (BUG58, V2-PLAN D6). v12.
+     *
+     * Non-null is what the Inbox's "Not transactions" filter reads, and what
+     * keeps the row out of the queue and its badge. **A label, never a
+     * delete**: the row is otherwise an ordinary unmatched candidate, kept and
+     * visible, and the user's "It's a transaction" clears this and nothing
+     * else. A column rather than a status for the reason `suppressed_by_id` is
+     * one: a classified row can still be pending, discarded or restored.
+     *
+     * Every row that predates v12 holds `NULL` — nothing was ever classified.
+     */
+    @ColumnInfo(name = "non_transaction_kind")
+    val nonTransactionKind: NonTransactionKind? = null,
 )

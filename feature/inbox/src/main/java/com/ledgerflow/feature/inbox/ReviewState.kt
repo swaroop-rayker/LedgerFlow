@@ -87,6 +87,11 @@ public data class ReviewUiState(
     val sourceLabel: String = "",
     val referenceHint: String? = null,
     val needsManualFill: Boolean = false,
+    /**
+     * The message as it arrived, while retained (BUG58, owner 2026-10-21).
+     * Null when it is no longer kept, or for a receipt.
+     */
+    val capturedText: String? = null,
 
     val submitting: Boolean = false,
     val message: String? = null,

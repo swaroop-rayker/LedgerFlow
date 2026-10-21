@@ -1,5 +1,6 @@
 {
   "sender": "AD-ICICIB",
   "provenance": "synthetic",
+  "nonTransaction": "PROMO",
   "expected": null
 }

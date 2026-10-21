@@ -1,0 +1,7 @@
+{
+  "sender": "AD-HDFCBK-S",
+  "provenance": "real",
+  "note": "REAL, from the owner's phone (2026-10-21), reported as a BUG58 ghost: a second HDFC e-mandate pre-debit notice, different merchant and amount, same shape. Substituted: the amount, the merchant and the UMN hash. Sender header a placeholder; SMS assumed from the signature. Must extract NOTHING and be labelled a bill or due date.",
+  "nonTransaction": "STATEMENT_OR_DUE",
+  "expected": null
+}

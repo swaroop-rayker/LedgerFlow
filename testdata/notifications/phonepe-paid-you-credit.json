@@ -1,0 +1,14 @@
+{
+  "sender": "PhonePe",
+  "packageName": "com.phonepe.app",
+  "provenance": "real",
+  "note": "REAL, from the owner's phone (2026-10-21): a UPI credit that landed in the Inbox as a BUG58 ghost -- NOT a non-transaction but a missed payment. The synthetic corpus assumed 'Received Rs.X from Y'; the real shape is 'Y paid you Rs.X' with 'Payment from PhonePe' beneath, and no rule read it. Substituted: the payer's name and the amount. The package is assumed from the text (the owner said 'through notifications'); every payment-app package shares the rule's sender pattern.",
+  "expected": {
+    "ruleId": "notification-upi-paid-you",
+    "amountMinor": 2500,
+    "currency": "INR",
+    "direction": "CREDIT",
+    "merchantRaw": "ASHA K",
+    "instrumentHint": "UPI"
+  }
+}

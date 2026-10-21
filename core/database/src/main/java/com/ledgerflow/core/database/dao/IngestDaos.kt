@@ -480,18 +480,37 @@ public interface PendingTransactionDao {
     // user when a message lands while they are looking at it.
 
     /**
-     * The queue proper: awaiting a human, and not a suppressed duplicate.
+     * The queue proper: awaiting a human, not a suppressed duplicate, and not
+     * recognised as a non-transaction.
      *
      * Excluding suppressed rows here is what makes the default filter mean
      * "work to do". They remain reachable through [observeSuppressed] — §3.1
-     * requires a suppressed row to stay visible, not to stay in the queue.
+     * requires a suppressed row to stay visible, not to stay in the queue. A
+     * classified row (BUG58) is the same arrangement: reachable through
+     * [observeNotTransactions], out of the queue.
      */
     @Query(
         "SELECT * FROM pending_transaction " +
             "WHERE status = 'PENDING' AND suppressed_by_id IS NULL " +
+            "AND non_transaction_kind IS NULL " +
             "ORDER BY created_at DESC",
     )
     public fun observePending(): Flow<List<PendingTransactionEntity>>
+
+    /**
+     * BUG58's "Not transactions": recognised OTPs, balance notices, reminders,
+     * offers and failed payments that are still awaiting the user.
+     *
+     * `status = 'PENDING'` so a classified row the user then discarded is in
+     * Discarded and nowhere else, and restoring it brings it back here rather
+     * than into the queue -- the label survives the round trip.
+     */
+    @Query(
+        "SELECT * FROM pending_transaction " +
+            "WHERE status = 'PENDING' AND non_transaction_kind IS NOT NULL " +
+            "ORDER BY created_at DESC",
+    )
+    public fun observeNotTransactions(): Flow<List<PendingTransactionEntity>>
 
     /** §3.1's retained cross-source duplicates, whatever their status. */
     @Query(
@@ -513,7 +532,8 @@ public interface PendingTransactionDao {
     /** §9.3's `Inbox (n)`. Matches [observePending] exactly, or the badge lies. */
     @Query(
         "SELECT COUNT(*) FROM pending_transaction " +
-            "WHERE status = 'PENDING' AND suppressed_by_id IS NULL",
+            "WHERE status = 'PENDING' AND suppressed_by_id IS NULL " +
+            "AND non_transaction_kind IS NULL",
     )
     public fun observePendingCount(): Flow<Int>
 
@@ -529,6 +549,13 @@ public interface PendingTransactionDao {
     /** Matches [observeSuppressed]. */
     @Query("SELECT COUNT(*) FROM pending_transaction WHERE suppressed_by_id IS NOT NULL")
     public fun observeSuppressedCount(): Flow<Int>
+
+    /** Matches [observeNotTransactions]. */
+    @Query(
+        "SELECT COUNT(*) FROM pending_transaction " +
+            "WHERE status = 'PENDING' AND non_transaction_kind IS NOT NULL",
+    )
+    public fun observeNotTransactionsCount(): Flow<Int>
 
     /** Matches [observeWithStatus]. */
     @Query("SELECT COUNT(*) FROM pending_transaction WHERE status = :status")
@@ -553,6 +580,19 @@ public interface PendingTransactionDao {
             "WHERE id = :id AND status = 'DISCARDED'",
     )
     public suspend fun restore(id: String): Int
+
+    /**
+     * BUG58's "It's a transaction": clears the classifier's label, which moves
+     * the row from "Not transactions" into the queue.
+     *
+     * Scoped to a `PENDING` row that carries a label, so it can only ever do
+     * that one move -- never relabel an approved or discarded candidate.
+     */
+    @Query(
+        "UPDATE pending_transaction SET non_transaction_kind = NULL " +
+            "WHERE id = :id AND status = 'PENDING' AND non_transaction_kind IS NOT NULL",
+    )
+    public suspend fun markAsTransaction(id: String): Int
 
     /**
      * What the user has typed on the review screen but not approved (v8, BUG6).

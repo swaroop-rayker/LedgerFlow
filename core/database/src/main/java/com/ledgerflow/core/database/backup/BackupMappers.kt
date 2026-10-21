@@ -25,6 +25,7 @@ import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.LineItemKind
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.model.NonTransactionKind
 import com.ledgerflow.core.model.PaymentMethodType
 import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.model.RawParseStatus
@@ -103,6 +104,7 @@ internal fun toPendingRow(row: PendingTransactionEntity) = PendingTransactionRow
     reviewedAt = row.reviewedAt,
     approvedEntryId = row.approvedEntryId,
     reviewDraftJson = row.reviewDraftJson,
+    nonTransactionKind = row.nonTransactionKind?.name,
 )
 
 internal fun toRow(entry: LedgerEntryEntity) = LedgerEntryRow(
@@ -180,6 +182,11 @@ internal fun toPendingTransaction(row: PendingTransactionRow) = PendingTransacti
     reviewedAt = row.reviewedAt,
     approvedEntryId = row.approvedEntryId,
     reviewDraftJson = row.reviewDraftJson,
+    // An unknown name restores as null -- into the queue -- for the reason the
+    // type converter reads it that way: a label this build does not know must
+    // not hide a message from the user, and must not fail the whole restore.
+    nonTransactionKind = row.nonTransactionKind
+        ?.let { name -> NonTransactionKind.entries.firstOrNull { it.name == name } },
 )
 
 internal fun toCategory(row: CategoryRow) = CategoryEntity(

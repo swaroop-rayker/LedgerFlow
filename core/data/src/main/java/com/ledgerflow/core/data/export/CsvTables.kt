@@ -466,7 +466,7 @@ internal object CsvTables {
             "id", "source", "dedupe_key", "suppressed_by_id", "raw_ref_id",
             "extracted_json", "confidence", "status", "needs_manual_fill",
             "created_at", "created_at_iso", "reviewed_at", "reviewed_at_iso",
-            "approved_entry_id", "review_draft_json",
+            "approved_entry_id", "review_draft_json", "non_transaction_kind",
         ),
         rows = payload.pendingTransactions.map { row ->
             listOf(
@@ -485,6 +485,8 @@ internal object CsvTables {
                 CsvWriter.timestamp(row.reviewedAt),
                 row.approvedEntryId,
                 row.reviewDraftJson,
+                // v12, BUG58: the classifier's label, by name; empty when none.
+                row.nonTransactionKind,
             )
         },
     )

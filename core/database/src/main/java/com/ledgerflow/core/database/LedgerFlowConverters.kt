@@ -6,6 +6,7 @@ import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.LineItemKind
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.model.NonTransactionKind
 import com.ledgerflow.core.model.PaymentMethodType
 import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.model.RawParseStatus
@@ -72,6 +73,20 @@ public class LedgerFlowConverters {
     @TypeConverter
     public fun stringToPendingStatus(value: String?): PendingStatus? =
         value?.let { name -> PendingStatus.entries.firstOrNull { it.name == name } }
+
+    // -- v12: non-transactions (BUG58, V2-PLAN D6) ------------------------
+
+    @TypeConverter
+    public fun nonTransactionKindToString(value: NonTransactionKind?): String? = value?.name
+
+    /**
+     * An unknown name reads as null -- "not classified" -- which puts the row
+     * back in the queue. That is the safe direction to be wrong in: a label
+     * this build does not know cannot hide a message from the user.
+     */
+    @TypeConverter
+    public fun stringToNonTransactionKind(value: String?): NonTransactionKind? =
+        value?.let { name -> NonTransactionKind.entries.firstOrNull { it.name == name } }
 
     // -- v9: budgets (SPEC.md 5.7) --------------------------------------
 

@@ -1,0 +1,8 @@
+{
+  "sender": "SBI YONO",
+  "packageName": "com.sbi.lotusintouch",
+  "provenance": "real",
+  "note": "REAL, from the owner's phone: a YONO SBI app notification that landed in the Inbox as a BUG58 ghost (seen via the Review screen's Message card, 2026-10-21). Nothing substituted: a broadcast promotion carrying no personal data, kept verbatim. It must extract NOTHING and be labelled an offer.",
+  "nonTransaction": "PROMO",
+  "expected": null
+}

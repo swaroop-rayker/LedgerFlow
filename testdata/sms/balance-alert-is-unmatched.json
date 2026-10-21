@@ -1,5 +1,6 @@
 {
   "sender": "VM-AXISBK",
   "provenance": "synthetic",
+  "nonTransaction": "BALANCE",
   "expected": null
 }

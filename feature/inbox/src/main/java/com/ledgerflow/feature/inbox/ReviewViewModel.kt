@@ -153,7 +153,10 @@ public class ReviewViewModel @Inject constructor(
         // about the message, and a draft has no business overriding them
         // (v8, BUG6).
         val shown = candidate.edits?.let(fromExtraction::withEdits) ?: fromExtraction
-        _state.value = shown
+        // The message itself, so "nothing was extracted" is no longer all the
+        // user can learn about a candidate (BUG58). Not part of the baseline:
+        // it is a fact about the message, never an edit.
+        _state.value = shown.copy(capturedText = pendingRepository.capturedText(pendingId))
 
         // **The baseline is the EXTRACTION, not what was loaded** (BUG16).
         //

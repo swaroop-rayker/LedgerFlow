@@ -146,15 +146,19 @@ class CorpusProvenanceTest {
 
         /**
          * Four real SMS, all HDFC, captured from the owner's phone across
-         * 2026-08-26/27. **Raise this when a real one lands. Never lower it.**
+         * 2026-08-26/27, then two OTPs reported as BUG58 ghosts on
+         * 2026-10-21 (SBI YONO, JioMart), then two HDFC e-mandate pre-debit
+         * notices the same day. **Raise this when a real one lands. Never
+         * lower it.**
          */
-        const val MINIMUM_REAL_SMS = 4
+        const val MINIMUM_REAL_SMS = 8
 
         /**
-         * Zero, and honestly so — notification ingest has never captured a real
-         * message. Access was only granted at P2-8; `TESTING.md` F23 is the row
-         * that changes this, and it needs one real payment.
+         * Zero until 2026-10-21, and honestly so. Then the first five, all
+         * read off BUG58 ghosts through the Review screen's Message card: four
+         * YONO SBI promotions and one PhonePe credit -- the real payment
+         * `TESTING.md` F23 was waiting for, which no rule read.
          */
-        const val MINIMUM_REAL_NOTIFICATIONS = 0
+        const val MINIMUM_REAL_NOTIFICATIONS = 5
     }
 }

@@ -99,3 +99,44 @@ public enum class PendingStatus {
     /** The pipeline could not produce a reviewable candidate from the message. */
     FAILED,
 }
+
+/**
+ * A message the pipeline recognised as **not a transaction** (SPEC.md §5.1,
+ * `pending_transaction.non_transaction_kind`). Schema v12, BUG58, V2-PLAN D6.
+ *
+ * Allowlisted senders post far more than payments: one-time passwords, balance
+ * notices, statements and due-date reminders, offers, and "your payment failed".
+ * None of them matches a rule, and before v12 each became a confidence-0
+ * candidate with no payee and no amount — a "ghost" the user had to dismiss
+ * by hand.
+ *
+ * **A label, not a verdict to drop.** §5.1's never-drop rule stands: a
+ * classified message is still a `pending_transaction` row, retained and visible
+ * under the Inbox's "Not transactions" filter, and one tap moves it back into
+ * the queue. What the label changes is only *where* it waits and that it is
+ * never announced.
+ *
+ * Not a [PendingStatus] for the reason "suppressed" is not one: a row has to be
+ * able to be classified *and* pending, discarded or restored, and moving it back
+ * must not forget what it was.
+ */
+public enum class NonTransactionKind {
+
+    /** A one-time password or verification code. Nothing has moved yet. */
+    OTP,
+
+    /** A balance or available-limit notice with no debit or credit in it. */
+    BALANCE,
+
+    /** A statement, bill, due-date or EMI reminder. Money is owed, not moved. */
+    STATEMENT_OR_DUE,
+
+    /** An offer, cashback promotion, reward, KYC or app nudge. */
+    PROMO,
+
+    /** A payment that failed or was declined. Nothing moved. */
+    FAILED_OR_DECLINED,
+
+    /** Someone asked the user for money (a UPI collect request). Nothing moved yet. */
+    PAYMENT_REQUEST,
+}

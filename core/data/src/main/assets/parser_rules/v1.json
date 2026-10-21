@@ -160,6 +160,21 @@
       "enabled": true
     },
     {
+      "id": "notification-upi-paid-you",
+      "priority": 52,
+      "senderPattern": "(com\\.google\\.android\\.apps\\.nbu\\.paisa\\.user|com\\.phonepe\\.app|net\\.one97\\.paytm|in\\.org\\.npci\\.upiapp)",
+      "bodyPattern": "^(?<merchantRaw>[^\\n]{2,40}?)\\s+paid you\\s+(?<currency>Rs\\.?|INR|₹)\\s*(?<amount>[\\d,]+(?:\\.\\d{1,3})?)",
+      "fieldMap": {
+        "amount": "amount",
+        "currency": "currency",
+        "merchantRaw": "merchantRaw"
+      },
+      "direction": "CREDIT",
+      "instrumentHint": "UPI",
+      "confidenceBase": 0.9,
+      "enabled": true
+    },
+    {
       "id": "generic-amount-then-verb",
       "priority": 900,
       "senderPattern": ".*",

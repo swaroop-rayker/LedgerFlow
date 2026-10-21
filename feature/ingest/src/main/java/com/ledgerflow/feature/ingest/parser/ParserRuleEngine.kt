@@ -6,6 +6,7 @@ import com.ledgerflow.core.domain.ingest.ExtractionField
 import com.ledgerflow.core.domain.ingest.InstrumentHint
 import com.ledgerflow.core.domain.ingest.ParserRule
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
+import com.ledgerflow.core.model.NonTransactionKind
 
 /** What the engine made of one message. */
 public sealed interface ExtractionResult {
@@ -25,6 +26,18 @@ public sealed interface ExtractionResult {
      * `confidence = 0` and `needs_manual_fill = 1`.
      */
     public data object Unmatched : ExtractionResult
+
+    /**
+     * No rule matched, and the message is recognisably **not a transaction**:
+     * an OTP, a balance notice, a reminder, an offer, a request, a failed
+     * payment ([NonTransactionClassifier]; BUG58, V2-PLAN D6).
+     *
+     * **Still never a reason to drop the message.** It becomes the same
+     * confidence-0 row [Unmatched] does, labelled with [kind], which keeps it
+     * out of the queue and under the Inbox's "Not transactions" filter, and
+     * keeps it from being announced.
+     */
+    public data class NotATransaction(val kind: NonTransactionKind) : ExtractionResult
 }
 
 /**
@@ -72,7 +85,12 @@ public class ParserRuleEngine(rules: List<ParserRule>) {
             val match = rule.body.find(event.body) ?: return@forEach
             return ExtractionResult.Matched(rule.rule.id, rule.build(match, event.body))
         }
-        return ExtractionResult.Unmatched
+        // After every rule, never before: a debit that also mentions a balance
+        // or an OTP belongs to its rule. Reads the body only, so it is as
+        // source-agnostic as the rest of the engine (§5.2).
+        return NonTransactionClassifier.classify(event.body)
+            ?.let(ExtractionResult::NotATransaction)
+            ?: ExtractionResult.Unmatched
     }
 
     /**

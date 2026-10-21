@@ -129,6 +129,11 @@ public class PendingCandidateWriter @Inject constructor(
                         createdAt = now,
                         reviewedAt = null,
                         approvedEntryId = null,
+                        // BUG58: a recognised OTP, balance notice, reminder,
+                        // offer or failed payment. Still a row -- §5.1 -- and
+                        // still PENDING; the label is what keeps it out of the
+                        // queue and under "Not transactions".
+                        nonTransactionKind = candidate.nonTransactionKind,
                     ),
                 )
 

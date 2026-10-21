@@ -1,0 +1,7 @@
+{
+  "sender": "VM-SBIINB-S",
+  "provenance": "real",
+  "note": "REAL, from the owner's SMS inbox (2026-10-21). Wording and structure verbatim. Substituted: the six-digit code. The sender header was not supplied and is a placeholder in SBI's usual shape. 1800111109 is SBI's published helpline, not personal, and is kept. Offered as a likely cause of the BUG58 ghosts but NOT confirmed as one: the Inbox shows no text for a ghost, and the owner's ghosts are notification rows, not SMS. The owner notes the wording of these OTPs varies; this pins one shape. It must extract NOTHING and be labelled an OTP.",
+  "nonTransaction": "OTP",
+  "expected": null
+}

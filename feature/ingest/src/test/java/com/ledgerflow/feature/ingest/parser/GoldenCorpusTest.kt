@@ -1,12 +1,14 @@
 package com.ledgerflow.feature.ingest.parser
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractionField
 import com.ledgerflow.core.domain.ingest.IngestSourceType
 import com.ledgerflow.core.domain.ingest.InstrumentHint
 import com.ledgerflow.core.domain.ingest.ParserRule
 import com.ledgerflow.core.domain.ingest.RawIngestEvent
+import com.ledgerflow.core.model.NonTransactionKind
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -158,6 +160,28 @@ class GoldenCorpusTest {
     }
 
     /**
+     * The classifier claims **no** message the corpus says is a transaction
+     * (BUG58).
+     *
+     * The engine only consults it after every rule has missed, so a matched
+     * fixture never reaches it in [runCorpus]. That is exactly why this asks it
+     * directly: if a rule regresses, its messages fall through to the
+     * classifier, and the difference between "a ghost in Pending" and "a
+     * payment filed under Not transactions" is whether this holds.
+     */
+    @Test
+    fun theClassifierClaimsNoTransactionInTheCorpus() {
+        (casesIn("testdata/sms") + casesIn("testdata/notifications"))
+            .map { Case(it, json) }
+            .filter { it.expected != null }
+            .forEach { case ->
+                assertWithMessage("fixture '%s' is a transaction", case.name)
+                    .that(NonTransactionClassifier.classify(case.body))
+                    .isNull()
+            }
+    }
+
+    /**
      * Every shipped rule is exercised by at least one fixture.
      *
      * A rule nobody tests is a rule that can rot silently — and worse, one whose
@@ -198,7 +222,17 @@ class GoldenCorpusTest {
                 // The fixture says this must extract nothing. An OTP, a promo,
                 // a balance alert -- all from senders that also send real
                 // transactions, which is exactly why they need asserting.
-                assertThat(result).isEqualTo(ExtractionResult.Unmatched)
+                //
+                // And it says what the classifier must call it (BUG58, D6).
+                // Absent means "a ghost the classifier must leave alone": still
+                // asserted, because a label is the one way this pipeline can
+                // move a message out of the user's sight.
+                val label = case.nonTransactionOrNull
+                    ?.let { NonTransactionKind.valueOf(it) }
+                    ?.let(ExtractionResult::NotATransaction)
+                assertWithMessage("fixture '%s'", case.name)
+                    .that(result)
+                    .isEqualTo(label ?: ExtractionResult.Unmatched)
                 return@forEach
             }
 
@@ -248,6 +282,9 @@ class GoldenCorpusTest {
 
         val expected: JsonObject? = meta["expected"]?.takeIf { it != JsonNull }?.jsonObject
         val packageNameOrNull: String? = meta["packageName"]?.jsonPrimitive?.content
+
+        /** BUG58: what the classifier must call a fixture that extracts nothing. */
+        val nonTransactionOrNull: String? = meta["nonTransaction"]?.jsonPrimitive?.content
 
         fun string(key: String): String = meta[key]!!.jsonPrimitive.content
     }

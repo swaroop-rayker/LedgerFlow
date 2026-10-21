@@ -11,6 +11,7 @@ import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
 import com.ledgerflow.core.domain.usecase.ErasePendingUseCase
+import com.ledgerflow.core.domain.usecase.MarkPendingAsTransactionUseCase
 import com.ledgerflow.core.domain.usecase.ObserveInboxCountsUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
@@ -98,6 +99,7 @@ class InboxFilterChipsTest {
             discardPending = DiscardPendingUseCase(pending),
             restorePending = RestorePendingUseCase(pending),
             erasePending = ErasePendingUseCase(pending),
+            markAsTransaction = MarkPendingAsTransactionUseCase(pending),
             savedStateHandle = route,
         )
         backgroundScope.launch { vm.state.collect { } }

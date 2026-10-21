@@ -58,6 +58,7 @@ public class DefaultPendingRepository @Inject constructor(
             val dao = database?.pendingTransactionDao() ?: return@flatMapLatest flowOf(emptyList())
             val rows = when (filter) {
                 InboxFilter.PENDING -> dao.observePending()
+                InboxFilter.NOT_TRANSACTIONS -> dao.observeNotTransactions()
                 InboxFilter.SUPPRESSED -> dao.observeSuppressed()
                 InboxFilter.DISCARDED -> dao.observeWithStatus(PendingStatus.DISCARDED)
                 InboxFilter.FAILED -> dao.observeWithStatus(PendingStatus.FAILED)
@@ -92,12 +93,14 @@ public class DefaultPendingRepository @Inject constructor(
                 ?: return@flatMapLatest flowOf(InboxFilter.entries.associateWith { 0 })
             combine(
                 dao.observePendingCount(),
+                dao.observeNotTransactionsCount(),
                 dao.observeSuppressedCount(),
                 dao.observeCountWithStatus(PendingStatus.DISCARDED),
                 dao.observeCountWithStatus(PendingStatus.FAILED),
-            ) { pending, suppressed, discarded, failed ->
+            ) { pending, notTransactions, suppressed, discarded, failed ->
                 mapOf(
                     InboxFilter.PENDING to pending,
+                    InboxFilter.NOT_TRANSACTIONS to notTransactions,
                     InboxFilter.SUPPRESSED to suppressed,
                     InboxFilter.DISCARDED to discarded,
                     InboxFilter.FAILED to failed,
@@ -139,6 +142,26 @@ public class DefaultPendingRepository @Inject constructor(
         }.getOrNull()
     }
 
+    /**
+     * Both raw tables, by `raw_ref_id`, without asking which holds the row --
+     * the same shape [markApproved] uses, and for its reason: a `when` on the
+     * source here would be the branch CLAUDE.md §0 forbids outside an adapter.
+     * A receipt's ref is an attachment id and matches neither.
+     *
+     * Retention empties a body to `''` rather than deleting the row, so a blank
+     * is "no longer kept", reported as null.
+     */
+    override suspend fun capturedText(id: String): String? = withContext(io) {
+        val database = openVault() ?: return@withContext null
+        runCatching {
+            val ref = database.pendingTransactionDao().byId(id)?.rawRefId
+                ?: return@runCatching null
+            val body = database.smsRawDao().byId(ref)?.body
+                ?: database.notificationRawDao().byId(ref)?.body
+            body?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
     override suspend fun discard(id: String): Boolean = withContext(io) {
         val database = openVault() ?: return@withContext false
         runCatching {
@@ -150,6 +173,13 @@ public class DefaultPendingRepository @Inject constructor(
         val database = openVault() ?: return@withContext false
         runCatching {
             database.pendingTransactionDao().restore(id) > 0
+        }.getOrDefault(false)
+    }
+
+    override suspend fun markAsTransaction(id: String): Boolean = withContext(io) {
+        val database = openVault() ?: return@withContext false
+        runCatching {
+            database.pendingTransactionDao().markAsTransaction(id) > 0
         }.getOrDefault(false)
     }
 
@@ -190,6 +220,11 @@ public class DefaultPendingRepository @Inject constructor(
                 InboxFilter.SUPPRESSED -> dao.eraseSuppressed()
                 // The queue Law 1 is about. Not emptiable in bulk, by design.
                 InboxFilter.PENDING -> 0
+                // BUG58, D6: retained and visible, never deleted. These are
+                // PENDING rows the classifier labelled, and a mis-labelled
+                // payment must not be one "erase all" away from gone. Discard
+                // first, then erase from Discarded, like any other candidate.
+                InboxFilter.NOT_TRANSACTIONS -> 0
             }
         }.getOrDefault(0)
     }
@@ -305,5 +340,6 @@ public class DefaultPendingRepository @Inject constructor(
         edits = edits,
         editedMerchantName = editedMerchantName,
         editedCategoryName = editedCategoryName,
+        nonTransactionKind = nonTransactionKind,
     )
 }

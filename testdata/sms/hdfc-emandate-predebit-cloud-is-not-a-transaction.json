@@ -1,0 +1,7 @@
+{
+  "sender": "AD-HDFCBK-S",
+  "provenance": "real",
+  "note": "REAL, from the owner's phone (2026-10-21), reported as a BUG58 ghost: HDFC's pre-debit notice for a UPI e-mandate. Money has not moved; the debit itself arrives later as its own message. Substituted: the amount, the merchant and the mandate's UMN hash. The sender header is a placeholder; SMS is assumed from the '-HDFC Bank' signature. It must extract NOTHING and be labelled a bill or due date -- not a balance notice, which 'Maintain Balance' alone suggested.",
+  "nonTransaction": "STATEMENT_OR_DUE",
+  "expected": null
+}

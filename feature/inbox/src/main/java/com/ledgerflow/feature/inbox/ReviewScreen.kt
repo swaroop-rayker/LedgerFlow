@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -111,6 +112,8 @@ private fun ReviewForm(
     ) {
         LfScreenTitle(title = "Review", subtitle = state.provenanceLine())
 
+        state.capturedText?.let { CapturedMessage(it) }
+
         LfTextField(
             value = state.amountText,
             onValueChange = { onEvent(ReviewEvent.AmountChanged(it)) },
@@ -141,6 +144,37 @@ private fun ReviewForm(
             label = "Note",
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+/**
+ * The message as it arrived (BUG58, owner 2026-10-21).
+ *
+ * Above the form, because it is what the form is filled *from*: on a candidate
+ * where nothing was extracted it is the only evidence there is, and before this
+ * existed the user could not tell an OTP from a payment, nor report one.
+ * Selectable, so a message can be copied out and handed over as a fixture.
+ *
+ * The same card as the details below it -- one shape per screen -- and quiet
+ * type: it is reference, not a field.
+ */
+@Composable
+private fun CapturedMessage(text: String) {
+    LfCard {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = "Message",
+                style = LfTheme.typography.label,
+                color = LfTheme.colors.textTertiary,
+            )
+            SelectionContainer {
+                Text(
+                    text = text,
+                    style = LfTheme.typography.bodyM,
+                    color = LfTheme.colors.textSecondary,
+                )
+            }
+        }
     }
 }
 

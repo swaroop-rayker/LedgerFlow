@@ -13,6 +13,7 @@ import com.ledgerflow.core.domain.usecase.ObserveInboxCountsUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
 import com.ledgerflow.core.domain.usecase.ErasePendingUseCase
+import com.ledgerflow.core.domain.usecase.MarkPendingAsTransactionUseCase
 import com.ledgerflow.core.domain.usecase.RestorePendingUseCase
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Money
@@ -103,6 +104,7 @@ class InboxEraseConfirmationTest {
         discardPending = DiscardPendingUseCase(pending),
         restorePending = RestorePendingUseCase(pending),
         erasePending = ErasePendingUseCase(pending),
+        markAsTransaction = MarkPendingAsTransactionUseCase(pending),
     )
 
     private fun ids(): Set<String> = pending.snapshot().keys

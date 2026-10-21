@@ -37,7 +37,7 @@ starts.
 | D3 | Account: profile, email, phone, sign-in/out, delete account, account type | Law 6; privacy; there is no backend | **No LedgerFlow accounts.** "Account" becomes a **local profile** (name, photo) stored in the vault, plus the Google account linked for Drive (D1), shown as "Signed in to Google Drive as …" with sign-out. "Delete account" = erase this install's data (with the purge-style `Warning` confirmation) and unlink Drive. Email/phone are not collected: nothing would use them, and a field that stores PII for no purpose is a liability. |
 | D4 | Change default currency after onboarding | Locked decision: one base currency per install; `amount_minor` is always base | Base currency stays fixed once data exists (changing it would silently relabel every amount). Settings shows it read-only, with symbol, number format (lakh/western grouping) and date format as the adjustable parts. A future "start a new book in another currency" is a separate design. |
 | D5 | Receipts auto-delete after a period | ADR-0023 declined a timed purge | Owner reverses ADR-0023's decision explicitly (superseding ADR), or v2 ships "select and delete" + a reminder instead of silent auto-deletion. Recommendation: allow auto-delete **only of receipts already backed up** to a verified backup, never of the only copy. |
-| D6 | Ghost Inbox entries (BUG-B below) | §5.1 / CLAUDE.md §7: never silently drop a financial SMS | Recognised non-transactions (OTP, balance, statement, promo) are **retained and visible** under a new Inbox filter ("Not transactions"), not deleted and not in the main queue. That keeps the guarantee's substance (nothing lost) while ending the noise. Owner confirms. |
+| D6 | Ghost Inbox entries (BUG-B below) | §5.1 / CLAUDE.md §7: never silently drop a financial SMS | Recognised non-transactions (OTP, balance, statement, promo) are **retained and visible** under a new Inbox filter ("Not transactions"), not deleted and not in the main queue. That keeps the guarantee's substance (nothing lost) while ending the noise. **Confirmed by the owner, 2026-10-20** — built as BUG58. |
 | D7 | Settings as a sixth bottom-bar slot | Material's 3–5 destinations; CLAUDE.md compactness brief | Five slots are already used (Home, Ledger, +, Analytics, More). **Recommend: Settings replaces More in the bar, and More's contents move** — tools (goals, recurring, debts, utilities) into a "Tools" section reached from Home/More-as-a-screen, or keep More and put Settings behind a gear in every tab header. Owner picks. |
 | D8 | Import (Excel/CSV) | Law 1: nothing reaches the ledger without a tap | Imported rows land in the Inbox as `IMPORT` candidates (the source already exists), approvable in bulk with one confirmed tap per batch. Owner confirms "bulk approve" satisfies Law 1. |
 
@@ -89,6 +89,12 @@ due-date reminders, offers/cashback promos, failed/declined/reversed notices
 transactions" filter, never notify, and can be moved back with one tap. Also
 checked: whether dedupe or the parser mis-handled a real transaction into an
 empty row (false negative), using the fixtures.
+
+**Built (2026-10-20) as BUG58, after D6 was confirmed** — see SPEC §5.1 and
+§8. Six labels (a collect request is the sixth: the corpus had one and none of
+the five fitted). Not done, and recorded as SPEC §16 Q25: ghosts that predate
+schema v12 are not re-labelled, and a failed notice is labelled, not linked.
+The owner's real ghost messages are still to be added as redacted fixtures.
 
 **Related copy fix:** Home and onboarding say "Most UPI payments never send an
 SMS" — the owner's banks (HDFC for all amounts, SBI above a threshold) show the

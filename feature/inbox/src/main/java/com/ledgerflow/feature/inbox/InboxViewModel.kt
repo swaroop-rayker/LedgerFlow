@@ -8,6 +8,7 @@ import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
 import com.ledgerflow.core.domain.usecase.InboxException
+import com.ledgerflow.core.domain.usecase.MarkPendingAsTransactionUseCase
 import com.ledgerflow.core.domain.usecase.ObserveInboxCountsUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
@@ -45,6 +46,7 @@ public class InboxViewModel @Inject constructor(
     private val discardPending: DiscardPendingUseCase,
     private val restorePending: RestorePendingUseCase,
     private val erasePending: ErasePendingUseCase,
+    private val markAsTransaction: MarkPendingAsTransactionUseCase,
     // Last and defaulted, so the tests that build this directly are untouched;
     // Hilt supplies the real one from the back stack entry.
     savedStateHandle: SavedStateHandle = SavedStateHandle(),
@@ -126,6 +128,12 @@ public class InboxViewModel @Inject constructor(
 
             is InboxEvent.Restored -> viewModelScope.launch {
                 restorePending(event.pendingId)
+            }
+
+            // BUG58: the row leaves this filter because the database says so,
+            // the same as a discard. Not announced -- the user is looking at it.
+            is InboxEvent.MarkedAsTransaction -> viewModelScope.launch {
+                if (markAsTransaction(event.pendingId)) post("Moved to Pending.")
             }
 
             InboxEvent.UndoDiscard -> {

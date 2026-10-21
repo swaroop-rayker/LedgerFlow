@@ -182,7 +182,8 @@ public interface IngestDiagnosticsDao {
      */
     @Query(
         "SELECT MIN(created_at) FROM pending_transaction " +
-            "WHERE status = 'PENDING' AND suppressed_by_id IS NULL",
+            "WHERE status = 'PENDING' AND suppressed_by_id IS NULL " +
+            "AND non_transaction_kind IS NULL",
     )
     public suspend fun oldestWaitingSince(): Long?
 }
