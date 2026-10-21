@@ -11,6 +11,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.inbox.InboxFilter
+import com.ledgerflow.core.domain.inbox.PendingRepository
+import com.ledgerflow.core.domain.ingest.CaptureOutcome
+import com.ledgerflow.core.domain.ingest.DedupeKey
+import com.ledgerflow.core.domain.ingest.ExtractedDirection
+import com.ledgerflow.core.domain.ingest.ExtractedTransaction
+import com.ledgerflow.core.domain.ingest.IngestSourceType
+import com.ledgerflow.core.domain.ingest.PendingCandidate
+import com.ledgerflow.core.domain.ingest.RawIngestEvent
+import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
@@ -21,6 +31,7 @@ import com.ledgerflow.core.domain.vault.VaultOutcome
 import com.ledgerflow.core.domain.vault.VaultRepository
 import com.ledgerflow.core.domain.vault.VaultState
 import com.ledgerflow.core.model.EntryAssignment
+import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
 import dagger.hilt.android.AndroidEntryPoint
@@ -60,12 +71,101 @@ class BenchmarkSeedActivity : ComponentActivity() {
 
     @Inject lateinit var approve: ApproveTransactionUseCase
 
+    @Inject lateinit var pending: PendingRepository
+
+    @Inject lateinit var rawIngest: RawIngestRepository
+
     private var status by mutableStateOf("Starting")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { LfTheme { Text(text = status) } }
-        lifecycleScope.launch { status = runCatching { seed() }.getOrElse { "Failed: $it" } }
+        val inbox = intent.getStringExtra(EXTRA_INBOX)
+        lifecycleScope.launch {
+            status = runCatching {
+                val seeded = seed()
+                when {
+                    !seeded.startsWith("Seeded") -> seeded
+                    inbox == INBOX_ON -> fillInbox()
+                    inbox == INBOX_OFF -> emptyInbox()
+                    else -> seeded
+                }
+            }.getOrElse { "Failed: $it" }
+        }
+    }
+
+    /**
+     * Puts [INBOX_ROWS] candidates in the Inbox for `InboxScrollBenchmark`
+     * (PERF-120HZ-PLAN §3). Reports "Inbox: N pending".
+     *
+     * **Through the capture write, never the ledger.** Each is a raw SMS row
+     * (`RawIngestRepository.record`) and its candidate
+     * (`recordParseOutcome`), the two writes `ParseIngestWorker` makes, so
+     * nothing reaches `ledger_entry` (Law 1). No notification is posted: that
+     * is the worker's step, not the write's.
+     *
+     * **Discarded between runs, restored here.** [emptyInbox] discards them
+     * after each benchmark, so Home's "To review" card, the other benchmarks
+     * and the store screenshots taken from this vault see no pending rows.
+     * Restoring brings the same rows back, so every run scrolls the same list.
+     * Only when there is nothing to restore (the 30-day purge, or a first run)
+     * are new ones written, with a fresh generation in their bodies so the raw
+     * table does not absorb them as re-deliveries.
+     *
+     * The mix is the Inbox's: mostly parsed debits with Review and Approve, a
+     * fifth with no direction read (Review only), and a fifth with nothing read
+     * at all (§5.1's never-drop row). Amounts are distinct, so no candidate is
+     * suppressed as another's duplicate (§3.1).
+     */
+    private suspend fun fillInbox(): String {
+        pending.observe(InboxFilter.DISCARDED).first()
+            .filter { it.extracted.referenceNo?.startsWith(BENCH_REF) == true }
+            .forEach { pending.restore(it.id) }
+        val existing = pending.observe(InboxFilter.PENDING).first().size
+        if (existing >= INBOX_ROWS) return "Inbox: $existing pending"
+
+        val marker = getSharedPreferences(MARKER_FILE, Context.MODE_PRIVATE)
+        val generation = marker.getInt(MARKER_INBOX_GENERATION, 0) + 1
+        marker.edit().putInt(MARKER_INBOX_GENERATION, generation).apply()
+        val now = System.currentTimeMillis()
+        repeat(INBOX_ROWS - existing) { i ->
+            val (name, _) = MERCHANTS[i % MERCHANTS.size]
+            val amount = Money(INBOX_BASE_MINOR + i * INBOX_STEP_MINOR)
+            val at = now - i * INBOX_SPACING_MS
+            val ref = "$BENCH_REF$generation-$i"
+            val extracted = when (i % INBOX_MIX) {
+                0 -> ExtractedTransaction(referenceNo = ref)
+                1 -> ExtractedTransaction(
+                    amount = amount, currency = "INR", merchantRaw = name.uppercase(),
+                    referenceNo = ref, occurredAt = at, confidence = PARTIAL_CONFIDENCE,
+                )
+                else -> ExtractedTransaction(
+                    amount = amount, currency = "INR", direction = ExtractedDirection.DEBIT,
+                    merchantRaw = name.uppercase(), accountLast4 = "6402",
+                    referenceNo = ref, occurredAt = at, confidence = FULL_CONFIDENCE,
+                )
+            }
+            val body = "Rs ${amount.minor / 100} debited from A/c XX6402 to ${name.uppercase()}. Ref $ref"
+            val raw = rawIngest.record(RawIngestEvent(IngestSourceType.SMS, BENCH_SENDER, body, at))
+            if (raw is CaptureOutcome.Recorded) {
+                rawIngest.recordParseOutcome(
+                    rawId = raw.rawId,
+                    ruleId = null,
+                    candidate = PendingCandidate(
+                        source = EntrySource.SMS,
+                        extracted = extracted,
+                        dedupeKey = DedupeKey.compute(extracted, raw.rawId),
+                    ),
+                )
+            }
+        }
+        return "Inbox: ${pending.observe(InboxFilter.PENDING).first().size} pending"
+    }
+
+    /** Discards every pending candidate, so the vault is as other benchmarks expect it. */
+    private suspend fun emptyInbox(): String {
+        pending.observe(InboxFilter.PENDING).first().forEach { pending.discard(it.id) }
+        return "Inbox: ${pending.observe(InboxFilter.PENDING).first().size} pending"
     }
 
     private suspend fun seed(): String {
@@ -169,6 +269,21 @@ class BenchmarkSeedActivity : ComponentActivity() {
         const val MARKER_DONE = "done"
         const val MARKER_COUNT = "count"
         const val MARKER_NEXT_DAY = "nextEpochDay"
+        const val MARKER_INBOX_GENERATION = "inboxGeneration"
+
+        /** `--es inbox on|off`: fill the Inbox for `InboxScrollBenchmark`, or discard what it left. */
+        const val EXTRA_INBOX = "inbox"
+        const val INBOX_ON = "on"
+        const val INBOX_OFF = "off"
+        const val INBOX_ROWS = 120
+        const val INBOX_MIX = 5
+        const val INBOX_BASE_MINOR = 10_000L // Rs 100
+        const val INBOX_STEP_MINOR = 137L // distinct amounts: no candidate is another's duplicate
+        const val INBOX_SPACING_MS = 3_600_000L // an hour apart
+        const val PARTIAL_CONFIDENCE = 0.4
+        const val FULL_CONFIDENCE = 0.9
+        const val BENCH_REF = "BENCH"
+        const val BENCH_SENDER = "AD-BNKSMS"
         const val TAG = "BenchmarkSeed"
         const val NANOS_PER_SECOND = 1_000_000_000L
 

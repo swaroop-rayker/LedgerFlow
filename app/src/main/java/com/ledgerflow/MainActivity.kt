@@ -156,44 +156,61 @@ private fun LedgerFlowApp(
 
         AppRoute.Ready -> {
             val prompt by appViewModel.notificationSetupPrompt.collectAsStateWithLifecycle()
-            when {
-                // A tap on an Inbox notification names a specific candidate, and
-                // it outranks the explainer unconditionally. Swallowing a deep
-                // link to show a setup screen would answer a user who asked for
-                // one thing with an unrelated one, and the explainer has two
-                // standing routes back while the tap has none.
-                deepLink != null -> Shell(deepLink, onDeepLinkHandled)
-
-                // §5.2's explainer, at the first moment there is a vault behind
-                // it. See AppViewModel.notificationSetupPrompt for why this is
-                // here and not inside §7.4's gate.
-                prompt == NotificationSetupPrompt.Show -> NotificationAccessRoute(
-                    onDone = appViewModel::dismissNotificationSetup,
-                    // Not "Done": nothing has necessarily been done. This is the
-                    // one presentation the user did not ask for, so the label
-                    // has to make declining an obvious, unembarrassed option --
-                    // a "Done" on an ungranted screen reads as the app pretending
-                    // the user complied.
-                    doneLabel = "Not now",
-                )
-
-                // Undecided renders the shell rather than a spinner: the flag
-                // read is a single small file and the alternative is a blank
-                // frame on every launch of an install that has already seen it,
-                // which is all of them after the first.
-                else -> Shell(deepLink, onDeepLinkHandled)
-            }
+            ReadyRoute(
+                deepLink = deepLink,
+                prompt = prompt,
+                explainer = {
+                    NotificationAccessRoute(
+                        onDone = appViewModel::dismissNotificationSetup,
+                        // Not "Done": nothing has necessarily been done. This is
+                        // the one presentation the user did not ask for, so the
+                        // label has to make declining an obvious, unembarrassed
+                        // option -- a "Done" on an ungranted screen reads as the
+                        // app pretending the user complied.
+                        doneLabel = "Not now",
+                    )
+                },
+                shell = { LedgerFlowShell(deepLink = deepLink, onDeepLinkHandled = onDeepLinkHandled) },
+            )
         }
     }
 }
 
 /**
- * The shell, named so the branch above reads as three alternatives rather than
- * as one alternative and two copies of an argument list.
+ * What an unlocked vault shows: §5.2's explainer or the shell.
+ *
+ * **The shell has exactly one call site** (BUG59). It used to be hosted from
+ * two `when` branches, "a link is waiting" and "everything else", and the shell
+ * clears the link once it has navigated. Clearing it moved the shell from one
+ * branch to the other, which to Compose is a different place in the tree, so
+ * the shell and its nav controller were thrown away and rebuilt on Home: every
+ * Inbox link opened the Inbox for a frame and then left the user on Home.
  */
 @Composable
-private fun Shell(deepLink: String?, onDeepLinkHandled: () -> Unit) {
-    LedgerFlowShell(deepLink = deepLink, onDeepLinkHandled = onDeepLinkHandled)
+internal fun ReadyRoute(
+    deepLink: String?,
+    prompt: NotificationSetupPrompt,
+    explainer: @Composable () -> Unit,
+    shell: @Composable () -> Unit,
+) {
+    // A tap on an Inbox notification names a specific candidate, and it
+    // outranks the explainer unconditionally. Swallowing a deep link to show a
+    // setup screen would answer a user who asked for one thing with an
+    // unrelated one, and the explainer has two standing routes back while the
+    // tap has none. Remembered, because the shell clears the link as soon as
+    // it has acted on it: "outranks" has to outlast that, or the explainer
+    // takes the screen from the Inbox the user just opened. It is still shown
+    // on the next launch, since the prompt stays `Show` until dismissed.
+    var openedByLink by rememberSaveable { mutableStateOf(false) }
+    if (deepLink != null && !openedByLink) openedByLink = true
+
+    // §5.2's explainer, at the first moment there is a vault behind it. See
+    // AppViewModel.notificationSetupPrompt for why this is here and not inside
+    // §7.4's gate. Undecided renders the shell rather than a spinner: the flag
+    // read is a single small file and the alternative is a blank frame on every
+    // launch of an install that has already seen it, which is all of them after
+    // the first.
+    if (prompt == NotificationSetupPrompt.Show && !openedByLink) explainer() else shell()
 }
 
 @Composable

@@ -1,8 +1,12 @@
 # Plan — 120 Hz hardening (P5 addendum)
 
-Status: **proposed, not started.** Written 2026-09-30 after P5 step 1
-(`c5200a6`, `68f38b6`, `6ae169f`). Nothing here is built until the owner says
-so.
+Status: **paused by the owner, 2026-10-21, for V2 features.** Written
+2026-09-30 after P5 step 1 (`c5200a6`, `68f38b6`, `6ae169f`). Done: §2.1–2.3
+and §2.5 (the Ledger row), §5 (tab switches, BUG57) and §6.1 (fully drawn).
+§3 was tried, measured slower and reverted. The baseline profile was
+regenerated after §2 (`822594a`, PR #4's branch). Open, and to start only at
+the owner's word: §1's tooling in `scripts/perf/`, §2.4, §4 and §6.2. `InboxScrollBenchmark`, `TabSwitchBenchmark`
+and `LedgerScrollBenchmark` are the measuring tools that exist.
 
 ## 0. Where we stand (measured, SM-S721B, 2026-09-29)
 
@@ -158,6 +162,38 @@ rebuilt per frame during pan?) against §11's pre-binning rule.
 The time chart's draw cost was its text, measured on every draw; fixed
 2026-10-19 (§5). `LfMirroredBarChart` and `LfTreemap` still measure in draw.
 The mirrored chart measures one string, which the measurer's cache holds.
+
+**Tried 2026-10-20, measured, reverted. The owner stopped the rows work.**
+§2's rules were applied to all four lists, plus a one-node `LfButton`
+`Text`/`Inline` action in place of Material's `TextButton`. Each list was held
+to its old composition by a pixel test, and no golden changed. On the one
+surface with a benchmark, the new rows were slower, so all of it was reverted.
+`InboxScrollBenchmark` (120 seeded candidates, `:benchmark`) stays.
+
+Measured on LF Bench, SM-S721B, thermal status 0, A-B-B-A, 5 iterations of 4
+flings each. CPU time per frame, P50 / P90 / P99:
+
+| Build | Start | P50 / P90 / P99 | Late frames |
+|---|---|---|---|
+| A: before | 36.3 °C | 3.00 / 5.03 / 6.93 ms | 2 |
+| B: flat rows | 36.3 °C | 3.35 / 5.91 / 7.41 ms | 3 |
+| B: flat rows | 37.0 °C, the 15-minute cool-down cap ran out | 3.85 / 5.94 / 8.46 ms | 6 |
+| A: before | 36.3 °C | 3.14 / 5.44 / 7.18 ms | 1 |
+
+- **The Inbox was never over budget.** Its P99 was under 8.3 ms before
+  anything changed, so there was nothing for late frames to show.
+- **The flat row built about 7 % cheaper but measured 25–30 % dearer.** From
+  the traces, per prefetched row: compose 1238/1467 → 1172/1335 µs, measure
+  1050/1221 → 1380/1527 µs. It measured text more often, 4.3 measures per row
+  against 3.1, although it had one text fewer. The cause was not found.
+- **Fewer nodes is not the same as cheaper.** Reading the swipe offset in
+  composition, to build the Discard track only mid-swipe, also cost one extra
+  recomposition per new row.
+
+The lesson for §2's numbers: count measure passes, not only nodes.
+
+Found while building the benchmark: BUG59. Every Inbox link (every
+notification tap) landed on Home. Fixed separately.
 
 ## 4. GPU side
 

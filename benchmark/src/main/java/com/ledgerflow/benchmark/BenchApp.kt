@@ -21,6 +21,8 @@ private const val SEED_TIMEOUT_MS = 3 * 60 * 1000L
 private const val UI_TIMEOUT_MS = 30_000L
 private const val FIRST_RUN_SHEET_MS = 5_000L
 private const val POLL_MS = 250L
+// BenchmarkSeedActivity.INBOX_ROWS.
+private const val INBOX_ROWS = 120
 private const val MAX_WALK_DEPTH = 40
 private const val SWIPE_STEPS = 6
 private const val EDGE_DIVISOR = 5
@@ -54,6 +56,23 @@ internal fun MacrobenchmarkScope.ensureSeeded() {
 }
 
 /**
+ * Fills the benchmark vault's Inbox ([on]) or discards what is there
+ * (`BenchmarkSeedActivity`'s `inbox` extra), then stops the app so the next
+ * start is a fresh process. Fails loudly rather than measure the wrong list.
+ */
+internal fun UiDevice.setInbox(on: Boolean) {
+    executeShellCommand("am start -W -n $SEED_ACTIVITY --es inbox ${if (on) "on" else "off"}")
+    val report = awaitAppNode(SEED_TIMEOUT_MS) { node ->
+        node.text?.let { it.startsWith("Inbox:") || it.startsWith("Failed") } == true
+    }?.text?.toString()
+    val count = report?.removePrefix("Inbox: ")?.substringBefore(" ")?.toIntOrNull()
+    check(count != null && (if (on) count >= INBOX_ROWS else count == 0)) {
+        "The benchmark Inbox was not ${if (on) "filled" else "emptied"}: $report"
+    }
+    executeShellCommand("am force-stop $TARGET_PACKAGE")
+}
+
+/**
  * A fresh install opens on the notification-capture sheet, over the tabs. It is
  * answered once, as a user would ("Not now"), and stays answered, so every
  * measured start after this one opens on Home.
@@ -75,6 +94,16 @@ internal fun UiDevice.openTab(label: String) {
         "No \"$label\" tab on screen: ${screenText()}"
     }
     val bounds = Rect().also(tab::getBoundsInScreen)
+    click(bounds.centerX(), bounds.centerY())
+    waitForIdle()
+}
+
+/** Taps the first node showing exactly [text], once it has appeared. */
+internal fun UiDevice.tapText(text: String) {
+    val node = checkNotNull(awaitAppNode(UI_TIMEOUT_MS) { it.text?.toString() == text }) {
+        "No \"$text\" on screen: ${screenText()}"
+    }
+    val bounds = Rect().also(node::getBoundsInScreen)
     click(bounds.centerX(), bounds.centerY())
     waitForIdle()
 }

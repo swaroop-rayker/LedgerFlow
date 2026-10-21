@@ -1,9 +1,21 @@
 # Plan — LedgerFlow v2 (for general users)
 
-Status: **proposed, not started.** Written 2026-09-30 from the owner's v2 brief.
-v2 begins **after P5 is complete** (steps 2–6: XLSX export, diagnostics,
-accessibility pass and goldens, `targetSdk` 37, Play release track), and only
-when the owner says so. Nothing in this document has been implemented.
+Status: **V2-1 built, not all merged (2026-10-21).** Written 2026-09-30 from
+the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
+
+| V2-1 item | State |
+|---|---|
+| BUG-A transitions | Fixed as BUG57, PR #2 (open) |
+| BUG-B ghost entries | Fixed as BUG58 (schema v12, D6 confirmed), branch `claude/elastic-bardeen-33af7d`, no PR yet |
+| BUG-C Home v1 | On `main` (BUG54, `2109191`, `fd5e635`) |
+| BUG59 Inbox links land on Home | Fixed, branch `claude/elated-chatelet-0425ad` (stacked on PR #4) |
+| Perf alongside | PRs #1, #3 and #4 open; PERF-120HZ §3 tried and reverted |
+
+**Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
+the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
+FX ADR (D2) take the next free numbers when they are written, not 0029/0030.
+Schema v12 is BUG58's, so merchant categories (§5.5) become v13 and V2-7's
+tables v14 and later.
 
 v1 was built for one user and one phone. v2 is for general users, adds
 opt-in network features, and **keeps the privacy promise**: no LedgerFlow
@@ -86,6 +98,15 @@ supplement**, with the allowlist seeded accordingly (smsFull); playSafe, which
 has no SMS, explains its limit plainly.
 
 ### BUG-C — Home says "Nothing here yet" with entries in the vault
+**Status: built 2026-10-16 as SPEC §8 BUG54 (Home v1, on `main`).** The card
+list below is what shipped, except that budgets use `LfBudgetBar` (the owner
+chose the bar over the ring).
+
+**Found alongside, BUG59 (2026-10-20):** every `ledgerflow://inbox` link, which
+means every Inbox notification tap, opened the Inbox for a frame and then left
+the user on Home. Home's "To review" card was the only way in that worked.
+Fixed with a regression test and checked on the device; see SPEC §8.
+
 **Cause, from the code:** it is not a data bug — Home was never built.
 `DashboardScreen` draws its "Nothing here yet" empty state **unconditionally**
 after the two banners, whatever the vault holds. Its KDoc says the real content
@@ -334,13 +355,13 @@ merchant_category`, a literal `'DEBIT'`/`'CREDIT'` bound per CLAUDE.md's rule an
 
 ### 5.5 Schema and tests
 
-Schema **v12**: `merchant_category` (id, name, color_argb, sort_order,
+Schema **v13** (v12 went to BUG58): `merchant_category` (id, name, color_argb, sort_order,
 created_at, updated_at, deleted_at — the same shape and soft-delete rule as
 `category`, flat) and nullable `merchant.merchant_category_id`. Migration by
 `CREATE new / INSERT SELECT / DROP / RENAME`, with `MigrationTest`, the
-committed `12.json`, and `BackupPayload` fields defaulting to what the migration
+committed `13.json`, and `BackupPayload` fields defaulting to what the migration
 writes (`NULL` for every existing merchant — all start Uncategorised).
-`OlderSchemaBackupRestoresTest` gains a v11 payload.
+`OlderSchemaBackupRestoresTest` gains a v12 payload.
 
 Tests: categorisation only ever changes from the Merchants section (a guard
 that ingest, review and entry never write `merchant_category_id`); delete with
@@ -383,14 +404,14 @@ a merchant's category. Either would be its own owner decision.
 
 | Phase | Scope | Needs first |
 |---|---|---|
-| V2-0 | Owner decisions D1–D8; ADR-0029 (network), ADR-0030 (FX), ADR for D5 | owner |
+| V2-0 | Owner decisions D1–D8; ADRs for the network (D1), FX (D2) and D5, at the next free numbers | owner; D6 settled 2026-10-20 |
 | V2-1 | BUG-A transitions, BUG-B ghost entries + copy, BUG-C Home v1 | D6; ghost-message evidence; Home card list |
 | V2-2 | Settings destination and restructure (moves only, no new features) | D7 |
 | V2-3 | Appearance, Currency & region, Notifications, App lock, About | D4 |
 | V2-4 | Data & sync: Drive, Import (CSV/XLSX), Restore entry | D1, D8; P5 XLSX |
 | V2-5 | Receipts management | D5 |
-| V2-6 | Merchant categories (schema v12): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; owner to confirm §5.2's seed list |
-| V2-7 | More: recurring, goals, debts, utilities (schema v13+) | D2 for converter |
+| V2-6 | Merchant categories (schema v13): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; owner to confirm §5.2's seed list |
+| V2-7 | More: recurring, goals, debts, utilities (schema v14+) | D2 for converter |
 | V2-8 | Recommended additions the owner picks; Play listing for v2 | owner |
 
 `docs/PERF-120HZ-PLAN.md` runs alongside from V2-1 (its transition work is
