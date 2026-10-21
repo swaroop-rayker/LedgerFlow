@@ -6,7 +6,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -29,7 +29,8 @@ public object LfIcons {
 
     public val Dashboard: ImageVector = Icons.Filled.Home
     public val Ledger: ImageVector = Icons.AutoMirrored.Filled.List
-    public val More: ImageVector = Icons.Filled.Menu
+    /** The Settings tab (V2-2, which replaced More in the bar). */
+    public val Settings: ImageVector = Icons.Filled.Settings
     public val Add: ImageVector = Icons.Filled.Add
 
     /** Dismiss. Never used for a destructive action without a confirmation. */

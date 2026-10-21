@@ -64,10 +64,10 @@ import com.ledgerflow.feature.ledger.LedgerEvent
 import com.ledgerflow.feature.ledger.LedgerScreen
 import com.ledgerflow.feature.ledger.LedgerViewModel
 import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
-import com.ledgerflow.feature.settings.MoreScreen
+import com.ledgerflow.feature.settings.SettingsScreen
+import com.ledgerflow.feature.settings.SettingsViewModel
 import com.ledgerflow.feature.settings.backup.BackupNowScreen
 import com.ledgerflow.feature.settings.backup.BackupNowViewModel
-import com.ledgerflow.feature.settings.MoreViewModel
 import com.ledgerflow.feature.settings.diagnostics.DiagnosticsEvent
 import com.ledgerflow.feature.settings.diagnostics.DiagnosticsScreen
 import com.ledgerflow.feature.settings.diagnostics.DiagnosticsViewModel
@@ -270,8 +270,8 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
         AnalyticsDialogs(state = state, onEvent = viewModel::onEvent)
     }
 
-    composable<Destination.More> {
-        val viewModel: MoreViewModel = hiltViewModel()
+    composable<Destination.Settings> {
+        val viewModel: SettingsViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
         // §5.2's resume poll, for the row that reports whether capture works.
         // The user's route to fixing it leaves the app entirely, so the resume
@@ -280,7 +280,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             viewModel.refresh()
             onPauseOrDispose { }
         }
-        MoreScreen(
+        SettingsScreen(
             state = state,
             onCategories = { navController.navigate(Destination.Categories) },
             onBudgets = { navController.navigate(Destination.Budgets) },
@@ -551,7 +551,7 @@ private val Destination.label: String
         Destination.Dashboard -> "Home"
         Destination.Ledger -> "Ledger"
         Destination.Analytics -> "Analytics"
-        Destination.More -> "More"
+        Destination.Settings -> "Settings"
         is Destination.Entry -> "Add"
         Destination.Categories -> "Categories"
         Destination.Budgets -> "Budgets"
@@ -565,10 +565,11 @@ private val Destination.label: String
         Destination.NotificationAccess -> "Notifications"
     }
 
+/** Only the bar draws an icon, so only its four destinations have one of their own. */
 private val Destination.icon
     get() = when (this) {
         Destination.Dashboard -> LfIcons.Dashboard
         Destination.Ledger -> LfIcons.Ledger
         Destination.Analytics -> LfIcons.Analytics
-        else -> LfIcons.More
+        else -> LfIcons.Settings
     }

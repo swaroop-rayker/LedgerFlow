@@ -120,7 +120,7 @@ class Bug57_TabSwitchDoesNotOverlapScreensTest {
                         composable<Destination.Dashboard> { Lines("Home", HOME_INK) }
                         composable<Destination.Ledger> { LedgerList() }
                         composable<Destination.Analytics> { Lines("Analytics", OTHER_INK) }
-                        composable<Destination.More> { Lines("More", OTHER_INK) }
+                        composable<Destination.Settings> { Lines("Settings", OTHER_INK) }
                         composable<Destination.Entry> { Lines("Entry form", OTHER_INK) }
                     }
                 }

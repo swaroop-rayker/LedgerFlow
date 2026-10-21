@@ -5,7 +5,7 @@ import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import org.junit.Test
 
 /**
- * What the More tab's notification row says, per health state (SPEC.md §5.2).
+ * What the Settings tab's notification row says, per health state (SPEC.md §5.2).
  *
  * The row is the standing route back to the explainer once the first-run
  * presentation has been dismissed, so it is the surface a user reaches for when
@@ -19,7 +19,7 @@ import org.junit.Test
 class CaptureRowTest {
 
     private fun subtitleFor(health: NotificationCaptureHealth) =
-        captureSubtitle(MoreUiState(captureHealth = health))
+        captureSubtitle(SettingsUiState(captureHealth = health))
 
     /**
      * Every state says something different.
@@ -76,7 +76,7 @@ class CaptureRowTest {
     /** The row's default, which is what the screen renders on first composition. */
     @Test
     fun defaultState_rendersTheUnpolledSubtitle() {
-        assertThat(captureSubtitle(MoreUiState()))
+        assertThat(captureSubtitle(SettingsUiState()))
             .isEqualTo(subtitleFor(NotificationCaptureHealth.RECONNECTING))
     }
 }

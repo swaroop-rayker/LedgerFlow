@@ -28,8 +28,13 @@ public sealed interface Destination {
     @Serializable
     public data object Analytics : Destination
 
+    /**
+     * The fourth tab (V2-2, `docs/V2-PLAN.md` D7). It replaced More in the bar,
+     * and every row More had moved here; the one tool, Diagnostics, is a
+     * section of it rather than a screen of one row.
+     */
     @Serializable
-    public data object More : Destination
+    public data object Settings : Destination
 
     /**
      * Full-screen, reached from the centre action — or from a pending row in
@@ -47,23 +52,23 @@ public sealed interface Destination {
     @Serializable
     public data class Entry(val draftId: String? = null) : Destination
 
-    /** Reached from More. */
+    /** Reached from Settings. */
     @Serializable
     public data object Categories : Destination
 
-    /** Budget management (§5.7). Reached from More, like Categories. */
+    /** Budget management (§5.7). Reached from Settings, like Categories. */
     @Serializable
     public data object Budgets : Destination
 
     @Serializable
     public data object Export : Destination
 
-    /** The bin, reached from More. Everything deleted, both books (ADR-0015). */
+    /** The bin, reached from Settings. Everything deleted, both books (ADR-0015). */
     @Serializable
     public data object DeletedEntries : Destination
 
     /**
-     * "Back up now", reached from More (§16 Q23). Full-screen: it takes the 24
+     * "Back up now", reached from Settings (§16 Q23). Full-screen: it takes the 24
      * words, and a bottom bar under that is an invitation to wander off with
      * them half-typed.
      */
@@ -83,7 +88,7 @@ public sealed interface Destination {
     @Serializable
     public data class Inbox(val filter: String? = null) : Destination
 
-    /** Ingest diagnostics (P5), reached from More. */
+    /** Ingest diagnostics (P5), reached from Settings. */
     @Serializable
     public data object Diagnostics : Destination
 
@@ -97,11 +102,11 @@ public sealed interface Destination {
     public data object ScanReceipt : Destination
 
     /**
-     * §5.2's permission explainer, reached from More and from the Dashboard
+     * §5.2's permission explainer, reached from Settings and from the Dashboard
      * health banner.
      *
      * **Two entry points to one screen, and both are needed.** The banner is
-     * where a user *notices* capture is not working; More is where they go
+     * where a user *notices* capture is not working; Settings is where they go
      * looking when nothing has told them. The same destination serves the
      * first-run presentation too, which is rendered outside this graph — the
      * vault has just been created and the shell does not exist yet — so the
@@ -132,5 +137,5 @@ internal val BottomBarDestinations: List<Destination> = listOf(
     Destination.Dashboard,
     Destination.Ledger,
     Destination.Analytics,
-    Destination.More,
+    Destination.Settings,
 )

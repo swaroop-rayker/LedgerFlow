@@ -19,20 +19,20 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Everything the More tab asks its ViewModel to do. */
-public sealed interface MoreEvent {
+/** Everything the Settings tab asks its ViewModel to do. */
+public sealed interface SettingsEvent {
 
     /** Opens the confirmation. Does not delete anything by itself. */
-    public data object ReceiptDeleteRequested : MoreEvent
+    public data object ReceiptDeleteRequested : SettingsEvent
 
     /** Irreversible (ADR-0023). */
-    public data object ReceiptDeleteConfirmed : MoreEvent
+    public data object ReceiptDeleteConfirmed : SettingsEvent
 
-    public data object ReceiptDeleteDismissed : MoreEvent
+    public data object ReceiptDeleteDismissed : SettingsEvent
 }
 
 /**
- * The More tab's state (SPEC.md §9.3).
+ * The Settings tab's state (SPEC.md §9.3; it was the More tab until V2-2).
  *
  * It had no ViewModel until the bin arrived, because until then every row on it
  * was a static label over a navigation callback. This one still is a navigation
@@ -43,7 +43,7 @@ public sealed interface MoreEvent {
  * counts and points.
  */
 @Immutable
-public data class MoreUiState(
+public data class SettingsUiState(
     /**
      * Deleted entries across **both** books.
      *
@@ -102,7 +102,7 @@ public data class MoreUiState(
 )
 
 @HiltViewModel
-public class MoreViewModel @Inject constructor(
+public class SettingsViewModel @Inject constructor(
     ledger: LedgerRepository,
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
     private val attachments: AttachmentRepository,
@@ -138,14 +138,14 @@ public class MoreViewModel @Inject constructor(
 
     private val confirmingDelete = MutableStateFlow(false)
 
-    public val state: StateFlow<MoreUiState> = combine(
+    public val state: StateFlow<SettingsUiState> = combine(
         ledger.observeDeletedCount(LedgerType.DEBIT),
         ledger.observeDeletedCount(LedgerType.CREDIT),
         captureHealth,
         receipts,
         confirmingDelete,
     ) { debits, credits, health, images, confirming ->
-        MoreUiState(
+        SettingsUiState(
             deletedCount = debits + credits,
             isLoaded = true,
             captureHealth = health,
@@ -159,7 +159,7 @@ public class MoreViewModel @Inject constructor(
         .combine(backups.nightlyBackupsEnabled()) { state, nightly ->
             state.copy(nightlyBackupsEnabled = nightly)
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), MoreUiState())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
     init {
         refresh()
@@ -173,16 +173,16 @@ public class MoreViewModel @Inject constructor(
         }
     }
 
-    public fun onEvent(event: MoreEvent) {
+    public fun onEvent(event: SettingsEvent) {
         when (event) {
             // The row opens the confirmation rather than doing anything, even
             // at zero: a destructive control that is sometimes inert teaches
             // people to tap it without reading.
-            MoreEvent.ReceiptDeleteRequested -> confirmingDelete.value = true
+            SettingsEvent.ReceiptDeleteRequested -> confirmingDelete.value = true
 
-            MoreEvent.ReceiptDeleteDismissed -> confirmingDelete.value = false
+            SettingsEvent.ReceiptDeleteDismissed -> confirmingDelete.value = false
 
-            MoreEvent.ReceiptDeleteConfirmed -> viewModelScope.launch {
+            SettingsEvent.ReceiptDeleteConfirmed -> viewModelScope.launch {
                 attachments.deleteAll()
                 confirmingDelete.value = false
                 // Re-measured rather than assumed to be zero: a failed unlink

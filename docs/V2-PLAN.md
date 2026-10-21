@@ -1,15 +1,16 @@
 # Plan — LedgerFlow v2 (for general users)
 
-Status: **V2-1 built, not all merged (2026-10-21).** Written 2026-09-30 from
+Status: **V2-1 merged; V2-2 built (2026-10-21).** Written 2026-09-30 from
 the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 
-| V2-1 item | State |
+| Item | State |
 |---|---|
-| BUG-A transitions | Fixed as BUG57, PR #2 (open) |
-| BUG-B ghost entries | Fixed as BUG58 (schema v12, D6 confirmed), branch `claude/elastic-bardeen-33af7d`, no PR yet |
+| BUG-A transitions | BUG57, squashed onto `main` from PR #2 (`5421712`) |
+| BUG-B ghost entries | BUG58 (schema v12, D6 confirmed), squashed onto `main` (`9bc1af0`) |
 | BUG-C Home v1 | On `main` (BUG54, `2109191`, `fd5e635`) |
-| BUG59 Inbox links land on Home | Fixed, branch `claude/elated-chatelet-0425ad` (stacked on PR #4) |
-| Perf alongside | PRs #1, #3 and #4 open; PERF-120HZ §3 tried and reverted |
+| BUG59 Inbox links land on Home | Squashed onto `main` (`37e225a`) |
+| Perf alongside | PRs #1, #3, #4 squashed onto `main` (`48c4a04`, `5d7b262`, `52ddd82`); PERF-120HZ §3 tried and reverted |
+| V2-2 Settings | Built: D7 (a), §3 below; SPEC §9.3 |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -38,7 +39,7 @@ starts.
 | D4 | Change default currency after onboarding | Locked decision: one base currency per install; `amount_minor` is always base | Base currency stays fixed once data exists (changing it would silently relabel every amount). Settings shows it read-only, with symbol, number format (lakh/western grouping) and date format as the adjustable parts. A future "start a new book in another currency" is a separate design. |
 | D5 | Receipts auto-delete after a period | ADR-0023 declined a timed purge | Owner reverses ADR-0023's decision explicitly (superseding ADR), or v2 ships "select and delete" + a reminder instead of silent auto-deletion. Recommendation: allow auto-delete **only of receipts already backed up** to a verified backup, never of the only copy. |
 | D6 | Ghost Inbox entries (BUG-B below) | §5.1 / CLAUDE.md §7: never silently drop a financial SMS | Recognised non-transactions (OTP, balance, statement, promo) are **retained and visible** under a new Inbox filter ("Not transactions"), not deleted and not in the main queue. That keeps the guarantee's substance (nothing lost) while ending the noise. **Confirmed by the owner, 2026-10-20** — built as BUG58. |
-| D7 | Settings as a sixth bottom-bar slot | Material's 3–5 destinations; CLAUDE.md compactness brief | Five slots are already used (Home, Ledger, +, Analytics, More). **Recommend: Settings replaces More in the bar, and More's contents move** — tools (goals, recurring, debts, utilities) into a "Tools" section reached from Home/More-as-a-screen, or keep More and put Settings behind a gear in every tab header. Owner picks. |
+| D7 | Settings as a sixth bottom-bar slot | Material's 3–5 destinations; CLAUDE.md compactness brief | Five slots are already used (Home, Ledger, +, Analytics, More). **Recommend: Settings replaces More in the bar, and More's contents move** — tools (goals, recurring, debts, utilities) into a "Tools" section reached from Home/More-as-a-screen, or keep More and put Settings behind a gear in every tab header. Owner picks. **Decided 2026-10-21: Settings replaces More** (gear, fourth tab). Every row More had moved to Settings; Diagnostics, the one tool, is its Tools section rather than a screen of one row (V2-2). |
 | D8 | Import (Excel/CSV) | Law 1: nothing reaches the ledger without a tap | Imported rows land in the Inbox as `IMPORT` candidates (the source already exists), approvable in bulk with one confirmed tap per batch. Owner confirms "bulk approve" satisfies Law 1. |
 
 ---
@@ -168,6 +169,12 @@ A **Settings** destination (placement per D7) absorbs today's scattered rows —
 Back up now, Export, Notification capture, Receipts — and adds the sections
 below. Every settings page follows the compactness brief: rows, not cards of
 pills; one shape per screen.
+
+**V2-2, built 2026-10-21 (moves only).** Settings is the fourth tab and holds
+all of More's rows under Capture, Organise, Data and Tools (SPEC §9.3 has the
+order). The sections below are absent until their phase builds them; each
+then joins as a heading of its own, or grows an existing one (§3.4 takes over
+Capture, §3.6 takes over Data).
 
 ### 3.1 Account (per D3)
 Local profile (name, photo — stored in the vault, backed up with it), linked

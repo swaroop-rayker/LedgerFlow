@@ -20,7 +20,7 @@ class DeletedRowTest {
 
     @Test
     fun beforeTheCountArrives_saysWhatTheRowIsForRatherThanGuessing() {
-        val subtitle = deletedSubtitle(MoreUiState(deletedCount = 0, isLoaded = false))
+        val subtitle = deletedSubtitle(SettingsUiState(deletedCount = 0, isLoaded = false))
 
         // Not "nothing deleted": that would be a claim, and at this point the
         // database has not been asked yet.
@@ -30,7 +30,7 @@ class DeletedRowTest {
 
     @Test
     fun emptyBin_saysSoAndExplainsWhatTheRowIsFor() {
-        val subtitle = deletedSubtitle(MoreUiState(deletedCount = 0, isLoaded = true))
+        val subtitle = deletedSubtitle(SettingsUiState(deletedCount = 0, isLoaded = true))
 
         assertThat(subtitle).startsWith("Nothing deleted")
         assertThat(subtitle).contains("kept here")
@@ -38,13 +38,13 @@ class DeletedRowTest {
 
     @Test
     fun oneEntry_readsAsSingular() {
-        assertThat(deletedSubtitle(MoreUiState(deletedCount = 1, isLoaded = true)))
+        assertThat(deletedSubtitle(SettingsUiState(deletedCount = 1, isLoaded = true)))
             .isEqualTo("1 entry kept here. Restore it or erase it for good.")
     }
 
     @Test
     fun severalEntries_readAsPlural() {
-        assertThat(deletedSubtitle(MoreUiState(deletedCount = 4, isLoaded = true)))
+        assertThat(deletedSubtitle(SettingsUiState(deletedCount = 4, isLoaded = true)))
             .isEqualTo("4 entries kept here. Restore them or erase them for good.")
     }
 }

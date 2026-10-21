@@ -16,7 +16,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The More tab's goldens at 1.0 and 2.0 (§12, P5 step 4), with §9.6's checks.
+ * The Settings tab's goldens at 1.0 and 2.0 (§12, P5 step 4), with §9.6's checks.
+ *
+ * They were More's (`more-*`) until V2-2 moved every row here under section
+ * headings; the rows and their sentences are unchanged.
  *
  * Two states, chosen for what the rows *say*: a lived-in install (capture on,
  * a nightly backup, things in the bin and receipts kept) and a new one (capture
@@ -28,15 +31,15 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class MoreScreenGoldensTest {
+class SettingsScreenGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
 
-    private fun capture(name: String, state: MoreUiState, fontScale: Float) =
+    private fun capture(name: String, state: SettingsUiState, fontScale: Float) =
         rule.captureScreenGolden(name, fontScale) {
             LfTheme {
-                MoreScreen(
+                SettingsScreen(
                     state = state,
                     onCategories = {},
                     onBudgets = {},
@@ -50,7 +53,7 @@ class MoreScreenGoldensTest {
             }
         }
 
-    private val livedIn = MoreUiState(
+    private val livedIn = SettingsUiState(
         deletedCount = 3,
         isLoaded = true,
         receipts = AttachmentUsage(count = 12, bytes = 3_400_000L),
@@ -59,19 +62,19 @@ class MoreScreenGoldensTest {
         nightlyBackupsEnabled = true,
     )
 
-    private val fresh = MoreUiState(
+    private val fresh = SettingsUiState(
         deletedCount = 0,
         isLoaded = true,
         captureHealth = NotificationCaptureHealth.NOT_GRANTED,
     )
 
-    @Test fun livedIn_1x() = capture("more-lived-in-1x", livedIn, 1f)
+    @Test fun livedIn_1x() = capture("settings-lived-in-1x", livedIn, 1f)
 
     @Config(qualifiers = PHONE_2X)
-    @Test fun livedIn_2x() = capture("more-lived-in-2x", livedIn, 2f)
+    @Test fun livedIn_2x() = capture("settings-lived-in-2x", livedIn, 2f)
 
-    @Test fun fresh_1x() = capture("more-fresh-1x", fresh, 1f)
+    @Test fun fresh_1x() = capture("settings-fresh-1x", fresh, 1f)
 
     @Config(qualifiers = PHONE_2X)
-    @Test fun fresh_2x() = capture("more-fresh-2x", fresh, 2f)
+    @Test fun fresh_2x() = capture("settings-fresh-2x", fresh, 2f)
 }

@@ -4,7 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.vault.PhraseValidation
-import com.ledgerflow.feature.settings.MoreUiState
+import com.ledgerflow.feature.settings.SettingsUiState
 import com.ledgerflow.feature.settings.backupSubtitle
 import java.util.Locale
 import org.junit.Test
@@ -69,13 +69,13 @@ class BackupMessagesTest {
 
     @Test
     fun neverBackedUp_saysWhatThatMeans() {
-        assertThat(backupSubtitle(MoreUiState(lastBackupAt = null)))
+        assertThat(backupSubtitle(SettingsUiState(lastBackupAt = null)))
             .isEqualTo("No backup yet. Your data exists only on this phone.")
     }
 
     @Test
     fun afterABackup_namesTheDate() {
-        val subtitle = backupSubtitle(MoreUiState(lastBackupAt = 1_758_189_300_000L), Locale.UK)
+        val subtitle = backupSubtitle(SettingsUiState(lastBackupAt = 1_758_189_300_000L), Locale.UK)
 
         assertThat(subtitle).startsWith("Last backup ")
         assertThat(subtitle).contains("2025")
@@ -88,7 +88,7 @@ class BackupMessagesTest {
     @Test
     fun withNightlyBackupsOn_theRowSaysThePhoneDoesItItself() {
         val subtitle = backupSubtitle(
-            MoreUiState(lastBackupAt = 1_758_189_300_000L, nightlyBackupsEnabled = true),
+            SettingsUiState(lastBackupAt = 1_758_189_300_000L, nightlyBackupsEnabled = true),
             Locale.UK,
         )
 
