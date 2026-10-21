@@ -44,6 +44,24 @@ if (releaseSigning == null && providers.gradleProperty("ledgerflow.requireReleas
 android {
     namespace = "com.ledgerflow"
 
+    testOptions.unitTests {
+        // BUG57's test composes the real NavHost under Robolectric, which needs
+        // the merged resources and manifest -- see :core:designsystem.
+        isIncludeAndroidResources = true
+
+        // Forwarded, not hardcoded -- see the identical block in
+        // :core:designsystem for why (Robolectric's fork does not inherit the
+        // daemon's truststore). Absent on a stock runner.
+        all { test ->
+            listOf(
+                "javax.net.ssl.trustStore",
+                "javax.net.ssl.trustStorePassword",
+            ).forEach { key ->
+                System.getProperty(key)?.let { test.systemProperty(key, it) }
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.ledgerflow"
     }
@@ -372,6 +390,15 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // BUG57: the graph's transitions, frame by frame, under Robolectric. The
+    // NavHost wiring lives here, so the test that guards it does too. Every
+    // coordinate is already in the catalogue for :core:ui's harness.
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.androidx.test.ext.junit)
 
     // BUG6's regression test assembles the real graph -- SQLCipher, the
     // Keystore-wrapped DEK, the entry form -- tears all of it down, and rebuilds

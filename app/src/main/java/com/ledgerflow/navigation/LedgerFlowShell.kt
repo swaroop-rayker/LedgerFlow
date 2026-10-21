@@ -24,7 +24,6 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -180,9 +179,11 @@ private fun LedgerFlowNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
 ) {
-    NavHost(
+    // Never the library's default: that is a 700 ms simultaneous cross-fade,
+    // two screens' text drawn over each other (BUG57). See NavMotion.
+    LfNavHost(
         navController = navController,
-        startDestination = Destination.Dashboard,
+        motion = rememberNavMotion(),
         modifier = modifier,
     ) {
         tabDestinations(navController)
@@ -468,7 +469,7 @@ private fun CentreActionDial(
  * and the system back gesture walks the user backwards through their tab
  * history instead of leaving the app -- the most common bottom-bar bug there is.
  */
-private fun NavHostController.switchTab(destination: Destination) {
+internal fun NavHostController.switchTab(destination: Destination) {
     navigate(destination) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true

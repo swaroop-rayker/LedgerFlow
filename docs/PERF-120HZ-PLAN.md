@@ -95,6 +95,31 @@ Tab switches currently use Navigation Compose's default 700 ms cross-fade,
 which draws two full screens every frame for most of a second. v2 replaces it
 (see `docs/V2-PLAN.md`); this plan measures it before and after.
 
+**Replaced 2026-10-19 (BUG57).** The surface is `TabSwitchBenchmark`, with
+`LateFrameMetric` — §1.3's `App Deadline Missed` count, the first committed
+piece of §1's tooling. It waits 1 s after each tap, longer than the old
+transition, so the old and new builds run the same gesture.
+
+First reading, LF Bench on SM-S721B, baseline profile required, 5 iterations
+of 8 switches, interleaved old/new, thermal status 0 throughout but warming
+(34.5 → 39.1 °C):
+
+| Build | Start temp | Frames/iteration | Late frames, median (range) | frameOverrun P99 |
+|---|---|---|---|---|
+| old (700 ms cross-fade) | 34.5 °C | 676 | 5 (5–12) | 12.1 ms |
+| new (fade-through) | 36.7 °C | 196 | 6 (3–10) | 20.2 ms |
+| old | 38.0 °C | 669 | 7 (5–12) | 16.0 ms |
+| new | 38.5 °C | 194 | 9 (5–10) | 28.2 ms |
+
+**The fix removes ~70% of the frames a switch draws, not its late frames.**
+Late frames are level within run-to-run spread (perhaps +1–2 per 8
+switches). P99 rises because it is now a percentile of a third as many frames:
+the few expensive ones — by assumption the incoming tab's first composition,
+which both builds pay; not yet confirmed from the traces — weigh three times as
+much. BUG57 was a legibility defect and is fixed; tab-switch *jank* is this
+plan's §3 work (a cheaper first frame for Analytics and the Ledger), measured
+against this table.
+
 ## 6. Startup
 
 1. `reportFullyDrawn()` once the vault is open and the first screen has data,

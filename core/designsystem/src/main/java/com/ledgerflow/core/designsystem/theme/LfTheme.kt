@@ -176,6 +176,14 @@ public data class LfMotion(
     val micro: Int = 120,
     val standard: Int = 240,
     val emphasized: Int = 400,
+    /**
+     * How long an outgoing screen takes to fade out before the incoming one
+     * starts to fade in (BUG57). The two never overlap: overlapping is the
+     * cross-fade that drew two screens' text over each other for 700 ms.
+     */
+    val fadeOut: Int = 60,
+    /** How far a forward/back navigation slides its screens (BUG57). */
+    val axisSlide: Dp = 30.dp,
 )
 
 public val LocalLfTypography: androidx.compose.runtime.ProvidableCompositionLocal<LfTypography> =
