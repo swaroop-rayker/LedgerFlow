@@ -9,6 +9,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -16,6 +17,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ledgerflow.core.designsystem.component.GLYPH_MEASURER_CACHE_SIZE
+import com.ledgerflow.core.designsystem.component.LocalLfGlyphMeasurer
 
 /**
  * Type scale (SPEC.md §9.2).
@@ -243,6 +246,7 @@ public fun LfTheme(
         LocalLfTypography provides LfDefaultTypography,
         LocalLfSpacing provides LfSpacing(),
         LocalLfMotion provides LfMotion(),
+        LocalLfGlyphMeasurer provides rememberTextMeasurer(cacheSize = GLYPH_MEASURER_CACHE_SIZE),
     ) {
         // Typography as well as colours, for the same reason: a Material widget
         // that renders its own text would otherwise come out in the platform
