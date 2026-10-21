@@ -32,11 +32,29 @@ public object LedgerFlowDatabaseFactory {
         dek: Dek,
         databaseName: String = LedgerFlowDatabase.DATABASE_NAME,
     ): LedgerFlowDatabase {
+        val key = DatabaseKey.forFile(context.getDatabasePath(databaseName), dek)
+        return try {
+            create(context, key, databaseName)
+        } finally {
+            key.destroy()
+        }
+    }
+
+    /**
+     * @param key derived once by the caller ([DatabaseKey.forFile]) and shared
+     *   with `PreMigrationGuard`, so a launch pays for SQLCipher's key
+     *   derivation once rather than once per connection (ADR-0029).
+     */
+    public fun create(
+        context: Context,
+        key: DatabaseKey,
+        databaseName: String = LedgerFlowDatabase.DATABASE_NAME,
+    ): LedgerFlowDatabase {
         loadNativeLibrary()
 
         // SQLCipher takes the key as a byte array so it can be zeroed; passing a
         // String would leave the key in the JVM string pool until GC.
-        val factory = SupportOpenHelperFactory(dek.bytes(), PragmaHook, false)
+        val factory = SupportOpenHelperFactory(key.bytes(), PragmaHook, false)
 
         val builder = Room
             .databaseBuilder(context, LedgerFlowDatabase::class.java, databaseName)
@@ -66,7 +84,9 @@ public object LedgerFlowDatabaseFactory {
      * `cipher_page_size` (4096) and `kdf_iter` (256000) are already the
      * SQLCipher 4 defaults and are deliberately left alone -- the spec's
      * instruction is "do NOT lower kdf_iter", and restating a default is how it
-     * later gets "tuned" by someone who does not know why it is there.
+     * later gets "tuned" by someone who does not know why it is there. An
+     * existing file is keyed with the derivation's result ([DatabaseKey]), so
+     * these connections do not run it; it still ran, once, at 256000.
      *
      * `cipher_memory_security` is not on by default, so it is set explicitly.
      * It keeps key material and decrypted pages out of swappable memory.

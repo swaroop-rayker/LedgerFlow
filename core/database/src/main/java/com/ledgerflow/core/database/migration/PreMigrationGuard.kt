@@ -103,8 +103,13 @@ public class PreMigrationGuard(
      * single read against a connection that is closed immediately. Opening
      * through Room instead would *run the migration* as a side effect of asking
      * whether one is needed, which is the whole thing this has to happen before.
+     *
+     * @param key what SQLCipher is keyed with: a launch passes the
+     *   [com.ledgerflow.core.database.DatabaseKey] it derived once and also hands
+     *   to Room, so this open costs no derivation of its own (ADR-0029). The DEK
+     *   itself, as a passphrase, opens the same file.
      */
-    public fun assess(dek: ByteArray): MigrationAssessment {
+    public fun assess(key: ByteArray): MigrationAssessment {
         if (!databaseFile.exists() || databaseFile.length() == 0L) {
             // Fresh install: Room will create the file at the current version
             // and no migration runs.
@@ -113,7 +118,7 @@ public class PreMigrationGuard(
 
         loadNativeLibrary()
         val onDisk = runCatching {
-            openReadOnly(databaseFile, dek).use { it.version }
+            openReadOnly(databaseFile, key).use { it.version }
         }.getOrElse { failure ->
             return MigrationAssessment.Unreadable(failure.message ?: failure::class.java.name)
         }
@@ -130,7 +135,8 @@ public class PreMigrationGuard(
 
     /**
      * Checkpoints, copies, and verifies. Returns [SnapshotResult.Success] only
-     * once the copy has been opened under [dek] and shown to hold the same rows.
+     * once the copy has been opened under [key] and shown to hold the same rows.
+     * The copy has the same salt as the file, so the same derived key opens it.
      *
      * **The checkpoint is load-bearing.** Copying `.db` while a populated `-wal`
      * sits beside it produces a snapshot missing the most recent writes — a
@@ -139,7 +145,7 @@ public class PreMigrationGuard(
      * `wal_checkpoint(TRUNCATE)` the one file is self-contained.
      */
     @Suppress("ReturnCount")
-    public fun takeSnapshot(dek: ByteArray, from: Int): SnapshotResult {
+    public fun takeSnapshot(key: ByteArray, from: Int): SnapshotResult {
         loadNativeLibrary()
 
         val required = (databaseFile.length() * REQUIRED_SPACE_MULTIPLIER).toLong()
@@ -149,7 +155,7 @@ public class PreMigrationGuard(
         }
 
         val sourceEntries = runCatching {
-            openReadWrite(databaseFile, dek).use { db ->
+            openReadWrite(databaseFile, key).use { db ->
                 // TRUNCATE rather than PASSIVE: PASSIVE may leave frames behind
                 // if a reader is active, and "mostly checkpointed" is not a
                 // property this can be built on.
@@ -172,7 +178,7 @@ public class PreMigrationGuard(
 
         val (temp, target) = copied
         val verified = runCatching {
-            openReadOnly(temp, dek).use { db ->
+            openReadOnly(temp, key).use { db ->
                 db.version == from && db.countLedgerEntries() == sourceEntries
             }
         }.getOrDefault(false)
@@ -243,10 +249,10 @@ public class PreMigrationGuard(
             System.loadLibrary("sqlcipher")
         }
 
-        fun openReadOnly(file: File, dek: ByteArray): SQLiteDatabase =
-            SQLiteDatabase.openDatabase(file.path, dek, null, SQLiteDatabase.OPEN_READONLY, null)
+        fun openReadOnly(file: File, key: ByteArray): SQLiteDatabase =
+            SQLiteDatabase.openDatabase(file.path, key, null, SQLiteDatabase.OPEN_READONLY, null)
 
-        fun openReadWrite(file: File, dek: ByteArray): SQLiteDatabase =
-            SQLiteDatabase.openDatabase(file.path, dek, null, SQLiteDatabase.OPEN_READWRITE, null)
+        fun openReadWrite(file: File, key: ByteArray): SQLiteDatabase =
+            SQLiteDatabase.openDatabase(file.path, key, null, SQLiteDatabase.OPEN_READWRITE, null)
     }
 }

@@ -9,6 +9,7 @@ import com.ledgerflow.core.crypto.UnlockResult
 import com.ledgerflow.core.data.di.VaultDatabaseName
 import com.ledgerflow.core.database.CanaryResult
 import com.ledgerflow.core.database.DatabaseCanary
+import com.ledgerflow.core.database.DatabaseKey
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.LedgerFlowDatabaseFactory
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
@@ -207,7 +208,16 @@ public class VaultSession @Inject constructor(
         }
     }
 
-    override suspend fun openOnLaunch() {
+    /**
+     * **On [io] from the first line, not only around each blocking call.** The
+     * UI calls this from `viewModelScope` while the main thread is still
+     * drawing the first frame, and each `withContext(io)` below used to resume
+     * on main in between: the Keystore unwrap began ~25 ms after this was
+     * called, of which the wordlist and the two file checks took 3-4 ms.
+     * Measured on LF Bench, 2026-10-18, and fully drawn moved by about as
+     * much. Nothing here needs the main thread; [_state] is a `StateFlow`.
+     */
+    override suspend fun openOnLaunch(): Unit = withContext(io) {
         mutex.withLock {
             // Pull the BIP-39 wordlist off the APK here, on IO, so that every
             // later call -- a Recovery keystroke, a phrase validation -- is pure
@@ -221,12 +231,12 @@ public class VaultSession @Inject constructor(
             // and one that died mid-way must not be opened at all (§16 Q11).
             if (withContext(io) { restoreMarker.exists() }) {
                 if (database == null) _state.value = VaultState.RestoreInterrupted
-                return
+                return@withLock
             }
 
             if (database != null) {
                 _state.value = VaultState.Unlocked
-                return
+                return@withLock
             }
             if (!withContext(io) { dekManager.isInitialized() }) {
                 // No phrase wrap on disk: the §7.4 gate was never completed.
@@ -234,7 +244,7 @@ public class VaultSession @Inject constructor(
                 // phrase is the mandatory factor, so its absence is the only
                 // honest definition of "not set up".
                 _state.value = VaultState.NeedsOnboarding
-                return
+                return@withLock
             }
 
             _state.value = VaultState.Working
@@ -310,42 +320,49 @@ public class VaultSession @Inject constructor(
         dek: Dek,
         seedMetadata: VaultInitRequest? = null,
     ): VaultOutcome = withContext(io) {
-        // BUG8(d), ADR-0019. All of this happens *before* Room is asked to open
-        // the file, because asking Room is what runs the migration.
-        val migratingFrom = when (val prepared = prepareForMigration(dek)) {
-            is MigrationPreparation.Blocked ->
-                return@withContext VaultOutcome.UpgradeBlocked(prepared.reason)
-            is MigrationPreparation.Proceed -> prepared.migratingFrom
-        }
-
-        val opened = runCatching { LedgerFlowDatabaseFactory.create(context, dek, databaseName) }
-            .getOrElse { return@withContext failedOpen(migratingFrom) }
-
-        val result = runCatching {
-            // Room opens lazily, so the migration has not run yet. Touching the
-            // database forces it here, where a failure is still attributable to
-            // the upgrade and the snapshot is still the right answer.
-            opened.openHelper.writableDatabase
-            if (seedMetadata != null) {
-                DatabaseCanary.write(opened)
-                opened.appMetaDao().putAll(initialMetadata(seedMetadata))
+        // ADR-0029: SQLCipher's key derivation, once, for the guard and for
+        // every connection Room's pool opens. Each used to run its own.
+        val key = DatabaseKey.forFile(context.getDatabasePath(databaseName), dek)
+        try {
+            // BUG8(d), ADR-0019. All of this happens *before* Room is asked to open
+            // the file, because asking Room is what runs the migration.
+            val migratingFrom = when (val prepared = prepareForMigration(key)) {
+                is MigrationPreparation.Blocked ->
+                    return@withContext VaultOutcome.UpgradeBlocked(prepared.reason)
+                is MigrationPreparation.Proceed -> prepared.migratingFrom
             }
-            DatabaseCanary.verify(opened)
-        }.getOrElse {
-            opened.close()
-            return@withContext failedOpen(migratingFrom)
-        }
 
-        when (result) {
-            is CanaryResult.Mismatch -> {
+            val opened = runCatching { LedgerFlowDatabaseFactory.create(context, key, databaseName) }
+                .getOrElse { return@withContext failedOpen(migratingFrom) }
+
+            val result = runCatching {
+                // Room opens lazily, so the migration has not run yet. Touching the
+                // database forces it here, where a failure is still attributable to
+                // the upgrade and the snapshot is still the right answer.
+                opened.openHelper.writableDatabase
+                if (seedMetadata != null) {
+                    DatabaseCanary.write(opened)
+                    opened.appMetaDao().putAll(initialMetadata(seedMetadata))
+                }
+                DatabaseCanary.verify(opened)
+            }.getOrElse {
                 opened.close()
-                VaultOutcome.Failed(RecoveryReason.CanaryMismatch)
+                return@withContext failedOpen(migratingFrom)
             }
 
-            CanaryResult.Valid -> {
-                accept(opened, dek)
-                VaultOutcome.Unlocked
+            when (result) {
+                is CanaryResult.Mismatch -> {
+                    opened.close()
+                    VaultOutcome.Failed(RecoveryReason.CanaryMismatch)
+                }
+
+                CanaryResult.Valid -> {
+                    accept(opened, dek)
+                    VaultOutcome.Unlocked
+                }
             }
+        } finally {
+            key.destroy()
         }
     }
 
@@ -449,10 +466,18 @@ public class VaultSession @Inject constructor(
     ): RestoreOutcome {
         // A restore creates the file, so nothing is normally pending; an
         // interrupted one resumed by a newer build is the case this covers.
-        if (prepareForMigration(dek) is MigrationPreparation.Blocked) return RestoreOutcome.Failed
-
-        val handle = runCatching { LedgerFlowDatabaseFactory.create(context, dek, databaseName) }
-            .getOrElse { return RestoreOutcome.Failed }
+        // Normally there is no file yet, so this is the DEK as a passphrase and
+        // costs nothing; resuming an interrupted restore, it is ADR-0029's key.
+        val key = DatabaseKey.forFile(context.getDatabasePath(databaseName), dek)
+        val handle = try {
+            if (prepareForMigration(key) is MigrationPreparation.Blocked) {
+                null
+            } else {
+                runCatching { LedgerFlowDatabaseFactory.create(context, key, databaseName) }.getOrNull()
+            }
+        } finally {
+            key.destroy()
+        } ?: return RestoreOutcome.Failed
 
         val rows = runCatching {
             handle.openHelper.writableDatabase
@@ -548,9 +573,9 @@ public class VaultSession @Inject constructor(
      * §7.3's problem and not an upgrade's — and the open below will produce the
      * Recovery routing that actually helps.
      */
-    private fun prepareForMigration(dek: Dek): MigrationPreparation {
+    private fun prepareForMigration(key: DatabaseKey): MigrationPreparation {
         val guard = guard()
-        return when (val assessment = guard.assess(dek.bytes())) {
+        return when (val assessment = guard.assess(key.bytes())) {
             MigrationAssessment.NotNeeded -> {
                 // A clean launch at the current version has now happened, so a
                 // snapshot from the previous one has done its job (§8.1).
@@ -566,7 +591,7 @@ public class VaultSession @Inject constructor(
 
             is MigrationAssessment.Required -> {
                 _state.value = VaultState.Upgrading(assessment.from, assessment.to)
-                when (val snapshot = guard.takeSnapshot(dek.bytes(), assessment.from)) {
+                when (val snapshot = guard.takeSnapshot(key.bytes(), assessment.from)) {
                     is SnapshotResult.Success -> MigrationPreparation.Proceed(assessment.from)
                     is SnapshotResult.InsufficientStorage -> MigrationPreparation.Blocked(
                         UpgradeBlockReason.InsufficientStorage(
