@@ -111,7 +111,7 @@ private fun UpgradeBlockReason.explain(): UpgradeCopy = when (this) {
         body = "A copy of your data could not be saved, so the update was not attempted. " +
             "Your ledger is exactly as it was.",
         detail = "Reopening the app will try again. If it keeps happening, export your " +
-            "data from More → Export before updating.",
+            "data from Settings → Export before updating.",
     )
 
     is UpgradeBlockReason.MigrationFailed -> if (restored) {
@@ -120,7 +120,7 @@ private fun UpgradeBlockReason.explain(): UpgradeCopy = when (this) {
             body = "Something went wrong partway through, so your data was put back the " +
                 "way it was. Nothing was lost.",
             detail = "You are still on the previous format. Reopening the app will try " +
-                "again; export your data from More → Export first if you would rather " +
+                "again; export your data from Settings → Export first if you would rather " +
                 "have a copy of your own.",
         )
     } else {

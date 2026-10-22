@@ -188,7 +188,7 @@ private val AnalyticsFilterField.body: String
 
 private val AnalyticsFilterField.emptyMessage: String
     get() = when (this) {
-        AnalyticsFilterField.CATEGORY -> "No categories yet. Add some in More → Organise."
+        AnalyticsFilterField.CATEGORY -> "No categories yet. Add some in Settings → Organise."
         AnalyticsFilterField.SUBCATEGORY -> "Those categories have no subcategories."
         AnalyticsFilterField.MERCHANT -> "No merchants yet."
         AnalyticsFilterField.SOURCE -> "No sources."

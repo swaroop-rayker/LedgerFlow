@@ -225,10 +225,10 @@ private val EntryPicker.body: String
 
 private val EntryPicker.emptyMessage: String
     get() = when (this) {
-        is EntryPicker.Category -> "No categories yet. Add some in More → Organise."
+        is EntryPicker.Category -> "No categories yet. Add some in Settings → Organise."
         is EntryPicker.Subcategory -> "This category has no subcategories."
-        EntryPicker.Merchant -> "No merchants yet. Add some in More → Organise."
-        EntryPicker.PaymentMethod -> "No payment methods yet. Add some in More → Organise."
+        EntryPicker.Merchant -> "No merchants yet. Add some in Settings → Organise."
+        EntryPicker.PaymentMethod -> "No payment methods yet. Add some in Settings → Organise."
     }
 
 private fun EntryPicker.optionsFrom(state: EntryUiState): List<LfPickerOption> = when (this) {

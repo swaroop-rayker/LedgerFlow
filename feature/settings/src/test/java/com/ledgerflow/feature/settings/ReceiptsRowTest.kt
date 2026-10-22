@@ -17,7 +17,7 @@ import org.junit.Test
 class ReceiptsRowTest {
 
     private fun state(count: Int, bytes: Long, loaded: Boolean = true) =
-        MoreUiState(receipts = AttachmentUsage(count = count, bytes = bytes), isLoaded = loaded)
+        SettingsUiState(receipts = AttachmentUsage(count = count, bytes = bytes), isLoaded = loaded)
 
     // ─── The row ────────────────────────────────────────────────────────────
 
