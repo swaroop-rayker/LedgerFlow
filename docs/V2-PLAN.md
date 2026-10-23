@@ -1,6 +1,6 @@
 # Plan — LedgerFlow v2 (for general users)
 
-Status: **V2-1 merged; V2-2 built (2026-10-21).** Written 2026-09-30 from
+Status: **V2-1 and V2-2 merged (2026-10-22).** Written 2026-09-30 from
 the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 
 | Item | State |
@@ -10,7 +10,7 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | BUG-C Home v1 | On `main` (BUG54, `2109191`, `fd5e635`) |
 | BUG59 Inbox links land on Home | Squashed onto `main` (`37e225a`) |
 | Perf alongside | PRs #1, #3, #4 squashed onto `main` (`48c4a04`, `5d7b262`, `52ddd82`); PERF-120HZ §3 tried and reverted |
-| V2-2 Settings | Built: D7 (a), §3 below; SPEC §9.3 |
+| V2-2 Settings | Merged, PR #5 (`d40f5cd`, 2026-10-22): D7 (a), §3 below; SPEC §9.3. Device suites on `d40f5cd` (SM-S721B, 2026-10-23): `:core:database` 105/105 (migration chain v1→v12, backup round-trip, older-schema restores) and `:core:data` 402/402 (restore, nightly and manual backup, purge). CI skips its instrumented job behind the known receipt-corpus red. Its RTL check found BUG61, fixed separately in PR #6 |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -170,7 +170,7 @@ Back up now, Export, Notification capture, Receipts — and adds the sections
 below. Every settings page follows the compactness brief: rows, not cards of
 pills; one shape per screen.
 
-**V2-2, built 2026-10-21 (moves only).** Settings is the fourth tab and holds
+**V2-2, merged 2026-10-22 (moves only; PR #5).** Settings is the fourth tab and holds
 all of More's rows under Capture, Organise, Data and Tools (SPEC §9.3 has the
 order). The sections below are absent until their phase builds them; each
 then joins as a heading of its own, or grows an existing one (§3.4 takes over
