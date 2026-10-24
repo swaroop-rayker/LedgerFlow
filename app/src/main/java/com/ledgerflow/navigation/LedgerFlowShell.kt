@@ -71,6 +71,8 @@ import com.ledgerflow.feature.ledger.LedgerViewModel
 import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.settings.SettingsScreen
 import com.ledgerflow.feature.settings.SettingsViewModel
+import com.ledgerflow.feature.settings.allowlist.AllowlistScreen
+import com.ledgerflow.feature.settings.allowlist.AllowlistViewModel
 import com.ledgerflow.feature.settings.backup.BackupNowScreen
 import com.ledgerflow.feature.settings.backup.BackupNowViewModel
 import com.ledgerflow.feature.settings.diagnostics.DiagnosticsEvent
@@ -330,6 +332,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             onBackUp = { navController.navigate(Destination.BackUpNow) },
             onNotificationAccess = { navController.navigate(Destination.NotificationAccess) },
             onDiagnostics = { navController.navigate(Destination.Diagnostics) },
+            onPaymentApps = { navController.navigate(Destination.PaymentApps) },
             // Android's own page for the channel (V2-PLAN §3.4): the channel is
             // the switch. The resume poll above re-reads it on the way back.
             onBudgetAlerts = {
@@ -437,6 +440,11 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         BackupNowScreen(state = state, onEvent = viewModel::onEvent)
     }
     composable<Destination.Export> { ExportRoute(onBack = navController::popBackStack) }
+    composable<Destination.PaymentApps> {
+        val viewModel: AllowlistViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        AllowlistScreen(state = state, onEvent = viewModel::onEvent, onBack = navController::popBackStack)
+    }
     composable<Destination.Diagnostics> {
         val viewModel: DiagnosticsViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -612,6 +620,7 @@ private val Destination.label: String
         Destination.BackUpNow -> "Back up"
         is Destination.Inbox -> "Inbox"
         Destination.Diagnostics -> "Diagnostics"
+        Destination.PaymentApps -> "Payment apps"
         is Destination.InboxReview -> "Review"
         Destination.ScanReceipt -> "Scan"
         Destination.NotificationAccess -> "Notifications"

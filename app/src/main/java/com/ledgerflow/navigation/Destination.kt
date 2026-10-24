@@ -92,6 +92,10 @@ public sealed interface Destination {
     @Serializable
     public data object Diagnostics : Destination
 
+    /** The notification allowlist editor (V2-3, V2-PLAN §3.4), reached from Settings. */
+    @Serializable
+    public data object PaymentApps : Destination
+
     /**
      * Receipt capture (§5.3), reached from the centre action's dial.
      *

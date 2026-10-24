@@ -50,6 +50,7 @@ class AppearanceRowsTest {
                     onBackUp = {},
                     onDiagnostics = {},
                     onBudgetAlerts = {},
+                    onPaymentApps = {},
                     onEvent = { events += it },
                 )
             }

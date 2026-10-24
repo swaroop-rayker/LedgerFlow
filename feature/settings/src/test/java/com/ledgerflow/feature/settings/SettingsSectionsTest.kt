@@ -40,6 +40,7 @@ class SettingsSectionsTest {
     /** Every row that opens something, and what it opens. The rest are choices. */
     private val navigatingRows = mapOf(
         SettingsItem.NotificationCapture to "notification access",
+        SettingsItem.PaymentApps to "payment apps",
         SettingsItem.BudgetAlerts to "budget alerts",
         SettingsItem.Categories to "categories",
         SettingsItem.Budgets to "budgets",
@@ -60,7 +61,11 @@ class SettingsSectionsTest {
         assertThat(SettingsSections.map { it.heading to it.items }).containsExactly(
             // V2-3 renamed Capture to Notifications (V2-PLAN §3.4): what LedgerFlow
             // reads, then what it sends.
-            "Notifications" to listOf(SettingsItem.NotificationCapture, SettingsItem.BudgetAlerts),
+            "Notifications" to listOf(
+                SettingsItem.NotificationCapture,
+                SettingsItem.PaymentApps,
+                SettingsItem.BudgetAlerts,
+            ),
             "Organise" to listOf(SettingsItem.Categories, SettingsItem.Budgets),
             "Data" to listOf(
                 SettingsItem.BackUpNow,
@@ -127,6 +132,7 @@ class SettingsSectionsTest {
                     onBackUp = { opened += "back up" },
                     onDiagnostics = { opened += "diagnostics" },
                     onBudgetAlerts = { opened += "budget alerts" },
+                    onPaymentApps = { opened += "payment apps" },
                     onEvent = { event -> opened += "event $event" },
                 )
             }
@@ -154,6 +160,7 @@ class SettingsSectionsTest {
                     onBackUp = {},
                     onDiagnostics = {},
                     onBudgetAlerts = {},
+                    onPaymentApps = {},
                     onEvent = {},
                 )
             }

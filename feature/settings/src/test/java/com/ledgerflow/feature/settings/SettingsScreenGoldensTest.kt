@@ -71,6 +71,7 @@ class SettingsScreenGoldensTest {
                         onBackUp = {},
                         onDiagnostics = {},
                         onBudgetAlerts = {},
+                        onPaymentApps = {},
                         onEvent = {},
                     )
                 }
@@ -97,6 +98,7 @@ class SettingsScreenGoldensTest {
         // Currency & region, also moved from the defaults.
         region = RegionConventions(grouping = NumberGrouping.WESTERN, dateOrder = DateOrder.DAY_MONTH_YEAR),
         budgetAlerts = AlertChannelState.ON,
+        paymentApps = 20,
     )
 
     private val fresh = SettingsUiState(
@@ -105,6 +107,7 @@ class SettingsScreenGoldensTest {
         captureHealth = NotificationCaptureHealth.NOT_GRANTED,
         baseCurrency = "INR",
         budgetAlerts = AlertChannelState.APP_OFF,
+        paymentApps = 20,
     )
 
     @Test fun livedIn_1x() = capture("settings-lived-in-1x", livedIn, 1f)
