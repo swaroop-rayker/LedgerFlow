@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
@@ -343,7 +344,7 @@ private fun RollupCard(rollup: RollupHealth) {
     }
 }
 
-internal fun rollupChecked(rollup: RollupHealth, locale: Locale = Locale.getDefault()): String {
+internal fun rollupChecked(rollup: RollupHealth, locale: Locale = DisplayLocale.current()): String {
     val at = rollup.lastReconciledAt ?: return "Analytics totals have not been re-checked yet."
     val date = DateFormat.getDateInstance(DateFormat.MEDIUM, locale).format(Date(at))
     return "Analytics totals last re-checked $date."

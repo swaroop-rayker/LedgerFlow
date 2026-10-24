@@ -26,9 +26,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.CurrencyDisplay
 
@@ -150,7 +150,7 @@ private fun AmountInput(
             // number it belongs to -- which is what the first build did.
             textStyle = LfTheme.typography.amountL.copy(
                 color = amountColor,
-                textAlign = TextAlign.Start,
+                textAlign = LfTextAlign.start,
             ),
             singleLine = true,
             cursorBrush = SolidColor(colors.accent),

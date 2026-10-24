@@ -5,6 +5,7 @@ import androidx.paging.LoadState
 import androidx.paging.LoadStates
 import androidx.paging.PagingData
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.ui.unit.LayoutDirection
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
@@ -48,8 +49,14 @@ class LedgerScreensGoldensTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun ledger(name: String, state: LedgerUiState, rows: List<LedgerListItem>, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun ledger(
+        name: String,
+        state: LedgerUiState,
+        rows: List<LedgerListItem>,
+        fontScale: Float,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, direction) {
             LfTheme {
                 LedgerScreen(
                     state = state,
@@ -199,6 +206,10 @@ class LedgerScreensGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun expenses_2x() = ledger("ledger-expenses-2x", expensesState, expenses, 2f)
+
+    /** RTL (BUG61): rows mirrored, each signed amount on the screen's end (left) with its sign in front. */
+    @Test fun expensesRtl_1x() =
+        ledger("ledger-expenses-rtl-1x", expensesState, expenses, 1f, LayoutDirection.Rtl)
 
     @Test fun income_1x() = ledger("ledger-income-1x", state(LedgerType.CREDIT, true), income, 1f)
 

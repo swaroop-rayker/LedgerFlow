@@ -3,7 +3,6 @@ package com.ledgerflow.core.designsystem.format
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLocale
 import com.ledgerflow.core.common.time.OccurredAt
 import java.time.Instant
 import java.time.ZoneId
@@ -25,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
  * `DateFormat.is24HourFormat` is the user's own setting, and it is the only
  * thing that makes a clock look native on someone else's phone.
  *
- * **The locale comes from `LocalLocale`, which is a composition local, and not
+ * **The locale comes from `LocalLocale` (through `DisplayLocale`, BUG61), which is a composition local, and not
  * from `Locale.getDefault()`, which is a process-wide field.** This was
  * `LocalConfiguration.current.locales[0] ?: Locale.getDefault()`, and the
  * fallback was the problem: `Locale.getDefault()` reads no observable state, so
@@ -42,7 +41,7 @@ public object TimeStamp {
     /** `4:12 pm`, or `d MMM, 4:12 pm` with [withDate]. */
     @Composable
     public fun of(occurredAt: Long, withDate: Boolean): String {
-        val locale = LocalLocale.current.platformLocale
+        val locale = DisplayLocale.composed
         val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
         return remember(occurredAt, locale, is24Hour, withDate) {
             format(occurredAt, locale, is24Hour, withDate)
@@ -67,7 +66,7 @@ public object TimeStamp {
      */
     @Composable
     public fun ofCapture(occurredAt: Long, capturedAt: Long, withDate: Boolean): String {
-        val locale = LocalLocale.current.platformLocale
+        val locale = DisplayLocale.composed
         val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
         return remember(occurredAt, capturedAt, locale, is24Hour, withDate) {
             format(

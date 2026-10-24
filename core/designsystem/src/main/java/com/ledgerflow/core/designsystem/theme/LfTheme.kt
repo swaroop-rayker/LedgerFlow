@@ -12,8 +12,12 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,7 +47,33 @@ public data class LfTypography(
     val amountM: TextStyle,
     /** Monospaced-feel style for recovery words, so similar glyphs stay distinct. */
     val mnemonicWord: TextStyle,
-)
+) {
+    /**
+     * These styles aligned to the screen's leading edge for [direction]
+     * (BUG61): left in LTR, right in RTL, whatever the text's own direction.
+     * [LfTheme.typography] hands these out, so a call site gets the right edge
+     * without asking. Built once per direction, not per read.
+     */
+    public fun alignedTo(direction: LayoutDirection): LfTypography = when (direction) {
+        LayoutDirection.Ltr -> forLtr
+        LayoutDirection.Rtl -> forRtl
+    }
+
+    private val forLtr: LfTypography by lazy { aligned(LfTextAlign.startOf(LayoutDirection.Ltr)) }
+    private val forRtl: LfTypography by lazy { aligned(LfTextAlign.startOf(LayoutDirection.Rtl)) }
+
+    private fun aligned(align: TextAlign): LfTypography = LfTypography(
+        displayL = displayL.copy(textAlign = align),
+        titleL = titleL.copy(textAlign = align),
+        titleM = titleM.copy(textAlign = align),
+        bodyL = bodyL.copy(textAlign = align),
+        bodyM = bodyM.copy(textAlign = align),
+        label = label.copy(textAlign = align),
+        amountL = amountL.copy(textAlign = align),
+        amountM = amountM.copy(textAlign = align),
+        mnemonicWord = mnemonicWord.copy(textAlign = align),
+    )
+}
 
 /** Tabular figures, so a column of amounts lines up. §9.2 makes it mandatory. */
 private const val TABULAR_FIGURES = "tnum"
@@ -95,7 +125,21 @@ private fun lfTextStyle(
     fontFeatureSettings = features.takeIf { it.isNotEmpty() }?.joinToString(", "),
     lineHeightStyle = LfLineHeight,
     platformStyle = PlatformTextStyle(includeFontPadding = false),
+    textDirection = LfTextDirection,
 )
+
+/**
+ * A paragraph reads in its own text's direction (BUG61): the first strong letter
+ * decides, and a string with none -- "-₹70.00", a date -- reads LTR.
+ *
+ * Left unset, Compose took the *screen's* direction, so on a mirrored screen an
+ * English sentence was laid out right-to-left and put its full stop at the
+ * front. `Content` alone would fall back to RTL there and move a debit's sign to
+ * the end, hence `ContentOrLtr`; Arabic text, when there is any, still has
+ * strong letters and reads RTL. Alignment is the screen's, not the text's: see
+ * [LfTypography.alignedTo] and [LfTextAlign].
+ */
+internal val LfTextDirection: TextDirection = TextDirection.ContentOrLtr
 
 public val LfDefaultTypography: LfTypography = LfTypography(
     displayL = lfTextStyle(34.sp, 40.sp, FontWeight.SemiBold),
@@ -251,9 +295,11 @@ public fun LfTheme(
         // Typography as well as colours, for the same reason: a Material widget
         // that renders its own text would otherwise come out in the platform
         // font on a screen that is otherwise Inter. See [LfMaterialTypography].
+        // Aligned to the screen's direction here, at the root, because Material
+        // reads its typography directly rather than through [LfTheme.typography].
         MaterialTheme(
             colorScheme = materialScheme,
-            typography = LfMaterialTypography,
+            typography = lfMaterialTypographyFor(LocalLayoutDirection.current),
             content = content,
         )
     }
@@ -264,8 +310,9 @@ public object LfTheme {
     public val colors: LfColors
         @Composable get() = LocalLfColors.current
 
+    /** Aligned to the current layout direction's leading edge (BUG61). */
     public val typography: LfTypography
-        @Composable get() = LocalLfTypography.current
+        @Composable get() = LocalLfTypography.current.alignedTo(LocalLayoutDirection.current)
 
     public val spacing: LfSpacing
         @Composable get() = LocalLfSpacing.current

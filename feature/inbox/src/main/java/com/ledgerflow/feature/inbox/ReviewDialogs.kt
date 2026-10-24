@@ -4,6 +4,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -244,7 +245,7 @@ internal fun LineItemEditorEvent.toReviewEvent(): ReviewEvent = when (this) {
 }
 
 internal fun Long.asLocalDate(): String =
-    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(DisplayLocale.current())
         .format(Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()))
 
 /**

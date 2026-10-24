@@ -2,6 +2,7 @@ package com.ledgerflow.feature.dashboard
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.ui.unit.LayoutDirection
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.diagnostics.CrashSummary
@@ -37,8 +38,13 @@ class DashboardScreenGoldensTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun capture(name: String, state: DashboardUiState, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun capture(
+        name: String,
+        state: DashboardUiState,
+        fontScale: Float,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, direction) {
             LfTheme { DashboardScreen(state = state, onSetUpNotifications = {}, onBackUpNow = {}) }
         }
 
@@ -100,6 +106,16 @@ class DashboardScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun month_2x() = capture("home-month-2x", HomeFixtures.populated, 2f)
+
+    /**
+     * The same month on an Arabic or Hebrew phone (BUG61): mirrored, every
+     * English line on the right with its full stop last, each "-" in front of
+     * its amount, the comparisons on the screen's end (left).
+     */
+    @Test fun monthRtl_1x() = capture("home-month-rtl-1x", HomeFixtures.populated, 1f, LayoutDirection.Rtl)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun monthRtl_2x() = capture("home-month-rtl-2x", HomeFixtures.populated, 2f, LayoutDirection.Rtl)
 
     /**
      * The frame before the figures land: the books have answered, the summary

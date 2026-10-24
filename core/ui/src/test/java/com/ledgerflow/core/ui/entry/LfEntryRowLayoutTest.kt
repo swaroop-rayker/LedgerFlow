@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -46,6 +45,7 @@ import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
@@ -283,7 +283,10 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
                             text = MoneyFormat.directional(item.amount.minor, item.currency, item.ledger),
                             style = LfTheme.typography.amountM,
                             color = if (item.ledger == LedgerType.DEBIT) colors.debit else colors.credit,
-                            textAlign = TextAlign.End,
+                            // The one change to the old composition: the screen's
+                            // end, as the real row aligns it since BUG61, where
+                            // `TextAlign.End` now means the paragraph's end.
+                            textAlign = LfTextAlign.end,
                         )
                     },
                 )

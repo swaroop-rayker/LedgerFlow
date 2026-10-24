@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
@@ -50,6 +49,7 @@ import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.DraftSummary
@@ -607,7 +607,7 @@ private fun PendingAmount(amount: String) {
         text = amount,
         style = LfTheme.typography.amountM,
         color = LfTheme.colors.textSecondary,
-        textAlign = TextAlign.End,
+        textAlign = LfTextAlign.end,
     )
 }
 

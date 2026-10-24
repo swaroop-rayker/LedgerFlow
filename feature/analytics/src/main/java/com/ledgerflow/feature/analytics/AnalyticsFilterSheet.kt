@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -390,7 +391,7 @@ private fun dateLabel(epochDay: Int): String {
     val date = java.time.LocalDate.ofEpochDay(epochDay.toLong())
     val month = date.month.getDisplayName(
         java.time.format.TextStyle.SHORT,
-        java.util.Locale.getDefault(),
+        DisplayLocale.current(),
     )
     return "${date.dayOfMonth} $month ${date.year}"
 }
@@ -494,7 +495,7 @@ private fun pickedDateLabel(utcMillis: Long): String {
         .toLocalDate()
     val month = date.month.getDisplayName(
         java.time.format.TextStyle.SHORT,
-        java.util.Locale.getDefault(),
+        DisplayLocale.current(),
     )
     return "${date.dayOfMonth} $month ${date.year}"
 }
