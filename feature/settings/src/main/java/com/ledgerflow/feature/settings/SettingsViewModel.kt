@@ -14,6 +14,7 @@ import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
+import com.ledgerflow.core.domain.ingest.PackageAllowlistRepository
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.region.RegionStore
@@ -158,6 +159,9 @@ public data class SettingsUiState(
      * resume, as the user changes it in system settings.
      */
     val budgetAlerts: AlertChannelState? = null,
+
+    /** Apps whose notifications are read (the enabled allowlist, D-10); null until read. */
+    val paymentApps: Int? = null,
 )
 
 @HiltViewModel
@@ -170,6 +174,7 @@ public class SettingsViewModel @Inject constructor(
     private val phoneMotion: PhoneMotionSettings,
     private val regionStore: RegionStore,
     private val budgetAlertChannel: BudgetAlertChannel,
+    allowlist: PackageAllowlistRepository,
 ) : ViewModel() {
 
     private val phoneAnimationsOn = MutableStateFlow(true)
@@ -236,6 +241,7 @@ public class SettingsViewModel @Inject constructor(
         .combine(baseCurrency) { state, code -> state.copy(baseCurrency = code) }
         .combine(choosingDateOrder) { state, choosing -> state.copy(choosingDateOrder = choosing) }
         .combine(budgetAlerts) { state, alerts -> state.copy(budgetAlerts = alerts) }
+        .combine(allowlist.observe()) { state, apps -> state.copy(paymentApps = apps.count { it.enabled }) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
     init {

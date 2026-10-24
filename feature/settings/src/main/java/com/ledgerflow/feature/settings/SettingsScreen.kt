@@ -66,6 +66,7 @@ public fun SettingsScreen(
     onBackUp: () -> Unit,
     onDiagnostics: () -> Unit,
     onBudgetAlerts: () -> Unit,
+    onPaymentApps: () -> Unit,
     onEvent: (SettingsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -82,6 +83,7 @@ public fun SettingsScreen(
     // D4) -- `SettingsSectionsTest` holds that every row is exactly one.
     val links: Map<SettingsItem, () -> Unit> = mapOf(
         SettingsItem.NotificationCapture to onNotificationAccess,
+        SettingsItem.PaymentApps to onPaymentApps,
         SettingsItem.BudgetAlerts to onBudgetAlerts,
         SettingsItem.Categories to onCategories,
         SettingsItem.Budgets to onBudgets,
@@ -123,6 +125,7 @@ public fun SettingsScreen(
 /** Every row the Settings tab has. [SettingsSections] decides where each goes. */
 internal enum class SettingsItem {
     NotificationCapture,
+    PaymentApps,
     BudgetAlerts,
     Categories,
     Budgets,
@@ -179,7 +182,10 @@ internal data class SettingsSection(val heading: String, val items: List<Setting
  *   a question for after the rows above, and it changes nothing.
  */
 internal val SettingsSections: List<SettingsSection> = listOf(
-    SettingsSection("Notifications", listOf(SettingsItem.NotificationCapture, SettingsItem.BudgetAlerts)),
+    SettingsSection(
+        "Notifications",
+        listOf(SettingsItem.NotificationCapture, SettingsItem.PaymentApps, SettingsItem.BudgetAlerts),
+    ),
     SettingsSection("Organise", listOf(SettingsItem.Categories, SettingsItem.Budgets)),
     SettingsSection(
         "Data",
@@ -215,6 +221,7 @@ internal val SettingsSections: List<SettingsSection> = listOf(
 internal val SettingsItem.title: String
     get() = when (this) {
         SettingsItem.NotificationCapture -> "Notification capture"
+        SettingsItem.PaymentApps -> "Payment apps"
         SettingsItem.BudgetAlerts -> "Budget alerts"
         SettingsItem.Categories -> "Categories & merchants"
         SettingsItem.Budgets -> "Budgets"
@@ -243,6 +250,7 @@ internal val SettingsItem.title: String
  */
 internal fun subtitleFor(item: SettingsItem, state: SettingsUiState): String = when (item) {
     SettingsItem.NotificationCapture -> captureSubtitle(state)
+    SettingsItem.PaymentApps -> paymentAppsSubtitle(state.paymentApps)
     SettingsItem.BudgetAlerts -> budgetAlertsSubtitle(state.budgetAlerts)
     SettingsItem.BackUpNow -> backupSubtitle(state)
     SettingsItem.DeletedEntries -> deletedSubtitle(state)
@@ -270,6 +278,17 @@ private val FIXED_SUBTITLES: Map<SettingsItem, String> = mapOf(
     SettingsItem.StartScreen to "Applies the next time the app opens.",
     SettingsItem.Diagnostics to "How automatic capture is working",
 )
+
+/**
+ * What the payment-apps row says (V2-PLAN §3.4): how many apps are read, so the
+ * guarantee's reach is visible from Settings. Null until the list is read.
+ */
+internal fun paymentAppsSubtitle(enabledCount: Int?): String = when (enabledCount) {
+    null -> "The apps whose notifications LedgerFlow reads"
+    0 -> "None. No app's notifications are read."
+    1 -> "Reads notifications from 1 app. Tap to change."
+    else -> "Reads notifications from $enabledCount apps. Tap to change."
+}
 
 /**
  * What the budget-alerts row says (V2-PLAN §3.4): the channel's state, and
@@ -377,6 +396,7 @@ internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoi
     SettingsItem.BaseCurrency,
     SettingsItem.DateOrder,
     SettingsItem.NotificationCapture,
+    SettingsItem.PaymentApps,
     SettingsItem.BudgetAlerts,
     SettingsItem.Categories,
     SettingsItem.Budgets,
@@ -748,6 +768,7 @@ private fun SettingsPreview() {
             onBackUp = {},
             onDiagnostics = {},
             onBudgetAlerts = {},
+            onPaymentApps = {},
             onEvent = {},
         )
     }
@@ -770,6 +791,7 @@ private fun SettingsEmptyBinPreview() {
             onBackUp = {},
             onDiagnostics = {},
             onBudgetAlerts = {},
+            onPaymentApps = {},
             onEvent = {},
         )
     }
