@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.ledgerflow.appearance.RegionConventionsSync
+import com.ledgerflow.applock.AppLockController
 import com.ledgerflow.core.data.diagnostics.CrashRecorder
 import com.ledgerflow.feature.analytics.work.RollupWorker
 import com.ledgerflow.feature.budget.notify.BudgetNotifications
@@ -41,6 +42,9 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
     /** Settings > Currency & region, applied for the whole process (V2-3). */
     @Inject internal lateinit var regionConventions: RegionConventionsSync
 
+    /** Settings > Security & privacy's app lock, for the whole process (V2-3). */
+    @Inject internal lateinit var appLock: AppLockController
+
     /** Lives as long as the process; holds the one collector above. */
     private val processScope = MainScope()
 
@@ -66,6 +70,9 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
         // notification as much as the first screen. The read is a DataStore
         // flow, off the main thread; only the write lands on it.
         regionConventions.start(processScope)
+        // The lock decides before the first frame and watches the process go
+        // to the background and come back (SPEC §7.6).
+        appLock.start(processScope)
         // SPEC.md §5.1's `inbox_high`, created before the first message rather
         // than before the first post: a channel that does not exist yet cannot
         // be found and configured in system settings, and the user should be

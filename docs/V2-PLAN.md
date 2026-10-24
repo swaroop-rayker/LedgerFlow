@@ -16,7 +16,8 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 · Appearance | PR #8, `claude/v2-3-appearance` (§3.2; SPEC §9.3, §9.5; ADR-0030). Not yet merged |
 | V2-3 · Currency & region | PR #9, stacked on #8 (§3.3; SPEC §9.3, §16 Q26 closed; BUG62). Not yet merged |
 | V2-3 · Notifications | PR #10, stacked on #9 (§3.4: budget-alerts row, overspending alerts; SPEC §9.3, §5.7). Not yet merged |
-| V2-3 · Allowlist editor | Built on `claude/v2-3-allowlist-editor`, stacked on Notifications (§3.4; SPEC §9.3, §5.2, §16 Q4). Not yet merged |
+| V2-3 · Allowlist editor | PR #11, stacked on #10 (§3.4; SPEC §9.3, §5.2, §16 Q4). Not yet merged |
+| V2-3 · App lock + screenshot block | Built on `claude/v2-3-app-lock`, stacked on the allowlist editor (§3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned). Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -243,6 +244,12 @@ device-credential fallback, gating the **UI only — never the DEK** (CLAUDE.md
 Home (tap to reveal), block screenshots in-app (`FLAG_SECURE`) as an option,
 the phrase-screen protections already in place. Data permissions: a page
 listing each permission the app holds, why, and a deep link to revoke it.
+
+**Built (V2-3, 2026-10-24): app lock and screenshot block.** Platform prompt
+only (no `androidx.biometric`), on cold start and after Lock after
+(Immediately / 1 / 5 / 15 minutes); a screen overlay that touches no key.
+SPEC §7.6 has the detail. Hide amounts and the data-permissions page are the
+next PR.
 
 ### 3.6 Data & sync
 Backups (today's manual + nightly + Recovery Kit, moved here), Restore (exists

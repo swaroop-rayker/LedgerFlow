@@ -1,7 +1,9 @@
 package com.ledgerflow
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -9,6 +11,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -25,12 +28,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.createLifecycleAwareWindowRecomposer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.appearance.AppMotionDurationScale
 import com.ledgerflow.appearance.AppearanceViewModel
 import com.ledgerflow.appearance.RegionConventionsSync
+import com.ledgerflow.applock.AppLockController
+import com.ledgerflow.applock.DeviceUnlockPrompt
+import com.ledgerflow.applock.LockScreen
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.appearance.AnimationPreference
@@ -93,10 +100,22 @@ public class MainActivity : ComponentActivity() {
     /** Every Compose animation's scale; zero under Animations > Off (V2-3). */
     private val motionScale = AppMotionDurationScale()
 
+    /** The app lock (SPEC §7.6): a screen gate, decided for the whole process. */
+    @Inject
+    internal lateinit var appLock: AppLockController
+
+    /** The phone's own unlock prompt; registered in [onCreate], before the activity starts. */
+    private lateinit var unlockPrompt: DeviceUnlockPrompt
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         deepLink.value = intent?.dataString
+        unlockPrompt = DeviceUnlockPrompt(
+            activity = this,
+            onUnlocked = { appLock.unlocked() },
+            onClosed = { appLock.promptClosed() },
+        )
 
         // The window's recomposer, made here rather than by Compose so that it
         // plays animations at [motionScale] instead of the scale Compose would
@@ -115,17 +134,66 @@ public class MainActivity : ComponentActivity() {
             // And Currency & region, applied process-wide by the Application:
             // the first amount drawn is already grouped as the user chose.
             if (!regionConventions.ready.collectAsStateWithLifecycle().value) return@setContent
+            // And the lock's decision (SPEC §7.6): never a frame of content
+            // that the lock is about to cover.
+            val security = appLock.preferences.collectAsStateWithLifecycle().value ?: return@setContent
+            val locked = appLock.locked.collectAsStateWithLifecycle().value ?: return@setContent
+            WindowPrivacy(blockScreenshots = security.blockScreenshots, appLockOn = security.appLock)
             val dark = prefs.theme.isDark(phoneIsDark = isSystemInDarkTheme())
             val motion = rememberMotionLevel(prefs.animations)
             SystemBarIconsFollow(dark)
             LfTheme(darkTheme = dark) {
-                LedgerFlowApp(
-                    deepLink = deepLink.collectAsStateWithLifecycle().value,
-                    onDeepLinkHandled = { deepLink.value = null },
-                    motionLevel = motion,
-                    startScreen = prefs.startScreen,
-                )
+                Box(Modifier.fillMaxSize()) {
+                    // Still composed under the lock, so the user returns to
+                    // where they were; hidden from accessibility services
+                    // while locked, so a screen reader cannot read past it.
+                    Box(if (locked) Modifier.clearAndSetSemantics { } else Modifier) {
+                        LedgerFlowApp(
+                            deepLink = deepLink.collectAsStateWithLifecycle().value,
+                            onDeepLinkHandled = { deepLink.value = null },
+                            motionLevel = motion,
+                            startScreen = prefs.startScreen,
+                        )
+                    }
+                    if (locked) {
+                        LockScreen(onUnlock = ::askToUnlock, onLeave = { moveTaskToBack(true) })
+                    }
+                }
             }
+        }
+    }
+
+    /** Opens the phone's prompt, once at a time (SPEC §7.6). */
+    private fun askToUnlock() {
+        if (appLock.isAuthenticating) return
+        appLock.promptShown()
+        unlockPrompt.show()
+    }
+
+    /**
+     * Settings > Security & privacy's window flags (V2-PLAN §3.5).
+     *
+     * **Block screenshots** is `FLAG_SECURE`: no screenshots or recordings, and
+     * a blank window in screen sharing and in Recents. Compose's dialogs and
+     * sheets inherit it from this window (their default secure policy).
+     *
+     * **With the app lock on**, Recents shows no picture of the app on Android
+     * 13+ even when screenshots are allowed: a thumbnail of the last screen
+     * would show exactly what the lock is there to cover.
+     */
+    @Composable
+    private fun WindowPrivacy(blockScreenshots: Boolean, appLockOn: Boolean) {
+        DisposableEffect(blockScreenshots) {
+            if (blockScreenshots) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+            onDispose { }
+        }
+        DisposableEffect(appLockOn) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setRecentsScreenshotEnabled(!appLockOn)
+            onDispose { }
         }
     }
 

@@ -74,6 +74,17 @@ key, not a looser reading of the first.
 | `appearance_start_screen` | `appearance` | `HOME`/`LEDGER`/`ANALYTICS`. Chosen when the vault opens. |
 | `region_number_grouping` | `region` | `BY_CURRENCY`/`LAKH`/`WESTERN`. Groups amounts on the unlock screen and in notifications posted with no Activity. |
 | `region_date_order` | `region` | `AUTO` and three explicit orders. Same reach as the grouping. |
+| `security_app_lock` | `security` | On/off. The lock decides before anything draws, whatever the vault's state; a lock setting must not arrive with a restore onto another phone. |
+| `security_lock_after` | `security` | A timeout name. Same reach as the switch. |
+| `security_block_screenshots` | `security` | On/off. Must cover the first frame. |
+
+The app lock's keys pass test 1 in the sense that matters: reading them tells
+a thief only whether the lock is on. Writing them (switching the lock off)
+needs write access to the app's private storage, which is already more than
+the lock defends against -- it is a screen gate over data that stays
+encrypted either way (SPEC §7.6). A damaged file therefore reads as "off",
+the app as it always was, rather than failing closed and locking the user out
+of the screen.
 
 ### Named exception: overspending warnings already sent
 
