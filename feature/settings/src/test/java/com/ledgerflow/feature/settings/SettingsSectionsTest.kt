@@ -37,6 +37,19 @@ class SettingsSectionsTest {
     @get:Rule
     val rule = createComposeRule()
 
+    /** Every row that opens something, and what it opens. The rest are choices. */
+    private val navigatingRows = mapOf(
+        SettingsItem.NotificationCapture to "notification access",
+        SettingsItem.Categories to "categories",
+        SettingsItem.Budgets to "budgets",
+        SettingsItem.BackUpNow to "back up",
+        SettingsItem.Export to "export",
+        SettingsItem.DeletedEntries to "bin",
+        // Opens the confirmation; deleting is the dialog's job (ADR-0023).
+        SettingsItem.Receipts to "event ${SettingsEvent.ReceiptDeleteRequested}",
+        SettingsItem.Diagnostics to "diagnostics",
+    )
+
     @Test
     fun sections_areTheOwnersSplit_inMoresOrder() {
         // Owner, 2026-10-21: every row More had is a setting, Diagnostics the
@@ -50,8 +63,21 @@ class SettingsSectionsTest {
                 SettingsItem.DeletedEntries,
                 SettingsItem.Receipts,
             ),
+            // V2-3 (2026-10-24): below the sections people return to, above Tools.
+            "Appearance" to listOf(SettingsItem.Theme, SettingsItem.Animations, SettingsItem.StartScreen),
             "Tools" to listOf(SettingsItem.Diagnostics),
         ).inOrder()
+    }
+
+    @Test
+    fun everyRow_eitherNavigates_orIsAChoice_neverBoth() {
+        // A row with neither would draw nothing; a row with both would be a
+        // choice whose tap also navigates away from it.
+        val state = SettingsUiState(isLoaded = true)
+        val choices = SettingsItem.entries.filter { choiceFor(it, state) != null }
+        assertThat(choices).containsExactly(SettingsItem.Theme, SettingsItem.Animations, SettingsItem.StartScreen)
+        assertThat(navigatingRows.keys + choices).containsExactlyElementsIn(SettingsItem.entries)
+        assertThat(navigatingRows.keys.intersect(choices.toSet())).isEmpty()
     }
 
     @Test
@@ -88,20 +114,7 @@ class SettingsSectionsTest {
             }
         }
 
-        val expected = mapOf(
-            SettingsItem.NotificationCapture to "notification access",
-            SettingsItem.Categories to "categories",
-            SettingsItem.Budgets to "budgets",
-            SettingsItem.BackUpNow to "back up",
-            SettingsItem.Export to "export",
-            SettingsItem.DeletedEntries to "bin",
-            // Opens the confirmation; deleting is the dialog's job (ADR-0023).
-            SettingsItem.Receipts to "event ${SettingsEvent.ReceiptDeleteRequested}",
-            SettingsItem.Diagnostics to "diagnostics",
-        )
-        assertThat(expected.keys).containsExactlyElementsIn(SettingsItem.entries)
-
-        expected.forEach { (item, callback) ->
+        navigatingRows.forEach { (item, callback) ->
             opened.clear()
             rule.onNodeWithText(item.title).performScrollTo().performClick()
             rule.waitForIdle()

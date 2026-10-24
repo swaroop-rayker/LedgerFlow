@@ -27,6 +27,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.appearance.MotionLevel
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -89,10 +90,55 @@ class Bug57_TabSwitchDoesNotOverlapScreensTest {
 
     @Test
     fun animationsOff_switchesWithoutMotionOrOverlap() {
-        show(animationsEnabled = false)
+        show(MotionLevel.OFF)
         assertFramesNeverOverlap("Home -> Ledger, animations off", settledWithinMs = OFF_SETTLE_MS) {
             navController.switchTab(Destination.Ledger)
         }
+    }
+
+    /**
+     * Settings > Appearance > Animations > Reduced (V2-3): forward and back are
+     * fade-throughs with no slide. The overlap rule still holds, and the
+     * incoming screen's text never moves sideways while it fades in.
+     */
+    @Test
+    fun reduced_fadesThroughWithoutSliding() {
+        show(MotionLevel.REDUCED)
+        val edges = mutableListOf<Int>()
+        assertFramesNeverOverlap("Home -> entry form, reduced", settledWithinMs = AXIS_SETTLE_MS, onFrame = {
+            inkLeftEdge()?.let(edges::add)
+        }) {
+            navController.navigate(Destination.Entry())
+        }
+        assertWithMessage("the entry form's left edge, frame by frame, while it fades in").that(edges).isNotEmpty()
+        assertWithMessage("the entry form's left edge moved: ${edges.distinct()}")
+            .that(edges.max() - edges.min())
+            .isAtMost(1)
+        assertFramesNeverOverlap(
+            "entry form -> back to Home, reduced",
+            settledWithinMs = AXIS_SETTLE_MS,
+            toHome = true,
+        ) {
+            navController.popBackStack()
+        }
+    }
+
+    /**
+     * The measurement above can see a slide: under Full the same move shifts
+     * the incoming text sideways. Without this, a left edge that never moved
+     * could mean only that the measure was blind.
+     */
+    @Test
+    fun full_doesSlide_soTheReducedCheckCanSeeOne() {
+        show()
+        val edges = mutableListOf<Int>()
+        assertFramesNeverOverlap("Home -> entry form, full", settledWithinMs = AXIS_SETTLE_MS, onFrame = {
+            inkLeftEdge()?.let(edges::add)
+        }) {
+            navController.navigate(Destination.Entry())
+        }
+        assertWithMessage("the entry form's left edge, frame by frame").that(edges.max() - edges.min())
+            .isAtLeast(SLIDE_VISIBLE_PX)
     }
 
     @Test
@@ -108,14 +154,14 @@ class Bug57_TabSwitchDoesNotOverlapScreensTest {
         rule.onNodeWithText(row(SCROLLED_TO)).assertIsDisplayed()
     }
 
-    private fun show(animationsEnabled: Boolean = true) {
+    private fun show(level: MotionLevel = MotionLevel.FULL) {
         rule.setContent {
             LfTheme {
                 navController = rememberNavController()
                 Box(Modifier.fillMaxSize().background(Color.White)) {
                     LfNavHost(
                         navController = navController,
-                        motion = rememberNavMotion(animationsEnabled = animationsEnabled),
+                        motion = rememberNavMotion(level),
                     ) {
                         composable<Destination.Dashboard> { Lines("Home", HOME_INK) }
                         composable<Destination.Ledger> { LedgerList() }
@@ -138,6 +184,7 @@ class Bug57_TabSwitchDoesNotOverlapScreensTest {
         what: String,
         settledWithinMs: Long,
         toHome: Boolean = false,
+        onFrame: () -> Unit = {},
         navigate: () -> Unit,
     ) {
         rule.mainClock.autoAdvance = false
@@ -153,6 +200,7 @@ class Bug57_TabSwitchDoesNotOverlapScreensTest {
                 .isLessThan(FAINT)
             val (incoming, outgoing) = if (toHome) home to other else other to home
             if (settledAt == null && incoming > SOLID && outgoing < FAINT) settledAt = elapsed
+            onFrame()
         }
         assertWithMessage("$what: when the incoming screen was fully drawn, alone (ms)")
             .that(settledAt)
@@ -174,6 +222,22 @@ class Bug57_TabSwitchDoesNotOverlapScreensTest {
             }
         }
         return red to blue
+    }
+
+    /**
+     * The leftmost column holding the other screen's (blue) ink at a visible
+     * strength, or null when there is none. Every row is scanned: a fading
+     * glyph's edge is still in the same column at any opacity.
+     */
+    private fun inkLeftEdge(): Int? {
+        val pixels = rule.onRoot().captureToImage().toPixelMap()
+        for (x in 0 until pixels.width) {
+            for (y in 0 until pixels.height) {
+                val c = pixels[x, y]
+                if (min(c.blue - c.red, c.blue - c.green) > EDGE_INK) return x
+            }
+        }
+        return null
     }
 
     @Composable
@@ -203,6 +267,12 @@ class Bug57_TabSwitchDoesNotOverlapScreensTest {
 
         /** A screen drawn at (near) full opacity. */
         const val SOLID = 0.9f
+
+        /** Ink strong enough to place an edge by: a quarter-opaque glyph. */
+        const val EDGE_INK = 0.25f
+
+        /** Full's 30 dp slide, seen as at least this many pixels of travel. */
+        const val SLIDE_VISIBLE_PX = 10
 
         // NavMotion's budgets: 60 ms out + 120 ms in for a tab, 240 ms for the
         // slide, plus a frame of slack each for the frame the navigation lands.

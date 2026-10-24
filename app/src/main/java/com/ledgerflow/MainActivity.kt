@@ -3,24 +3,39 @@ package com.ledgerflow
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.createLifecycleAwareWindowRecomposer
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ledgerflow.appearance.AppMotionDurationScale
+import com.ledgerflow.appearance.AppearanceViewModel
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.appearance.AnimationPreference
+import com.ledgerflow.core.domain.appearance.MotionLevel
+import com.ledgerflow.core.domain.appearance.PhoneMotionSettings
+import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.feature.onboarding.OnboardingScreen
 import com.ledgerflow.feature.onboarding.OnboardingViewModel
 import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
@@ -31,6 +46,7 @@ import com.ledgerflow.feature.onboarding.upgrade.UpgradeBlockedScreen
 import com.ledgerflow.feature.onboarding.upgrade.UpgradingScreen
 import com.ledgerflow.navigation.LedgerFlowShell
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -63,19 +79,96 @@ public class MainActivity : ComponentActivity() {
      */
     private val deepLink = MutableStateFlow<String?>(null)
 
+    private val appearance: AppearanceViewModel by viewModels()
+
+    /** The phone's "Animator duration scale", re-read on every resume. */
+    @Inject
+    internal lateinit var phoneMotion: PhoneMotionSettings
+
+    /** Every Compose animation's scale; zero under Animations > Off (V2-3). */
+    private val motionScale = AppMotionDurationScale()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         deepLink.value = intent?.dataString
 
-        setContent {
-            LfTheme {
+        // The window's recomposer, made here rather than by Compose so that it
+        // plays animations at [motionScale] instead of the scale Compose would
+        // read from the phone. It is otherwise the one Compose makes: tied to
+        // this activity's lifecycle, cancelled when the window goes. Dialogs,
+        // sheets and popups compose under it, so Off reaches them too.
+        val recomposer = window.decorView.createLifecycleAwareWindowRecomposer(
+            coroutineContext = motionScale,
+            lifecycle = lifecycle,
+        )
+
+        setContent(parent = recomposer) {
+            // Nothing until the choices are read (AppearanceViewModel): a few
+            // milliseconds of the launch window, never a frame in the wrong theme.
+            val prefs = appearance.preferences.collectAsStateWithLifecycle().value ?: return@setContent
+            val dark = prefs.theme.isDark(phoneIsDark = isSystemInDarkTheme())
+            val motion = rememberMotionLevel(prefs.animations)
+            SystemBarIconsFollow(dark)
+            LfTheme(darkTheme = dark) {
                 LedgerFlowApp(
                     deepLink = deepLink.collectAsStateWithLifecycle().value,
                     onDeepLinkHandled = { deepLink.value = null },
+                    motionLevel = motion,
+                    startScreen = prefs.startScreen,
                 )
             }
         }
+    }
+
+    /**
+     * Animations > Full / Reduced / Off, with the phone's "Remove animations"
+     * applied on top (§9.5: the phone's switch always wins). The phone's scale
+     * is re-read on resume -- the switch lives in another app, so coming back is
+     * the only moment it can have changed -- and pushed into [motionScale].
+     */
+    @Composable
+    private fun rememberMotionLevel(choice: AnimationPreference): MotionLevel {
+        var phoneScale by remember { mutableFloatStateOf(phoneMotion.animatorDurationScale()) }
+        LifecycleResumeEffect(Unit) {
+            phoneScale = phoneMotion.animatorDurationScale()
+            onPauseOrDispose { }
+        }
+        val level = choice.motionLevel(phoneAnimationsOn = phoneScale != 0f)
+        SideEffect { motionScale.update(level, phoneScale) }
+        return level
+    }
+
+    /**
+     * Status- and navigation-bar icons drawn for the app's theme, not the
+     * phone's. `enableEdgeToEdge()` picks them from the phone's night mode, so
+     * with Appearance set against the phone (Dark on a light phone) the clock
+     * and battery would be dark on a dark screen. Re-applied whenever the
+     * resolved theme changes; the scrims are the library's own defaults.
+     */
+    @Composable
+    private fun SystemBarIconsFollow(dark: Boolean) {
+        DisposableEffect(dark) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.auto(
+                    lightScrim = android.graphics.Color.TRANSPARENT,
+                    darkScrim = android.graphics.Color.TRANSPARENT,
+                ) { dark },
+                navigationBarStyle = SystemBarStyle.auto(
+                    lightScrim = NAV_BAR_LIGHT_SCRIM,
+                    darkScrim = NAV_BAR_DARK_SCRIM,
+                ) { dark },
+            )
+            onDispose { }
+        }
+    }
+
+    private companion object {
+        /** `androidx.activity`'s `DefaultLightScrim`, which it keeps private. */
+        private val NAV_BAR_LIGHT_SCRIM = android.graphics.Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+
+        /** `androidx.activity`'s `DefaultDarkScrim`. */
+        private val NAV_BAR_DARK_SCRIM = android.graphics.Color.argb(0x80, 0x1b, 0x1b, 0x1b)
     }
 
     /**
@@ -107,6 +200,8 @@ public class MainActivity : ComponentActivity() {
 private fun LedgerFlowApp(
     deepLink: String?,
     onDeepLinkHandled: () -> Unit,
+    motionLevel: MotionLevel,
+    startScreen: StartScreen,
 ) {
     val appViewModel: AppViewModel = hiltViewModel()
     val route by appViewModel.route.collectAsStateWithLifecycle()
@@ -170,7 +265,14 @@ private fun LedgerFlowApp(
                         doneLabel = "Not now",
                     )
                 },
-                shell = { LedgerFlowShell(deepLink = deepLink, onDeepLinkHandled = onDeepLinkHandled) },
+                shell = {
+                    LedgerFlowShell(
+                        deepLink = deepLink,
+                        onDeepLinkHandled = onDeepLinkHandled,
+                        motionLevel = motionLevel,
+                        startScreen = startScreen,
+                    )
+                },
             )
         }
     }

@@ -1,8 +1,10 @@
 package com.ledgerflow.core.datastore.di
 
+import com.ledgerflow.core.datastore.AppearanceDataStore
 import com.ledgerflow.core.datastore.CaptureGapDataStore
 import com.ledgerflow.core.datastore.ListenerHealthDataStore
 import com.ledgerflow.core.datastore.NotificationSetupDataStore
+import com.ledgerflow.core.domain.appearance.AppearanceStore
 import com.ledgerflow.core.domain.ingest.CaptureGapStore
 import com.ledgerflow.core.domain.ingest.ListenerHealthStore
 import com.ledgerflow.core.domain.ingest.NotificationSetupStore
@@ -34,4 +36,11 @@ internal abstract class DatastoreModule {
     internal abstract fun notificationSetupStore(
         store: NotificationSetupDataStore,
     ): NotificationSetupStore
+
+    /**
+     * Settings > Appearance. Not ADR-0020's operational metadata: the user's
+     * own display choices, admitted by ADR-0030 on its narrower test.
+     */
+    @Binds
+    internal abstract fun appearanceStore(store: AppearanceDataStore): AppearanceStore
 }

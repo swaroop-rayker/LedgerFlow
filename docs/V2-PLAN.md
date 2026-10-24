@@ -11,10 +11,14 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | BUG59 Inbox links land on Home | Squashed onto `main` (`37e225a`) |
 | Perf alongside | PRs #1, #3, #4 squashed onto `main` (`48c4a04`, `5d7b262`, `52ddd82`); PERF-120HZ §3 tried and reverted |
 | V2-2 Settings | Merged, PR #5 (`d40f5cd`, 2026-10-22): D7 (a), §3 below; SPEC §9.3. Device suites on `d40f5cd` (SM-S721B, 2026-10-23): `:core:database` 105/105 (migration chain v1→v12, backup round-trip, older-schema restores) and `:core:data` 402/402 (restore, nightly and manual backup, purge). CI skips its instrumented job behind the known receipt-corpus red. Its RTL check found BUG61, fixed separately in PR #6 |
+| BUG61 RTL text | Merged, PR #6 (`dd25dd9`, 2026-10-24) |
+| V2-3 decisions | Owner, 2026-10-24: seven PRs in order Appearance → Currency & region → Notifications (budget-alerts row + overspending) → Allowlist editor → App lock + screenshot block → Hide amounts + Data permissions → About. Lock on the platform `BiometricPrompt` (no `androidx.biometric`); preferences outside the vault under ADR-0030 |
+| V2-3 · Appearance | Built on `claude/v2-3-appearance` (§3.2; SPEC §9.3, §9.5; ADR-0030). Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
 FX ADR (D2) take the next free numbers when they are written, not 0029/0030.
+ADR-0030 is now V2-3's device preferences (2026-10-24), so D1 and D2 start at 0031.
 Schema v12 is BUG58's, so merchant categories (§5.5) become v13 and V2-7's
 tables v14 and later.
 
@@ -185,6 +189,12 @@ names what is lost, tells the user to back up first — never pretends to).
 Theme: System / Light / Dark (the app already follows the system; this adds
 the override — **palette unchanged**). Animations: Full / Reduced / Off.
 Start screen: Home / Ledger / Analytics.
+
+**Built (V2-3, 2026-10-24).** Three rows on the Settings tab under an
+Appearance heading, between Data and Tools; SPEC §9.3 and §9.5 have the
+detail. Full is "as the phone allows" (no separate System option), Off scales
+every Compose animation to zero, and the start screen applies from the next
+launch. Stored outside the vault under ADR-0030.
 
 ### 3.3 Currency & region (per D4)
 Base currency (read-only once data exists), currency symbol style, number

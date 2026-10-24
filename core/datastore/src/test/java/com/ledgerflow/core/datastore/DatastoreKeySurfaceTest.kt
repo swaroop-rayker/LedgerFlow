@@ -47,6 +47,13 @@ class DatastoreKeySurfaceTest {
         "capture_gap_first_missed_at",
         "capture_gap_last_missed_at",
         "capture_gap_missed",
+        // ADR-0030 (2026-10-24): Settings > Appearance. The user's display
+        // choices, not machinery -- admitted on that ADR's narrower test (worth
+        // nothing to someone who stole the file; must apply before the vault
+        // opens; never travels in a .lfbk), not by widening ADR-0020's rule.
+        "appearance_theme",
+        "appearance_animations",
+        "appearance_start_screen",
     )
 
     private val moduleSources: List<File> by lazy {
@@ -74,7 +81,7 @@ class DatastoreKeySurfaceTest {
     }
 
     @Test
-    fun everyDeclaredKey_isPermittedByAdr0020() {
+    fun everyDeclaredKey_isPermittedByAdr0020OrAdr0030() {
         assertThat(declaredKeys()).containsExactlyElementsIn(permittedKeys)
     }
 
