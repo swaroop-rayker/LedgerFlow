@@ -156,6 +156,7 @@ val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
         "android.permission.CAMERA",
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_BIOMETRIC",
         "android.permission.RECEIVE_SMS",
         "android.permission.WAKE_LOCK",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -167,6 +168,7 @@ val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
         "android.permission.CAMERA",
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_BIOMETRIC",
         "android.permission.RECEIVE_SMS",
         "android.permission.WAKE_LOCK",
         "android.permission.ACCESS_NETWORK_STATE",
@@ -180,6 +182,7 @@ val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
         "android.permission.CAMERA",
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_BIOMETRIC",
         "android.permission.WAKE_LOCK",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -190,6 +193,7 @@ val EXPECTED_MERGED_PERMISSIONS: Map<String, Set<String>> = mapOf(
         "android.permission.CAMERA",
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_BIOMETRIC",
         "android.permission.WAKE_LOCK",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -375,6 +379,10 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // The app lock (SPEC §7.6) watches the PROCESS go to the background, so
+    // rotation or a system dialog is never "away". Already in the graph via
+    // :core:data; named here because :app now uses it directly.
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.hilt.navigation.compose)
 
     // LedgerFlowApplication is WorkManager's Configuration.Provider, so :app

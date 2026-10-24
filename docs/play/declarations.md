@@ -17,7 +17,7 @@ owner picks the matching option.
 | **Financial features** | The app is a personal expense and budgeting tracker. It does **not** provide banking, loans, payments, money transfer, investment, insurance or crypto services. | Pick the option the console offers for "no financial services / budgeting or expense tracking only". It does not move money or connect to any bank. |
 | **Data safety** | See `docs/play/data-safety.md` | |
 | **Foreground service permissions** | Not asked | No service declares a `foregroundServiceType`; WorkManager's plain `FOREGROUND_SERVICE` is unused. Checked in the merged manifest 2026-10-02. |
-| **Sensitive permissions** | None requiring a declaration | playSafe has no `RECEIVE_SMS`/`READ_SMS` (D-04, pinned by `mergedPermissionCheckPlaySafeRelease`). `CAMERA` and `POST_NOTIFICATIONS` need no form. Notification access is granted by the user in Android's settings, after the app's own explanation screen ("What LedgerFlow reads"). |
+| **Sensitive permissions** | None requiring a declaration | playSafe has no `RECEIVE_SMS`/`READ_SMS` (D-04, pinned by `mergedPermissionCheckPlaySafeRelease`). `CAMERA`, `POST_NOTIFICATIONS` and `USE_BIOMETRIC` (the optional app lock, V2-3) need no form. Notification access is granted by the user in Android's settings, after the app's own explanation screen ("What LedgerFlow reads"). |
 
 ## Release track (new personal developer account)
 

@@ -21,6 +21,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
+      The app lock's prompt (SPEC 7.6, V2-3): the platform BiometricPrompt needs
+      it. A normal permission, granted at install, that lets the app ASK the
+      phone to confirm the user; it reads no biometric data and touches no key.
+      Pinned in both permission guards on purpose (Law 6, ADR-0021).
+    -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!--
       allowBackup=false is mandatory (SPEC.md §7.5). Android Auto Backup copies
       the encrypted database but cannot copy the Keystore key, so a restore onto
       a new device yields an undecryptable database. LedgerFlow ships its own

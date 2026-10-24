@@ -6,12 +6,14 @@ import com.ledgerflow.core.datastore.ListenerHealthDataStore
 import com.ledgerflow.core.datastore.NotificationSetupDataStore
 import com.ledgerflow.core.datastore.OverspendAnnouncementsDataStore
 import com.ledgerflow.core.datastore.RegionDataStore
+import com.ledgerflow.core.datastore.SecurityDataStore
 import com.ledgerflow.core.domain.analytics.OverspendAnnouncements
 import com.ledgerflow.core.domain.appearance.AppearanceStore
 import com.ledgerflow.core.domain.ingest.CaptureGapStore
 import com.ledgerflow.core.domain.ingest.ListenerHealthStore
 import com.ledgerflow.core.domain.ingest.NotificationSetupStore
 import com.ledgerflow.core.domain.region.RegionStore
+import com.ledgerflow.core.domain.security.SecurityStore
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -57,4 +59,8 @@ internal abstract class DatastoreModule {
     internal abstract fun overspendAnnouncements(
         store: OverspendAnnouncementsDataStore,
     ): OverspendAnnouncements
+
+    /** Settings > Security & privacy, on ADR-0030's test. */
+    @Binds
+    internal abstract fun securityStore(store: SecurityDataStore): SecurityStore
 }

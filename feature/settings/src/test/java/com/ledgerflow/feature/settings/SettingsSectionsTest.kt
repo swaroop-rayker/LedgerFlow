@@ -51,6 +51,7 @@ class SettingsSectionsTest {
         SettingsItem.Receipts to "event ${SettingsEvent.ReceiptDeleteRequested}",
         // Opens its picker; picking is the dialog's job.
         SettingsItem.DateOrder to "event ${SettingsEvent.DateOrderRequested}",
+        SettingsItem.LockAfter to "event ${SettingsEvent.LockAfterRequested}",
         SettingsItem.Diagnostics to "diagnostics",
     )
 
@@ -74,6 +75,12 @@ class SettingsSectionsTest {
                 SettingsItem.Receipts,
             ),
             // V2-3 (2026-10-24): below the sections people return to, above Tools.
+            // V2-3, SPEC §7.6: after Data, before how the app looks.
+            "Security & privacy" to listOf(
+                SettingsItem.AppLock,
+                SettingsItem.LockAfter,
+                SettingsItem.BlockScreenshots,
+            ),
             "Appearance" to listOf(SettingsItem.Theme, SettingsItem.Animations, SettingsItem.StartScreen),
             "Currency & region" to listOf(
                 SettingsItem.BaseCurrency,
@@ -82,6 +89,14 @@ class SettingsSectionsTest {
             ),
             "Tools" to listOf(SettingsItem.Diagnostics),
         ).inOrder()
+    }
+
+    @Test
+    fun everyRow_hasASentence() {
+        // subtitleFor is a table; a row added without an entry would throw here
+        // rather than when the tab is drawn.
+        val state = SettingsUiState(isLoaded = true)
+        SettingsItem.entries.forEach { item -> assertThat(subtitleFor(item, state)).isNotEmpty() }
     }
 
     @Test
@@ -97,9 +112,12 @@ class SettingsSectionsTest {
             SettingsItem.NumberGrouping,
         )
         val facts = listOf(SettingsItem.BaseCurrency)
-        assertThat(navigatingRows.keys + choices + facts).containsExactlyElementsIn(SettingsItem.entries)
+        val switches = SettingsItem.entries.filter { toggleFor(it, state) != null }
+        assertThat(switches).containsExactly(SettingsItem.AppLock, SettingsItem.BlockScreenshots)
+        assertThat(navigatingRows.keys + choices + facts + switches).containsExactlyElementsIn(SettingsItem.entries)
         assertThat(navigatingRows.keys.intersect(choices.toSet())).isEmpty()
         assertThat(navigatingRows.keys.intersect(facts.toSet())).isEmpty()
+        assertThat((navigatingRows.keys + choices + facts).intersect(switches.toSet())).isEmpty()
     }
 
     @Test

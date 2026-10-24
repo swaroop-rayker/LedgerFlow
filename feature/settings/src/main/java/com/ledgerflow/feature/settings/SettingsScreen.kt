@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -26,19 +25,11 @@ import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfSwitchRow
 import com.ledgerflow.core.designsystem.theme.LfTheme
-import com.ledgerflow.core.designsystem.format.MoneyFormat
-import com.ledgerflow.core.designsystem.format.bidiIsolated
-import com.ledgerflow.core.domain.analytics.AlertChannelState
-import com.ledgerflow.core.domain.appearance.AnimationPreference
-import com.ledgerflow.core.model.CurrencyDisplay
-import com.ledgerflow.core.model.CurrencyExponent
 import com.ledgerflow.core.model.DateOrder
-import com.ledgerflow.core.model.NumberGrouping
-import java.time.LocalDate
-import com.ledgerflow.core.domain.appearance.StartScreen
-import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
+import com.ledgerflow.core.domain.security.LockTimeout
 import java.util.Locale
 
 /**
@@ -70,13 +61,7 @@ public fun SettingsScreen(
     onEvent: (SettingsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (state.confirmingReceiptDelete) {
-        DeleteReceiptsDialog(state = state, onEvent = onEvent)
-    }
-
-    if (state.choosingDateOrder) {
-        DateOrderDialog(selected = state.region.dateOrder, onEvent = onEvent)
-    }
+    SettingsDialogs(state = state, onEvent = onEvent)
 
     // Where each navigating row goes; the shell owns the destinations. Rows
     // absent here are choices made in place, or a fact (the base currency,
@@ -96,6 +81,7 @@ public fun SettingsScreen(
         // Four options do not fit a row's control (they would stack into a
         // column four buttons tall), so this one opens a short picker.
         SettingsItem.DateOrder to { onEvent(SettingsEvent.DateOrderRequested) },
+        SettingsItem.LockAfter to { onEvent(SettingsEvent.LockAfterRequested) },
         SettingsItem.Diagnostics to onDiagnostics,
     )
 
@@ -143,6 +129,11 @@ internal enum class SettingsItem {
     BaseCurrency,
     NumberGrouping,
     DateOrder,
+
+    // Security & privacy (V2-3, V2-PLAN §3.5, SPEC §7.6).
+    AppLock,
+    LockAfter,
+    BlockScreenshots,
 
     Diagnostics,
 }
@@ -197,6 +188,10 @@ internal val SettingsSections: List<SettingsSection> = listOf(
         ),
     ),
     SettingsSection(
+        "Security & privacy",
+        listOf(SettingsItem.AppLock, SettingsItem.LockAfter, SettingsItem.BlockScreenshots),
+    ),
+    SettingsSection(
         "Appearance",
         listOf(SettingsItem.Theme, SettingsItem.Animations, SettingsItem.StartScreen),
     ),
@@ -235,6 +230,9 @@ internal val SettingsItem.title: String
         SettingsItem.BaseCurrency -> "Base currency"
         SettingsItem.NumberGrouping -> "Number grouping"
         SettingsItem.DateOrder -> "Date order"
+        SettingsItem.AppLock -> "App lock"
+        SettingsItem.LockAfter -> "Lock after"
+        SettingsItem.BlockScreenshots -> "Block screenshots"
         SettingsItem.Diagnostics -> "Diagnostics"
     }
 
@@ -248,215 +246,36 @@ internal val SettingsItem.title: String
  * purge of receipts and makes their growth visible instead, so that row is kept
  * for the same reason.
  */
-internal fun subtitleFor(item: SettingsItem, state: SettingsUiState): String = when (item) {
-    SettingsItem.NotificationCapture -> captureSubtitle(state)
-    SettingsItem.PaymentApps -> paymentAppsSubtitle(state.paymentApps)
-    SettingsItem.BudgetAlerts -> budgetAlertsSubtitle(state.budgetAlerts)
-    SettingsItem.BackUpNow -> backupSubtitle(state)
-    SettingsItem.DeletedEntries -> deletedSubtitle(state)
-    SettingsItem.Receipts -> receiptsSubtitle(state)
-    SettingsItem.Theme -> themeSubtitle(state.appearance.theme)
-    SettingsItem.Animations -> animationsSubtitle(state)
-    SettingsItem.BaseCurrency -> baseCurrencySubtitle(state)
-    SettingsItem.NumberGrouping -> groupingSubtitle(state)
-    SettingsItem.DateOrder -> dateOrderSubtitle(state.region.dateOrder)
-    SettingsItem.Categories,
-    SettingsItem.Budgets,
-    SettingsItem.Export,
-    SettingsItem.StartScreen,
-    SettingsItem.Diagnostics,
-    -> FIXED_SUBTITLES.getValue(item)
-}
+internal fun subtitleFor(item: SettingsItem, state: SettingsUiState): String = SUBTITLES.getValue(item)(state)
 
-/** The rows whose sentence never changes with state. */
-private val FIXED_SUBTITLES: Map<SettingsItem, String> = mapOf(
-    SettingsItem.Categories to "Organise how spending is grouped",
-    SettingsItem.Budgets to "Set a limit per category",
-    SettingsItem.Export to "Save your data as an Excel workbook or CSV",
+/**
+ * Each row's sentence, by row. A table rather than a `when`: one entry per row
+ * is the whole of its logic, and `SettingsSectionsTest.everyRow_hasASentence`
+ * fails if a row is added without one.
+ */
+private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
+    SettingsItem.NotificationCapture to { captureSubtitle(it) },
+    SettingsItem.PaymentApps to { paymentAppsSubtitle(it.paymentApps) },
+    SettingsItem.BudgetAlerts to { budgetAlertsSubtitle(it.budgetAlerts) },
+    SettingsItem.Categories to { "Organise how spending is grouped" },
+    SettingsItem.Budgets to { "Set a limit per category" },
+    SettingsItem.BackUpNow to { backupSubtitle(it) },
+    SettingsItem.Export to { "Save your data as an Excel workbook or CSV" },
+    SettingsItem.DeletedEntries to { deletedSubtitle(it) },
+    SettingsItem.Receipts to { receiptsSubtitle(it) },
+    SettingsItem.AppLock to { appLockSubtitle(it) },
+    SettingsItem.LockAfter to { lockAfterSubtitle(it.security) },
+    SettingsItem.BlockScreenshots to { blockScreenshotsSubtitle(it.security.blockScreenshots) },
+    SettingsItem.Theme to { themeSubtitle(it.appearance.theme) },
+    SettingsItem.Animations to { animationsSubtitle(it) },
     // The shell reads it once per launch (a live change would rebuild the
     // navigation graph under the user), so the sentence says when it applies.
-    SettingsItem.StartScreen to "Applies the next time the app opens.",
-    SettingsItem.Diagnostics to "How automatic capture is working",
+    SettingsItem.StartScreen to { "Applies the next time the app opens." },
+    SettingsItem.BaseCurrency to { baseCurrencySubtitle(it) },
+    SettingsItem.NumberGrouping to { groupingSubtitle(it) },
+    SettingsItem.DateOrder to { dateOrderSubtitle(it.region.dateOrder) },
+    SettingsItem.Diagnostics to { "How automatic capture is working" },
 )
-
-/**
- * What the payment-apps row says (V2-PLAN §3.4): how many apps are read, so the
- * guarantee's reach is visible from Settings. Null until the list is read.
- */
-internal fun paymentAppsSubtitle(enabledCount: Int?): String = when (enabledCount) {
-    null -> "The apps whose notifications LedgerFlow reads"
-    0 -> "None. No app's notifications are read."
-    1 -> "Reads notifications from 1 app. Tap to change."
-    else -> "Reads notifications from $enabledCount apps. Tap to change."
-}
-
-/**
- * What the budget-alerts row says (V2-PLAN §3.4): the channel's state, and
- * what turning it back on takes. Null before the first read on resume.
- */
-internal fun budgetAlertsSubtitle(state: AlertChannelState?): String = when (state) {
-    null -> "When a budget nears its limit, or is on course to go over."
-    AlertChannelState.ON -> "On. When a budget nears its limit, or is on course to go over."
-    AlertChannelState.CHANNEL_OFF -> "Off in Android settings. Tap to turn them on."
-    AlertChannelState.APP_OFF -> "LedgerFlow's notifications are off. Tap to turn them on."
-}
-
-/**
- * D4: shown, never changed. Every amount in the vault is minor units of this
- * currency, so changing it would relabel every figure without converting any.
- * The sentence says so, rather than leaving a row that looks broken.
- */
-internal fun baseCurrencySubtitle(state: SettingsUiState): String {
-    val code = state.baseCurrency ?: return "Chosen when LedgerFlow was set up."
-    // Isolated, so the dirham's right-to-left symbol cannot turn the line
-    // around (BUG61).
-    val symbol = bidiIsolated(CurrencyDisplay.symbolOf(code))
-    return "$symbol ${CurrencyDisplay.nameOf(code)} ($code). Every amount is kept in it, so it can't change."
-}
-
-/** A long amount in the base currency, as the chosen grouping writes it. */
-internal fun groupingSubtitle(state: SettingsUiState): String {
-    val code = state.baseCurrency ?: DEFAULT_CURRENCY
-    val sample = MoneyFormat.symbolised(
-        GROUPING_SAMPLE_MAJOR * POWERS_OF_TEN[CurrencyExponent.of(code)],
-        code,
-        grouping = state.region.grouping,
-    )
-    return when (state.region.grouping) {
-        NumberGrouping.BY_CURRENCY -> "$sample, as ${CurrencyDisplay.spokenUnitOf(code)} are written."
-        NumberGrouping.LAKH -> "$sample, in lakh and crore."
-        NumberGrouping.WESTERN -> "$sample, in thousands and millions."
-    }
-}
-
-/** One date, in each order: a day past the 12th, so the order cannot be misread. */
-internal fun dateOrderSubtitle(order: DateOrder): String {
-    val sample = DisplayDates.medium(DATE_SAMPLE, order = order)
-    return when (order) {
-        DateOrder.AUTO -> "Your region's style: $sample"
-        DateOrder.DAY_MONTH_YEAR -> "Day first: $sample"
-        DateOrder.MONTH_DAY_YEAR -> "Month first: $sample"
-        DateOrder.YEAR_MONTH_DAY -> "Year first: $sample"
-    }
-}
-
-/** The picker's options: each order named by how it writes the sample date. */
-internal fun dateOrderOptions(): List<String> = DateOrder.entries.map { order ->
-    when (order) {
-        DateOrder.AUTO -> "Region style"
-        DateOrder.DAY_MONTH_YEAR, DateOrder.MONTH_DAY_YEAR, DateOrder.YEAR_MONTH_DAY ->
-            DisplayDates.medium(DATE_SAMPLE, order = order)
-    }
-}
-
-private val DATE_SAMPLE: LocalDate = LocalDate.of(2026, 10, 24)
-private const val GROUPING_SAMPLE_MAJOR = 1_234_567L
-private const val DEFAULT_CURRENCY = "INR"
-
-/** Indexed by ISO-4217 exponent (0, 2 and 3 occur), as `MoneyFormat` keeps it. */
-private val POWERS_OF_TEN = longArrayOf(1L, 10L, 100L, 1_000L)
-
-/**
- * One in-place choice: its options, which is selected, and the event a pick
- * sends. Null for a row that navigates.
- */
-@Immutable
-internal class SettingsChoice(
-    val options: List<String>,
-    val selectedIndex: Int,
-    val eventFor: (Int) -> SettingsEvent,
-)
-
-/** The choice an Appearance row offers (V2-PLAN §3.2), or null for any other row. */
-internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoice? = when (item) {
-    SettingsItem.Theme -> SettingsChoice(
-        options = ThemePreference.entries.map { it.label },
-        selectedIndex = state.appearance.theme.ordinal,
-        eventFor = { SettingsEvent.ThemePicked(ThemePreference.entries[it]) },
-    )
-
-    SettingsItem.Animations -> SettingsChoice(
-        options = AnimationPreference.entries.map { it.label },
-        selectedIndex = state.appearance.animations.ordinal,
-        eventFor = { SettingsEvent.AnimationsPicked(AnimationPreference.entries[it]) },
-    )
-
-    SettingsItem.StartScreen -> SettingsChoice(
-        options = StartScreen.entries.map { it.label },
-        selectedIndex = state.appearance.startScreen.ordinal,
-        eventFor = { SettingsEvent.StartScreenPicked(StartScreen.entries[it]) },
-    )
-
-    SettingsItem.NumberGrouping -> SettingsChoice(
-        options = NumberGrouping.entries.map { it.label },
-        selectedIndex = state.region.grouping.ordinal,
-        eventFor = { SettingsEvent.GroupingPicked(NumberGrouping.entries[it]) },
-    )
-
-    SettingsItem.BaseCurrency,
-    SettingsItem.DateOrder,
-    SettingsItem.NotificationCapture,
-    SettingsItem.PaymentApps,
-    SettingsItem.BudgetAlerts,
-    SettingsItem.Categories,
-    SettingsItem.Budgets,
-    SettingsItem.BackUpNow,
-    SettingsItem.Export,
-    SettingsItem.DeletedEntries,
-    SettingsItem.Receipts,
-    SettingsItem.Diagnostics,
-    -> null
-}
-
-private val ThemePreference.label: String
-    get() = when (this) {
-        ThemePreference.SYSTEM -> "System"
-        ThemePreference.LIGHT -> "Light"
-        ThemePreference.DARK -> "Dark"
-    }
-
-private val AnimationPreference.label: String
-    get() = when (this) {
-        AnimationPreference.FULL -> "Full"
-        AnimationPreference.REDUCED -> "Reduced"
-        AnimationPreference.OFF -> "Off"
-    }
-
-private val NumberGrouping.label: String
-    get() = when (this) {
-        NumberGrouping.BY_CURRENCY -> "Currency"
-        NumberGrouping.LAKH -> "Lakh"
-        NumberGrouping.WESTERN -> "Western"
-    }
-
-/** "Home", as the bottom bar names it -- not "Dashboard". */
-private val StartScreen.label: String
-    get() = when (this) {
-        StartScreen.HOME -> "Home"
-        StartScreen.LEDGER -> "Ledger"
-        StartScreen.ANALYTICS -> "Analytics"
-    }
-
-/** One line each at 1.0: the row is a choice to scan, not a paragraph. */
-internal fun themeSubtitle(theme: ThemePreference): String = when (theme) {
-    ThemePreference.SYSTEM -> "Light or dark, as your phone is set."
-    ThemePreference.LIGHT -> "Always light."
-    ThemePreference.DARK -> "Always dark."
-}
-
-/**
- * What the chosen motion means, and -- the case that would otherwise look like
- * a broken setting -- why nothing moves on a phone that has removed animations,
- * whichever option is picked (SPEC §9.5: the phone's switch always wins).
- */
-internal fun animationsSubtitle(state: SettingsUiState): String = when {
-    !state.phoneAnimationsOn -> "Your phone has animations removed, so nothing here moves either."
-    else -> when (state.appearance.animations) {
-        AnimationPreference.FULL -> "Screens slide and fade."
-        AnimationPreference.REDUCED -> "Screens fade. Nothing slides."
-        AnimationPreference.OFF -> "Nothing moves."
-    }
-}
 
 /**
  * What the bin row says about itself.
@@ -664,10 +483,13 @@ private fun SettingsItemRow(
     onEvent: (SettingsEvent) -> Unit,
 ) {
     val choice = choiceFor(item, state)
+    val toggle = toggleFor(item, state)
     when {
         onClick != null -> SettingsRow(title = item.title, subtitle = subtitleFor(item, state), onClick = onClick)
         choice != null ->
             ChoiceRow(title = item.title, choice = choice, subtitle = subtitleFor(item, state), onEvent = onEvent)
+        toggle != null ->
+            ToggleRow(title = item.title, toggle = toggle, subtitle = subtitleFor(item, state), onEvent = onEvent)
         else -> InfoRow(title = item.title, subtitle = subtitleFor(item, state))
     }
 }
@@ -686,29 +508,79 @@ private fun InfoRow(title: String, subtitle: String) {
     }
 }
 
+/** The dialogs a row can open: the receipts confirmation and the two pickers. */
+@Composable
+private fun SettingsDialogs(state: SettingsUiState, onEvent: (SettingsEvent) -> Unit) {
+    if (state.confirmingReceiptDelete) {
+        DeleteReceiptsDialog(state = state, onEvent = onEvent)
+    }
+
+    if (state.choosingDateOrder) {
+        OptionsDialog(
+            title = "Date order",
+            body = "How dates are written across LedgerFlow.",
+            options = dateOrderOptions(),
+            selectedIndex = state.region.dateOrder.ordinal,
+            onPick = { onEvent(SettingsEvent.DateOrderPicked(DateOrder.entries[it])) },
+            onClose = { onEvent(SettingsEvent.DateOrderDismissed) },
+        )
+    }
+    if (state.choosingLockAfter) {
+        OptionsDialog(
+            title = "Lock after",
+            body = "How long LedgerFlow may be away before it asks again.",
+            options = LockTimeout.entries.map { it.label },
+            selectedIndex = state.security.lockAfter.ordinal,
+            onPick = { onEvent(SettingsEvent.LockAfterPicked(LockTimeout.entries[it])) },
+            onClose = { onEvent(SettingsEvent.LockAfterDismissed) },
+        )
+    }
+}
+
 /**
- * Settings > Currency & region > Date order. Four options, each named by how
- * it writes one date; a pick applies and closes, the way a list of choices in
- * Android's own settings does. Stacked by the control itself, as four will be
- * at any width a dialog has.
+ * A row's choice with too many options for the row itself (Date order, Lock
+ * after): four would stack the in-place control into a column four buttons
+ * tall. A pick applies and closes, the way a list of choices in Android's own
+ * settings does. Stacked by the control itself, as four will be at any width a
+ * dialog has.
  */
 @Composable
-private fun DateOrderDialog(selected: DateOrder, onEvent: (SettingsEvent) -> Unit) {
+private fun OptionsDialog(
+    title: String,
+    body: String,
+    options: List<String>,
+    selectedIndex: Int,
+    onPick: (Int) -> Unit,
+    onClose: () -> Unit,
+) {
     LfDialog(
-        title = "Date order",
-        body = "How dates are written across LedgerFlow.",
+        title = title,
+        body = body,
         confirmText = "Close",
         dismissText = null,
-        onConfirm = { onEvent(SettingsEvent.DateOrderDismissed) },
-        onDismiss = { onEvent(SettingsEvent.DateOrderDismissed) },
-        detail = {
-            LfSegmentedControl(
-                options = dateOrderOptions(),
-                selectedIndex = selected.ordinal,
-                onSelect = { onEvent(SettingsEvent.DateOrderPicked(DateOrder.entries[it])) },
-            )
-        },
+        onConfirm = onClose,
+        onDismiss = onClose,
+        detail = { LfSegmentedControl(options = options, selectedIndex = selectedIndex, onSelect = onPick) },
     )
+}
+
+/**
+ * A switch in the row's card (Security & privacy): the same card as every row,
+ * so the screen keeps one shape; the sentence under the name says what the
+ * switch does, or why it cannot be turned on.
+ */
+@Composable
+private fun ToggleRow(title: String, toggle: SettingsToggle, subtitle: String, onEvent: (SettingsEvent) -> Unit) {
+    LfCard(modifier = Modifier.fillMaxWidth()) {
+        LfSwitchRow(
+            label = title,
+            checked = toggle.checked,
+            onCheckedChange = { onEvent(toggle.eventFor(it)) },
+            supporting = subtitle,
+            modifier = Modifier.defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget),
+            prominent = true,
+        )
+    }
 }
 
 /**

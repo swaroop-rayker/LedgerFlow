@@ -1,5 +1,6 @@
 package com.ledgerflow.core.designsystem.component
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +43,12 @@ public fun LfSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     supporting: String? = null,
+    /**
+     * A row-sized title and sentence, for a switch that stands as a row among
+     * other rows (Settings > Security & privacy), so it reads in the same type
+     * as its neighbours. The default stays the compact form forms use.
+     */
+    prominent: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -53,16 +60,19 @@ public fun LfSwitchRow(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = if (prominent) Arrangement.spacedBy(LfTheme.spacing.xs) else Arrangement.Top,
+        ) {
             Text(
                 text = label,
-                style = LfTheme.typography.bodyM,
+                style = if (prominent) LfTheme.typography.bodyL else LfTheme.typography.bodyM,
                 color = LfTheme.colors.textPrimary,
             )
             if (supporting != null) {
                 Text(
                     text = supporting,
-                    style = LfTheme.typography.label,
+                    style = if (prominent) LfTheme.typography.bodyM else LfTheme.typography.label,
                     color = LfTheme.colors.textSecondary,
                 )
             }
