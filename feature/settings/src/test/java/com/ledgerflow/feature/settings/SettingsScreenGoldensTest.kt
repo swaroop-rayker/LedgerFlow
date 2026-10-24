@@ -1,8 +1,13 @@
 package com.ledgerflow.feature.settings
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.appearance.AnimationPreference
+import com.ledgerflow.core.domain.appearance.AppearancePreferences
+import com.ledgerflow.core.domain.appearance.StartScreen
+import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
@@ -36,8 +41,13 @@ class SettingsScreenGoldensTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun capture(name: String, state: SettingsUiState, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun capture(
+        name: String,
+        state: SettingsUiState,
+        fontScale: Float,
+        layoutDirection: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, layoutDirection) {
             LfTheme {
                 SettingsScreen(
                     state = state,
@@ -60,6 +70,12 @@ class SettingsScreenGoldensTest {
         captureHealth = NotificationCaptureHealth.CONNECTED,
         lastBackupAt = 1_790_000_000_000L,
         nightlyBackupsEnabled = true,
+        // Not the defaults, so the golden shows a selection that moved (V2-3).
+        appearance = AppearancePreferences(
+            theme = ThemePreference.DARK,
+            animations = AnimationPreference.REDUCED,
+            startScreen = StartScreen.LEDGER,
+        ),
     )
 
     private val fresh = SettingsUiState(
@@ -77,4 +93,11 @@ class SettingsScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun fresh_2x() = capture("settings-fresh-2x", fresh, 2f)
+
+    /**
+     * Right-to-left (BUG61): headings and rows on the right, the segmented
+     * controls mirrored so the first option is rightmost, every English line
+     * still LTR with its full stop last.
+     */
+    @Test fun livedIn_rtl_1x() = capture("settings-lived-in-rtl-1x", livedIn, 1f, LayoutDirection.Rtl)
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -23,7 +24,11 @@ import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.appearance.AnimationPreference
+import com.ledgerflow.core.domain.appearance.StartScreen
+import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import java.text.DateFormat
 import java.util.Date
@@ -64,7 +69,8 @@ public fun SettingsScreen(
     // confirmation is the only thing that deletes (ADR-0023).
     val requestReceiptDelete: () -> Unit = { onEvent(SettingsEvent.ReceiptDeleteRequested) }
 
-    fun open(item: SettingsItem): () -> Unit = when (item) {
+    // Null for a row that is a choice made in place rather than a way somewhere.
+    fun open(item: SettingsItem): (() -> Unit)? = when (item) {
         SettingsItem.NotificationCapture -> onNotificationAccess
         SettingsItem.Categories -> onCategories
         SettingsItem.Budgets -> onBudgets
@@ -72,6 +78,7 @@ public fun SettingsScreen(
         SettingsItem.Export -> onExport
         SettingsItem.DeletedEntries -> onDeletedEntries
         SettingsItem.Receipts -> requestReceiptDelete
+        SettingsItem.Theme, SettingsItem.Animations, SettingsItem.StartScreen -> null
         SettingsItem.Diagnostics -> onDiagnostics
     }
 
@@ -90,11 +97,7 @@ public fun SettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
                     SectionHeading(section.heading)
                     section.items.forEach { item ->
-                        SettingsRow(
-                            title = item.title,
-                            subtitle = subtitleFor(item, state),
-                            onClick = open(item),
-                        )
+                        SettingsItemRow(item = item, state = state, onClick = open(item), onEvent = onEvent)
                     }
                 }
             }
@@ -111,6 +114,12 @@ internal enum class SettingsItem {
     Export,
     DeletedEntries,
     Receipts,
+
+    // Appearance (V2-3, V2-PLAN §3.2): choices made in place, not ways out.
+    Theme,
+    Animations,
+    StartScreen,
+
     Diagnostics,
 }
 
@@ -140,6 +149,9 @@ internal data class SettingsSection(val heading: String, val items: List<Setting
  * - **Back up now directly above Export** (§16 Q23), because the two are easy
  *   to confuse and must not be: Export writes a plain spreadsheet anyone can
  *   read; Back up now writes the encrypted backup only the 24 words can open.
+ * - **Appearance after Data** (V2-3, 2026-10-24): how the app looks is set
+ *   once and rarely revisited, so it sits below the sections people come back
+ *   to, and above Tools, which stays last.
  * - **Diagnostics last**: it answers "is capture working?" in detail, which is
  *   a question for after the rows above, and it changes nothing.
  */
@@ -154,6 +166,10 @@ internal val SettingsSections: List<SettingsSection> = listOf(
             SettingsItem.DeletedEntries,
             SettingsItem.Receipts,
         ),
+    ),
+    SettingsSection(
+        "Appearance",
+        listOf(SettingsItem.Theme, SettingsItem.Animations, SettingsItem.StartScreen),
     ),
     SettingsSection("Tools", listOf(SettingsItem.Diagnostics)),
 )
@@ -178,6 +194,9 @@ internal val SettingsItem.title: String
         SettingsItem.Export -> "Export"
         SettingsItem.DeletedEntries -> "Deleted entries"
         SettingsItem.Receipts -> "Receipts"
+        SettingsItem.Theme -> "Theme"
+        SettingsItem.Animations -> "Animations"
+        SettingsItem.StartScreen -> "Start screen"
         SettingsItem.Diagnostics -> "Diagnostics"
     }
 
@@ -199,7 +218,97 @@ internal fun subtitleFor(item: SettingsItem, state: SettingsUiState): String = w
     SettingsItem.Export -> "Save your data as an Excel workbook or CSV"
     SettingsItem.DeletedEntries -> deletedSubtitle(state)
     SettingsItem.Receipts -> receiptsSubtitle(state)
+    SettingsItem.Theme -> themeSubtitle(state.appearance.theme)
+    SettingsItem.Animations -> animationsSubtitle(state)
+    // The shell reads it once per launch (a live change would rebuild the
+    // navigation graph under the user), so the sentence says when it applies.
+    SettingsItem.StartScreen -> "Applies the next time the app opens."
     SettingsItem.Diagnostics -> "How automatic capture is working"
+}
+
+/**
+ * One in-place choice: its options, which is selected, and the event a pick
+ * sends. Null for a row that navigates.
+ */
+@Immutable
+internal class SettingsChoice(
+    val options: List<String>,
+    val selectedIndex: Int,
+    val eventFor: (Int) -> SettingsEvent,
+)
+
+/** The choice an Appearance row offers (V2-PLAN §3.2), or null for any other row. */
+internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoice? = when (item) {
+    SettingsItem.Theme -> SettingsChoice(
+        options = ThemePreference.entries.map { it.label },
+        selectedIndex = state.appearance.theme.ordinal,
+        eventFor = { SettingsEvent.ThemePicked(ThemePreference.entries[it]) },
+    )
+
+    SettingsItem.Animations -> SettingsChoice(
+        options = AnimationPreference.entries.map { it.label },
+        selectedIndex = state.appearance.animations.ordinal,
+        eventFor = { SettingsEvent.AnimationsPicked(AnimationPreference.entries[it]) },
+    )
+
+    SettingsItem.StartScreen -> SettingsChoice(
+        options = StartScreen.entries.map { it.label },
+        selectedIndex = state.appearance.startScreen.ordinal,
+        eventFor = { SettingsEvent.StartScreenPicked(StartScreen.entries[it]) },
+    )
+
+    SettingsItem.NotificationCapture,
+    SettingsItem.Categories,
+    SettingsItem.Budgets,
+    SettingsItem.BackUpNow,
+    SettingsItem.Export,
+    SettingsItem.DeletedEntries,
+    SettingsItem.Receipts,
+    SettingsItem.Diagnostics,
+    -> null
+}
+
+private val ThemePreference.label: String
+    get() = when (this) {
+        ThemePreference.SYSTEM -> "System"
+        ThemePreference.LIGHT -> "Light"
+        ThemePreference.DARK -> "Dark"
+    }
+
+private val AnimationPreference.label: String
+    get() = when (this) {
+        AnimationPreference.FULL -> "Full"
+        AnimationPreference.REDUCED -> "Reduced"
+        AnimationPreference.OFF -> "Off"
+    }
+
+/** "Home", as the bottom bar names it -- not "Dashboard". */
+private val StartScreen.label: String
+    get() = when (this) {
+        StartScreen.HOME -> "Home"
+        StartScreen.LEDGER -> "Ledger"
+        StartScreen.ANALYTICS -> "Analytics"
+    }
+
+/** One line each at 1.0: the row is a choice to scan, not a paragraph. */
+internal fun themeSubtitle(theme: ThemePreference): String = when (theme) {
+    ThemePreference.SYSTEM -> "Light or dark, as your phone is set."
+    ThemePreference.LIGHT -> "Always light."
+    ThemePreference.DARK -> "Always dark."
+}
+
+/**
+ * What the chosen motion means, and -- the case that would otherwise look like
+ * a broken setting -- why nothing moves on a phone that has removed animations,
+ * whichever option is picked (SPEC §9.5: the phone's switch always wins).
+ */
+internal fun animationsSubtitle(state: SettingsUiState): String = when {
+    !state.phoneAnimationsOn -> "Your phone has animations removed, so nothing here moves either."
+    else -> when (state.appearance.animations) {
+        AnimationPreference.FULL -> "Screens slide and fade."
+        AnimationPreference.REDUCED -> "Screens fade. Nothing slides."
+        AnimationPreference.OFF -> "Nothing moves."
+    }
 }
 
 /**
@@ -389,6 +498,59 @@ private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
                 text = title,
                 style = LfTheme.typography.bodyL,
                 color = LfTheme.colors.textPrimary,
+            )
+            Text(
+                text = subtitle,
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textSecondary,
+            )
+        }
+    }
+}
+
+/** One row: a way somewhere when [onClick] is given, otherwise a choice made in place. */
+@Composable
+private fun SettingsItemRow(
+    item: SettingsItem,
+    state: SettingsUiState,
+    onClick: (() -> Unit)?,
+    onEvent: (SettingsEvent) -> Unit,
+) {
+    val choice = choiceFor(item, state)
+    if (onClick != null) {
+        SettingsRow(title = item.title, subtitle = subtitleFor(item, state), onClick = onClick)
+    } else if (choice != null) {
+        ChoiceRow(title = item.title, choice = choice, subtitle = subtitleFor(item, state), onEvent = onEvent)
+    }
+}
+
+/**
+ * A choice made in place (Appearance): the same card as [SettingsRow], so the
+ * screen keeps one shape, with the options between the title and the sentence
+ * that says what the current one means. It applies on tap; there is nothing to
+ * confirm, and the theme visibly changing is the confirmation.
+ *
+ * The control stacks its options at large font scales rather than breaking a
+ * label (BUG9, `LfSegmentedControl`).
+ */
+@Composable
+private fun ChoiceRow(
+    title: String,
+    choice: SettingsChoice,
+    subtitle: String,
+    onEvent: (SettingsEvent) -> Unit,
+) {
+    LfCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Text(
+                text = title,
+                style = LfTheme.typography.bodyL,
+                color = LfTheme.colors.textPrimary,
+            )
+            LfSegmentedControl(
+                options = choice.options,
+                selectedIndex = choice.selectedIndex,
+                onSelect = { onEvent(choice.eventFor(it)) },
             )
             Text(
                 text = subtitle,
