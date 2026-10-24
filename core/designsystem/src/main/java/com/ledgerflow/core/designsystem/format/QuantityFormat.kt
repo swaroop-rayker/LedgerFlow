@@ -48,12 +48,13 @@ public object QuantityFormat {
      * the line worth nothing and take the amount with it, which is a surprising
      * answer to a field somebody simply left alone.
      */
-    public fun parse(text: String, locale: Locale = Locale.getDefault()): Long {
+    public fun parse(text: String, locale: Locale = DisplayLocale.current()): Long {
         val separator = DecimalFormatSymbols.getInstance(locale).decimalSeparator
-        val cleaned = text.filter { it.isDigit() || it == separator || it == '.' }
+        // Any script's digits, any decimal mark (BUG62, TypedNumber).
+        val cleaned = TypedNumber.normalize(text, separator)
         if (cleaned.none(Char::isDigit)) return Quantity.SCALE
 
-        val splitAt = cleaned.indexOfFirst { it == separator || it == '.' }
+        val splitAt = cleaned.indexOf('.')
         val whole = if (splitAt < 0) cleaned else cleaned.take(splitAt)
         val fraction = if (splitAt < 0) "" else cleaned.drop(splitAt + 1)
 
@@ -74,7 +75,7 @@ public object QuantityFormat {
      * and a chip reading "×2.000" is three characters of noise on the one line
      * a collapsed row has.
      */
-    public fun plain(quantityMilli: Long, locale: Locale = Locale.getDefault()): String {
+    public fun plain(quantityMilli: Long, locale: Locale = DisplayLocale.current()): String {
         val separator = DecimalFormatSymbols.getInstance(locale).decimalSeparator
         val units = quantityMilli / Quantity.SCALE
         val thousandths = (quantityMilli % Quantity.SCALE).toInt()

@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -387,14 +387,8 @@ private fun AnalyticsUiState.valueFor(unit: PeriodUnit): String = when (unit) {
 }
 
 /** `5 Aug 2026` from a days-since-epoch value. */
-private fun dateLabel(epochDay: Int): String {
-    val date = java.time.LocalDate.ofEpochDay(epochDay.toLong())
-    val month = date.month.getDisplayName(
-        java.time.format.TextStyle.SHORT,
-        DisplayLocale.current(),
-    )
-    return "${date.dayOfMonth} $month ${date.year}"
-}
+private fun dateLabel(epochDay: Int): String =
+    DisplayDates.dayMonthYear(java.time.LocalDate.ofEpochDay(epochDay.toLong()))
 
 /**
  * §5.6's custom range, as two dates.
@@ -493,11 +487,7 @@ private fun pickedDateLabel(utcMillis: Long): String {
     val date = java.time.Instant.ofEpochMilli(utcMillis)
         .atZone(java.time.ZoneOffset.UTC)
         .toLocalDate()
-    val month = date.month.getDisplayName(
-        java.time.format.TextStyle.SHORT,
-        DisplayLocale.current(),
-    )
-    return "${date.dayOfMonth} $month ${date.year}"
+    return DisplayDates.dayMonthYear(date)
 }
 
 private fun Set<String>.toggle(id: String): Set<String> =

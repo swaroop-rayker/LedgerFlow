@@ -8,6 +8,7 @@ import android.os.strictmode.Violation
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.ledgerflow.appearance.RegionConventionsSync
 import com.ledgerflow.core.data.diagnostics.CrashRecorder
 import com.ledgerflow.feature.analytics.work.RollupWorker
 import com.ledgerflow.feature.budget.notify.BudgetNotifications
@@ -15,6 +16,7 @@ import com.ledgerflow.feature.ingest.notify.InboxNotifications
 import com.ledgerflow.feature.settings.work.NightlyBackupWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
+import kotlinx.coroutines.MainScope
 
 /**
  * Application entry point and Hilt's object-graph root.
@@ -36,6 +38,12 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
 
     @Inject internal lateinit var workerFactory: HiltWorkerFactory
 
+    /** Settings > Currency & region, applied for the whole process (V2-3). */
+    @Inject internal lateinit var regionConventions: RegionConventionsSync
+
+    /** Lives as long as the process; holds the one collector above. */
+    private val processScope = MainScope()
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -54,6 +62,10 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
         // offers the report on the next launch. Never sent anywhere (Law 6).
         CrashRecorder.install(this)
         if (isDebuggable()) enableStrictMode()
+        // Before anything can format an amount or a date: a worker's
+        // notification as much as the first screen. The read is a DataStore
+        // flow, off the main thread; only the write lands on it.
+        regionConventions.start(processScope)
         // SPEC.md §5.1's `inbox_high`, created before the first message rather
         // than before the first post: a channel that does not exist yet cannot
         // be found and configured in system settings, and the user should be

@@ -72,6 +72,12 @@ key, not a looser reading of the first.
 | `appearance_theme` | `appearance` | `SYSTEM`/`LIGHT`/`DARK`. Paints the unlock screen. |
 | `appearance_animations` | `appearance` | `FULL`/`REDUCED`/`OFF`. Applies from the first frame. |
 | `appearance_start_screen` | `appearance` | `HOME`/`LEDGER`/`ANALYTICS`. Chosen when the vault opens. |
+| `region_number_grouping` | `region` | `BY_CURRENCY`/`LAKH`/`WESTERN`. Groups amounts on the unlock screen and in notifications posted with no Activity. |
+| `region_date_order` | `region` | `AUTO` and three explicit orders. Same reach as the grouping. |
+
+The base currency is **not** here: it lives in the vault (`app_meta`) because
+every stored amount is in it, and it fails test 3 — it must travel with the
+data it labels.
 
 Later V2-3 pages amend this table in the commit that adds their keys.
 
@@ -94,8 +100,9 @@ both stores need one restore path.
 
 ## Verification
 
-- `DatastoreKeySurfaceTest` (`:core:datastore`): the three keys above, by name,
-  in both directions.
+- `DatastoreKeySurfaceTest` (`:core:datastore`): the keys above, by name,
+  in both directions. `RegionConventionsParseTest` does for `region` what the
+  appearance test does for its file.
 - `AppearancePreferencesParseTest` (`:core:datastore`): an empty file, an
   unknown name (a newer build's file after a downgrade) and every value read back
   without throwing, because this read paints the first frame.

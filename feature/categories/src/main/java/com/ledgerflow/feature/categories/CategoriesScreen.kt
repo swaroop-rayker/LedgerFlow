@@ -28,6 +28,7 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
@@ -626,14 +627,14 @@ private fun HiddenCard(item: HiddenTaxonomy, onEvent: (CategoriesEvent) -> Unit)
 @Composable
 private fun hiddenStamp(millis: Long): String {
     val locale = DisplayLocale.composed
-    return remember(millis, locale) {
-        DateTimeFormatter.ofPattern(HIDDEN_DATE_PATTERN, locale)
+    // Read here, outside `remember`, so a change of date order redraws it.
+    val pattern = DisplayDates.dayMonthPattern()
+    return remember(millis, locale, pattern) {
+        DateTimeFormatter.ofPattern(pattern, locale)
             .withZone(ZoneId.systemDefault())
             .format(Instant.ofEpochMilli(millis))
     }
 }
-
-private const val HIDDEN_DATE_PATTERN = "d MMM"
 private const val HIDDEN_HEADER_KEY = "hidden-header"
 
 /** A tappable row inside a picker dialog. */
