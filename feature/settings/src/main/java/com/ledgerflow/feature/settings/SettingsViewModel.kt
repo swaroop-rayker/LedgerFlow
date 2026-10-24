@@ -3,6 +3,8 @@ package com.ledgerflow.feature.settings
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.analytics.AlertChannelState
+import com.ledgerflow.core.domain.analytics.BudgetAlertChannel
 import com.ledgerflow.core.domain.appearance.AnimationPreference
 import com.ledgerflow.core.domain.appearance.AppearancePreferences
 import com.ledgerflow.core.domain.appearance.AppearanceStore
@@ -149,6 +151,13 @@ public data class SettingsUiState(
 
     /** True while the date-order picker is up. */
     val choosingDateOrder: Boolean = false,
+
+    /**
+     * Whether budget alerts can reach the user: Android's "Budget alerts" channel
+     * and the app's notifications (V2-PLAN §3.4). Null until read; re-read on
+     * resume, as the user changes it in system settings.
+     */
+    val budgetAlerts: AlertChannelState? = null,
 )
 
 @HiltViewModel
@@ -160,6 +169,7 @@ public class SettingsViewModel @Inject constructor(
     private val appearanceStore: AppearanceStore,
     private val phoneMotion: PhoneMotionSettings,
     private val regionStore: RegionStore,
+    private val budgetAlertChannel: BudgetAlertChannel,
 ) : ViewModel() {
 
     private val phoneAnimationsOn = MutableStateFlow(true)
@@ -167,6 +177,8 @@ public class SettingsViewModel @Inject constructor(
     private val baseCurrency = MutableStateFlow<String?>(null)
 
     private val choosingDateOrder = MutableStateFlow(false)
+
+    private val budgetAlerts = MutableStateFlow<AlertChannelState?>(null)
 
     /**
      * The polled half.
@@ -223,6 +235,7 @@ public class SettingsViewModel @Inject constructor(
         .combine(regionStore.conventions) { state, region -> state.copy(region = region) }
         .combine(baseCurrency) { state, code -> state.copy(baseCurrency = code) }
         .combine(choosingDateOrder) { state, choosing -> state.copy(choosingDateOrder = choosing) }
+        .combine(budgetAlerts) { state, alerts -> state.copy(budgetAlerts = alerts) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
     init {
@@ -234,6 +247,9 @@ public class SettingsViewModel @Inject constructor(
         // The phone's switch lives in the system's Settings app, so returning
         // from it is a resume -- the same moment capture health is re-read.
         phoneAnimationsOn.value = phoneMotion.animatorDurationScale() != 0f
+        // Likewise the notification channel: the user turns it on in Android's
+        // settings and comes back.
+        budgetAlerts.value = budgetAlertChannel.state()
         viewModelScope.launch {
             captureHealth.value = getCaptureHealth()
             receipts.value = attachments.usage()

@@ -14,7 +14,8 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | BUG61 RTL text | Merged, PR #6 (`dd25dd9`, 2026-10-24) |
 | V2-3 decisions | Owner, 2026-10-24: seven PRs in order Appearance → Currency & region → Notifications (budget-alerts row + overspending) → Allowlist editor → App lock + screenshot block → Hide amounts + Data permissions → About. Lock on the platform `BiometricPrompt` (no `androidx.biometric`); preferences outside the vault under ADR-0030 |
 | V2-3 · Appearance | PR #8, `claude/v2-3-appearance` (§3.2; SPEC §9.3, §9.5; ADR-0030). Not yet merged |
-| V2-3 · Currency & region | Built on `claude/v2-3-currency-region`, stacked on Appearance (§3.3; SPEC §9.3, §16 Q26 closed; BUG62). Not yet merged |
+| V2-3 · Currency & region | PR #9, stacked on #8 (§3.3; SPEC §9.3, §16 Q26 closed; BUG62). Not yet merged |
+| V2-3 · Notifications | Built on `claude/v2-3-notifications`, stacked on Currency & region (§3.4: budget-alerts row, overspending alerts; SPEC §9.3, §5.7). Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -213,6 +214,13 @@ Budget alerts (exists — moves here), bill reminders, recurring-transaction
 reminders, overspending alerts (spend rate projected past a budget before month
 end), capture notifications (exists). Each a switch plus timing where it has
 one. All local (WorkManager), no push service.
+
+**Built (V2-3, 2026-10-24): budget-alerts row and overspending alerts.** The
+"budget alerts (exists — moves here)" above was mistaken: there was no in-app
+switch to move, only Android's channel, which the row now reports and opens.
+Overspending warns once per period from day 7 (day 2 weekly) on the Budget
+alerts channel; SPEC §9.3 has the rule. Capture's heading is now
+Notifications. Bill and recurring reminders wait for V2-7.
 
 **Notification allowlist editor (deferred here by the owner, 2026-10-02).** v1
 ships a built-in list of payment and banking apps and no way to change it, and

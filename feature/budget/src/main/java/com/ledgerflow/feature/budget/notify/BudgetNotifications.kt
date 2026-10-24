@@ -3,11 +3,16 @@ package com.ledgerflow.feature.budget.notify
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.ledgerflow.core.common.notify.NotificationPostPolicy
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.usecase.BudgetAlert
+import java.time.LocalDate
 
 /**
  * §5.7's threshold notifications.
@@ -35,7 +40,7 @@ public object BudgetNotifications {
             "Budget alerts",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "When spending crosses a limit you set."
+            description = "When spending crosses a limit you set, or is on course to."
         }
         NotificationManagerCompat.from(context).createNotificationChannel(channel)
     }
@@ -55,22 +60,12 @@ public object BudgetNotifications {
     public fun post(context: Context, alert: BudgetAlert, currency: String) {
         if (!NotificationPostPolicy.isPermitted(context)) return
 
-        val name = alert.progress.categoryName
-        val spent = MoneyFormat.symbolised(alert.progress.spent.minor, currency)
-        val limit = MoneyFormat.symbolised(alert.progress.effectiveAmount.minor, currency)
-
-        val title = if (alert.threshold >= FULL) {
-            "$name budget used up"
-        } else {
-            "$name at ${alert.threshold}%"
-        }
+        val (title, text) = wordsFor(alert, currency)
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle(title)
-            // Both figures, because a percentage alone hides the scale and the
-            // headroom left is the thing the user can act on.
-            .setContentText("$spent of $limit")
+            .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .build()
@@ -80,6 +75,57 @@ public object BudgetNotifications {
                 .notify(alert.progress.budget.id.hashCode(), notification)
         }
     }
+
+    /**
+     * A notification's title and line.
+     *
+     * A threshold gives both figures, because a percentage alone hides the
+     * scale and the headroom left is the thing the user can act on. An
+     * overspending warning (V2-PLAN §3.4) says where this pace ends and by
+     * when, against the limit, and calls it a pace -- it is a projection, and
+     * a user who front-loads a month's shopping is not really on course for
+     * thirty times that.
+     */
+    internal fun wordsFor(alert: BudgetAlert, currency: String): Pair<String, String> {
+        val progress = alert.progress
+        val name = progress.categoryName
+        val limit = MoneyFormat.symbolised(progress.effectiveAmount.minor, currency)
+        return when (alert) {
+            is BudgetAlert.ThresholdCrossed -> {
+                val spent = MoneyFormat.symbolised(progress.spent.minor, currency)
+                val title = if (alert.threshold >= FULL) "$name budget used up" else "$name at ${alert.threshold}%"
+                title to "$spent of $limit"
+            }
+            is BudgetAlert.OnCourseToOverrun -> {
+                val projected = MoneyFormat.symbolised(progress.projectedSpend.minor, currency)
+                val end = DisplayDates.dayMonth(LocalDate.ofEpochDay(progress.periodEnd.toLong()))
+                "$name on course to go over" to "At this pace, $projected by $end. Limit $limit."
+            }
+        }
+    }
+
+    /** What Settings > Notifications > Budget alerts reports (V2-PLAN §3.4). */
+    public fun channelState(context: Context): AlertChannelState {
+        if (!NotificationPostPolicy.isPermitted(context)) return AlertChannelState.APP_OFF
+        val channel = NotificationManagerCompat.from(context).getNotificationChannelCompat(CHANNEL_ID)
+        return if (channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE) {
+            AlertChannelState.CHANNEL_OFF
+        } else {
+            AlertChannelState.ON
+        }
+    }
+
+    /**
+     * Android's own page for this channel, or the app's notification page when
+     * all of LedgerFlow's notifications are off -- the channel page cannot turn
+     * those back on.
+     */
+    public fun settingsIntent(context: Context, state: AlertChannelState): Intent = when (state) {
+        AlertChannelState.APP_OFF -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        AlertChannelState.ON, AlertChannelState.CHANNEL_OFF ->
+            Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL_ID)
+    }.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
 
     private const val FULL = 100
 }

@@ -5,6 +5,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.format.DisplayConventions
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.appearance.AnimationPreference
 import com.ledgerflow.core.domain.appearance.AppearancePreferences
 import com.ledgerflow.core.domain.appearance.StartScreen
@@ -69,6 +70,7 @@ class SettingsScreenGoldensTest {
                         onNotificationAccess = {},
                         onBackUp = {},
                         onDiagnostics = {},
+                        onBudgetAlerts = {},
                         onEvent = {},
                     )
                 }
@@ -94,6 +96,7 @@ class SettingsScreenGoldensTest {
         baseCurrency = "INR",
         // Currency & region, also moved from the defaults.
         region = RegionConventions(grouping = NumberGrouping.WESTERN, dateOrder = DateOrder.DAY_MONTH_YEAR),
+        budgetAlerts = AlertChannelState.ON,
     )
 
     private val fresh = SettingsUiState(
@@ -101,6 +104,7 @@ class SettingsScreenGoldensTest {
         isLoaded = true,
         captureHealth = NotificationCaptureHealth.NOT_GRANTED,
         baseCurrency = "INR",
+        budgetAlerts = AlertChannelState.APP_OFF,
     )
 
     @Test fun livedIn_1x() = capture("settings-lived-in-1x", livedIn, 1f)
