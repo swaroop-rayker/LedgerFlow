@@ -25,7 +25,7 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
@@ -1019,14 +1019,8 @@ private fun AnalyticsSnapshot.toColumns(): List<LfBarColumn> = timeBuckets.map {
 }
 
 /** `12 Aug` from a days-since-epoch value. */
-private fun shortDateLabel(epochDay: Int): String {
-    val date = java.time.LocalDate.ofEpochDay(epochDay.toLong())
-    return "${date.dayOfMonth} " +
-        date.month.getDisplayName(
-            java.time.format.TextStyle.SHORT,
-            DisplayLocale.current(),
-        )
-}
+private fun shortDateLabel(epochDay: Int): String =
+    DisplayDates.dayMonth(java.time.LocalDate.ofEpochDay(epochDay.toLong()))
 
 /**
  * A day grid is only a calendar while a month fits in it. Beyond this the

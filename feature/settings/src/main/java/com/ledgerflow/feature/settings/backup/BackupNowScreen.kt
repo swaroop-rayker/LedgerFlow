@@ -18,7 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -30,8 +30,6 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.ui.phrase.LfPhraseEntry
-import java.text.DateFormat
-import java.util.Date
 import com.ledgerflow.core.ui.phrase.LfPhraseScanner
 import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
 
@@ -148,7 +146,7 @@ private fun Explanation(nightlyBackupsEnabled: Boolean) {
  */
 @Composable
 private fun FailedNightlyLine(at: Long) {
-    val date = DateFormat.getDateInstance(DateFormat.MEDIUM, DisplayLocale.current()).format(Date(at))
+    val date = DisplayDates.medium(at)
     LfCard {
         Text(
             text = "The automatic backup on $date couldn't be written. Your earlier backups are " +

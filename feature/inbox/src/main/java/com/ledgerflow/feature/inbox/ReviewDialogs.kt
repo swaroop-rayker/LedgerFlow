@@ -4,7 +4,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -18,8 +18,6 @@ import com.ledgerflow.core.ui.picker.LfPickerDialog
 import com.ledgerflow.core.ui.picker.LfPickerOption
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 
 /** Everything the review screen can put in front of the form. */
 @Composable
@@ -245,8 +243,7 @@ internal fun LineItemEditorEvent.toReviewEvent(): ReviewEvent = when (this) {
 }
 
 internal fun Long.asLocalDate(): String =
-    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(DisplayLocale.current())
-        .format(Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()))
+    DisplayDates.medium(Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate())
 
 /**
  * The formatter's currency for line figures.

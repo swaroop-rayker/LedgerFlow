@@ -33,7 +33,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -46,7 +46,6 @@ import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.ui.phrase.LfPhraseEntry
 import com.ledgerflow.core.ui.phrase.LfPhraseScanner
-import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -329,9 +328,7 @@ internal fun backupLabel(fileName: String, zone: TimeZone = TimeZone.getDefault(
             .apply { timeZone = TimeZone.getTimeZone("UTC") }
             .parse(stamp)
     }.getOrNull() ?: return fileName
-    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, DisplayLocale.current())
-        .apply { timeZone = zone }
-        .format(parsed)
+    return DisplayDates.mediumDateTime(parsed.time, zone.toZoneId())
 }
 
 private val STAMPED_NAME = Regex("""ledgerflow-(\d{8}-\d{6})\.lfbk""")

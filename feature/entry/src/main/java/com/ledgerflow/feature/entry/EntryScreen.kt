@@ -37,7 +37,7 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
 import com.ledgerflow.core.designsystem.component.LfAmountTone
@@ -60,8 +60,6 @@ import com.ledgerflow.core.ui.lineitem.LineItemEditorEvent
 import com.ledgerflow.core.model.LedgerType
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 
 /**
  * Manual entry (SPEC.md §5.4), both ledgers, with the line-item editor.
@@ -538,8 +536,7 @@ private fun SaveBar(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 }
 
 private fun Long.asLocalDate(): String =
-    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(DisplayLocale.current())
-        .format(Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate())
+    DisplayDates.medium(Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate())
 
 @PreviewScreenSizes
 @PreviewFontScale

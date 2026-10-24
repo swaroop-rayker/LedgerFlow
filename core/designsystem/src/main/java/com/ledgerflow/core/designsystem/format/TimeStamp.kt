@@ -43,8 +43,9 @@ public object TimeStamp {
     public fun of(occurredAt: Long, withDate: Boolean): String {
         val locale = DisplayLocale.composed
         val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
-        return remember(occurredAt, locale, is24Hour, withDate) {
-            format(occurredAt, locale, is24Hour, withDate)
+        val dayMonth = DisplayDates.dayMonthPattern()
+        return remember(occurredAt, locale, is24Hour, withDate, dayMonth) {
+            format(occurredAt, locale, is24Hour, withDate, dayMonth)
         }
     }
 
@@ -68,12 +69,14 @@ public object TimeStamp {
     public fun ofCapture(occurredAt: Long, capturedAt: Long, withDate: Boolean): String {
         val locale = DisplayLocale.composed
         val is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
-        return remember(occurredAt, capturedAt, locale, is24Hour, withDate) {
+        val dayMonth = DisplayDates.dayMonthPattern()
+        return remember(occurredAt, capturedAt, locale, is24Hour, withDate, dayMonth) {
             format(
                 OccurredAt.effective(occurredAt, capturedAt),
                 locale,
                 is24Hour,
                 withDate,
+                dayMonth,
             )
         }
     }
@@ -83,9 +86,10 @@ public object TimeStamp {
         locale: Locale,
         is24Hour: Boolean,
         withDate: Boolean,
+        dayMonth: String,
     ): String {
         val time = if (is24Hour) TIME_24_HOUR else TIME_12_HOUR
-        val pattern = if (withDate) DATE_PREFIX + time else time
+        val pattern = if (withDate) "$dayMonth, $time" else time
         val zone = ZoneId.systemDefault()
         // Cached: a list composes a stamp per row as rows scroll in, and parsing
         // the pattern each time was measurable inside 120 Hz frames. The key
@@ -104,5 +108,4 @@ public object TimeStamp {
 
     private const val TIME_12_HOUR = "h:mm a"
     private const val TIME_24_HOUR = "HH:mm"
-    private const val DATE_PREFIX = "d MMM, "
 }
