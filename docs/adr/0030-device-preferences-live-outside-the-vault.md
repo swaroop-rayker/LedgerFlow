@@ -75,6 +75,21 @@ key, not a looser reading of the first.
 | `region_number_grouping` | `region` | `BY_CURRENCY`/`LAKH`/`WESTERN`. Groups amounts on the unlock screen and in notifications posted with no Activity. |
 | `region_date_order` | `region` | `AUTO` and three explicit orders. Same reach as the grouping. |
 
+### Named exception: overspending warnings already sent
+
+| Key | File | Why it is here |
+|---|---|---|
+| `budget_overspend_announced` | `budget_alerts` | A set of opaque `budgetId@periodStart` entries, one per budget. |
+
+This key **fails test 2**: the budget-alert worker opens the vault anyway, so
+nothing needs it before unlock. It is here by the owner's explicit choice
+(2026-10-24) over a schema change — a column on `budget` would be a migration
+for a once-per-period flag, and would move merchant categories from v13 to
+v14. It passes tests 1 and 3: no amount, category or name, only opaque ids and
+a day number; and not carrying it in a `.lfbk` costs at most one repeated
+warning after a restore. It is listed by name so it stays an exception rather
+than a precedent: the next proposal that fails test 2 reopens this ADR.
+
 The base currency is **not** here: it lives in the vault (`app_meta`) because
 every stored amount is in it, and it fails test 3 — it must travel with the
 data it labels.

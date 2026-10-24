@@ -48,6 +48,7 @@ class CurrencyRegionRowsTest {
                     onNotificationAccess = {},
                     onBackUp = {},
                     onDiagnostics = {},
+                    onBudgetAlerts = {},
                     onEvent = { events += it },
                 )
             }

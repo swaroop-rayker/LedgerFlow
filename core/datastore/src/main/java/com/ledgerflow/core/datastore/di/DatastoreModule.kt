@@ -4,7 +4,9 @@ import com.ledgerflow.core.datastore.AppearanceDataStore
 import com.ledgerflow.core.datastore.CaptureGapDataStore
 import com.ledgerflow.core.datastore.ListenerHealthDataStore
 import com.ledgerflow.core.datastore.NotificationSetupDataStore
+import com.ledgerflow.core.datastore.OverspendAnnouncementsDataStore
 import com.ledgerflow.core.datastore.RegionDataStore
+import com.ledgerflow.core.domain.analytics.OverspendAnnouncements
 import com.ledgerflow.core.domain.appearance.AppearanceStore
 import com.ledgerflow.core.domain.ingest.CaptureGapStore
 import com.ledgerflow.core.domain.ingest.ListenerHealthStore
@@ -49,4 +51,10 @@ internal abstract class DatastoreModule {
     /** Settings > Currency & region, on the same ADR-0030 test. */
     @Binds
     internal abstract fun regionStore(store: RegionDataStore): RegionStore
+
+    /** Overspending warnings already sent; ADR-0030's named exception. */
+    @Binds
+    internal abstract fun overspendAnnouncements(
+        store: OverspendAnnouncementsDataStore,
+    ): OverspendAnnouncements
 }

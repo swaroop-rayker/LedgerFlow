@@ -57,6 +57,9 @@ class DatastoreKeySurfaceTest {
         // ADR-0030, Settings > Currency & region: two enum names.
         "region_number_grouping",
         "region_date_order",
+        // ADR-0030's named exception (owner, 2026-10-24): overspending warnings
+        // already sent, as opaque "budgetId@periodStart" entries. No amounts.
+        "budget_overspend_announced",
     )
 
     private val moduleSources: List<File> by lazy {

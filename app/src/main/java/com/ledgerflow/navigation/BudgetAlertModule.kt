@@ -1,7 +1,9 @@
 package com.ledgerflow.navigation
 
 import android.content.Context
+import com.ledgerflow.core.domain.analytics.BudgetAlertChannel
 import com.ledgerflow.core.domain.analytics.BudgetAlertTrigger
+import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.budget.work.BudgetAlertWorker
 import dagger.Module
 import dagger.Provides
@@ -32,4 +34,14 @@ public object BudgetAlertModule {
         // one -- and StrictMode kills the debug build for exactly that.
         BudgetAlertWorker.enqueue(context)
     }
+
+    /**
+     * The "Budget alerts" channel's state, for Settings (V2-PLAN §3.4). The
+     * channel is `:feature:budget`'s and the row is `:feature:settings`'s, so
+     * this binding lives here for the same reason the trigger does.
+     */
+    @Provides
+    public fun budgetAlertChannel(
+        @ApplicationContext context: Context,
+    ): BudgetAlertChannel = BudgetAlertChannel { BudgetNotifications.channelState(context) }
 }
