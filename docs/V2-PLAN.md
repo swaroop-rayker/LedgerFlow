@@ -43,11 +43,11 @@ starts.
 |---|---|---|---|
 | D1 | Google Drive backup/sync; "online" data | Law 6 (nothing computed touches a network) | **ADR-0029: opt-in network, own-account only.** Drive holds the same `.lfbk` files the SAF folder does — already encrypted to the phrase-derived key (ADR-0027) before they leave the phone. Google sees ciphertext and file names; LedgerFlow runs no server. Uses the Drive REST API through the Storage Access Framework picker if possible (no Google SDK); the official Drive/Identity SDKs only if SAF cannot hold a Drive folder reliably — a dependency the owner approves separately. |
 | D2 | Currency converter with real-time rates | Locked decision: *rates are user-entered, never fetched* | **Split.** The ledger rule stays: an entry's `fx_rate_micro` is what the user enters. A **utility** converter may fetch a public rate table (e.g. ECB reference rates), sending nothing but the request, cached, clearly labelled "indicative". Optionally it may *suggest* a rate the user confirms on the entry form. Needs ADR-0030 superseding the §0 line. |
-| D3 | Account: profile, email, phone, sign-in/out, delete account, account type | Law 6; privacy; there is no backend | **No LedgerFlow accounts.** "Account" becomes a **local profile** (name, photo) stored in the vault, plus the Google account linked for Drive (D1), shown as "Signed in to Google Drive as …" with sign-out. "Delete account" = erase this install's data (with the purge-style `Warning` confirmation) and unlink Drive. Email/phone are not collected: nothing would use them, and a field that stores PII for no purpose is a liability. |
+| D3 | Account: profile, email, phone, sign-in/out, delete account, account type | Law 6; privacy; there is no backend | **No LedgerFlow accounts.** "Account" becomes a **local profile** (name, photo) stored in the vault, plus the Google account linked for Drive (D1), shown as "Signed in to Google Drive as …" with sign-out. "Delete account" = erase this install's data (with the purge-style `Warning` confirmation) and unlink Drive. Email/phone are not collected: nothing would use them, and a field that stores PII for no purpose is a liability. **2026-10-25:** the owner's reference samples include sign-up, login, reset-password and verification-code screens. They are drawn on the design canvas and mapped in `DESIGN_SYSTEM_PLAN.md` §5.6 as "waits on D3"; none is built while this row stands. |
 | D4 | Change default currency after onboarding | Locked decision: one base currency per install; `amount_minor` is always base | Base currency stays fixed once data exists (changing it would silently relabel every amount). Settings shows it read-only, with symbol, number format (lakh/western grouping) and date format as the adjustable parts. A future "start a new book in another currency" is a separate design. |
 | D5 | Receipts auto-delete after a period | ADR-0023 declined a timed purge | Owner reverses ADR-0023's decision explicitly (superseding ADR), or v2 ships "select and delete" + a reminder instead of silent auto-deletion. Recommendation: allow auto-delete **only of receipts already backed up** to a verified backup, never of the only copy. |
 | D6 | Ghost Inbox entries (BUG-B below) | §5.1 / CLAUDE.md §7: never silently drop a financial SMS | Recognised non-transactions (OTP, balance, statement, promo) are **retained and visible** under a new Inbox filter ("Not transactions"), not deleted and not in the main queue. That keeps the guarantee's substance (nothing lost) while ending the noise. **Confirmed by the owner, 2026-10-20** — built as BUG58. |
-| D7 | Settings as a sixth bottom-bar slot | Material's 3–5 destinations; CLAUDE.md compactness brief | Five slots are already used (Home, Ledger, +, Analytics, More). **Recommend: Settings replaces More in the bar, and More's contents move** — tools (goals, recurring, debts, utilities) into a "Tools" section reached from Home/More-as-a-screen, or keep More and put Settings behind a gear in every tab header. Owner picks. **Decided 2026-10-21: Settings replaces More** (gear, fourth tab). Every row More had moved to Settings; Diagnostics, the one tool, is its Tools section rather than a screen of one row (V2-2). |
+| D7 | Settings as a sixth bottom-bar slot | Material's 3–5 destinations; CLAUDE.md compactness brief | Five slots are already used (Home, Ledger, +, Analytics, More). **Recommend: Settings replaces More in the bar, and More's contents move** — tools (goals, recurring, debts, utilities) into a "Tools" section reached from Home/More-as-a-screen, or keep More and put Settings behind a gear in every tab header. Owner picks. **Decided 2026-10-21: Settings replaces More** (gear, fourth tab). Every row More had moved to Settings; Diagnostics, the one tool, is its Tools section rather than a screen of one row (V2-2). **Amended 2026-10-25 (owner): Profile replaces Settings as the fourth tab** (Home · Ledger · + · Analytics · Profile). Settings and Account live inside Profile, and every Settings section becomes its own page. Built by the redesign's step D4 (`DESIGN_SYSTEM_PLAN.md` §7), which updates SPEC §9.3 in the same commit. |
 | D8 | Import (Excel/CSV) | Law 1: nothing reaches the ledger without a tap | Imported rows land in the Inbox as `IMPORT` candidates (the source already exists), approvable in bulk with one confirmed tap per batch. Owner confirms "bulk approve" satisfies Law 1. |
 
 ---
@@ -184,10 +184,18 @@ order). The sections below are absent until their phase builds them; each
 then joins as a heading of its own, or grows an existing one (§3.4 takes over
 Capture, §3.6 takes over Data).
 
+**Amended 2026-10-25 (D7).** Settings moves inside the Profile tab and becomes
+an index: one row per section, showing its current value, each opening a page
+of its own. The sections below are those pages.
+
 ### 3.1 Account (per D3)
 Local profile (name, photo — stored in the vault, backed up with it), linked
 Google Drive account and sign-out, "Erase this install" (purge-style warning,
 names what is lost, tells the user to back up first — never pretends to).
+
+**2026-10-25:** the name and photo head the Profile tab (D7), with an edit
+button. The sign-out row reads "Sign out of Google Drive", appears only when
+Drive is linked, and confirms in a bottom sheet.
 
 ### 3.2 Appearance
 Theme: System / Light / Dark (the app already follows the system; this adds
@@ -250,6 +258,12 @@ only (no `androidx.biometric`), on cold start and after Lock after
 (Immediately / 1 / 5 / 15 minutes); a screen overlay that touches no key.
 SPEC §7.6 has the detail. Hide amounts and the data-permissions page are the
 next PR.
+
+**PIN (owner, 2026-10-25).** The Security page offers a choice: the phone's
+own lock (today's default) or a LedgerFlow PIN, as in the reference samples.
+The PIN hides the screens only: it never wraps, unlocks or derives the DEK, a
+Keystore entry or a backup key (CLAUDE.md §0, §7). It needs its own ADR, at
+the next free number, before it is built.
 
 ### 3.6 Data & sync
 Backups (today's manual + nightly + Recovery Kit, moved here), Restore (exists

@@ -6,7 +6,62 @@ and fast-forwarded to `0cc93ea` once V2-3 (PRs #8–#12) was merged.
 **Status (2026-10-25):** plan approved; Q1–Q5 answered as recommended; Phase 2
 done and the owner chose **B · Night Vault**
 (canvas: https://claude.ai/artifact/BHYXqJ93MQQKV9CJErQJ7N). Phase 3 starts at
-step A1.
+step A1. **Amended 2026-10-25** after the owner supplied reference samples:
+Night Vault keeps its colours and fonts and takes its shapes, components and
+layouts from the samples; Profile replaces the Settings tab (see below, and
+Q6–Q9).
+
+### Reference samples (2026-10-25)
+
+`D:\LF_UI_UX_design_sample` (outside the repo): `cards.webp` is a component
+sheet; `pfp.png` is a Profile screen; the screenshots show transactions,
+account, language, a logout sheet, login, notifications, an onboarding
+carousel, settings, security, reset password, a verification code, PIN setup
+and sign-up. The owner's brief: take ideas from them; take navigation,
+buttons, controls and forms from `cards.webp`; ignore its iOS kit; make
+charts in the same spirit but not copies.
+
+**Taken from the samples:**
+- **Shapes and sizes:** 16 dp corners on buttons, fields, tiles and grouped
+  panels; 24 dp on sheets and dialogs; full rounding on pills, tabs, the FAB,
+  avatars and progress bars (§4.2).
+- **Buttons:** large (56 dp) and small (40 dp); filled, tonal, outlined (the
+  Google sign-in style), icon-only and pill.
+- **Fields:** 56 dp tall, hairline border, placeholder inside, a trailing eye
+  on passwords, an attachment field.
+- **Controls:** checkbox, radio, switch, pill-shaped segmented tabs, slider.
+- **Rows:** three kinds. A navigation row (icon tile, label, current value,
+  chevron), a select row (check on the chosen one) and a switch row.
+- **Sheets:** a grab handle; a confirm sheet with a No/Yes pair; option tiles
+  (Camera, Image, Document: today's Add sheet); a filter sheet with chip
+  groups and Apply; recurrence pickers.
+- **Navigation:** a bottom bar with the + raised half above it and labels
+  under every icon; a top bar with Back, a centred title and an overflow menu.
+- **Pieces:** tinted icon tiles; the profile header (avatar with a ring, name,
+  edit); progress bars; a filter bar (period pill and filter icon); the "See
+  your financial report" link banner.
+
+**Not taken:**
+- The violet palette. Night Vault's colours stay (owner, 2026-10-25).
+- The iOS kit (status bar, keyboards). Android draws its own.
+- The graphs as drawn: no multi-hue gradient donut, since colour carries
+  meaning here. §4.5 has the chart style that replaces them.
+- One card per transaction row. The compactness brief (`CLAUDE.md` §5) keeps
+  rows grouped in one panel with hairlines, as `pfp.png` itself does.
+- The 3D illustrations: no artwork exists (Q9).
+
+**Sample roles in Night Vault colours:**
+
+| In the samples | In Night Vault |
+|---|---|
+| violet filled button | bone `action.primary`, graphite text |
+| lavender tonal button | `surface.overlay` with bone text |
+| outlined (Google) button | transparent, `border.strong` hairline |
+| pastel icon tile | the category's colour at `SUBTLE_TINT`, glyph in the category colour |
+| red logout tile and text | `status.dangerSubtle` / `status.danger` (pink, never money-out coral) |
+| violet switch, check, radio | `action.primary` |
+| green progress bar | `money.incoming` only for money in; budgets and goals use `action.primary`, over-budget `status.warning` |
+| white card on grey page | `surface.raised` on `surface.canvas`, hairline `border.subtle` |
 
 **What this plan does:** checks the earlier audit against the code (§1), sorts
 every hard-coded size into "keep" or "make it a token" (§2), maps what the UI
@@ -43,6 +98,10 @@ need an answer first, not a guess.
 | Q3 | **Fixing the screen-state gaps means editing ViewModels and UI state classes.** Examples: a Retry event for the setup dead end, showing Budgets' messages, an Undo for Ledger deletes. | You asked not to change "business logic". These are screen state (UI layer), not the data layer or the money rules. | Allow changes to `*ViewModel.kt`, `*UiState`/`*State.kt` and screen files. Don't touch use cases, repositories, DAOs, `:core:domain`, `:core:data` or `:core:database`. Anything that needs those (editing a saved entry, undoing a budget delete) goes on an out-of-scope list (§5.5). |
 | Q4 | **New font files.** A direction may need a second typeface. | It's a bundled file (Law 6: never downloaded) with an OFL licence that has to ship in `assets/licenses/`, per `LfFonts.kt`. | Approve per direction in Phase 2. No new *library* dependency is needed anywhere in this plan. |
 | Q5 | **About twice as many goldens.** Adding dark theme doubles today's 135 goldens (after V2-3) to roughly 270, plus new ones for dialogs, sheets and states. | More Git LFS storage (memory: worktree goldens can be LFS pointers) and a longer CI `screenshot` job. | Accept. The alternative is dark mode staying unchecked, and dark is the default theme. |
+| Q6 | **Decided 2026-10-25: accounts are design-only.** The samples have sign-up, login, reset password and a verification code. Those need a server to check them, and V2-PLAN D3 decided LedgerFlow has no accounts (Law 6). | Building them would reverse D3. | The screens are drawn on the canvas and mapped in §5.6 as "waits on D3". Until D3 changes, "sign in" means Google, for Drive backup (D1), and "log out" means "Sign out of Google Drive", shown only when Drive is linked. |
+| Q7 | **Decided 2026-10-25: an in-app PIN is an app-lock option.** The samples set up a 4-digit PIN. | A PIN is a user-chosen secret, and `CLAUDE.md` §0 bans one anywhere on the key path. | Offered beside the phone's own lock (fingerprint, face, screen lock). It hides the screens only, like today's lock: never the DEK, the Keystore or a backup (`CLAUDE.md` §7, `AppLockStateTest`). Its own ADR, at the next free number, when it is built. |
+| Q8 | **Decided 2026-10-25: Profile replaces the Settings tab.** The bar becomes Home · Ledger · + · Analytics · Profile; Settings and Account live inside Profile. | Supersedes V2-PLAN D7's placement (Settings as the fourth tab). | Step D4 builds it, and updates `SPEC.md` §9.3 and V2-PLAN D7 in the same commit. |
+| Q9 | **Artwork for a welcome carousel.** The samples' onboarding uses 3D illustrations; LedgerFlow has none. | A bundled image with a licence, like the fonts (Law 6: never downloaded). | Decide when general-user onboarding (V2-PLAN §6.9) is picked. Recommend flat vector illustrations in Night Vault tones, with their licence in `assets/licenses/`. Until then, a carousel shows no art. |
 
 ---
 
@@ -175,6 +234,26 @@ shared feedback host (snackbar) on every screen, a field-level error under an
 input, an error-with-Retry pattern, and themed wrappers for the date pickers
 and the bottom sheet.
 
+**Needed by the reference samples (2026-10-25).** Each is built when the step
+or V2 phase that first uses it arrives (§7), from the canvas, in both themes:
+
+| Part | What it is | First needed by |
+|---|---|---|
+| `LfIconTile` | 40 dp rounded square, the category or row colour at `SUBTLE_TINT`, glyph or initial drawn in a leaf (the `lfCategoryDot` technique, so a row stays one `Layout`) | F3 (entry rows), D4 (Profile rows) |
+| `LfNavRow` | icon tile, label, current value, chevron; the settings-index row | D4 |
+| `LfSelectRow` | label with a check on the chosen row (Language, Security, the Options dialog) | D4 |
+| `LfProfileHeader` + `LfAvatar` | 64 dp avatar with a 2 dp ring (photo or initial), name, edit button | D4 (placeholder), V2 §3.1 |
+| `LfProgressBar` | `LfBudgetBar`'s bar generalised: full-round 8 dp, a role for its colour | E1 |
+| `LfSheet` variants | confirm (title, line, No/Yes pair), options (icon tiles), filter (chip groups, Reset, Apply) | E1 |
+| `LfFilterBar` | period pill (opens a picker) and a filter icon | F5 (Ledger, Analytics) |
+| `LfLinkBanner` | one-line panel with a chevron ("See your financial report") | F5 (Home) |
+| `LfPasswordField` | `LfTextField` with a trailing show/hide eye | V2 auth (Q6) |
+| `LfSocialButton` | outlined button with a brand mark ("Continue with Google") | V2-4 Drive (D1) |
+| `LfCodeInput` | 6 digit slots, the filled ones in Plex Mono | V2 auth (Q6) |
+| `LfPinPad` + `LfPinDots` | 3×4 keypad and 4 dots, full screen | PIN lock (Q7) |
+| `LfPagerDots` | carousel position | onboarding (§6.9) |
+| `LfAreaChart` | §4.5 | F6 |
+
 ---
 
 ## 4. Design system architecture
@@ -230,6 +309,22 @@ radius-16, inter-600      screen.edge, shape.container  row.border, chart.donutS
 share a value. Material's own `Shapes` are filled from these, so pickers and
 sheets stop using Material's 28 dp.
 
+Night Vault's values, from the reference samples (2026-10-25; they replace the
+12 dp panels and 10 dp buttons first drawn on the canvas):
+
+| Role | Value | Used by |
+|---|---|---|
+| `container` | 16 dp; sheets 24 dp on their top corners | cards, grouped panels, sections |
+| `row` | 0 inside a panel; 16 dp for a standalone row | list rows |
+| `control` | 16 dp; 12 dp on the 40 dp icon tile (16 would make it read as a circle) | buttons, fields, icon tiles |
+| `dialog` | 24 dp | dialogs, sheets |
+| `full` | 50 % | pills, chips, segmented tabs, the FAB, avatars, progress bars, PIN dots |
+
+**Size** (`LfLayout`, below): button 56 dp (large) and 40 dp (small); field
+56 dp; icon tile 40 dp; avatar 64 dp with a 2 dp ring; row minimum 56 dp;
+bottom bar 64 dp with a 56 dp + raised half above it. The 48 dp touch target
+stays the floor for anything smaller.
+
 **Type** (`LfTheme.type`): `display`, `title`, `heading`, `body`, `bodySmall`,
 `label`, `caption`, `amountHero`, `amountRow`, `amountSmall`, `mnemonic`.
 Tabular figures on every amount style (SPEC §9.2), the `ss02` disambiguation on
@@ -251,7 +346,7 @@ the same shapes.
 
 **Layout constants** (`LfLayout`, not a token, not changed by a style):
 `minTouchTarget`, `actionMinWidth`, `segmentMinWidth`, `peekCardWidth`,
-`dialogListMax` (once settled).
+`dialogListMax` (once settled), and the component sizes above.
 
 ### 4.3 Where the tokens live and how screens use them
 
@@ -294,7 +389,12 @@ core/designsystem/src/main/java/com/ledgerflow/core/designsystem/
 2. **New features compose existing parts.** V2-3's pages are `LfSettingsPage`
    + `LfListRow`/`LfSwitchRow`; the lock screen is an `LfFlowStep`; the V2-5
    receipts browser is a new grid component; V2-7's goals, recurring items and
-   debts are `LfDetailPage` + `LfSection` + rows + existing charts.
+   debts are `LfDetailPage` + `LfSection` + rows + existing charts. The
+   samples' screens compose the parts in §3's "Needed by the reference
+   samples" table: Profile is `LfProfileHeader` + `LfNavRow`s, sign-in is
+   `LfFormPage` + `LfPasswordField` + `LfSocialButton`, the PIN is
+   `LfFlowStep` + `LfPinPad`. §5.6 maps every screen V2-PLAN and the samples
+   add, one by one.
 3. **A feature that needs a new look adds a component, not a style.** It's
    built in `:core:designsystem` from semantic roles, with goldens in both
    themes. A genuinely new *meaning* ("goal progress", say) becomes a new role,
@@ -307,6 +407,38 @@ core/designsystem/src/main/java/com/ledgerflow/core/designsystem/
    notification can't read Compose tokens, so the roles get exported as Android
    colour resources generated from the same primitives (a small Gradle task,
    added only when the first such surface is approved).
+
+### 4.5 Chart style
+
+The samples' graphs set the tone (a soft line over a fading fill, a ring with
+a total in the middle), not the drawing. Every rule in `CLAUDE.md` §5's charts
+section still applies: hand-rolled `Lf*` Canvas code with no charting
+dependency (ADR-0005), one book per chart (Law 2), pre-binned to the pixel
+width (SPEC §11), text measured in `drawWithCache`, semantics per segment,
+goldens at 1× and 2× in both themes.
+
+- **`LfAreaChart` (new)**, for one series over time (a month's spending by
+  day, a year by month):
+  - a smooth **monotone** cubic curve (Fritsch–Carlson). A plain spline
+    overshoots: it would dip below zero or peak above the real maximum
+    between two days, drawing money that was never spent.
+  - under the line, the series colour fading from 24 % to 0 % opacity, top
+    to bottom. That is the only gradient anywhere in the charts.
+  - a baseline and nothing else: no grid. The latest point, or the one the
+    user touches, gets a dot and a small value pill in Plex Mono.
+  - x labels sparse (start, middle, end), y labels only on the pill.
+- **Donut:** a thinner ring (12 dp at the default size), rounded ends, a 2 dp
+  gap between slices, the total in the middle in Plex Mono. Slices keep their
+  category colours: never a multi-hue gradient, because a colour here *means*
+  a category.
+- **Bars** (stacked, horizontal, mirrored): rounded ends on the free side, a
+  quiet track (`chart.track`), and the grid kept to the few lines the axis
+  labels need.
+- **Progress and budget bars:** 8 dp tall, fully rounded. Budgets and goals use
+  `action.primary`; over budget turns `status.warning`. Never a money colour,
+  since a budget is a plan, not a movement of money.
+- **Calendar heatmap and treemap:** the `control` corner on cells and tiles;
+  otherwise unchanged.
 
 ---
 
@@ -392,7 +524,7 @@ a known audit gap closed in Phase E.
 | Filters (dialog) | `LfSheet` | — | |
 | Custom range (dialog) | `LfSheet` | X | |
 | Date-range picker | `LfDateRangePickerDialog` | — | lavender → themed |
-| Settings | `LfTabPage` / `LfSettingsPage` | L | |
+| Settings | Becomes two screens (D4, Q8). **Profile** is the fourth tab: `LfTabPage` with `LfProfileHeader` and one grouped panel of `LfNavRow`s (Account, Settings, Export data, and Sign out of Google Drive once Drive exists). **Settings** is an `LfSettingsPage` index of `LfNavRow`s, each showing its current value: Notifications, Organise, Data & backup, Security & privacy ("Phone's lock"), Appearance ("Dark"), Currency & region ("INR"), Tools, About, Help. Each opens its own `LfSettingsPage`. | L | today's 19 rows on one list → an index plus one page per section |
 | Delete receipts (dialog) | `LfDialog` Warning | S | |
 | Add sheet | `LfSheet` | — | Material 28 dp → shape role |
 | Add entry | `LfFormPage` | X (fields), S | error below the fold; silent save → snackbar |
@@ -421,8 +553,8 @@ a known audit gap closed in Phase E.
 | Payment to review / "N payments" / Could not approve (notifications) | notification style: app icon, accent colour | — | |
 | Budget alert (notification) | same | — | stock icon → app icon; tap opens Budgets (re-check against V2-3's changes) |
 | LedgerFlow is locked (V2-3) | `LfFlowStep` | U (unlock unavailable) | |
-| Settings' V2-3 rows: switches, inline choices, read-only Base currency | `LfSettingsPage` rows (`LfListRow`, `LfSwitchRow`, choice row) | S | three row kinds → one row family |
-| Options (dialog, V2-3) | `LfDialog` with choice rows | — | |
+| Settings' V2-3 rows: switches, inline choices, read-only Base currency | rows on their section's `LfSettingsPage`: `LfSwitchRow`, `LfNavRow` with the value, `LfSelectRow` on the choice page | S | three row kinds → the samples' three (navigation, select, switch) |
+| Options (dialog, V2-3) | `LfDialog` with `LfSelectRow`s | — | |
 | Payment apps (V2-3) | `LfSettingsPage` | L ("Reading the apps…"), E, S | |
 | Add an app? (dialog, V2-3) | `LfDialog` Warning | — | |
 
@@ -434,7 +566,102 @@ a known audit gap closed in Phase E.
   adds a confirmation instead.
 - Catching storage failures *inside* repositories. This plan catches them in
   ViewModels and shows an error state; the repositories stay as they are.
-- A receipts viewer (V2-5) and a Licences/About screen (V2-3 §3.8).
+- *Building* the screens in §5.6. This plan only decides how they will look,
+  so the templates in step D1 are made with them in mind; each one is built
+  by its own V2 phase.
+
+### 5.6 Screens V2-PLAN and the reference samples add (not built yet)
+
+§5.4 covers what exists. These are the screens `docs/V2-PLAN.md` and the
+reference samples ask for that don't exist yet, mapped the same way, so that
+step D1's templates and step C's components already fit them. The fourth
+column names any part the design system doesn't have yet. That part is built
+in `:core:designsystem` by the phase that first needs it (§4.4 item 3), not by
+this redesign. The canvas draws each one.
+
+**Where they live (Q8).** Profile is the fourth tab. It holds Account, Settings,
+Export data and, once Drive exists, Sign out of Google Drive. Settings is an
+index; **every section is its own `LfSettingsPage`**, as in the samples'
+settings screen: Notifications, Organise, Data & sync, Receipts, Security &
+privacy (with Data permissions under it), Appearance, Currency & region,
+Tools, About, Help. The V2-7 tools sit on the Tools page.
+
+| V2-PLAN | Screen | Template / component | States | New part needed |
+|---|---|---|---|---|
+| §3.1, `pfp.png` | Profile (tab) | `LfTabPage` + `LfProfileHeader` + grouped `LfNavRow`s | L | `LfProfileHeader`, `LfAvatar`, `LfNavRow`, `LfIconTile` |
+| §3.1 | Account | `LfSettingsPage` | L, S | |
+| §3.1 | Edit profile (name, photo) | `LfFormPage` | X, S | |
+| §3.1, logout sheet | Sign out of Google Drive? | confirm `LfSheet` (No / Yes) | — | confirm sheet variant |
+| settings sample | Settings index | `LfSettingsPage` of `LfNavRow`s with values | — | |
+| §3.1 | Erase this install | `LfDialog` Warning, typed confirmation | X | `LfTypedConfirmField` (also §3.6 Restore) |
+| §3.5 | Hide amounts on Home | a mode of the Home cards, tap to reveal | — | `LfMaskedAmount` (announced as "hidden", §9.6) |
+| §3.5 | Data permissions | `LfSettingsPage`, one row per permission (why + Manage link) | L | |
+| §3.4 | Bill / recurring reminders (rows) | `LfSettingsPage` switch rows + timing choice | — | |
+| §3.4, §4.2 | Reminder notification | notification style (F4) | — | |
+| §3.6 | Data & sync | `LfSettingsPage` (absorbs today's Data rows) | L, U, S | |
+| §3.6 | Connect Google Drive | `LfFlowStep` (explain → system picker → confirm) | L, U (offline), X, S | |
+| §3.6 | Drive status (last upload, sync) | `LfSettingsPage` section | L, U (offline), X | sync status row (`LfListRow` + status mark) |
+| §3.6 | Import: choose file → preview → result | `LfFlowStep` ×3; result opens the Inbox | L, X, S | `LfTablePreview` (first rows, column per field) |
+| §3.6, D8 | Approve N imported? | `LfDialog`, names the count (Law 1) | — | |
+| §3.6 | Restore from Settings | today's Restore + typed-DELETE confirmation (§7.3) | L, X, S | `LfTypedConfirmField` |
+| §3.7 | Receipts browser | `LfDetailPage` + period `LfSegmentedControl` | L, E, X, S | `LfThumbnailGrid` with multi-select |
+| §3.7 | Receipt viewer | full-screen one-off (pinch zoom) | L, X | |
+| §3.7 | Delete N receipts / Delete all | `LfDialog` Warning (count and size) | — | |
+| §3.7 | Storage and auto-delete | `LfSettingsPage` rows | — | |
+| §3.8 | About | `LfSettingsPage` | — | |
+| §3.8 | What's new · Privacy policy · Terms | `LfDetailPage` holding text | L | `LfProse` (headings, paragraphs, lists) |
+| §3.8 | Help & FAQ | `LfDetailPage` | E (no match) | `LfExpandableRow` |
+| §3.8 | Report a bug (review before sending) | `LfFormPage` | S | |
+| §3.8 | Open-source licences → one licence | `LfDetailPage` list → `LfProse` | L | |
+| §5.1 | Merchant categories (Organise tab) | today's Organise tab + `TaxonomyCard` | L, E, X, S | |
+| §5.2 | Merchants: Uncategorised (n) filter, multi-select, Set category | Organise tab + `LfChip` filter + selection bar | E, S | selection bar shared with Inbox and Bin |
+| §5.3 | Merchant picker, browse by kind | today's picker dialog + `LfSectionHeader` groups | E | |
+| §5.4 | Analytics "By merchant category" | `LfSection`: donut + ranked list, treemap toggle | L, E | |
+| §5.4 | Merchant category → merchants → entries | `LfDetailPage` ×2 (`LfHorizontalBarChart`, paged `LfEntryRow`) | L, E | |
+| §4.1 | Goals list · goal detail | `LfDetailPage` + `LfSection` | L, E, X | `LfProgressBar` (generalised from `LfBudgetBar`); a `progress` role, neutral colour (§4.4 item 4) |
+| §4.1 | New / edit goal · add contribution | `LfFormPage` · `LfSheet` | X, S | |
+| §4.2 | Recurring list · detail · suggestions to confirm | `LfDetailPage` + `LfSection` | L, E, X, S | |
+| §4.2 | New / edit recurring item | `LfFormPage` (cadence choice, next date) | X, S | |
+| §4.3 | Debts & loans (I owe / owed to me) · loan detail | `LfDetailPage` + `LfSection` | L, E, X | `LfSchedule` (repayment rows, paged) |
+| §4.3 | New / edit loan · link a payment | `LfFormPage` · picker dialog | X, S | |
+| §4.4 | Calculator ("use as amount") | `LfSheet` | — | `LfKeypad` |
+| §4.4 | Currency converter | `LfFormPage` + "indicative" `LfNotice` | L, U (offline), X | |
+| §4.4 | Split expense | `LfFormPage` | X, S | |
+| §3.5, security sample | Security & privacy: choose Phone's lock or LedgerFlow PIN | `LfSettingsPage` + `LfSelectRow`s | — | |
+| Q7, PIN samples | Set up PIN · confirm PIN · unlock with PIN | `LfFlowStep`, full screen | X (didn't match) | `LfPinPad`, `LfPinDots` |
+| §6.8, language sample | Language (only if localisation is picked) | `LfSettingsPage` + `LfSelectRow`s | — | |
+| Help | Help (also V2-PLAN §3.8) | as Help & FAQ above | | |
+
+**Designed only: waits on V2-PLAN D3 (Q6).** Drawn on the canvas so the parts
+exist when the decision is made; none is built while LedgerFlow has no
+accounts.
+
+| Sample | Screen | Template / component | States | New part needed |
+|---|---|---|---|---|
+| onboarding | Welcome carousel | `LfFlowStep` with pages, Sign up / Log in pair | — | `LfPagerDots`; artwork (Q9) |
+| sign-up | Sign up (name, email, password, terms, "Continue with Google") | `LfFormPage` | X (field errors), S | `LfPasswordField`, `LfSocialButton` |
+| login | Log in, Forgot password? | `LfFormPage` | X | |
+| reset password | Reset password | `LfFormPage` | X, S | |
+| verification | Enter your verification code (timer, "Send again") | `LfFlowStep` | X, S | `LfCodeInput` |
+
+"Continue with Google" is the one part that does not wait on D3: it is how
+Drive is linked (V2-PLAN D1, V2-4).
+
+**V2-PLAN §6 (owner picks), mapped only once picked:** Search
+(`LfDetailPage` with a search field in the header slot), transfers and refund
+links (a row action plus a linked-pair row), accounts with balances
+(`LfDetailPage`, one book per figure), tags (`LfChip` input), monthly
+statement PDF (`LfFormPage`), home-screen widget (§4.4 item 5), Hindi UI
+(longer labels and Devanagari: the font-scale-2.0 and BUG9 rules already
+cover the layout side), general-user onboarding (`LfFlowStep`s), crash-log
+export (a Settings row).
+
+**What step D1 takes from this.** The templates need four slots that no
+screen today uses all of: a search field in the header (Search, Help, the
+merchant picker), a filter-chip band (Merchants' Uncategorised, Receipts'
+period), a selection mode that swaps the action bar for "N selected"
+(Merchants, Receipts, Inbox, Bin), and an offline state (§5.1) for the Drive
+and converter screens.
 
 ---
 
@@ -537,19 +764,21 @@ one gate at a time to stay inside the dev box's RAM and heat limits.
 | **A2** ✓ | Material `ColorScheme` (all 48 roles) and `Shapes` (all 5) mapped from today's palette and radii (`LfMaterialTheme.kt`); `LfMaterialThemeTest` completeness tests; BUG63 (off switch) fixed with `Bug63_OffSwitchIsVisibleTest`; `material-date-picker` and `material-selection-controls` goldens in both themes. Goldens changed only at the switches (Settings, Payment apps) | Yes, small (switches; pickers and sheet off-golden) | the phone wasn't connected, so the pickers were checked through the new goldens; a device pass of both pickers and the Add sheet is still owed | `fix: BUG63 -- Material widgets inherit LedgerFlow's colours and corners; the off switch is visible again` |
 | **B1** ✓ | Primitive layer (`theme/primitive/LfPrimitives.kt`, internal) and semantic roles (`LfColors` grouped as `surface`/`text`/`border`/`action`/`money`/`status`/`chart`; `LfTheme.type`, `LfTheme.space`, `LfTheme.borders`) with **today's exact values**; the 12 flat colour names, the `xs`…`xxl` steps and `LfTheme.typography` are deprecated aliases; the A2 Material mapping reads the roles. `LfTokenLayersTest` pins every value | **No: every golden byte-identical after re-recording** | stability report | `refactor: design tokens in three layers, same values` |
 | **B2** ✓ | Component tokens, all `internal`: `component/LfComponentTokens.kt` and `chart/LfChartTokens.kt` in `:core:designsystem` (colours and text from the roles, a component's own spacing from `LfScale`), and `LfUiTokens.kt` in `:core:ui` (public roles only). Every component and chart in `:core:designsystem`, and the entry row, pickers, line-item editor and phrase screens in `:core:ui`, read their tokens; none reads a deprecated alias except two 24 dp sizes in `:core:ui` (entry-row swatch, phrase-entry gap) that wait for B3's `LfLayout`. `chart.track` now points at `surface.overlay`, the colour four of the five charts actually draw their tracks in; nothing else read it | **No: every golden byte-identical after re-recording** | stability report: no new unstable parameter, every restartable composable still skippable; `LfEntryRowLayoutTest`'s `inkDifferences` check passes | `refactor: components read component tokens` |
-| **B3** | Radii move out of `LfSpacing` into shape roles; `LfLayout` holds the layout constants | No: pixel-identical | | `refactor: shapes and layout constants leave LfSpacing` |
+| **B3** | Radii move out of `LfSpacing` into the shape roles (`container`, `row`, `control`, `dialog`, `full`, §4.2); `LfLayout` holds the layout constants and the component sizes; both **at today's values** (the samples' values arrive in F3), and `:core:ui`'s two 24 dp sizes move onto them | No: pixel-identical | | `refactor: shapes and layout constants leave LfSpacing` |
 | **C1** | `designTokenCheck` + allowlist of today's violations, in `preMergeCheck` | No | run it against a deliberately bad file | `build: designTokenCheck rejects raw colours, sizes, shapes and widgets outside the theme` |
 | **C2** | `LfDatePickerDialog`, `LfDateRangePickerDialog`, `LfBottomSheet`, `LfSnackbarHost` wrappers; the 4 pickers and the Add sheet move to them; allowlist shrinks | No (A2 already themed them) | goldens of each wrapper, both themes | `refactor: pickers and sheets go through themed wrappers` |
-| **D1** | Templates (`LfTabPage`, `LfDetailPage`, `LfFormPage`, `LfFlowStep`, `LfSettingsPage`, `LfSheet`, `LfActionBar`) with today's look; **one screen edge margin and one list end** | Yes (margins) | device: insets with `uiautomator dump` + nav bar `mFrame`, before/after in the commit (`CLAUDE.md` §5) | `feat(ui): screen templates; one edge margin everywhere` |
+| **D1** | Templates (`LfTabPage`, `LfDetailPage`, `LfFormPage`, `LfFlowStep`, `LfSettingsPage`, `LfSheet`, `LfActionBar`) with today's look, including the four slots §5.6 says v2 needs (header search, filter band, selection mode, offline state), the samples' top bar (Back, centred title, overflow) on pushed pages, and a grouped-panel container for rows; **one screen edge margin and one list end** | Yes (margins) | device: insets with `uiautomator dump` + nav bar `mFrame`, before/after in the commit (`CLAUDE.md` §5) | `feat(ui): screen templates; one edge margin everywhere` |
 | **D2** | Screens adopt templates, a few per commit (tabs · Inbox, Review, Entry · Settings pages · onboarding flows · Scan, Export, Diagnostics, Bin, Budgets, Organise) | Yes | per batch: goldens reviewed, 2.0, RTL | `refactor(inbox): Inbox and Review use the detail and form templates` |
 | **D3** | Shape and border roles applied consistently (cards, rows, fields, swipe tracks); hairline and dialog-height tokens; allowlist shrinks | Yes (corners) | | `fix(ui): one corner shape per role; hairlines from the theme` |
-| **E1** | `LfStateContent`, skeletons, `LfNotice`, `LfFeedbackHost`, field error line, progress step, all with goldens in both themes | No (components only) | contrast test | `feat(ui): shared loading, empty, error and feedback components` |
+| **D4** | **Profile tab and Settings pages (Q8).** The fourth tab becomes Profile (`LfProfileHeader` showing "Set up your profile" until V2-PLAN §3.1 can store a name and photo, which needs schema and is out of scope here; `LfNavRow`s for Settings and Export data; Account and sign-out rows appear with their V2 phases). Settings becomes an index of `LfNavRow`s showing current values, and each of today's seven sections becomes its own `LfSettingsPage` with no row's behaviour changed. `SPEC.md` §9.3 and V2-PLAN D7 updated in the same commit | Yes (navigation) | a named test per route: every Settings row, Home's capture and backup banners, the budget-alert tap and `ledgerflow://` links still reach their page; Start screen choices unchanged; Back from a section returns to Settings, then Profile; device run, 2.0 and RTL | `feat(ui): Profile tab; every Settings section is its own page` |
+| **E1** | `LfStateContent`, skeletons, `LfNotice`, `LfFeedbackHost`, field error line, progress step, `LfProgressBar`, and the confirm, options and filter variants of `LfSheet` (the Add sheet becomes the options variant), all with goldens in both themes | No (components only) | contrast test | `feat(ui): shared loading, empty, error and feedback components` |
 | **E2–E6** | Screens adopt the state system in the D2 batches, closing §5.4's gaps. Each fix gets a Law 7 test named after it: **setup dead end first**, then Budgets' messages and delete confirmation, Entry's off-screen error, blank loading screens, the missing on-screen Back, the budget alert icon and tap | Yes | no-dead-end tests; device run of each fixed path | `fix(onboarding): BUGNN -- a failed setup offers Retry instead of "You're set up"` |
-| **F1** | Docs only: ADR-0031 (the chosen direction), `SPEC.md` §9 rewritten to match, `V2-PLAN.md` §8 updated | No | | `docs: ADR-0031 visual direction; SPEC §9 follows` |
+| **F1** | Docs only: ADR-0031 (Night Vault: its colours and fonts, plus the shapes and components taken from the reference samples, citing the folder), `SPEC.md` §9 rewritten to match, `V2-PLAN.md` §8 updated | No | | `docs: ADR-0031 visual direction; SPEC §9 follows` |
 | **F2** | The chosen direction's primitives (and font file, if approved) replace today's; light and dark | **Yes: every golden** | contrast for every pair; review goldens screen by screen; device in both themes | `feat(ui): <direction> palette and type` |
-| **F3** | Component token changes for the direction (density, borders, shapes) | Yes | stability report; benchmarks on Ledger and Inbox | `feat(ui): <direction> component styling` |
+| **F3** | Component token changes for the direction: §4.2's shape and size values; the samples' buttons, fields, checkbox, radio, switch and pill segmented tabs; the bottom bar with the raised + and labels; `LfIconTile` on entry rows in place of the 24 dp dot, drawn into the row's leaf so the row stays one `Layout` (`CLAUDE.md` §8), held to the old composition's structure by an `inkDifferences` test of everything but the tile | Yes | stability report; benchmarks on Ledger and Inbox (cool, interleaved); row height before/after from `uiautomator dump` | `feat(ui): Night Vault component styling` |
 | **F4** | One icon family through `LfIcons`; notification icons generated from it | Yes | notification shade screenshots | `feat(ui): one icon set, notifications included` |
 | **F5** | Screen-level composition the direction calls for (Home first, then the D2 batches) | Yes | per batch: goldens, 2.0, RTL, device, benchmarks for lists | `feat(home): Home in <direction>` |
+| **F6** | Chart polish (§4.5): `LfAreaChart` (monotone curve, fading fill, value pill) with a unit test that the curve never leaves the data's range; rounded donut with gaps and a centre total; rounded bars; 8 dp progress bars. The Analytics screen picks which views use the area chart | Yes | goldens at 1× and 2×, both themes, reviewed; Analytics redraw test (`LfStackedBarChartRedrawTest` pattern) for the new chart; semantics per point | `feat(charts): area chart; rounded donut, bars and progress` |
 | **G** | Deprecated aliases removed; allowlist empty; `docs/DESIGN_SYSTEM.md`; `CLAUDE.md` §5 and `SPEC.md` pointers; `LfFonts.kt`'s stale snackbar note fixed | No | full uncached gate | `chore(ui): remove legacy theme names; design-system guide` |
 
 ### Risks and how each is handled
