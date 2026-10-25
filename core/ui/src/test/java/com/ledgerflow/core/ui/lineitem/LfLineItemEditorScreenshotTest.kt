@@ -15,7 +15,10 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import androidx.compose.foundation.background
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -68,7 +71,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [EDITOR_ROBOLECTRIC_SDK])
-class LfLineItemEditorScreenshotTest {
+open class LfLineItemEditorScreenshotTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -79,18 +82,26 @@ class LfLineItemEditorScreenshotTest {
             CompositionLocalProvider(
                 LocalDensity provides Density(density.density, fontScale),
             ) {
-                LfTheme {
-                    Column(
-                        modifier = Modifier
-                            .width(NARROW_EDITOR.dp)
-                            .padding(LfTheme.spacing.md),
-                    ) {
-                        LfLineItemEditor(state = state, onEvent = {})
+                GoldenTheme.Provide {
+                    LfTheme {
+                        // The app's background behind the component, so the dark golden is not
+                        // light text on the test window's near-white.
+                        Column(
+                            modifier = Modifier
+                                .width(NARROW_EDITOR.dp)
+                                .background(LfTheme.colors.surfaceBase)
+                                .padding(LfTheme.spacing.md),
+                        ) {
+                            LfLineItemEditor(state = state, onEvent = {})
+                        }
                     }
                 }
             }
         }
-        composeRule.onRoot().captureRoboImage("$EDITOR_GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
+        composeRule.onRoot().captureRoboImage(
+            "$EDITOR_GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
     }
 
     private fun row(
@@ -156,3 +167,11 @@ class LfLineItemEditorScreenshotTest {
 private const val EDITOR_ROBOLECTRIC_SDK = 34
 private const val NARROW_EDITOR = 320
 private const val EDITOR_GOLDEN_DIR = "src/test/screenshots"
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LfLineItemEditorScreenshotDarkTest : LfLineItemEditorScreenshotTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
+}

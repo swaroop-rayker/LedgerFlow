@@ -150,6 +150,54 @@ tasks.register("bannedApiCheck") {
 }
 
 /**
+ * **Every golden in both themes** (DESIGN_SYSTEM_PLAN §6.3).
+ *
+ * Dark is the app's default theme, and until step A1 of the redesign exactly
+ * one golden of 135 was dark: a screen could look broken in dark and no test
+ * would say so. Each goldens test now has a dark twin (`DarkGoldensRule`) that
+ * saves `<name>-dark.png` beside `<name>.png`; this fails when either half of a
+ * pair is missing, so a new golden cannot quietly skip dark. A pair named
+ * `<name>-light.png` / `<name>-dark.png` (the capture guide's) counts too.
+ *
+ * File names only, so it runs in a second and needs no build.
+ */
+tasks.register("goldenThemePairsCheck") {
+    group = "verification"
+    description = "Fails when a screenshot golden has no partner in the other theme."
+
+    val goldenDirs = subprojects.map { it.file("src/test/screenshots") }
+    val root = rootDir
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val missing = mutableListOf<String>()
+        goldenDirs.filter { it.isDirectory }.forEach { dir ->
+            val names = dir.listFiles { f -> f.extension == "png" }.orEmpty().map { it.nameWithoutExtension }.toSet()
+            names.forEach { name ->
+                val partner = when {
+                    name.endsWith("-dark") ->
+                        listOf(name.removeSuffix("-dark"), name.removeSuffix("-dark") + "-light")
+                    name.endsWith("-light") -> listOf(name.removeSuffix("-light") + "-dark")
+                    else -> listOf("$name-dark")
+                }
+                if (partner.none { it in names }) {
+                    missing += "${dir.relativeTo(root).invariantSeparatorsPath}/$name.png has no " +
+                        (if (name.endsWith("-dark")) "light" else "dark") + " partner (${partner.first()}.png)"
+                }
+            }
+        }
+        if (missing.isNotEmpty()) {
+            missing.forEach { logger.error("::error::$it") }
+            throw GradleException(
+                "goldenThemePairsCheck: ${missing.size} golden(s) missing a light/dark partner. " +
+                    "Add a DarkGoldensRule twin for the test and record it (review before committing).",
+            )
+        }
+        logger.lifecycle("goldenThemePairsCheck: clean.")
+    }
+}
+
+/**
  * **The app's entire permission set, pinned per source set** (SPEC.md §3.1
  * D-04, Law 6, CLAUDE.md §9).
  *
@@ -340,6 +388,7 @@ tasks.register("preMergeCheck") {
         .map { it.path }
 
     dependsOn("bannedApiCheck")
+    dependsOn("goldenThemePairsCheck")
     dependsOn("moduleDependencyRuleCheck")
     dependsOn("restrictedPermissionCheck")
     // The merged-manifest half of the permission rule (see EXPECTED_PERMISSIONS'

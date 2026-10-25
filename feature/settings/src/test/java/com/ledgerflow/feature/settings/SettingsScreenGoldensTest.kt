@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.format.DisplayConventions
+import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.appearance.AnimationPreference
@@ -18,6 +19,7 @@ import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -39,7 +41,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = SETTINGS_1X)
-class SettingsScreenGoldensTest {
+open class SettingsScreenGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
@@ -60,20 +62,24 @@ class SettingsScreenGoldensTest {
         DisplayConventions.current = state.region
         try {
             rule.captureScreenGolden(name, fontScale, layoutDirection) {
+                // In LfScaffold, as the shell hosts every tab: the screen paints
+                // no background of its own.
                 LfTheme {
-                    SettingsScreen(
-                        state = state,
-                        onCategories = {},
-                        onBudgets = {},
-                        onExport = {},
-                        onDeletedEntries = {},
-                        onNotificationAccess = {},
-                        onBackUp = {},
-                        onDiagnostics = {},
-                        onBudgetAlerts = {},
-                        onPaymentApps = {},
-                        onEvent = {},
-                    )
+                    LfScaffold {
+                        SettingsScreen(
+                            state = state,
+                            onCategories = {},
+                            onBudgets = {},
+                            onExport = {},
+                            onDeletedEntries = {},
+                            onNotificationAccess = {},
+                            onBackUp = {},
+                            onDiagnostics = {},
+                            onBudgetAlerts = {},
+                            onPaymentApps = {},
+                            onEvent = {},
+                        )
+                    }
                 }
             }
         } finally {
@@ -136,3 +142,11 @@ class SettingsScreenGoldensTest {
  */
 private const val SETTINGS_1X = "w360dp-h2800dp"
 private const val SETTINGS_2X = "w360dp-h5600dp"
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class SettingsScreenGoldensDarkTest : SettingsScreenGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
+}

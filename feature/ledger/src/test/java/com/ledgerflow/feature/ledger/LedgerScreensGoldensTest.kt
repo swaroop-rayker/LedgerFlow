@@ -6,6 +6,7 @@ import androidx.paging.LoadStates
 import androidx.paging.PagingData
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.compose.ui.unit.LayoutDirection
+import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
@@ -23,6 +24,7 @@ import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -44,7 +46,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class LedgerScreensGoldensTest {
+open class LedgerScreensGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
@@ -57,18 +59,22 @@ class LedgerScreensGoldensTest {
         direction: LayoutDirection = LayoutDirection.Ltr,
     ) =
         rule.captureScreenGolden(name, fontScale, direction) {
+            // In LfScaffold, as the shell hosts every tab: the screen paints no
+            // background of its own.
             LfTheme {
-                LedgerScreen(
-                    state = state,
-                    // Finished load states, stated: a static `PagingData` without
-                    // them reports `refresh = Loading` forever (measured), and the
-                    // empty state waits for a settled load -- the first two
-                    // recordings of an empty book were blank pages.
-                    entries = flowOf(PagingData.from(rows, sourceLoadStates = LoadStates(DONE, DONE, DONE))),
-                    onEvent = {},
-                    onOpenDraft = {},
-                    onReviewCandidate = {},
-                )
+                LfScaffold {
+                    LedgerScreen(
+                        state = state,
+                        // Finished load states, stated: a static `PagingData` without
+                        // them reports `refresh = Loading` forever (measured), and the
+                        // empty state waits for a settled load -- the first two
+                        // recordings of an empty book were blank pages.
+                        entries = flowOf(PagingData.from(rows, sourceLoadStates = LoadStates(DONE, DONE, DONE))),
+                        onEvent = {},
+                        onOpenDraft = {},
+                        onReviewCandidate = {},
+                    )
+                }
             }
         }
 
@@ -247,4 +253,12 @@ class LedgerScreensGoldensTest {
         const val CATEGORY_BLUE = 0xFF3E6AD6.toInt()
         val DONE = LoadState.NotLoading(endOfPaginationReached = true)
     }
+}
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LedgerScreensGoldensDarkTest : LedgerScreensGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
 }

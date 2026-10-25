@@ -3,6 +3,7 @@ package com.ledgerflow.feature.dashboard
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.compose.ui.unit.LayoutDirection
+import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupReminder
 import com.ledgerflow.core.domain.diagnostics.CrashSummary
@@ -13,6 +14,7 @@ import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -33,7 +35,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class DashboardScreenGoldensTest {
+open class DashboardScreenGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
@@ -45,7 +47,9 @@ class DashboardScreenGoldensTest {
         direction: LayoutDirection = LayoutDirection.Ltr,
     ) =
         rule.captureScreenGolden(name, fontScale, direction) {
-            LfTheme { DashboardScreen(state = state, onSetUpNotifications = {}, onBackUpNow = {}) }
+            // In LfScaffold, as the shell hosts every tab: the screen paints no
+            // background of its own.
+            LfTheme { LfScaffold { DashboardScreen(state = state, onSetUpNotifications = {}, onBackUpNow = {}) } }
         }
 
     /** Both books read, both empty: what every pre-v2 golden here depicted. */
@@ -128,4 +132,12 @@ class DashboardScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun loading_2x() = capture("home-loading-2x", figuresLoading, 2f)
+}
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class DashboardScreenGoldensDarkTest : DashboardScreenGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
 }

@@ -23,6 +23,7 @@ import com.ledgerflow.core.domain.diagnostics.PipelineSpeed
 import com.ledgerflow.core.domain.diagnostics.ReadQualityReport
 import com.ledgerflow.core.domain.diagnostics.RollupHealth
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -42,7 +43,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [ROBOLECTRIC_SDK], qualifiers = TALL_1X)
-class DiagnosticsScreenTest {
+open class DiagnosticsScreenTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -188,3 +189,11 @@ private const val ROBOLECTRIC_SDK = 34
 private const val TALL_1X = "w360dp-h1800dp"
 private const val TALL_2X = "w360dp-h3600dp"
 private const val SCREEN_TITLE = "Diagnostics"
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class DiagnosticsScreenDarkTest : DiagnosticsScreenTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
+}

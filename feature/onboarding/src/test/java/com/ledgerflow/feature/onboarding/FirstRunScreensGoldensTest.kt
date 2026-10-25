@@ -20,6 +20,7 @@ import com.ledgerflow.feature.onboarding.restore.RestoreUiState
 import com.ledgerflow.feature.onboarding.upgrade.UpgradeBlockedScreen
 import com.ledgerflow.feature.onboarding.upgrade.UpgradingScreen
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -39,7 +40,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class FirstRunScreensGoldensTest {
+open class FirstRunScreensGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
@@ -161,4 +162,12 @@ class FirstRunScreensGoldensTest {
     fun upgradeBlocked_2x() = rule.captureScreenGolden("upgrade-low-storage-2x", 2f) {
         LfTheme { UpgradeBlockedScreen(reason = lowStorage) }
     }
+}
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class FirstRunScreensGoldensDarkTest : FirstRunScreensGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
 }

@@ -19,7 +19,10 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import androidx.compose.foundation.background
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -42,7 +45,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [SCANNER_ROBOLECTRIC_SDK])
-class LfPhraseScannerScreenshotTest {
+open class LfPhraseScannerScreenshotTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -51,9 +54,18 @@ class LfPhraseScannerScreenshotTest {
         composeRule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                LfTheme {
-                    Column(modifier = Modifier.width(NARROW.dp).padding(LfTheme.spacing.sm)) {
-                        ScannerControls(granted = granted, onDismiss = {})
+                GoldenTheme.Provide {
+                    LfTheme {
+                        // The app's background behind the component, so the dark golden is not
+                        // light text on the test window's near-white.
+                        Column(
+                            modifier = Modifier
+                                .width(NARROW.dp)
+                                .background(LfTheme.colors.surfaceBase)
+                                .padding(LfTheme.spacing.sm),
+                        ) {
+                            ScannerControls(granted = granted, onDismiss = {})
+                        }
                     }
                 }
             }
@@ -61,7 +73,10 @@ class LfPhraseScannerScreenshotTest {
     }
 
     private fun capture(name: String) {
-        composeRule.onRoot().captureRoboImage("$GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
+        composeRule.onRoot().captureRoboImage(
+            "$GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
     }
 
     private fun assertInstructionAboveButton(instruction: String) {
@@ -120,3 +135,11 @@ private const val BUTTON = "Type the words"
 
 /** A narrow phone, the width at which a wrapped instruction first matters. */
 private const val NARROW = 320
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LfPhraseScannerScreenshotDarkTest : LfPhraseScannerScreenshotTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
+}

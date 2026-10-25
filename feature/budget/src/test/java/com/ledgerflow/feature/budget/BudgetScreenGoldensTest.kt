@@ -2,6 +2,7 @@ package com.ledgerflow.feature.budget
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.Budget
 import com.ledgerflow.core.domain.analytics.BudgetProgress
@@ -12,6 +13,7 @@ import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -29,14 +31,16 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class BudgetScreenGoldensTest {
+open class BudgetScreenGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
 
     private fun capture(name: String, state: BudgetUiState, fontScale: Float) =
         rule.captureScreenGolden(name, fontScale) {
-            LfTheme { BudgetScreen(state = state, onEvent = {}) }
+            // In LfScaffold, as the shell hosts it: the screen paints no
+            // background of its own.
+            LfTheme { LfScaffold { BudgetScreen(state = state, onEvent = {}) } }
         }
 
     private fun progress(id: String, name: String, limit: Long, spent: Long, projected: Long) = BudgetProgress(
@@ -82,4 +86,12 @@ class BudgetScreenGoldensTest {
     private companion object {
         const val START = 20_667
     }
+}
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class BudgetScreenGoldensDarkTest : BudgetScreenGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
 }

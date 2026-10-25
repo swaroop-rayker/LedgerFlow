@@ -74,6 +74,16 @@ Verdicts: **Confirmed**, **Corrected** (the claim was wrong), **Incomplete**
 - No shared loading component exists. Loading is a spinner inside a button, a placeholder dash on Home, the word "Loading" in an empty-state card on Analytics, or nothing at all.
 - The parallel V2-3 branch (Q2), since merged.
 
+**Found by A1's dark goldens** (today's dark theme, not caused by A1):
+- The Ledger row's bin icon is barely visible: a dark grey glyph on a dark row
+  (`ledger-expenses-*-dark`). Fixed by the icon role in F4 or earlier in D3.
+- Switches in the off position almost vanish (Payment apps' Paytm row,
+  Settings' App lock and Block screenshots): Material's unchecked track uses a
+  colour role `LfTheme` never sets. A2's complete colour mapping fixes it.
+- Disabled buttons ("24 words to go", a disabled Approve) are very faint.
+  Below 4.5:1 is allowed for disabled controls, but these sit at the edge of
+  readable; a `text.disabled` role (§4.2) settles it in B1/E1.
+
 ---
 
 ## 2. Every hard-coded size, sorted
@@ -458,13 +468,17 @@ a known audit gap closed in Phase E.
    Detekt or Lint rule would give better error messages but needs a new
    dependency (`detekt-api` / `lint-api`, `CLAUDE.md` §10), so it's left as an
    optional later step.
-3. **Screenshots in both themes.** `captureScreenGolden` gains a `theme`
-   parameter, and a helper records `-light` and `-dark` for every golden
-   (alongside the existing `-1x`/`-2x` and `-rtl`). A test lists the golden
-   folders and fails when a light golden has no dark partner, so new screens
-   can't skip dark. Tolerance stays `LfScreenshotOptions` (`maxDistance 0.055`;
-   never raised, `CLAUDE.md` §4). Goldens are reviewed, never re-recorded
-   blind (§12).
+3. **Screenshots in both themes.** *(Built in A1.)* Each goldens test class has
+   a one-line dark twin carrying `DarkGoldensRule` (`core/testing`); the
+   harness then renders in night mode and saves `<name>-dark.png` beside the
+   unchanged light `<name>.png` (alongside the existing `-1x`/`-2x` and `-rtl`).
+   A rule rather than a class-level `+night` qualifier, because every
+   method-level `@Config(qualifiers = PHONE_2X)` would replace the qualifier
+   and quietly record the 2x goldens light. The Gradle task
+   `goldenThemePairsCheck`, in `preMergeCheck`, fails when either half of a
+   pair is missing, so new screens can't skip dark. Tolerance stays
+   `LfScreenshotOptions` (`maxDistance 0.055`; never raised, `CLAUDE.md` §4).
+   Goldens are reviewed, never re-recorded blind (§12).
 4. **Material widgets inherit the theme.**
    - `ColorSchemeCompletenessTest` walks every property of Material's
      `ColorScheme` and fails if any still equals Material's built-in value or
@@ -519,7 +533,7 @@ one gate at a time to stay inside the dev box's RAM and heat limits.
 
 | Step | What changes | Visible? | Extra checks | Commit (example) |
 |---|---|---|---|---|
-| **A1** | Golden harness gets a theme parameter; dark goldens recorded for every existing screen golden; the partner test (§6.3) | No (new goldens only) | review all dark goldens by eye | `test: dark-theme goldens for every screen, and a check that none is missing` |
+| **A1** ✓ | Dark twin for every goldens test (`DarkGoldensRule`); 133 dark goldens recorded; `goldenThemePairsCheck` in `preMergeCheck` (§6.3). The four shell-hosted tab screens, Budgets and the component tests now render on the app background (`LfScaffold` / `surfaceBase`) instead of the bare test window, which moves 64 light goldens from `#FAFAFA` to `#F7F8FA` (≤ 3 levels per channel, checked by script) | No app change | review all dark goldens by eye | `test: dark-theme goldens for every screen, and a check that none is missing` |
 | **A2** | Material `ColorScheme` and `Shapes` filled completely from today's palette and radii; completeness tests; date pickers and the Add sheet stop using Material defaults | Yes, small (pickers and sheet only) | device screenshot of both pickers in both themes | `fix: date pickers and the Add sheet inherit LedgerFlow's colours and corners` |
 | **B1** | Primitive and semantic layers with **today's exact values**; old names become deprecated aliases | **No: every golden must be pixel-identical** | stability report | `refactor: design tokens in three layers, same values` |
 | **B2** | Component tokens for the existing components (button, card, dialog, chip, segmented control, field, entry row, charts) | No: pixel-identical | stability report; `inkDifferences` on rows | `refactor: components read component tokens` |

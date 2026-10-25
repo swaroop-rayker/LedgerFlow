@@ -31,7 +31,10 @@ import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
 import com.ledgerflow.core.designsystem.chart.LfTreemap
 import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import androidx.compose.foundation.background
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -64,7 +67,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [CHART_ROBOLECTRIC_SDK])
-class LfChartScreenshotTest {
+open class LfChartScreenshotTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -75,18 +78,26 @@ class LfChartScreenshotTest {
             CompositionLocalProvider(
                 LocalDensity provides Density(density.density, fontScale),
             ) {
-                LfTheme {
-                    Column(
-                        modifier = Modifier
-                            .width(NARROW_CHART.dp)
-                            .padding(LfTheme.spacing.md),
-                        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-                        content = { content() },
-                    )
+                GoldenTheme.Provide {
+                    LfTheme {
+                        // The app's background behind the component, so the dark golden is not
+                        // light text on the test window's near-white.
+                        Column(
+                            modifier = Modifier
+                                .width(NARROW_CHART.dp)
+                                .background(LfTheme.colors.surfaceBase)
+                                .padding(LfTheme.spacing.md),
+                            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                            content = { content() },
+                        )
+                    }
                 }
             }
         }
-        composeRule.onRoot().captureRoboImage("$CHART_GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
+        composeRule.onRoot().captureRoboImage(
+            "$CHART_GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
     }
 
     // ── A2 / A5: the donut ─────────────────────────────────────────────────
@@ -353,3 +364,11 @@ private const val CHART_ROBOLECTRIC_SDK = 34
 private const val NARROW_CHART = 300
 
 private const val CHART_GOLDEN_DIR = "src/test/screenshots"
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LfChartScreenshotDarkTest : LfChartScreenshotTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
+}
