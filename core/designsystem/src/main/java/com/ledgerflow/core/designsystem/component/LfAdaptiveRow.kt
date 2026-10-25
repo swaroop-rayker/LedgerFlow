@@ -5,7 +5,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * [leading] beside [trailing], or above it when both will not fit.
@@ -36,7 +35,7 @@ public fun LfAdaptiveRow(
     trailing: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val gapPx = with(LocalDensity.current) { LfTheme.spacing.sm.roundToPx() }
+    val gapPx = with(LocalDensity.current) { LfActionRowTokens.gap.roundToPx() }
 
     Layout(
         modifier = modifier,

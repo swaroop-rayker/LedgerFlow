@@ -40,14 +40,14 @@ public fun LfSegmentedControl(
     modifier: Modifier = Modifier,
 ) {
     require(options.size >= MIN_OPTIONS) { "A segmented control needs at least $MIN_OPTIONS options" }
-    val colors = LfTheme.colors
     val spacing = LfTheme.spacing
+    val tokens = LfSegmentedTokens
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised, RoundedCornerShape(spacing.cornerMedium))
-            .padding(spacing.xs),
+            .background(tokens.track, RoundedCornerShape(tokens.trackCorner))
+            .padding(tokens.trackPadding),
     ) {
         // Unlike a button, a segment cannot grow to fit its label -- the cells
         // divide a fixed width. So at large font scales the choice is between
@@ -64,7 +64,7 @@ public fun LfSegmentedControl(
         if (perOption >= needed) {
             Row(
                 modifier = Modifier.fillMaxWidth().selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(tokens.gap),
             ) {
                 options.forEachIndexed { index, label ->
                     Segment(label, index == selectedIndex, { onSelect(index) }, Modifier.weight(1f))
@@ -73,7 +73,7 @@ public fun LfSegmentedControl(
         } else {
             Column(
                 modifier = Modifier.fillMaxWidth().selectableGroup(),
-                verticalArrangement = Arrangement.spacedBy(spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(tokens.gap),
             ) {
                 options.forEachIndexed { index, label ->
                     Segment(
@@ -95,23 +95,23 @@ private fun Segment(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = LfTheme.colors
     val spacing = LfTheme.spacing
+    val tokens = LfSegmentedTokens
     Box(
         modifier = modifier
             .background(
-                color = if (selected) colors.accent else colors.surfaceRaised,
-                shape = RoundedCornerShape(spacing.cornerSmall),
+                color = if (selected) tokens.selectedContainer else tokens.unselectedContainer,
+                shape = RoundedCornerShape(tokens.segmentCorner),
             )
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .defaultMinSize(minHeight = spacing.minTouchTarget)
-            .padding(horizontal = spacing.xs, vertical = spacing.sm),
+            .padding(horizontal = tokens.segmentPaddingHorizontal, vertical = tokens.segmentPaddingVertical),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            style = LfTheme.typography.bodyM,
-            color = if (selected) colors.onAccent else colors.textSecondary,
+            style = tokens.textStyle,
+            color = if (selected) tokens.selectedContent else tokens.unselectedContent,
             textAlign = TextAlign.Center,
             // The same contract every control label carries (BUG9): one line,
             // never broken mid-word. The layout above is what guarantees there

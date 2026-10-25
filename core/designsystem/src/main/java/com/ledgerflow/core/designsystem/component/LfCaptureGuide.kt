@@ -51,8 +51,8 @@ import com.ledgerflow.core.designsystem.theme.LfDarkColors
  */
 @Composable
 public fun LfCaptureGuide(modifier: Modifier = Modifier) {
-    val marks = LfDarkColors.textPrimary
-    val scrim = LfDarkColors.surfaceBase.copy(alpha = SCRIM_ALPHA)
+    val marks = LfDarkColors.text.primary
+    val scrim = LfDarkColors.surface.canvas.copy(alpha = SCRIM_ALPHA)
 
     Canvas(modifier = modifier) {
         val guideWidth = size.width * WIDTH_FRACTION

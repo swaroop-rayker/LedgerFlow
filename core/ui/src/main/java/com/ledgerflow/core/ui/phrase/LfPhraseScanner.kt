@@ -44,7 +44,7 @@ import com.google.zxing.common.HybridBinarizer
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.ui.LfPhraseTokens
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -92,7 +92,7 @@ public fun LfPhraseScanner(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(insets)
-                .padding(LfTheme.spacing.sm),
+                .padding(LfPhraseTokens.scannerInset),
             verticalArrangement = Arrangement.Bottom,
         ) {
             ScannerControls(granted = granted, onDismiss = onDismiss)
@@ -111,7 +111,7 @@ public fun LfPhraseScanner(
 @Composable
 internal fun ScannerControls(granted: Boolean, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     LfCard(modifier = modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfPhraseTokens.rowGap)) {
             Text(
                 text = if (granted) {
                     "Point the camera at the QR code on your Recovery Kit PDF."
@@ -119,8 +119,8 @@ internal fun ScannerControls(granted: Boolean, onDismiss: () -> Unit, modifier: 
                     "Scanning needs the camera. Without it, type the 24 words — it is the " +
                         "same phrase either way."
                 },
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfPhraseTokens.textStyle,
+                color = LfPhraseTokens.text,
             )
             LfButton(
                 text = "Type the words",

@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * A labelled switch whose **whole row is the control**.
@@ -62,18 +61,26 @@ public fun LfSwitchRow(
     ) {
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = if (prominent) Arrangement.spacedBy(LfTheme.spacing.xs) else Arrangement.Top,
+            verticalArrangement = if (prominent) {
+                Arrangement.spacedBy(LfSwitchRowTokens.prominentGap)
+            } else {
+                Arrangement.Top
+            },
         ) {
             Text(
                 text = label,
-                style = if (prominent) LfTheme.typography.bodyL else LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = if (prominent) LfSwitchRowTokens.prominentTitleStyle else LfSwitchRowTokens.titleStyle,
+                color = LfSwitchRowTokens.title,
             )
             if (supporting != null) {
                 Text(
                     text = supporting,
-                    style = if (prominent) LfTheme.typography.bodyM else LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = if (prominent) {
+                        LfSwitchRowTokens.prominentSupportingStyle
+                    } else {
+                        LfSwitchRowTokens.supportingStyle
+                    },
+                    color = LfSwitchRowTokens.supporting,
                 )
             }
         }

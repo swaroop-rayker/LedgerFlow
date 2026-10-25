@@ -229,7 +229,9 @@ private fun rolesFrom(p: Palette, isDark: Boolean): LfColors {
             info = p.accent,
             infoSubtle = subtle(p.accent),
         ),
-        chart = LfChartColors(grid = p.hairline, axisLabel = p.textMuted, track = p.hairline),
+        // track: the empty part of a bar or a heatmap's empty day, as four of the
+        // five charts draw it (the donut's ring keeps the hairline, its own token).
+        chart = LfChartColors(grid = p.hairline, axisLabel = p.textMuted, track = p.overlay),
         isDark = isDark,
     )
 }

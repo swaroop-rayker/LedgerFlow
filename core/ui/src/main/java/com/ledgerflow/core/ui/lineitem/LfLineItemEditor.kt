@@ -8,12 +8,12 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -22,7 +22,7 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
-import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.ui.LfFormRowTokens
 
 /**
  * The line-item editor (SPEC.md §5.4, ADR-0018).
@@ -58,7 +58,7 @@ public fun LfLineItemEditor(
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap),
     ) {
         Header(state)
 
@@ -96,13 +96,13 @@ public fun LfLineItemEditor(
 private fun Header(state: LineItemEditorState) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = "Items",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textSecondary,
+            style = LfFormRowTokens.captionStyle,
+            color = LfFormRowTokens.secondary,
             // A section heading is a label (BUG9): whole, on one line.
             maxLines = 1,
             softWrap = false,
@@ -110,8 +110,8 @@ private fun Header(state: LineItemEditorState) {
         state.summary?.let { summary ->
             Text(
                 text = summary,
-                style = LfTheme.typography.bodyM,
-                color = if (state.balanced) LfTheme.colors.textSecondary else LfTheme.colors.warn,
+                style = LfFormRowTokens.supportingStyle,
+                color = if (state.balanced) LfFormRowTokens.secondary else LfFormRowTokens.warning,
                 modifier = Modifier.weight(1f),
                 textAlign = LfTextAlign.end,
             )
@@ -131,21 +131,21 @@ private fun CollapsedRow(row: LineItemRow, onEvent: (LineItemEditorEvent) -> Uni
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onEvent(LineItemEditorEvent.Expanded(row.key)) }
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .padding(vertical = LfTheme.spacing.sm),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            .defaultMinSize(minHeight = LfFormRowTokens.minHeight)
+            .padding(vertical = LfFormRowTokens.paddingVertical),
+        verticalArrangement = Arrangement.spacedBy(LfFormRowTokens.tightGap),
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = row.name.ifBlank { "Untitled item" },
-                style = LfTheme.typography.bodyL,
+                style = LfFormRowTokens.textStyle,
                 color = if (row.name.isBlank()) {
-                    LfTheme.colors.textTertiary
+                    LfFormRowTokens.muted
                 } else {
-                    LfTheme.colors.textPrimary
+                    LfFormRowTokens.text
                 },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -153,8 +153,8 @@ private fun CollapsedRow(row: LineItemRow, onEvent: (LineItemEditorEvent) -> Uni
             )
             Text(
                 text = row.totalText,
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfFormRowTokens.textStyle,
+                color = LfFormRowTokens.text,
                 // The one thing on this row that must never be abbreviated: a
                 // truncated amount is worse than no amount.
                 maxLines = 1,
@@ -164,11 +164,11 @@ private fun CollapsedRow(row: LineItemRow, onEvent: (LineItemEditorEvent) -> Uni
         Text(
             text = listOfNotNull(row.filedAs ?: "No category", row.quantityLabel)
                 .joinToString("  ·  "),
-            style = LfTheme.typography.bodyM,
+            style = LfFormRowTokens.supportingStyle,
             color = if (row.filedAs == null) {
-                LfTheme.colors.textTertiary
+                LfFormRowTokens.muted
             } else {
-                LfTheme.colors.textSecondary
+                LfFormRowTokens.secondary
             },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -180,8 +180,8 @@ private fun CollapsedRow(row: LineItemRow, onEvent: (LineItemEditorEvent) -> Uni
 @Composable
 private fun ExpandedRow(row: LineItemRow, onEvent: (LineItemEditorEvent) -> Unit) {
     Column(
-        modifier = Modifier.padding(vertical = LfTheme.spacing.sm),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        modifier = Modifier.padding(vertical = LfFormRowTokens.paddingVertical),
+        verticalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap),
     ) {
         LfTextField(
             value = row.name,
@@ -192,7 +192,7 @@ private fun ExpandedRow(row: LineItemRow, onEvent: (LineItemEditorEvent) -> Unit
         // Price and quantity share a line: they are one thought, and the line
         // total below is the sentence they make. Stacked, the expanded row
         // grows past a screenful at large font scales for no gain.
-        Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap)) {
             LfTextField(
                 value = row.unitPriceText,
                 onValueChange = { onEvent(LineItemEditorEvent.UnitPriceChanged(row.key, it)) },
@@ -255,22 +255,22 @@ private fun FilingRow(label: String, value: String?, onClick: (() -> Unit)?) {
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick == null) Modifier else Modifier.clickable(onClick = onClick))
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .padding(vertical = LfTheme.spacing.xs),
+            .defaultMinSize(minHeight = LfFormRowTokens.minHeight)
+            .padding(vertical = LfFormRowTokens.compactPaddingVertical),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.labelGap),
     ) {
         Text(
             text = label,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfFormRowTokens.supportingStyle,
+            color = LfFormRowTokens.secondary,
             maxLines = 1,
             softWrap = false,
         )
         Text(
             text = value ?: "None",
-            style = LfTheme.typography.bodyM,
-            color = if (value == null) LfTheme.colors.textTertiary else LfTheme.colors.textPrimary,
+            style = LfFormRowTokens.supportingStyle,
+            color = if (value == null) LfFormRowTokens.muted else LfFormRowTokens.text,
             modifier = Modifier.weight(1f),
             textAlign = LfTextAlign.end,
         )

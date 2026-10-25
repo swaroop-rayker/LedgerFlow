@@ -17,7 +17,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * D1 — the two books, mirrored about a shared zero line (`SPEC.md` §5.6).
@@ -61,8 +60,11 @@ public fun LfMirroredBarChart(
     contentDescription: String? = null,
 ) {
     val measurer = rememberTextMeasurer()
-    val colors = LfTheme.colors
-    val labelStyle = LfTheme.typography.label.copy(color = colors.textSecondary)
+    val tokens = LfChartTokens
+    val labelStyle = tokens.labelStyle.copy(color = tokens.secondaryText)
+    val grid = tokens.mirroredGrid
+    val incoming = tokens.incoming
+    val outgoing = tokens.outgoing
 
     // One maximum across both books. Per-half scaling is the net figure
     // smuggled back in as geometry.
@@ -91,7 +93,7 @@ public fun LfMirroredBarChart(
             plotLeft = plotLeft,
             midY = midY,
             halfHeight = halfHeight,
-            grid = colors.surfaceOverlay,
+            grid = grid,
         )
 
         if (columns.isEmpty() || peak <= 0L) return@Canvas
@@ -103,8 +105,8 @@ public fun LfMirroredBarChart(
         columns.forEachIndexed { index, column ->
             val left = plotLeft + slot * index + inset
             // Two independent draws from one baseline. Nothing here subtracts.
-            drawBar(left, barWidth, column.creditMinor, peak, midY, halfHeight, true, colors.credit)
-            drawBar(left, barWidth, column.debitMinor, peak, midY, halfHeight, false, colors.debit)
+            drawBar(left, barWidth, column.creditMinor, peak, midY, halfHeight, true, incoming)
+            drawBar(left, barWidth, column.debitMinor, peak, midY, halfHeight, false, outgoing)
         }
     }
 }

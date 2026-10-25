@@ -68,6 +68,7 @@ internal object LfScale {
     val Radius24 = 24.dp
 
     val Stroke1 = 1.dp
+    val Stroke2 = 2.dp
 
     const val Duration60 = 60
     const val Duration120 = 120

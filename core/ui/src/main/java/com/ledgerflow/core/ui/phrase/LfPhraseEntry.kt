@@ -16,7 +16,7 @@ import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfKeyboards
 import com.ledgerflow.core.designsystem.component.LfTextField
-import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.ui.LfPhraseTokens
 
 /**
  * Typing the 24 recovery words: the committed words, the field, and the
@@ -57,7 +57,7 @@ public fun LfPhraseEntry(
 ) {
     Column(
         modifier = modifier.phraseSecret(),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(LfPhraseTokens.sectionGap),
     ) {
         EnteredWords(words, onWordRemove)
 
@@ -98,8 +98,8 @@ private fun EnteredWords(words: List<String>, onWordRemove: (Int) -> Unit) {
     // never wraps (BUG9), so the flow moves whole chips to the next line and
     // none is clipped -- in reading order, so "Word 4" still follows "Word 3".
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(LfPhraseTokens.wordGap),
+        verticalArrangement = Arrangement.spacedBy(LfPhraseTokens.wordGap),
     ) {
         words.forEachIndexed { position, word ->
             LfChip(
@@ -119,7 +119,7 @@ private fun Suggestions(suggestions: List<String>, onSuggestionTap: (String) -> 
     if (suggestions.isEmpty()) return
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfPhraseTokens.rowGap),
     ) {
         items(
             count = suggestions.size,

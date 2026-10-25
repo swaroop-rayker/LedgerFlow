@@ -24,7 +24,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * Budget progress (`SPEC.md` §5.6 A7, §5.7).
@@ -53,13 +52,13 @@ public fun LfBudgetBar(
     fraction: Float,
     projectedFraction: Float,
     modifier: Modifier = Modifier,
-    color: Color = LfTheme.colors.accent,
+    color: Color = LfChartTokens.series,
     height: Dp = DefaultBarHeight,
     contentDescription: String? = null,
 ) {
-    val colors = LfTheme.colors
+    val tokens = LfChartTokens
     val over = fraction > 1f
-    val fill = if (over) colors.warn else color
+    val fill = if (over) tokens.overBudget else color
 
     val spoken = contentDescription
         ?: "$label, $formattedSpent of $formattedBudget"
@@ -68,7 +67,7 @@ public fun LfBudgetBar(
         modifier = modifier
             .fillMaxWidth()
             .semantics { this.contentDescription = spoken },
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(tokens.gap),
     ) {
         // **`FlowRow`, not `Row`, and the goldens are why.** With a weighted
         // `Row` the unbreakable amount pair took its width first and the label
@@ -79,20 +78,20 @@ public fun LfBudgetBar(
         // widths the amounts drop to their own line and the name gets the row.
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(tokens.wideGap),
+            verticalArrangement = Arrangement.spacedBy(tokens.gap),
         ) {
             Text(
                 text = label,
-                style = LfTheme.typography.bodyM,
-                color = colors.textPrimary,
+                style = tokens.textStyle,
+                color = tokens.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.clearAndSetSemantics { },
             )
             BudgetAmounts(
                 text = "$formattedSpent of $formattedBudget",
-                color = if (over) colors.warn else colors.textSecondary,
+                color = if (over) tokens.overBudget else tokens.secondaryText,
             )
         }
 
@@ -101,12 +100,12 @@ public fun LfBudgetBar(
                 .fillMaxWidth()
                 .height(height)
                 .clip(RoundedCornerShape(height / 2))
-                .background(colors.surfaceOverlay),
+                .background(tokens.track),
         ) {
             FractionalBar(fraction = fraction.coerceIn(0f, 1f), color = fill)
             // Only when the projection is both meaningful and not already true.
             if (projectedFraction > fraction && projectedFraction <= 1f) {
-                ProjectionTick(fraction = projectedFraction, color = colors.textTertiary)
+                ProjectionTick(fraction = projectedFraction, color = tokens.reference)
             }
         }
     }
@@ -132,7 +131,7 @@ internal fun BudgetAmounts(
 ) {
     Text(
         text = text,
-        style = LfTheme.typography.label,
+        style = LfChartTokens.labelStyle,
         color = color,
         maxLines = AMOUNT_MAX_LINES,
         onTextLayout = onTextLayout,

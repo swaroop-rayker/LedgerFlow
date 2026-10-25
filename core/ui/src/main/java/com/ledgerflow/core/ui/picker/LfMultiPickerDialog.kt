@@ -23,7 +23,7 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
-import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.ui.LfFormRowTokens
 
 /**
  * [LfPickerDialog]'s multi-select twin, for the analytics filters (§5.6).
@@ -96,8 +96,8 @@ public fun LfMultiPickerDialog(
                     if (options.isEmpty()) {
                         Text(
                             text = emptyMessage,
-                            style = LfTheme.typography.bodyM,
-                            color = LfTheme.colors.textSecondary,
+                            style = LfFormRowTokens.supportingStyle,
+                            color = LfFormRowTokens.secondary,
                         )
                     }
                     options.forEach { option ->
@@ -136,16 +136,16 @@ public fun LfCheckRow(
                 onValueChange = onCheckedChange,
                 role = Role.Checkbox,
             )
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .padding(vertical = LfTheme.spacing.xs),
+            .defaultMinSize(minHeight = LfFormRowTokens.minHeight)
+            .padding(vertical = LfFormRowTokens.compactPaddingVertical),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap),
     ) {
         Checkbox(checked = checked, onCheckedChange = null)
         Text(
             text = label,
-            style = LfTheme.typography.bodyL,
-            color = LfTheme.colors.textPrimary,
+            style = LfFormRowTokens.textStyle,
+            color = LfFormRowTokens.text,
             modifier = Modifier.weight(1f),
         )
     }

@@ -27,7 +27,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.constrainHeight
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
 import com.ledgerflow.core.designsystem.component.LfIconButton
@@ -35,9 +34,9 @@ import com.ledgerflow.core.designsystem.component.lfCategoryDot
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.ui.LfEntryRowTokens
 
 /**
  * One committed entry, as the Ledger lists it (SPEC.md §5.5).
@@ -88,9 +87,8 @@ public fun LfEntryRow(
     deleteIcon: Painter? = null,
     onDelete: () -> Unit = {},
 ) {
-    val spacing = LfTheme.spacing
-    val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerLarge)
+    val tokens = LfEntryRowTokens
+    val shape = RoundedCornerShape(tokens.corner)
 
     // Merchant *and* category, on one line. They were stacked — merchant as the
     // title, category demoted to the grey line — which read as a hierarchy that
@@ -104,21 +102,21 @@ public fun LfEntryRow(
     val stamp = TimeStamp.of(item.occurredAt, withDate)
     val note = item.note?.takeIf { it.isNotBlank() }
     val detail = listOfNotNull(stamp, note).joinToString(ENTRY_SEPARATOR)
-    val gapPx = with(LocalDensity.current) { spacing.sm.roundToPx() }
+    val gapPx = with(LocalDensity.current) { tokens.gap.roundToPx() }
 
     Layout(
         modifier = modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised, shape)
-            .border(HAIRLINE.dp, colors.outline, shape)
+            .background(tokens.container, shape)
+            .border(tokens.borderWidth, tokens.border, shape)
             // Tighter on the trailing edge: the delete control is a 48dp touch
             // target around a 16dp glyph, so it carries ~16dp of its own inset
             // and a full `md` on top would leave the icon looking adrift.
             .padding(
-                start = spacing.md,
-                end = if (deleteIcon != null) spacing.xs else spacing.md,
-                top = spacing.sm,
-                bottom = spacing.sm,
+                start = tokens.insetStart,
+                end = if (deleteIcon != null) tokens.insetEndBesideAction else tokens.insetEnd,
+                top = tokens.insetVertical,
+                bottom = tokens.insetVertical,
             )
             // The merged announcement covers the *content*, not the delete
             // control. The button's `clickable` merges its own subtree, so a
@@ -138,8 +136,8 @@ public fun LfEntryRow(
             Text(
                 text = title,
                 modifier = Modifier.clearAndSetSemantics {},
-                style = LfTheme.typography.bodyL,
-                color = colors.textPrimary,
+                style = tokens.titleStyle,
+                color = tokens.title,
             )
             EntryDetail(detail = detail)
             EntryAmount(item = item)
@@ -305,7 +303,7 @@ public fun LedgerListItem.entryTitle(): String {
 @Composable
 private fun EntrySwatch(item: LedgerListItem) {
     val namingLine = with(LocalDensity.current) {
-        LfTheme.typography.bodyL.lineHeight.toDp()
+        LfEntryRowTokens.titleStyle.lineHeight.toDp()
     }
     // The display variants, not the raw column: an itemised entry's swatch
     // comes from its largest line item's category (ADR-0018), same as the
@@ -315,12 +313,12 @@ private fun EntrySwatch(item: LedgerListItem) {
     val square = Modifier
         .height(namingLine)
         .wrapContentHeight()
-        .size(LfTheme.spacing.lg)
+        .size(LfEntryRowTokens.swatchSize)
     Spacer(
         modifier = if (categoryName != null && categoryColor != null) {
             square.lfCategoryDot(name = categoryName, colorArgb = categoryColor)
         } else {
-            square.border(HAIRLINE.dp, LfTheme.colors.outline, CircleShape)
+            square.border(LfEntryRowTokens.borderWidth, LfEntryRowTokens.emptySwatchRing, CircleShape)
         },
     )
 }
@@ -335,8 +333,8 @@ private fun EntryDetail(detail: String) {
     Text(
         text = detail,
         modifier = Modifier.clearAndSetSemantics {},
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textTertiary,
+        style = LfEntryRowTokens.detailStyle,
+        color = LfEntryRowTokens.detail,
         maxLines = NOTE_MAX_LINES,
         overflow = TextOverflow.Ellipsis,
     )
@@ -345,7 +343,7 @@ private fun EntryDetail(detail: String) {
 /** How much, and which way. */
 @Composable
 private fun EntryAmount(item: LedgerListItem) {
-    val colors = LfTheme.colors
+    val tokens = LfEntryRowTokens
     Text(
         // The sign is a glyph, not a stored value: `amount_minor` is positive
         // in both books and direction is carried by `ledger` (Law 2). Colour
@@ -354,8 +352,8 @@ private fun EntryAmount(item: LedgerListItem) {
         // initial provides for its colour.
         text = MoneyFormat.directional(item.amount.minor, item.currency, item.ledger),
         modifier = Modifier.clearAndSetSemantics {},
-        style = LfTheme.typography.amountM,
-        color = if (item.ledger == LedgerType.DEBIT) colors.debit else colors.credit,
+        style = tokens.amountStyle,
+        color = if (item.ledger == LedgerType.DEBIT) tokens.outgoing else tokens.incoming,
         textAlign = LfTextAlign.end,
     )
 }
@@ -380,5 +378,4 @@ public const val ENTRY_SEPARATOR: String = " · "
 public const val ENTRY_UNFILED: String = "Unfiled"
 
 /** Hairline. The same weight the taxonomy cards and the nesting rail use. */
-private const val HAIRLINE = 1
 private const val NOTE_MAX_LINES = 1

@@ -12,7 +12,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * Category breakdown and payment-method split (`SPEC.md` §5.6, A2 and A5).
@@ -42,7 +41,7 @@ public fun LfDonutChart(
     thickness: Dp = DefaultThickness,
     centerContent: @Composable () -> Unit = {},
 ) {
-    val trackColor = LfTheme.colors.outline
+    val trackColor = LfChartTokens.donutTrack
     val total = slices.sumOf { it.value }.coerceAtLeast(0L)
 
     // One description for the whole chart. Per-slice semantics nodes on a

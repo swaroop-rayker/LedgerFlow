@@ -26,7 +26,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import kotlin.math.abs
 
 /**
@@ -77,22 +76,24 @@ public fun LfStackedBarChart(
     onViewportChange: ((LfViewportGesture) -> Unit)? = null,
 ) {
     val measurer = rememberTextMeasurer()
-    val colors = LfTheme.colors
-    val labelStyle = LfTheme.typography.label.copy(color = colors.textTertiary)
+    val tokens = LfChartTokens
+    val labelStyle = tokens.labelStyle.copy(color = tokens.axisLabel)
+    val grid = tokens.grid
+    val track = tokens.track
     val ticks = LfAxisTicks.niceTicks(columns.maxOfOrNull { it.total } ?: 0L)
     val description = contentDescription ?: buildDescription(columns, formatAxisValue)
     // Formatted here rather than in the draw block, so the chart below is keyed
     // on the strings: a lambda only ever equals itself, and callers build a
     // new one whenever their own state changes.
     val tickLabels = ticks.map(formatAxisValue)
-    val chart = remember(columns, ticks, tickLabels, labelStyle, colors.outline, colors.surfaceOverlay) {
+    val chart = remember(columns, ticks, tickLabels, labelStyle, grid, track) {
         StackedChart(
             columns = columns,
             ticks = ticks,
             tickLabels = tickLabels,
             labelStyle = labelStyle,
-            gridColor = colors.outline,
-            trackColor = colors.surfaceOverlay,
+            gridColor = grid,
+            trackColor = track,
         )
     }
 

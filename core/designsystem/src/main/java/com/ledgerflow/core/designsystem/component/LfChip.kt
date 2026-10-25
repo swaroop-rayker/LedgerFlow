@@ -16,8 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfColors
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
@@ -36,20 +34,20 @@ public fun LfChip(
     contentDescription: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    val colors = LfTheme.colors
     val spacing = LfTheme.spacing
-    val shape = RoundedCornerShape(spacing.cornerSmall)
+    val tokens = LfChipTokens
+    val shape = RoundedCornerShape(tokens.corner)
 
-    val palette = paletteFor(style, colors)
+    val palette = paletteFor(style)
 
     Row(
         modifier = modifier
             .background(palette.container, shape)
-            .border(1.dp, palette.outline, shape)
+            .border(tokens.borderWidth, palette.outline, shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             // Chips are small by nature; the touch target must not be.
             .defaultMinSize(minHeight = spacing.minTouchTarget)
-            .padding(horizontal = spacing.md, vertical = spacing.sm)
+            .padding(horizontal = tokens.paddingHorizontal, vertical = tokens.paddingVertical)
             .then(
                 contentDescription?.let { description ->
                     Modifier.semantics { this.contentDescription = description }
@@ -74,7 +72,7 @@ public fun LfChip(
                 },
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(tokens.gap),
     ) {
         // BUG9. `CLAUDE.md` §5's rule is stated for "buttons/chips" and only
         // `LfButton` implemented it, so chips wrapped mid-word for two phases --
@@ -91,15 +89,15 @@ public fun LfChip(
         leading?.let {
             Text(
                 text = it,
-                style = LfTheme.typography.label,
-                color = colors.textTertiary,
+                style = tokens.supportingStyle,
+                color = tokens.supporting,
                 maxLines = 1,
                 softWrap = false,
             )
         }
         Text(
             text = label,
-            style = LfTheme.typography.bodyM,
+            style = tokens.textStyle,
             color = palette.content,
             maxLines = 1,
             softWrap = false,
@@ -123,11 +121,14 @@ private data class ChipPalette(
     val content: Color,
 )
 
-private fun paletteFor(style: LfChipStyle, colors: LfColors): ChipPalette = when (style) {
-    LfChipStyle.Assist -> ChipPalette(colors.surfaceOverlay, colors.outline, colors.textPrimary)
-    LfChipStyle.Selected -> ChipPalette(colors.surfaceRaised, colors.accent, colors.textPrimary)
-    LfChipStyle.Error -> ChipPalette(colors.surfaceRaised, colors.debit, colors.debit)
-    LfChipStyle.Warning -> ChipPalette(colors.surfaceRaised, colors.warn, colors.warn)
+@Composable
+private fun paletteFor(style: LfChipStyle): ChipPalette = with(LfChipTokens) {
+    when (style) {
+        LfChipStyle.Assist -> ChipPalette(assistContainer, assistBorder, assistContent)
+        LfChipStyle.Selected -> ChipPalette(selectedContainer, selectedBorder, selectedContent)
+        LfChipStyle.Error -> ChipPalette(errorContainer, error, error)
+        LfChipStyle.Warning -> ChipPalette(warningContainer, warning, warning)
+    }
 }
 
 /**

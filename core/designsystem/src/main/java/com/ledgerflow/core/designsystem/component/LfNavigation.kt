@@ -21,7 +21,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.icon.LfIcons
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * The bottom bar: four destinations with a raised action in the middle
@@ -46,13 +45,11 @@ public fun LfBottomBar(
     require(items.size == NAV_ITEM_COUNT) {
         "The bottom bar takes exactly $NAV_ITEM_COUNT destinations, got ${items.size}"
     }
-    val colors = LfTheme.colors
-
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised)
-            .padding(vertical = LfTheme.spacing.sm),
+            .background(LfNavTokens.container)
+            .padding(vertical = LfNavTokens.barPaddingVertical),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
@@ -68,8 +65,7 @@ public fun LfBottomBar(
 
 @Composable
 private fun BarItem(item: LfNavItem, modifier: Modifier = Modifier) {
-    val colors = LfTheme.colors
-    val tint = if (item.selected) colors.accent else colors.textTertiary
+    val tint = if (item.selected) LfNavTokens.selected else LfNavTokens.unselected
 
     Column(
         modifier = modifier
@@ -78,16 +74,16 @@ private fun BarItem(item: LfNavItem, modifier: Modifier = Modifier) {
                 role = Role.Tab,
                 onClick = item.onClick,
             )
-            .padding(vertical = LfTheme.spacing.xs),
+            .padding(vertical = LfNavTokens.itemPaddingVertical),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(LfNavTokens.itemGap),
     ) {
         // The label already names the destination and the row owns the selection
         // state, so the icon must not announce itself or TalkBack says it twice.
         Icon(imageVector = item.icon, contentDescription = null, tint = tint)
         Text(
             text = item.label,
-            style = LfTheme.typography.label,
+            style = LfNavTokens.labelStyle,
             color = tint,
             textAlign = TextAlign.Center,
         )
@@ -102,18 +98,17 @@ public fun LfFab(
     modifier: Modifier = Modifier,
     icon: ImageVector = LfIcons.Add,
 ) {
-    val colors = LfTheme.colors
     Box(
         modifier = modifier
-            .size(LfTheme.spacing.minTouchTarget)
-            .background(colors.accent, CircleShape)
+            .size(LfNavTokens.fabSize)
+            .background(LfNavTokens.fabContainer, CircleShape)
             .selectable(selected = false, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = colors.onAccent,
+            tint = LfNavTokens.fabContent,
             modifier = Modifier.size(FAB_ICON_SIZE.dp),
         )
     }

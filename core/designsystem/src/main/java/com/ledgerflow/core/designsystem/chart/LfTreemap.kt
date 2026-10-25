@@ -19,7 +19,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import kotlin.math.abs
 
 /**
@@ -54,8 +53,9 @@ public fun LfTreemap(
     onTileClick: (String) -> Unit = {},
 ) {
     val measurer = rememberTextMeasurer()
-    val colors = LfTheme.colors
-    val labelStyle = LfTheme.typography.label
+    val labelStyle = LfChartTokens.labelStyle
+    val gutter = LfChartTokens.gutter
+    val text = LfChartTokens.text
 
     val layout = remember(tiles) {
         LfTreemapLayout.layout(tiles.map { it.id to it.value })
@@ -96,12 +96,12 @@ public fun LfTreemap(
             // strokes straddle the edge and would eat into the neighbour's
             // area, which is the one thing a treemap must not misrepresent.
             drawRect(
-                color = colors.surfaceBase,
+                color = gutter,
                 topLeft = topLeft,
                 size = Size(tileSize.width, GUTTER_PX),
             )
             drawRect(
-                color = colors.surfaceBase,
+                color = gutter,
                 topLeft = topLeft,
                 size = Size(GUTTER_PX, tileSize.height),
             )
@@ -112,7 +112,7 @@ public fun LfTreemap(
                 size = tileSize,
                 measurer = measurer,
                 style = labelStyle.copy(
-                    color = readableOn(datum.color, colors.surfaceBase, colors.textPrimary),
+                    color = readableOn(datum.color, gutter, text),
                 ),
             )
         }
@@ -146,7 +146,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTileLabel(
  * colour the theme may move underneath us.
  *
  * The two candidates are passed in rather than hardcoded because `LfTheme` bans
- * literal colours, and because `surfaceBase` and `textPrimary` are opposite
+ * literal colours, and because `surface.canvas` and `text.primary` are opposite
  * ends of *whichever* theme is active — so this works in dark mode without a
  * second branch.
  */

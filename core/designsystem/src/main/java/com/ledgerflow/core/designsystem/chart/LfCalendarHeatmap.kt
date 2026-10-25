@@ -17,7 +17,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * Calendar heatmap (`SPEC.md` §5.6, A6).
@@ -47,7 +46,7 @@ public fun LfCalendarHeatmap(
     modifier: Modifier = Modifier,
     weekdayLabels: List<String> = DEFAULT_WEEKDAYS,
 ) {
-    val colors = LfTheme.colors
+    val tokens = LfChartTokens
     val busiest = days.maxOfOrNull { it.amount }?.coerceAtLeast(1L) ?: 1L
 
     val description = if (days.none { it.amount > 0L }) {
@@ -62,14 +61,14 @@ public fun LfCalendarHeatmap(
         modifier = modifier
             .fillMaxWidth()
             .semantics { contentDescription = description },
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(tokens.gap),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(tokens.gap)) {
             weekdayLabels.forEach { label ->
                 Text(
                     text = label,
-                    style = LfTheme.typography.label,
-                    color = colors.textTertiary,
+                    style = tokens.labelStyle,
+                    color = tokens.axisLabel,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     modifier = Modifier
@@ -82,10 +81,10 @@ public fun LfCalendarHeatmap(
         days.chunked(DAYS_PER_WEEK).forEach { week ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(tokens.gap),
             ) {
                 week.forEach { day ->
-                    Cell(day = day, busiest = busiest, accent = colors.accent)
+                    Cell(day = day, busiest = busiest, accent = tokens.series)
                 }
                 // A short final week is padded so its cells keep the same width
                 // as every other row's -- otherwise the last week's squares
@@ -104,7 +103,7 @@ private fun androidx.compose.foundation.layout.RowScope.Cell(
     busiest: Long,
     accent: Color,
 ) {
-    val empty = LfTheme.colors.surfaceOverlay
+    val empty = LfChartTokens.track
     val fill = when {
         day.blank -> Color.Transparent
         day.amount <= 0L -> empty
@@ -118,7 +117,7 @@ private fun androidx.compose.foundation.layout.RowScope.Cell(
         modifier = Modifier
             .weight(1f)
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(LfTheme.spacing.cornerSmall))
+            .clip(RoundedCornerShape(LfChartTokens.cellCorner))
             .background(fill)
             .semantics {
                 contentDescription = if (day.blank) {

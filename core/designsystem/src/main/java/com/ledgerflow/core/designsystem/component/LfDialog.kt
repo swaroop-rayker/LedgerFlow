@@ -10,7 +10,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.DialogProperties
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * A confirmation dialog.
@@ -33,7 +32,7 @@ public fun LfDialog(
     emphasis: LfDialogEmphasis = LfDialogEmphasis.Normal,
     detail: (@Composable () -> Unit)? = null,
 ) {
-    val colors = LfTheme.colors
+    val tokens = LfDialogTokens
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = modifier,
@@ -42,24 +41,24 @@ public fun LfDialog(
         properties = DialogProperties(
             dismissOnClickOutside = emphasis == LfDialogEmphasis.Normal,
         ),
-        shape = RoundedCornerShape(LfTheme.spacing.cornerLarge),
-        containerColor = colors.surfaceOverlay,
+        shape = RoundedCornerShape(tokens.corner),
+        containerColor = tokens.container,
         title = {
             Text(
                 text = title,
-                style = LfTheme.typography.titleM,
+                style = tokens.titleStyle,
                 color = when (emphasis) {
-                    LfDialogEmphasis.Normal -> colors.textPrimary
-                    LfDialogEmphasis.Warning -> colors.warn
+                    LfDialogEmphasis.Normal -> tokens.title
+                    LfDialogEmphasis.Warning -> tokens.warningTitle
                 },
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
+            Column(verticalArrangement = Arrangement.spacedBy(tokens.bodyGap)) {
                 Text(
                     text = body,
-                    style = LfTheme.typography.bodyM,
-                    color = colors.textSecondary,
+                    style = tokens.bodyStyle,
+                    color = tokens.body,
                 )
                 detail?.invoke()
             }

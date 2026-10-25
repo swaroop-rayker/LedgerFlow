@@ -41,7 +41,7 @@ public fun LfIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = LfTheme.colors.textSecondary,
+    tint: Color = LfIconButtonTokens.tint,
 ) {
     LfIconButton(
         icon = rememberVectorPainter(icon),
@@ -77,12 +77,12 @@ public fun LfIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = LfTheme.colors.textSecondary,
+    tint: Color = LfIconButtonTokens.tint,
 ) {
     val spacing = LfTheme.spacing
     // Material 3's icon-button state layer: 40dp inside the 48dp target.
-    val stateLayer = spacing.minTouchTarget - spacing.xs * 2
-    val glyph = spacing.md
+    val stateLayer = spacing.minTouchTarget - LfIconButtonTokens.stateLayerInset * 2
+    val glyph = LfIconButtonTokens.glyph
     Spacer(
         modifier = modifier
             .size(spacing.minTouchTarget)

@@ -73,7 +73,7 @@ class LfTokenLayersTest {
             assertThat(c.border.strong).isEqualTo(c.text.muted) // A2's Material outline
             assertThat(c.status.danger).isEqualTo(c.money.outgoing) // errors have been coral
             assertThat(c.status.success).isEqualTo(c.money.incoming)
-            assertThat(c.chart.track).isEqualTo(c.border.subtle) // the donut's track
+            assertThat(c.chart.track).isEqualTo(c.surface.overlay) // bar, heatmap and budget tracks
             assertThat(c.chart.axisLabel).isEqualTo(c.text.muted) // the stacked chart's labels
         }
     }

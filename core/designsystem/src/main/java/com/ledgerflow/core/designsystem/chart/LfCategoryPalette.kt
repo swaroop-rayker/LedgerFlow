@@ -50,9 +50,8 @@ public object LfCategoryPalette {
      */
     @Composable
     public fun colorFor(colorArgb: Int?): Color {
-        val colors = LfTheme.colors
-        if (colorArgb == null) return colors.textTertiary
-        return normalise(colorArgb, colors.isDark)
+        if (colorArgb == null) return LfChartTokens.uncategorised
+        return normalise(colorArgb, LfTheme.colors.isDark)
     }
 
     /**
@@ -65,7 +64,7 @@ public object LfCategoryPalette {
      */
     @Composable
     public fun colorForId(id: String, colorArgb: Int?): Color {
-        if (id.isEmpty()) return LfTheme.colors.textTertiary
+        if (id.isEmpty()) return LfChartTokens.uncategorised
         if (colorArgb != null) return colorFor(colorArgb)
         val hue = abs(id.hashCode() % HUE_STEPS) * (FULL_TURN / HUE_STEPS)
         val dark = LfTheme.colors.isDark
