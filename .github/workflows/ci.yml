@@ -194,9 +194,13 @@ jobs:
       # a brand-new permission passed CI with nothing to say about it. That is
       # the property Law 6 now depends on, since ADR-0021 replaced its grep with
       # a pinned merged manifest, so it has to run where merges are gated.
-      - name: Permission pins (allowlist -- Gradle, source and merged manifests)
+      # The design-system guards ride along (DESIGN_SYSTEM_PLAN §6): they are
+      # file scans, seconds each, and like the rest they belong where merges
+      # are gated rather than only in a local preMergeCheck.
+      - name: Permission pins and design-system guards (Gradle)
         run: |
           ./gradlew restrictedPermissionCheck bannedApiCheck \
+            designTokenCheck goldenThemePairsCheck \
             :app:mergedPermissionCheckSmsFullDebug \
             :app:mergedPermissionCheckSmsFullRelease \
             :app:mergedPermissionCheckPlaySafeDebug \

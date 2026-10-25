@@ -198,6 +198,154 @@ tasks.register("goldenThemePairsCheck") {
 }
 
 /**
+ * **Screens style themselves only through the design system** (DESIGN_SYSTEM_PLAN §6.2).
+ *
+ * Scans the main sources of `:app`, `:core:ui` and every `:feature:*` (never
+ * `:core:designsystem`, which is where these values are allowed to live) for a
+ * raw colour, size, corner, text style, Material theme read, stock icon or a
+ * Material widget that has an `Lf` version. Plain pattern matching, like
+ * [bannedApiCheck]: no Detekt or Lint rule, because either needs a new
+ * dependency (CLAUDE.md §10).
+ *
+ * Today's violations are listed in `config/design-tokens-allowlist.txt`, as a
+ * count per file and rule with the step that removes them. The counts must
+ * match **exactly**. One more fails, because a new exception is a reviewed
+ * change to that file rather than something a screen can quietly add. One
+ * fewer also fails until the count is lowered, so the list only ever shrinks
+ * and never keeps headroom a later change could use without anyone noticing.
+ *
+ * Comments, string literals and `import` lines are not scanned; `0.dp` is not a
+ * size. Run it alone with `.\gradlew designTokenCheck`.
+ */
+tasks.register("designTokenCheck") {
+    group = "verification"
+    description = "Fails when a screen uses a raw colour, size, shape, text style, icon or Material widget."
+
+    val root = rootDir
+    val scanRoots = (
+        listOf(file("app"), file("core/ui")) +
+            file("feature").listFiles { f -> f.isDirectory }.orEmpty().sortedBy { it.name }
+        ).map { it.resolve("src") }
+    val allowlistFile = file("config/design-tokens-allowlist.txt")
+    inputs.file(allowlistFile)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        // Rule name to (pattern, what to use instead).
+        val rules = linkedMapOf(
+            "colour" to (
+                Regex("""\bColor\(\s*(0x|red\s*=|\d)|\bColor\.(Red|Blue|Black|White|Gray|Green|Yellow|Cyan|Magenta|DarkGray|LightGray)\b""") to
+                    "a colour comes from a role in LfTheme.colors"
+                ),
+            "alpha" to (
+                Regex("""\.copy\(\s*alpha\s*=""") to
+                    "a tint is a role (money.outgoingSubtle, status.warningSubtle, ...), not .copy(alpha = ...)"
+                ),
+            "size" to (
+                Regex("""\b(?!0(\.0)?f?\.)\d+(\.\d+)?f?\.(dp|sp)\b|\bDp\(|\b[A-Z][A-Z0-9_]*\.(dp|sp)\b""") to
+                    "a size comes from LfTheme.space, LfTheme.borders, LfLayout or a component"
+                ),
+            "shape" to (
+                Regex("""\bRoundedCornerShape\(|\bCircleShape\b|\bCutCornerShape\(""") to
+                    "a corner comes from LfTheme.shapes"
+                ),
+            "type" to (
+                Regex("""\bFontWeight\.|\bTextStyle\(|\bfontSize\s*=|\bletterSpacing\s*=""") to
+                    "text styles come from LfTheme.type"
+                ),
+            "material-theme" to (
+                Regex("""\bMaterialTheme\.(colorScheme|typography|shapes)\b""") to
+                    "read LfTheme, not MaterialTheme; Material's theme is mapped from it"
+                ),
+            "icon" to (
+                Regex("""\bIcons\.|\bImageVector\.Builder\b|\bpainterResource\(|\bandroid\.R\.drawable\b""") to
+                    "icons come from LfIcons"
+                ),
+            "widget" to (
+                Regex(
+                    """\b(AlertDialog|DatePickerDialog|DatePicker|DateRangePicker|ModalBottomSheet|Snackbar|Scaffold|""" +
+                        """TopAppBar|CenterAlignedTopAppBar|Button|OutlinedButton|TextButton|FilledTonalButton|""" +
+                        """ElevatedButton|IconButton|TextField|OutlinedTextField|Card|ElevatedCard|OutlinedCard|""" +
+                        """Switch)\(""",
+                ) to
+                    "use the Lf version (LfDialog, LfDatePickerDialog, LfBottomSheet, LfSnackbarHost, " +
+                    "LfScaffold, LfButton, LfIconButton, LfTextField, LfCard, LfSwitchRow)"
+                ),
+        )
+        val stringLiteral = Regex(""""(?:\\.|[^"\\])*"""")
+        fun codeOf(line: String): String {
+            val trimmed = line.trimStart()
+            val isComment = trimmed.startsWith("*") || trimmed.startsWith("/*") || trimmed.startsWith("//")
+            if (isComment || trimmed.startsWith("import ") || trimmed.startsWith("package ")) return ""
+            return stringLiteral.replace(line, "\"\"").substringBefore("//")
+        }
+
+        // (path, rule) -> lines that matched
+        val found = linkedMapOf<Pair<String, String>, MutableList<String>>()
+        scanRoots.filter { it.isDirectory }.forEach { src ->
+            src.walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .filterNot { f ->
+                    val p = f.invariantSeparatorsPath
+                    "/src/test/" in p || "/src/androidTest" in p || "/src/testFixtures/" in p || "/build/" in p
+                }
+                .sortedBy { it.invariantSeparatorsPath }
+                .forEach { f ->
+                    val path = f.relativeTo(root).invariantSeparatorsPath
+                    f.readLines().forEachIndexed { i, line ->
+                        val code = codeOf(line)
+                        rules.forEach { (name, rule) ->
+                            repeat(rule.first.findAll(code).count()) {
+                                found.getOrPut(path to name) { mutableListOf() } += "$path:${i + 1}: ${line.trim()}"
+                            }
+                        }
+                    }
+                }
+        }
+
+        val problems = mutableListOf<String>()
+        val entry = Regex("""^(\S+)\s+(\S+)\s+(\d+)\s+--\s+(\S.*)$""")
+        val allowed = linkedMapOf<Pair<String, String>, Int>()
+        allowlistFile.readLines().forEachIndexed { i, raw ->
+            val line = raw.trim()
+            if (line.isEmpty() || line.startsWith("#")) return@forEachIndexed
+            val m = entry.matchEntire(line)
+            if (m == null) {
+                problems += "config/design-tokens-allowlist.txt:${i + 1}: expected `<path> <rule> <count> -- <reason>`"
+                return@forEachIndexed
+            }
+            val (path, rule, count) = m.destructured
+            if (rule !in rules) problems += "config/design-tokens-allowlist.txt:${i + 1}: unknown rule `$rule`"
+            allowed[path to rule] = count.toInt()
+        }
+
+        (found.keys + allowed.keys).distinct().forEach { key ->
+            val hits = found[key].orEmpty()
+            val limit = allowed[key] ?: 0
+            val (path, rule) = key
+            when {
+                hits.size > limit -> {
+                    hits.forEach { problems += "$it\n    [$rule] ${rules[rule]?.second}" }
+                    problems += "$path: $rule found ${hits.size}, allowlist allows $limit. Use the design " +
+                        "system; an exception needs a reviewed allowlist line with its reason."
+                }
+                hits.size < limit ->
+                    problems += "$path: $rule found ${hits.size}, allowlist still allows $limit. Lower the " +
+                        "count in config/design-tokens-allowlist.txt (the list only shrinks)."
+            }
+        }
+
+        if (problems.isNotEmpty()) {
+            problems.forEach { logger.error("::error::$it") }
+            throw GradleException("designTokenCheck found ${problems.size} problem(s).")
+        }
+        logger.lifecycle(
+            "designTokenCheck: clean (${allowed.values.sum()} allowlisted in ${allowed.keys.map { it.first }.distinct().size} files).",
+        )
+    }
+}
+
+/**
  * **The app's entire permission set, pinned per source set** (SPEC.md §3.1
  * D-04, Law 6, CLAUDE.md §9).
  *
@@ -388,6 +536,7 @@ tasks.register("preMergeCheck") {
         .map { it.path }
 
     dependsOn("bannedApiCheck")
+    dependsOn("designTokenCheck")
     dependsOn("goldenThemePairsCheck")
     dependsOn("moduleDependencyRuleCheck")
     dependsOn("restrictedPermissionCheck")
