@@ -35,6 +35,8 @@ import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.appearance.MotionLevel
+import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.feature.analytics.AnalyticsCustomRangeSheet
 import com.ledgerflow.feature.analytics.AnalyticsEvent
@@ -89,8 +91,12 @@ internal fun LedgerFlowShell(
     modifier: Modifier = Modifier,
     deepLink: String? = null,
     onDeepLinkHandled: () -> Unit = {},
+    motionLevel: MotionLevel = MotionLevel.FULL,
+    startScreen: StartScreen = StartScreen.HOME,
     navController: NavHostController = rememberNavController(),
 ) {
+    // Settings > Appearance > Start screen, fixed for the shell's lifetime.
+    val startDestination = rememberStartDestination(startScreen)
     val backStackEntry by navController.currentBackStackEntryAsState()
     val current = backStackEntry?.destination
 
@@ -155,8 +161,36 @@ internal fun LedgerFlowShell(
     ) { padding ->
         LedgerFlowNavHost(
             navController = navController,
+            motionLevel = motionLevel,
+            startDestination = startDestination,
             modifier = Modifier.padding(padding),
         )
+    }
+}
+
+/**
+ * The tab the graph starts on: Settings > Appearance > Start screen as it was
+ * when the shell was first composed (V2-PLAN §3.2).
+ *
+ * **Read once, never followed.** Navigation rebuilds its graph, and the whole
+ * back stack with it, when the start destination changes, so following the
+ * preference live would throw the user out of the very page where they changed
+ * it. The new choice applies from the next launch, which is what the setting's
+ * own sentence says. Saveable so a restored back stack (rotation, process
+ * death) finds the graph it was saved from, not today's choice.
+ *
+ * The chosen tab is the graph's real start, so Back from it leaves the app and
+ * every other tab returns to it -- the rule §9.3 states for Home, with the
+ * user's tab in Home's place. A link (`ledgerflow://inbox`) still lands on its
+ * screen over it (BUG59).
+ */
+@Composable
+internal fun rememberStartDestination(startScreen: StartScreen): Destination {
+    val first = rememberSaveable { startScreen }
+    return when (first) {
+        StartScreen.HOME -> Destination.Dashboard
+        StartScreen.LEDGER -> Destination.Ledger
+        StartScreen.ANALYTICS -> Destination.Analytics
     }
 }
 
@@ -177,14 +211,17 @@ internal fun LedgerFlowShell(
 @Composable
 private fun LedgerFlowNavHost(
     navController: NavHostController,
+    motionLevel: MotionLevel,
+    startDestination: Destination,
     modifier: Modifier = Modifier,
 ) {
     // Never the library's default: that is a 700 ms simultaneous cross-fade,
     // two screens' text drawn over each other (BUG57). See NavMotion.
     LfNavHost(
         navController = navController,
-        motion = rememberNavMotion(),
+        motion = rememberNavMotion(motionLevel),
         modifier = modifier,
+        startDestination = startDestination,
     ) {
         tabDestinations(navController)
         fullScreenDestinations(navController)

@@ -1,7 +1,5 @@
 package com.ledgerflow.navigation
 
-import android.content.Context
-import android.provider.Settings
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -16,16 +14,11 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -33,6 +26,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.appearance.MotionLevel
 
 /**
  * How the app moves between screens (SPEC.md §9.3, §9.5; BUG57).
@@ -55,6 +49,8 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
  *   is a short shared-axis slide with the same fade-through inside it; back
  *   plays it in reverse, and RTL mirrors it. Predictive back seeks through
  *   these same transitions.
+ * - **Under Animations > Reduced** (V2-3) that slide is dropped and the
+ *   fade-through stays; **Off** snaps (see [enter]/[exit]).
  *
  * The kind is decided from the two screens, not from Navigation's push/pop
  * flag: `switchTab` pops to the start destination and then navigates, so which
@@ -62,7 +58,7 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
  */
 @Immutable
 internal class NavMotion(
-    private val enabled: Boolean,
+    private val level: MotionLevel,
     private val fadeOutMillis: Int,
     private val tabFadeInMillis: Int,
     private val axisMillis: Int,
@@ -74,9 +70,13 @@ internal class NavMotion(
         // Not None either -- see [exit]. A fade's initial value is drawn on the
         // frame the screen is added, before any animation ticks, so the
         // incoming screen starts at alpha 0 and the switch is one clean step.
-        if (!enabled) return fadeIn(snap())
+        if (level == MotionLevel.OFF) return fadeIn(snap())
         return if (scope.isTabSwitch()) {
             fadeIn(tween(tabFadeInMillis, delayMillis = fadeOutMillis, easing = LinearOutSlowInEasing))
+        } else if (level == MotionLevel.REDUCED) {
+            // Animations > Reduced (V2-3): the same fade-through, without the
+            // slide. Nothing moves sideways, and BUG57's rule still holds.
+            fadeIn(tween(axisMillis - fadeOutMillis, delayMillis = fadeOutMillis, easing = LinearOutSlowInEasing))
         } else {
             val from = direction(forward) * axisSlidePx
             slideInHorizontally(tween(axisMillis, easing = FastOutSlowInEasing)) { from } +
@@ -96,9 +96,9 @@ internal class NavMotion(
         // transition settled -- both screens' text at full strength, which is
         // BUG57 again for exactly the users who turned animations off. A snap
         // takes the outgoing screen to alpha 0 on the first tick.
-        if (!enabled) return fadeOut(snap())
+        if (level == MotionLevel.OFF) return fadeOut(snap())
         val fade = fadeOut(tween(fadeOutMillis, easing = FastOutLinearInEasing))
-        return if (scope.isTabSwitch()) {
+        return if (scope.isTabSwitch() || level == MotionLevel.REDUCED) {
             fade
         } else {
             val to = -direction(forward) * axisSlidePx
@@ -116,23 +116,23 @@ internal class NavMotion(
 }
 
 /**
- * The app's [NavMotion], from [LfTheme.motion] and the system's animation
- * setting.
+ * The app's [NavMotion], from [LfTheme.motion] and the resolved [level].
  *
- * [animationsEnabled] defaults to the system's "Remove animations" switch
- * (§9.5: every animation respects `ANIMATOR_DURATION_SCALE`). Compose already
- * scales its own animations by it; this turns the transitions off outright,
- * which is what makes the setting testable, and is the one seam v2's own
- * Animations toggle (V2-3) plugs into.
+ * [level] is Settings > Appearance > Animations with the phone's "Remove
+ * animations" switch already applied (§9.5: the phone's setting always wins;
+ * `AnimationPreference.motionLevel`). `MainActivity` resolves it, re-reading the
+ * phone's setting on every resume, and scales every other Compose animation by
+ * it too (`AppMotionDurationScale`). Off is set here explicitly as well as
+ * through that scale, because the explicit snap is what makes it testable.
  */
 @Composable
-internal fun rememberNavMotion(animationsEnabled: Boolean = rememberSystemAnimationsEnabled()): NavMotion {
+internal fun rememberNavMotion(level: MotionLevel): NavMotion {
     val tokens = LfTheme.motion
     val slidePx = with(LocalDensity.current) { tokens.axisSlide.roundToPx() }
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    return remember(animationsEnabled, tokens, slidePx, rtl) {
+    return remember(level, tokens, slidePx, rtl) {
         NavMotion(
-            enabled = animationsEnabled,
+            level = level,
             fadeOutMillis = tokens.fadeOut,
             tabFadeInMillis = tokens.micro,
             axisMillis = tokens.standard,
@@ -141,26 +141,6 @@ internal fun rememberNavMotion(animationsEnabled: Boolean = rememberSystemAnimat
         )
     }
 }
-
-/**
- * False when the system's animator duration scale is 0 ("Remove animations").
- *
- * Re-read on every resume: the switch lives in another app, so coming back is
- * the only moment it can have changed.
- */
-@Composable
-private fun rememberSystemAnimationsEnabled(): Boolean {
-    val context = LocalContext.current
-    var enabled by remember(context) { mutableStateOf(context.systemAnimationsEnabled()) }
-    LifecycleResumeEffect(context) {
-        enabled = context.systemAnimationsEnabled()
-        onPauseOrDispose { }
-    }
-    return enabled
-}
-
-private fun Context.systemAnimationsEnabled(): Boolean =
-    Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
 
 /**
  * The app's `NavHost`, with [motion] on all four transitions.
@@ -174,11 +154,12 @@ internal fun LfNavHost(
     navController: NavHostController,
     motion: NavMotion,
     modifier: Modifier = Modifier,
+    startDestination: Destination = Destination.Dashboard,
     builder: NavGraphBuilder.() -> Unit,
 ) {
     NavHost(
         navController = navController,
-        startDestination = Destination.Dashboard,
+        startDestination = startDestination,
         modifier = modifier,
         enterTransition = { motion.enter(this, forward = true) },
         exitTransition = { motion.exit(this, forward = true) },

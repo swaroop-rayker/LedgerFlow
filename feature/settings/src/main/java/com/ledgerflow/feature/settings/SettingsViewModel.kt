@@ -3,6 +3,12 @@ package com.ledgerflow.feature.settings
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.appearance.AnimationPreference
+import com.ledgerflow.core.domain.appearance.AppearancePreferences
+import com.ledgerflow.core.domain.appearance.AppearanceStore
+import com.ledgerflow.core.domain.appearance.PhoneMotionSettings
+import com.ledgerflow.core.domain.appearance.StartScreen
+import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
@@ -29,6 +35,14 @@ public sealed interface SettingsEvent {
     public data object ReceiptDeleteConfirmed : SettingsEvent
 
     public data object ReceiptDeleteDismissed : SettingsEvent
+
+    /** Appearance (V2-3). Applies at once; the activity follows the store. */
+    public data class ThemePicked(val theme: ThemePreference) : SettingsEvent
+
+    public data class AnimationsPicked(val animations: AnimationPreference) : SettingsEvent
+
+    /** Kept now, applied from the next launch (the shell reads it once). */
+    public data class StartScreenPicked(val startScreen: StartScreen) : SettingsEvent
 }
 
 /**
@@ -99,6 +113,15 @@ public data class SettingsUiState(
      * and still cannot open a backup.
      */
     val nightlyBackupsEnabled: Boolean = false,
+
+    /** Settings > Appearance (V2-PLAN §3.2), as stored outside the vault (ADR-0030). */
+    val appearance: AppearancePreferences = AppearancePreferences(),
+
+    /**
+     * False when the phone has "Remove animations" on, which overrides the
+     * app's choice (§9.5). Read on resume, with capture health.
+     */
+    val phoneAnimationsOn: Boolean = true,
 )
 
 @HiltViewModel
@@ -107,7 +130,11 @@ public class SettingsViewModel @Inject constructor(
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
     private val attachments: AttachmentRepository,
     backups: BackupRepository,
+    private val appearanceStore: AppearanceStore,
+    private val phoneMotion: PhoneMotionSettings,
 ) : ViewModel() {
+
+    private val phoneAnimationsOn = MutableStateFlow(true)
 
     /**
      * The polled half.
@@ -159,6 +186,8 @@ public class SettingsViewModel @Inject constructor(
         .combine(backups.nightlyBackupsEnabled()) { state, nightly ->
             state.copy(nightlyBackupsEnabled = nightly)
         }
+        .combine(appearanceStore.preferences) { state, appearance -> state.copy(appearance = appearance) }
+        .combine(phoneAnimationsOn) { state, on -> state.copy(phoneAnimationsOn = on) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
     init {
@@ -167,6 +196,9 @@ public class SettingsViewModel @Inject constructor(
 
     /** §5.2's resume poll. Called from the screen, for the reason its route explains. */
     public fun refresh() {
+        // The phone's switch lives in the system's Settings app, so returning
+        // from it is a resume -- the same moment capture health is re-read.
+        phoneAnimationsOn.value = phoneMotion.animatorDurationScale() != 0f
         viewModelScope.launch {
             captureHealth.value = getCaptureHealth()
             receipts.value = attachments.usage()
@@ -190,6 +222,16 @@ public class SettingsViewModel @Inject constructor(
                 // app merely hoped for.
                 receipts.value = attachments.usage()
             }
+
+            // Written and then read back through the store's flow, so the
+            // control shows what was kept rather than what was tapped.
+            is SettingsEvent.ThemePicked -> viewModelScope.launch { appearanceStore.setTheme(event.theme) }
+
+            is SettingsEvent.AnimationsPicked ->
+                viewModelScope.launch { appearanceStore.setAnimations(event.animations) }
+
+            is SettingsEvent.StartScreenPicked ->
+                viewModelScope.launch { appearanceStore.setStartScreen(event.startScreen) }
         }
     }
 
