@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,6 +28,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.designsystem.component.LfBottomBar
+import com.ledgerflow.core.designsystem.component.LfBottomSheet
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfNavItem
@@ -481,7 +480,6 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
  * The Inbox row carries its count in the label rather than as a superscript
  * badge, so it survives font scale 2.0 by wrapping like any other label (BUG9).
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CentreActionDial(
     pendingCount: Int,
@@ -490,7 +488,7 @@ private fun CentreActionDial(
     onInbox: () -> Unit,
     onScanReceipt: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = LfTheme.colors.surfaceRaised) {
+    LfBottomSheet(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

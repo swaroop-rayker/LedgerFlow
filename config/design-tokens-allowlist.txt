@@ -9,14 +9,8 @@
 # with its reason: if you are adding one, say why the design system cannot do it.
 #
 # Rules: colour, alpha, size, shape, type, material-theme, icon, widget.
-# Recorded at step C1 (2026-10-25).
-
-# --- Material date pickers and sheets: themed wrappers arrive in step C2.
-app/src/main/java/com/ledgerflow/navigation/LedgerFlowShell.kt widget 1 -- the Add sheet's ModalBottomSheet; LfBottomSheet in C2
-feature/analytics/src/main/java/com/ledgerflow/feature/analytics/AnalyticsFilterSheet.kt widget 2 -- DatePickerDialog + DateRangePicker; LfDateRangePickerDialog in C2
-feature/budget/src/main/java/com/ledgerflow/feature/budget/BudgetEditorDialog.kt widget 2 -- start-date DatePickerDialog + DatePicker; LfDatePickerDialog in C2
-feature/entry/src/main/java/com/ledgerflow/feature/entry/EntryDialogs.kt widget 2 -- entry date DatePickerDialog + DatePicker; LfDatePickerDialog in C2
-feature/inbox/src/main/java/com/ledgerflow/feature/inbox/ReviewDialogs.kt widget 1 -- Review's DatePicker; LfDatePickerDialog in C2
+# Recorded at step C1 (2026-10-25): 38 in 15 files.
+# Step C2: the 8 picker and sheet widgets moved to their Lf wrappers; 30 in 12 files.
 
 # --- Corners: screens move onto LfTheme.shapes in step D3.
 core/ui/src/main/java/com/ledgerflow/core/ui/entry/LfEntryRow.kt shape 1 -- the empty swatch's ring is a circle; becomes LfIconTile in F3

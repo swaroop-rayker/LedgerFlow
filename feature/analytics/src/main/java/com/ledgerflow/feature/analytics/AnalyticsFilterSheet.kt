@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DateRangePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -25,6 +23,7 @@ import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfDateRangePickerDialog
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.theme.LfTheme
@@ -402,8 +401,9 @@ private fun dateLabel(epochDay: Int): String =
 @Composable
 public fun AnalyticsRangePicker(onEvent: (AnalyticsEvent) -> Unit) {
     val state = rememberDateRangePickerState()
-    DatePickerDialog(
-        onDismissRequest = { onEvent(AnalyticsEvent.RangePickerShown(visible = false)) },
+    LfDateRangePickerDialog(
+        state = state,
+        onDismiss = { onEvent(AnalyticsEvent.RangePickerShown(visible = false)) },
         confirmButton = {
             LfButton(
                 text = "Apply",
@@ -434,24 +434,10 @@ public fun AnalyticsRangePicker(onEvent: (AnalyticsEvent) -> Unit) {
                 style = LfButtonStyle.Inline,
             )
         },
-    ) {
-        DateRangePicker(
-            state = state,
-            // **Material's default header breaks mid-phrase on a real device.**
-            // Seen at the owner's font scale: "Start date - End / date" wrapped
-            // across two lines beside the mode-toggle pencil, which is BUG17's
-            // shape exactly -- a heading competing with a control for one line.
-            // Ours is short, and it says what has been picked rather than
-            // labelling two empty slots.
-            title = null,
-            headline = { RangeHeadline(state) },
-            // The pencil switches to typed-date entry, a second input path with
-            // its own parsing and its own failure modes, for a range the user
-            // is already picking by tapping. Dropping it also gives the
-            // headline the whole line.
-            showModeToggle = false,
-        )
-    }
+        // Short, and says what has been picked; LfDateRangePickerDialog drops
+        // Material's header and typed-entry pencil (BUG17's shape).
+        headline = { RangeHeadline(state) },
+    )
 }
 
 /** What has been picked so far, on one line and in the user's own locale. */

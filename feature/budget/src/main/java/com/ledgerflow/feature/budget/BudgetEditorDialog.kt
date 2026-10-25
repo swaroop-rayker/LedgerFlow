@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDatePickerState
@@ -25,6 +23,7 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
+import com.ledgerflow.core.designsystem.component.LfDatePickerDialog
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
 import com.ledgerflow.core.designsystem.theme.LfTheme
@@ -270,8 +269,9 @@ private fun StartDatePicker(selected: Int, onPicked: (Int) -> Unit, onDismiss: (
     val state = rememberDatePickerState(
         initialSelectedDateMillis = selected.toLong() * MILLIS_PER_DAY,
     )
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
+    LfDatePickerDialog(
+        state = state,
+        onDismiss = onDismiss,
         confirmButton = {
             LfButton(
                 text = "Set",
@@ -286,9 +286,7 @@ private fun StartDatePicker(selected: Int, onPicked: (Int) -> Unit, onDismiss: (
         dismissButton = {
             LfButton(text = "Cancel", onClick = onDismiss, style = LfButtonStyle.Inline)
         },
-    ) {
-        DatePicker(state = state)
-    }
+    )
 }
 
 /** `12 Aug 2026` from a day number. */

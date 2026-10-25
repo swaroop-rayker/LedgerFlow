@@ -5,8 +5,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import com.ledgerflow.core.designsystem.theme.LfDarkColors
 import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfLegacySmallCorner
+import com.ledgerflow.core.designsystem.theme.LfLightColors
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.theme.primitive.LfScale
 
@@ -135,6 +137,33 @@ internal object LfDialogTokens {
     val bodyStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
     val body: Color @Composable get() = LfTheme.colors.text.secondary
     val bodyGap: Dp = LfScale.Space16
+}
+
+/** [LfDatePicker], [LfDatePickerDialog] and [LfDateRangePickerDialog]. */
+internal object LfDatePickerTokens {
+    val container: Color @Composable get() = LfTheme.colors.surface.overlay
+
+    /**
+     * The band behind the days between a range's two ends (BUG64). Material
+     * draws it in `secondaryContainer`, which step A2 mapped to the dialog's
+     * own colour, so the band vanished and only the two ends showed.
+     */
+    val rangeFill: Color @Composable get() = LfTheme.colors.action.subtle
+    val rangeDay: Color @Composable get() = LfTheme.colors.text.primary
+}
+
+/** [LfBottomSheet]. */
+internal object LfSheetTokens {
+    val container: Color @Composable get() = LfTheme.colors.surface.raised
+}
+
+/** [LfSnackbarHost]: an inverse strip, the action in the other theme's action colour. */
+internal object LfSnackbarTokens {
+    val shape: Shape = LfLegacySmallCorner
+    val container: Color @Composable get() = LfTheme.colors.surface.inverse
+    val content: Color @Composable get() = LfTheme.colors.text.onInverse
+    val action: Color
+        @Composable get() = if (LfTheme.colors.isDark) LfLightColors.action.primary else LfDarkColors.action.primary
 }
 
 internal object LfIconButtonTokens {

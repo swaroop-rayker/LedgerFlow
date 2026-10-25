@@ -1,10 +1,10 @@
 package com.ledgerflow.feature.inbox
 
-import androidx.compose.material3.DatePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.component.LfDatePicker
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -76,7 +76,7 @@ private fun DateDialog(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit) {
                 ?: onEvent(ReviewEvent.DateDismissed)
         },
         onDismiss = { onEvent(ReviewEvent.DateDismissed) },
-        detail = { DatePicker(state = pickerState, title = null, headline = null) },
+        detail = { LfDatePicker(state = pickerState, showHeadline = false) },
     )
 }
 

@@ -26,7 +26,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -108,7 +107,7 @@ public fun LfScaffold(
         contentColor = LfScaffoldTokens.content,
         contentWindowInsets = insets,
         snackbarHost = {
-            snackbarHostState?.let { SnackbarHost(it) }
+            snackbarHostState?.let { LfSnackbarHost(it) }
         },
         content = { padding ->
             // BUG49: mark what this scaffold paid for as consumed, so a scaffold
