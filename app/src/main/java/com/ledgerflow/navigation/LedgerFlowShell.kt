@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -35,6 +36,7 @@ import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.appearance.MotionLevel
 import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.inbox.InboxFilter
@@ -48,6 +50,7 @@ import com.ledgerflow.feature.analytics.AnalyticsViewModel
 import com.ledgerflow.feature.budget.BudgetEditorDialog
 import com.ledgerflow.feature.budget.BudgetScreen
 import com.ledgerflow.feature.budget.BudgetViewModel
+import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.categories.CategoriesScreen
 import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.dashboard.DashboardRoute
@@ -310,6 +313,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
     composable<Destination.Settings> {
         val viewModel: SettingsViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
+        val context = LocalContext.current
         // §5.2's resume poll, for the row that reports whether capture works.
         // The user's route to fixing it leaves the app entirely, so the resume
         // afterwards is the only moment the row can stop being wrong.
@@ -326,6 +330,17 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             onBackUp = { navController.navigate(Destination.BackUpNow) },
             onNotificationAccess = { navController.navigate(Destination.NotificationAccess) },
             onDiagnostics = { navController.navigate(Destination.Diagnostics) },
+            // Android's own page for the channel (V2-PLAN §3.4): the channel is
+            // the switch. The resume poll above re-reads it on the way back.
+            onBudgetAlerts = {
+                val intent = BudgetNotifications.settingsIntent(
+                    context,
+                    state.budgetAlerts ?: AlertChannelState.ON,
+                )
+                // An OEM build without the page is a row that does nothing,
+                // never a crash.
+                runCatching { context.startActivity(intent) }
+            },
             onEvent = viewModel::onEvent,
         )
     }

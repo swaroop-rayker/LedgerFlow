@@ -29,6 +29,7 @@ import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.bidiIsolated
+import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.appearance.AnimationPreference
 import com.ledgerflow.core.model.CurrencyDisplay
 import com.ledgerflow.core.model.CurrencyExponent
@@ -64,6 +65,7 @@ public fun SettingsScreen(
     onNotificationAccess: () -> Unit,
     onBackUp: () -> Unit,
     onDiagnostics: () -> Unit,
+    onBudgetAlerts: () -> Unit,
     onEvent: (SettingsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -75,18 +77,24 @@ public fun SettingsScreen(
         DateOrderDialog(selected = state.region.dateOrder, onEvent = onEvent)
     }
 
-    val links = SettingsLinks(
-        notificationAccess = onNotificationAccess,
-        categories = onCategories,
-        budgets = onBudgets,
-        backUp = onBackUp,
-        export = onExport,
-        deletedEntries = onDeletedEntries,
+    // Where each navigating row goes; the shell owns the destinations. Rows
+    // absent here are choices made in place, or a fact (the base currency,
+    // D4) -- `SettingsSectionsTest` holds that every row is exactly one.
+    val links: Map<SettingsItem, () -> Unit> = mapOf(
+        SettingsItem.NotificationCapture to onNotificationAccess,
+        SettingsItem.BudgetAlerts to onBudgetAlerts,
+        SettingsItem.Categories to onCategories,
+        SettingsItem.Budgets to onBudgets,
+        SettingsItem.BackUpNow to onBackUp,
+        SettingsItem.Export to onExport,
+        SettingsItem.DeletedEntries to onDeletedEntries,
         // The one row that does not navigate: it opens the confirmation, and
         // the confirmation is the only thing that deletes (ADR-0023).
-        receipts = { onEvent(SettingsEvent.ReceiptDeleteRequested) },
-        dateOrder = { onEvent(SettingsEvent.DateOrderRequested) },
-        diagnostics = onDiagnostics,
+        SettingsItem.Receipts to { onEvent(SettingsEvent.ReceiptDeleteRequested) },
+        // Four options do not fit a row's control (they would stack into a
+        // column four buttons tall), so this one opens a short picker.
+        SettingsItem.DateOrder to { onEvent(SettingsEvent.DateOrderRequested) },
+        SettingsItem.Diagnostics to onDiagnostics,
     )
 
     Column(
@@ -104,7 +112,7 @@ public fun SettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
                     SectionHeading(section.heading)
                     section.items.forEach { item ->
-                        SettingsItemRow(item = item, state = state, onClick = links.linkFor(item), onEvent = onEvent)
+                        SettingsItemRow(item = item, state = state, onClick = links[item], onEvent = onEvent)
                     }
                 }
             }
@@ -112,44 +120,10 @@ public fun SettingsScreen(
     }
 }
 
-/** Where each navigating row goes; the shell owns the destinations. */
-private class SettingsLinks(
-    val notificationAccess: () -> Unit,
-    val categories: () -> Unit,
-    val budgets: () -> Unit,
-    val backUp: () -> Unit,
-    val export: () -> Unit,
-    val deletedEntries: () -> Unit,
-    val receipts: () -> Unit,
-    val dateOrder: () -> Unit,
-    val diagnostics: () -> Unit,
-) {
-    /** Null for a row that is a choice made in place, or a fact, rather than a way somewhere. */
-    fun linkFor(item: SettingsItem): (() -> Unit)? = when (item) {
-        SettingsItem.NotificationCapture -> notificationAccess
-        SettingsItem.Categories -> categories
-        SettingsItem.Budgets -> budgets
-        SettingsItem.BackUpNow -> backUp
-        SettingsItem.Export -> export
-        SettingsItem.DeletedEntries -> deletedEntries
-        SettingsItem.Receipts -> receipts
-        // Choices in place; the base currency is read-only (D4).
-        SettingsItem.Theme,
-        SettingsItem.Animations,
-        SettingsItem.StartScreen,
-        SettingsItem.BaseCurrency,
-        SettingsItem.NumberGrouping,
-        -> null
-        // Four options do not fit a row's control (they would stack into a
-        // column four buttons tall), so this one opens a short picker.
-        SettingsItem.DateOrder -> dateOrder
-        SettingsItem.Diagnostics -> diagnostics
-    }
-}
-
 /** Every row the Settings tab has. [SettingsSections] decides where each goes. */
 internal enum class SettingsItem {
     NotificationCapture,
+    BudgetAlerts,
     Categories,
     Budgets,
     BackUpNow,
@@ -189,10 +163,11 @@ internal data class SettingsSection(val heading: String, val items: List<Setting
  * - **Notification capture first**, because it is the only row that can be
  *   *wrong* -- the others open something that always works. It is also the
  *   standing route back to §5.2's explainer once the first-run presentation has
- *   been dismissed, so it is always present and always enabled. V2-3's
- *   Notifications page (V2-PLAN §3.4) is where this section grows, budget alerts
- *   included; until then that switch stays in the budget editor (owner,
- *   2026-10-21).
+ *   been dismissed, so it is always present and always enabled. **V2-3 renamed
+ *   the section Notifications** (V2-PLAN §3.4 "takes over Capture") and added
+ *   **Budget alerts** under it: what LedgerFlow reads first, what it sends
+ *   second. There was never an in-app budget-alerts switch to move (V2-2's
+ *   note assumed one); Android's channel is the switch, and the row reports it.
  * - **Back up now directly above Export** (§16 Q23), because the two are easy
  *   to confuse and must not be: Export writes a plain spreadsheet anyone can
  *   read; Back up now writes the encrypted backup only the 24 words can open.
@@ -204,7 +179,7 @@ internal data class SettingsSection(val heading: String, val items: List<Setting
  *   a question for after the rows above, and it changes nothing.
  */
 internal val SettingsSections: List<SettingsSection> = listOf(
-    SettingsSection("Capture", listOf(SettingsItem.NotificationCapture)),
+    SettingsSection("Notifications", listOf(SettingsItem.NotificationCapture, SettingsItem.BudgetAlerts)),
     SettingsSection("Organise", listOf(SettingsItem.Categories, SettingsItem.Budgets)),
     SettingsSection(
         "Data",
@@ -240,6 +215,7 @@ internal val SettingsSections: List<SettingsSection> = listOf(
 internal val SettingsItem.title: String
     get() = when (this) {
         SettingsItem.NotificationCapture -> "Notification capture"
+        SettingsItem.BudgetAlerts -> "Budget alerts"
         SettingsItem.Categories -> "Categories & merchants"
         SettingsItem.Budgets -> "Budgets"
         SettingsItem.BackUpNow -> "Back up now"
@@ -267,6 +243,7 @@ internal val SettingsItem.title: String
  */
 internal fun subtitleFor(item: SettingsItem, state: SettingsUiState): String = when (item) {
     SettingsItem.NotificationCapture -> captureSubtitle(state)
+    SettingsItem.BudgetAlerts -> budgetAlertsSubtitle(state.budgetAlerts)
     SettingsItem.BackUpNow -> backupSubtitle(state)
     SettingsItem.DeletedEntries -> deletedSubtitle(state)
     SettingsItem.Receipts -> receiptsSubtitle(state)
@@ -293,6 +270,17 @@ private val FIXED_SUBTITLES: Map<SettingsItem, String> = mapOf(
     SettingsItem.StartScreen to "Applies the next time the app opens.",
     SettingsItem.Diagnostics to "How automatic capture is working",
 )
+
+/**
+ * What the budget-alerts row says (V2-PLAN §3.4): the channel's state, and
+ * what turning it back on takes. Null before the first read on resume.
+ */
+internal fun budgetAlertsSubtitle(state: AlertChannelState?): String = when (state) {
+    null -> "When a budget nears its limit, or is on course to go over."
+    AlertChannelState.ON -> "On. When a budget nears its limit, or is on course to go over."
+    AlertChannelState.CHANNEL_OFF -> "Off in Android settings. Tap to turn them on."
+    AlertChannelState.APP_OFF -> "LedgerFlow's notifications are off. Tap to turn them on."
+}
 
 /**
  * D4: shown, never changed. Every amount in the vault is minor units of this
@@ -389,6 +377,7 @@ internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoi
     SettingsItem.BaseCurrency,
     SettingsItem.DateOrder,
     SettingsItem.NotificationCapture,
+    SettingsItem.BudgetAlerts,
     SettingsItem.Categories,
     SettingsItem.Budgets,
     SettingsItem.BackUpNow,
@@ -758,6 +747,7 @@ private fun SettingsPreview() {
             onNotificationAccess = {},
             onBackUp = {},
             onDiagnostics = {},
+            onBudgetAlerts = {},
             onEvent = {},
         )
     }
@@ -779,6 +769,7 @@ private fun SettingsEmptyBinPreview() {
             onNotificationAccess = {},
             onBackUp = {},
             onDiagnostics = {},
+            onBudgetAlerts = {},
             onEvent = {},
         )
     }
