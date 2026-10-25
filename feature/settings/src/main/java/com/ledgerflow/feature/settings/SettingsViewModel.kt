@@ -14,8 +14,12 @@ import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.domain.ledger.LedgerRepository
+import com.ledgerflow.core.domain.region.RegionStore
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
+import com.ledgerflow.core.model.DateOrder
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.NumberGrouping
+import com.ledgerflow.core.model.RegionConventions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +47,17 @@ public sealed interface SettingsEvent {
 
     /** Kept now, applied from the next launch (the shell reads it once). */
     public data class StartScreenPicked(val startScreen: StartScreen) : SettingsEvent
+
+    /** Currency & region (V2-3). Applies to every amount as it is next drawn. */
+    public data class GroupingPicked(val grouping: NumberGrouping) : SettingsEvent
+
+    /** Opens the date-order picker. */
+    public data object DateOrderRequested : SettingsEvent
+
+    /** Applies the order and closes the picker. */
+    public data class DateOrderPicked(val order: DateOrder) : SettingsEvent
+
+    public data object DateOrderDismissed : SettingsEvent
 }
 
 /**
@@ -122,19 +137,36 @@ public data class SettingsUiState(
      * app's choice (§9.5). Read on resume, with capture health.
      */
     val phoneAnimationsOn: Boolean = true,
+
+    /**
+     * The install's base currency (`app_meta`, §5.8), or null until read. Shown
+     * read-only (D4) and used for the grouping row's sample amount.
+     */
+    val baseCurrency: String? = null,
+
+    /** Settings > Currency & region (V2-PLAN §3.3), stored outside the vault (ADR-0030). */
+    val region: RegionConventions = RegionConventions(),
+
+    /** True while the date-order picker is up. */
+    val choosingDateOrder: Boolean = false,
 )
 
 @HiltViewModel
 public class SettingsViewModel @Inject constructor(
-    ledger: LedgerRepository,
+    private val ledger: LedgerRepository,
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
     private val attachments: AttachmentRepository,
     backups: BackupRepository,
     private val appearanceStore: AppearanceStore,
     private val phoneMotion: PhoneMotionSettings,
+    private val regionStore: RegionStore,
 ) : ViewModel() {
 
     private val phoneAnimationsOn = MutableStateFlow(true)
+
+    private val baseCurrency = MutableStateFlow<String?>(null)
+
+    private val choosingDateOrder = MutableStateFlow(false)
 
     /**
      * The polled half.
@@ -188,6 +220,9 @@ public class SettingsViewModel @Inject constructor(
         }
         .combine(appearanceStore.preferences) { state, appearance -> state.copy(appearance = appearance) }
         .combine(phoneAnimationsOn) { state, on -> state.copy(phoneAnimationsOn = on) }
+        .combine(regionStore.conventions) { state, region -> state.copy(region = region) }
+        .combine(baseCurrency) { state, code -> state.copy(baseCurrency = code) }
+        .combine(choosingDateOrder) { state, choosing -> state.copy(choosingDateOrder = choosing) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
     init {
@@ -202,6 +237,9 @@ public class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             captureHealth.value = getCaptureHealth()
             receipts.value = attachments.usage()
+            // Fixed once set (D4), but read here rather than once: it is a
+            // vault read, and the vault is open by the time Settings exists.
+            baseCurrency.value = ledger.baseCurrency()
         }
     }
 
@@ -232,6 +270,17 @@ public class SettingsViewModel @Inject constructor(
 
             is SettingsEvent.StartScreenPicked ->
                 viewModelScope.launch { appearanceStore.setStartScreen(event.startScreen) }
+
+            is SettingsEvent.GroupingPicked -> viewModelScope.launch { regionStore.setGrouping(event.grouping) }
+
+            SettingsEvent.DateOrderRequested -> choosingDateOrder.value = true
+
+            SettingsEvent.DateOrderDismissed -> choosingDateOrder.value = false
+
+            is SettingsEvent.DateOrderPicked -> {
+                choosingDateOrder.value = false
+                viewModelScope.launch { regionStore.setDateOrder(event.order) }
+            }
         }
     }
 

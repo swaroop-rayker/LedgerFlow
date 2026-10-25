@@ -4,10 +4,12 @@ import com.ledgerflow.core.datastore.AppearanceDataStore
 import com.ledgerflow.core.datastore.CaptureGapDataStore
 import com.ledgerflow.core.datastore.ListenerHealthDataStore
 import com.ledgerflow.core.datastore.NotificationSetupDataStore
+import com.ledgerflow.core.datastore.RegionDataStore
 import com.ledgerflow.core.domain.appearance.AppearanceStore
 import com.ledgerflow.core.domain.ingest.CaptureGapStore
 import com.ledgerflow.core.domain.ingest.ListenerHealthStore
 import com.ledgerflow.core.domain.ingest.NotificationSetupStore
+import com.ledgerflow.core.domain.region.RegionStore
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -43,4 +45,8 @@ internal abstract class DatastoreModule {
      */
     @Binds
     internal abstract fun appearanceStore(store: AppearanceDataStore): AppearanceStore
+
+    /** Settings > Currency & region, on the same ADR-0030 test. */
+    @Binds
+    internal abstract fun regionStore(store: RegionDataStore): RegionStore
 }

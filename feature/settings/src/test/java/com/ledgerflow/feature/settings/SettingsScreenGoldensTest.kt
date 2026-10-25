@@ -3,16 +3,18 @@ package com.ledgerflow.feature.settings
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.ledgerflow.core.designsystem.format.DisplayConventions
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.appearance.AnimationPreference
 import com.ledgerflow.core.domain.appearance.AppearancePreferences
 import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.appearance.ThemePreference
+import com.ledgerflow.core.model.DateOrder
+import com.ledgerflow.core.model.NumberGrouping
+import com.ledgerflow.core.model.RegionConventions
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
-import com.ledgerflow.core.testing.screenshot.PHONE_1X
-import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import org.junit.Rule
 import org.junit.Test
@@ -35,33 +37,46 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
+@Config(sdk = [GOLDEN_SDK], qualifiers = SETTINGS_1X)
 class SettingsScreenGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
 
+    /**
+     * The process-wide conventions are set to the state's own for the capture
+     * (V2-3): in the app the two are always the same store, and a golden whose
+     * backup date ignored the state's date order would record a screen that
+     * cannot happen.
+     */
     private fun capture(
         name: String,
         state: SettingsUiState,
         fontScale: Float,
         layoutDirection: LayoutDirection = LayoutDirection.Ltr,
-    ) =
-        rule.captureScreenGolden(name, fontScale, layoutDirection) {
-            LfTheme {
-                SettingsScreen(
-                    state = state,
-                    onCategories = {},
-                    onBudgets = {},
-                    onExport = {},
-                    onDeletedEntries = {},
-                    onNotificationAccess = {},
-                    onBackUp = {},
-                    onDiagnostics = {},
-                    onEvent = {},
-                )
+    ) {
+        val host = DisplayConventions.current
+        DisplayConventions.current = state.region
+        try {
+            rule.captureScreenGolden(name, fontScale, layoutDirection) {
+                LfTheme {
+                    SettingsScreen(
+                        state = state,
+                        onCategories = {},
+                        onBudgets = {},
+                        onExport = {},
+                        onDeletedEntries = {},
+                        onNotificationAccess = {},
+                        onBackUp = {},
+                        onDiagnostics = {},
+                        onEvent = {},
+                    )
+                }
             }
+        } finally {
+            DisplayConventions.current = host
         }
+    }
 
     private val livedIn = SettingsUiState(
         deletedCount = 3,
@@ -76,22 +91,26 @@ class SettingsScreenGoldensTest {
             animations = AnimationPreference.REDUCED,
             startScreen = StartScreen.LEDGER,
         ),
+        baseCurrency = "INR",
+        // Currency & region, also moved from the defaults.
+        region = RegionConventions(grouping = NumberGrouping.WESTERN, dateOrder = DateOrder.DAY_MONTH_YEAR),
     )
 
     private val fresh = SettingsUiState(
         deletedCount = 0,
         isLoaded = true,
         captureHealth = NotificationCaptureHealth.NOT_GRANTED,
+        baseCurrency = "INR",
     )
 
     @Test fun livedIn_1x() = capture("settings-lived-in-1x", livedIn, 1f)
 
-    @Config(qualifiers = PHONE_2X)
+    @Config(qualifiers = SETTINGS_2X)
     @Test fun livedIn_2x() = capture("settings-lived-in-2x", livedIn, 2f)
 
     @Test fun fresh_1x() = capture("settings-fresh-1x", fresh, 1f)
 
-    @Config(qualifiers = PHONE_2X)
+    @Config(qualifiers = SETTINGS_2X)
     @Test fun fresh_2x() = capture("settings-fresh-2x", fresh, 2f)
 
     /**
@@ -101,3 +120,11 @@ class SettingsScreenGoldensTest {
      */
     @Test fun livedIn_rtl_1x() = capture("settings-lived-in-rtl-1x", livedIn, 1f, LayoutDirection.Rtl)
 }
+
+/**
+ * Taller than the shared phone canvas: V2-3's Appearance and Currency & region
+ * sections took the tab past 1800 dp, and a golden of the top of a screen
+ * reviews only the top (`ScreenGoldens`). Same 360 dp width.
+ */
+private const val SETTINGS_1X = "w360dp-h2400dp"
+private const val SETTINGS_2X = "w360dp-h4800dp"

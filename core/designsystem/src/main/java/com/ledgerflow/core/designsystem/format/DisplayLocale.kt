@@ -17,11 +17,13 @@ import java.util.Locale
  * date's order: an Indian phone still gets "21 Oct 2026", a US one "Oct 21,
  * 2026".
  *
- * Not for anything written to a file or parsed: those name `Locale.ROOT` or a
- * fixed pattern already. **Not yet for amounts**: `MoneyFormat` and
- * `QuantityFormat` also parse what the user types, and display and parse must
- * change together, so that is its own change. Revisit when a translation
- * ships: the answer then is the app's language, which this becomes.
+ * Not for anything written to a file or parsed from a file: those name
+ * `Locale.ROOT` or a fixed pattern already. **Amounts too, since V2-3** (SPEC
+ * §16 Q26): `MoneyFormat` and `QuantityFormat` display *and* parse with this
+ * locale, moved together in one change so the field reads the separators the
+ * screen shows. Dates go through `DisplayDates`, which also applies Settings >
+ * Currency & region's date order. Revisit when a translation ships: the
+ * answer then is the app's language, which this becomes.
  */
 public object DisplayLocale {
 

@@ -13,7 +13,8 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-2 Settings | Merged, PR #5 (`d40f5cd`, 2026-10-22): D7 (a), §3 below; SPEC §9.3. Device suites on `d40f5cd` (SM-S721B, 2026-10-23): `:core:database` 105/105 (migration chain v1→v12, backup round-trip, older-schema restores) and `:core:data` 402/402 (restore, nightly and manual backup, purge). CI skips its instrumented job behind the known receipt-corpus red. Its RTL check found BUG61, fixed separately in PR #6 |
 | BUG61 RTL text | Merged, PR #6 (`dd25dd9`, 2026-10-24) |
 | V2-3 decisions | Owner, 2026-10-24: seven PRs in order Appearance → Currency & region → Notifications (budget-alerts row + overspending) → Allowlist editor → App lock + screenshot block → Hide amounts + Data permissions → About. Lock on the platform `BiometricPrompt` (no `androidx.biometric`); preferences outside the vault under ADR-0030 |
-| V2-3 · Appearance | Built on `claude/v2-3-appearance` (§3.2; SPEC §9.3, §9.5; ADR-0030). Not yet merged |
+| V2-3 · Appearance | PR #8, `claude/v2-3-appearance` (§3.2; SPEC §9.3, §9.5; ADR-0030). Not yet merged |
+| V2-3 · Currency & region | Built on `claude/v2-3-currency-region`, stacked on Appearance (§3.3; SPEC §9.3, §16 Q26 closed; BUG62). Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -200,6 +201,12 @@ launch. Stored outside the vault under ADR-0030.
 Base currency (read-only once data exists), currency symbol style, number
 grouping (Indian lakh vs western), date format, country/region (drives
 defaults for SMS allowlist seeds and number format).
+
+**Built (V2-3, 2026-10-24): base currency (read-only), number grouping and
+date order.** Defaults reproduce the old behaviour exactly; SPEC §9.3 has the
+detail. Amounts now display and parse in English in the phone's region (§16
+Q26), which found BUG62. Not built: symbol style, and region-driven
+allowlist seeds (owner: later).
 
 ### 3.4 Notifications
 Budget alerts (exists — moves here), bill reminders, recurring-transaction

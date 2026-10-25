@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -26,8 +26,6 @@ import com.ledgerflow.feature.ocr.recognition.ReceiptTextRecognizer
 import com.ledgerflow.feature.ocr.recognition.RecognizedPage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -397,15 +395,14 @@ internal fun summaryOf(
  * the review then shows the capture date and the user should know to check it.
  */
 internal fun dateSentence(detection: ReceiptDates.Detection): String {
-    val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(DisplayLocale.current())
     return when (detection) {
-        is ReceiptDates.Detection.Found -> "Dated ${detection.date.format(format)}"
+        is ReceiptDates.Detection.Found -> "Dated ${DisplayDates.medium(detection.date)}"
         is ReceiptDates.Detection.Refused -> {
             val why = when (detection.reason) {
                 ReceiptDates.Refusal.AFTER_CAPTURE -> "is after today"
                 ReceiptDates.Refusal.TOO_OLD -> "is over a year ago"
             }
-            "Printed date ${detection.date.format(format)} $why, so it was not used — " +
+            "Printed date ${DisplayDates.medium(detection.date)} $why, so it was not used — " +
                 "set the date when you review"
         }
         ReceiptDates.Detection.None -> "No bill date found — today's date is used; check it when you review"

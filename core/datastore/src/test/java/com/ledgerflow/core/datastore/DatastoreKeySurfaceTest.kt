@@ -54,6 +54,9 @@ class DatastoreKeySurfaceTest {
         "appearance_theme",
         "appearance_animations",
         "appearance_start_screen",
+        // ADR-0030, Settings > Currency & region: two enum names.
+        "region_number_grouping",
+        "region_date_order",
     )
 
     private val moduleSources: List<File> by lazy {

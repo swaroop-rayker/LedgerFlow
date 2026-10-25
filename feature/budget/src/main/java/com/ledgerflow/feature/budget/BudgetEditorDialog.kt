@@ -17,7 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
@@ -292,14 +292,8 @@ private fun StartDatePicker(selected: Int, onPicked: (Int) -> Unit, onDismiss: (
 }
 
 /** `12 Aug 2026` from a day number. */
-private fun formatEpochDay(epochDay: Int): String {
-    val date = java.time.LocalDate.ofEpochDay(epochDay.toLong())
-    return "${date.dayOfMonth} " +
-        date.month.getDisplayName(
-            java.time.format.TextStyle.SHORT,
-            DisplayLocale.current(),
-        ) + " ${date.year}"
-}
+private fun formatEpochDay(epochDay: Int): String =
+    DisplayDates.dayMonthYear(java.time.LocalDate.ofEpochDay(epochDay.toLong()))
 
 private const val MILLIS_PER_DAY = 86_400_000L
 

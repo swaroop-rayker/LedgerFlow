@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.appearance.AppMotionDurationScale
 import com.ledgerflow.appearance.AppearanceViewModel
+import com.ledgerflow.appearance.RegionConventionsSync
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.appearance.AnimationPreference
@@ -85,6 +86,10 @@ public class MainActivity : ComponentActivity() {
     @Inject
     internal lateinit var phoneMotion: PhoneMotionSettings
 
+    /** Settings > Currency & region, kept in `DisplayConventions` by the Application. */
+    @Inject
+    internal lateinit var regionConventions: RegionConventionsSync
+
     /** Every Compose animation's scale; zero under Animations > Off (V2-3). */
     private val motionScale = AppMotionDurationScale()
 
@@ -107,6 +112,9 @@ public class MainActivity : ComponentActivity() {
             // Nothing until the choices are read (AppearanceViewModel): a few
             // milliseconds of the launch window, never a frame in the wrong theme.
             val prefs = appearance.preferences.collectAsStateWithLifecycle().value ?: return@setContent
+            // And Currency & region, applied process-wide by the Application:
+            // the first amount drawn is already grouped as the user chose.
+            if (!regionConventions.ready.collectAsStateWithLifecycle().value) return@setContent
             val dark = prefs.theme.isDark(phoneIsDark = isSystemInDarkTheme())
             val motion = rememberMotionLevel(prefs.animations)
             SystemBarIconsFollow(dark)

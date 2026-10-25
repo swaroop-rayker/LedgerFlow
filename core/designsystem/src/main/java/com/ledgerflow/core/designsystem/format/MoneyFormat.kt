@@ -3,6 +3,7 @@ package com.ledgerflow.core.designsystem.format
 import com.ledgerflow.core.model.CurrencyDisplay
 import com.ledgerflow.core.model.CurrencyExponent
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.NumberGrouping
 import java.math.BigDecimal
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -26,6 +27,16 @@ import java.util.Locale
  * The two are deliberately split. Indian digit grouping writes ₹1,24,000 where
  * the western convention writes 124,000, and that is a property of the *money*:
  * a rupee amount should look like rupees on a phone set to English (US).
+ * Settings > Currency & region can override the grouping for every currency
+ * (V2-3, [DisplayConventions]); by currency is the default.
+ *
+ * **The locale is [DisplayLocale]'s, for display and for parsing alike**
+ * (V2-3, SPEC §16 Q26): English in the phone's region, the same rule dates
+ * follow (BUG61). Under a right-to-left or non-English phone language the
+ * separators were that language's (Arabic's U+066B and U+066C on some phones) inside an English
+ * screen, and the input field had to agree with whatever the display showed.
+ * Both moved together, in one change, so what the user types is read with
+ * the separators they are shown.
  *
  * The grouping is also hand-rolled, for the same reason `:core:crypto`
  * hand-rolls HKDF and §5.8 hardcodes currency exponents -- the platform cannot
@@ -42,18 +53,20 @@ public object MoneyFormat {
     public fun plain(
         minor: Long,
         currencyCode: String,
-        locale: Locale = Locale.getDefault(),
+        locale: Locale = DisplayLocale.current(),
+        grouping: NumberGrouping = DisplayConventions.current.grouping,
     ): String {
         val symbols = DecimalFormatSymbols.getInstance(locale)
         val sign = if (minor < 0) symbols.minusSign.toString() else ""
-        return sign + magnitude(minor, currencyCode, locale)
+        return sign + magnitude(minor, currencyCode, locale, grouping)
     }
 
     /** `₹1,240.50` -- what an amount looks like on screen. */
     public fun symbolised(
         minor: Long,
         currencyCode: String,
-        locale: Locale = Locale.getDefault(),
+        locale: Locale = DisplayLocale.current(),
+        grouping: NumberGrouping = DisplayConventions.current.grouping,
     ): String {
         // Isolated so a right-to-left symbol (the dirham's) cannot turn the whole
         // amount into a right-to-left paragraph (BUG61).
@@ -65,7 +78,7 @@ public object MoneyFormat {
         }
         // The sign leads the symbol: "-₹5" reads as a negative amount where
         // "₹-5" reads as a typo.
-        return sign + symbol + magnitude(minor, currencyCode, locale)
+        return sign + symbol + magnitude(minor, currencyCode, locale, grouping)
     }
 
     /**
@@ -92,14 +105,14 @@ public object MoneyFormat {
         minor: Long,
         currencyCode: String,
         ledger: LedgerType,
-        locale: Locale = Locale.getDefault(),
+        locale: Locale = DisplayLocale.current(),
     ): String {
         val sign = when (ledger) {
             LedgerType.DEBIT -> '-'
             LedgerType.CREDIT -> '+'
         }
         return sign + bidiIsolated(CurrencyDisplay.symbolOf(currencyCode)) +
-            magnitude(minor, currencyCode, locale)
+            magnitude(minor, currencyCode, locale, DisplayConventions.current.grouping)
     }
 
     /**
@@ -114,7 +127,7 @@ public object MoneyFormat {
         minor: Long,
         currencyCode: String,
         ledger: LedgerType,
-        locale: Locale = Locale.getDefault(),
+        locale: Locale = DisplayLocale.current(),
     ): String {
         val verb = when (ledger) {
             LedgerType.DEBIT -> "spent"
@@ -133,7 +146,7 @@ public object MoneyFormat {
     public fun spoken(
         minor: Long,
         currencyCode: String,
-        locale: Locale = Locale.getDefault(),
+        locale: Locale = DisplayLocale.current(),
     ): String = "${plain(minor, currencyCode, locale)} ${CurrencyDisplay.spokenUnitOf(currencyCode)}"
 
     /**
@@ -163,15 +176,17 @@ public object MoneyFormat {
     public fun parse(
         text: String,
         currencyCode: String,
-        locale: Locale = Locale.getDefault(),
+        locale: Locale = DisplayLocale.current(),
     ): Long {
         val exponent = CurrencyExponent.of(currencyCode)
         val separator = DecimalFormatSymbols.getInstance(locale).decimalSeparator
 
         // '.' is accepted whatever the locale says, because on a physical
         // keyboard and on most IMEs that is the key the user actually presses.
-        val cleaned = text.filter { it.isDigit() || it == separator || it == '.' }
-        val splitAt = cleaned.indexOfFirst { it == separator || it == '.' }
+        // Digits in any script become ASCII, and every decimal mark becomes
+        // '.' (BUG62, TypedNumber).
+        val cleaned = TypedNumber.normalize(text, separator)
+        val splitAt = cleaned.indexOf('.')
 
         val whole = if (splitAt < 0) cleaned else cleaned.take(splitAt)
         val fraction = if (splitAt < 0) "" else cleaned.drop(splitAt + 1)
@@ -196,7 +211,7 @@ public object MoneyFormat {
      * `-Long.MIN_VALUE` is `Long.MIN_VALUE` and a sign flip that silently does
      * nothing is exactly the class of bug Law 3 is about.
      */
-    private fun magnitude(minor: Long, currencyCode: String, locale: Locale): String {
+    private fun magnitude(minor: Long, currencyCode: String, locale: Locale, grouping: NumberGrouping): String {
         val exponent = CurrencyExponent.of(currencyCode)
         val symbols = DecimalFormatSymbols.getInstance(locale)
         val plain = BigDecimal.valueOf(minor, exponent).abs().toPlainString()
@@ -205,10 +220,22 @@ public object MoneyFormat {
         val fraction = plain.substringAfter('.', missingDelimiterValue = "")
         val grouped = group(
             digits = integer,
-            groupSize = if (currencyCode.uppercase() in LAKH_GROUPED) LAKH_GROUP else WESTERN_GROUP,
+            groupSize = groupSizeFor(currencyCode, grouping),
             separator = symbols.groupingSeparator,
         )
         return if (fraction.isEmpty()) grouped else grouped + symbols.decimalSeparator + fraction
+    }
+
+    /**
+     * Settings > Currency & region > Number grouping (V2-3). By currency is the
+     * rule above and the default; the other two apply one convention to every
+     * currency, for someone who reads lakh in dollars or groups of three in
+     * rupees.
+     */
+    private fun groupSizeFor(currencyCode: String, grouping: NumberGrouping): Int = when (grouping) {
+        NumberGrouping.BY_CURRENCY -> if (currencyCode.uppercase() in LAKH_GROUPED) LAKH_GROUP else WESTERN_GROUP
+        NumberGrouping.LAKH -> LAKH_GROUP
+        NumberGrouping.WESTERN -> WESTERN_GROUP
     }
 
     /**
