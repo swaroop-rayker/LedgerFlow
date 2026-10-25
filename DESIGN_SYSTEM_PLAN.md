@@ -21,7 +21,7 @@ covered in §5.4.
 |---|---|
 | **Token** | A named design value ("the colour for money going out", "the gap at the edge of a screen") used instead of a raw number or hex code. Change the token, and every place that uses it changes together. |
 | **Primitive token** | A raw value with a neutral name: `coral-500 = #E5645F`, `space-4 = 16dp`. Says *what* the value is, not *where* it's used. |
-| **Semantic token** | A value named by its job: `money.out`, `surface.raised`, `text.muted`. Screens use these. |
+| **Semantic token** | A value named by its job: `money.outgoing`, `surface.raised`, `text.muted`. Screens use these. |
 | **Component token** | What one building block uses: "a card's corner radius", "a button's height". Points at semantic tokens. |
 | **Component** | A reusable building block (button, card, row, dialog) in `:core:designsystem` or `:core:ui`. |
 | **Template** | A reusable screen layout (header, content, pinned action bar) that knows nothing about which tab or route it lives under. |
@@ -183,7 +183,7 @@ and the bottom sheet.
 
 ```
 primitives (internal)  →  semantic roles (public)  →  component tokens (internal)
-coral-500, space-4,       money.out, surface.raised,   card.radius, button.height,
+coral-500, space-4,   money.outgoing, surface.raised,  card.radius, button.height,
 radius-16, inter-600      screen.edge, shape.container  row.border, chart.donutSize
         ▲                           ▲                            ▲
    a visual direction          screens read these         components read these
@@ -214,8 +214,8 @@ radius-16, inter-600      screen.edge, shape.container  row.border, chart.donutS
 | Surfaces | `canvas`, `raised`, `overlay`, `sunken`, `inverse` | today: surfaceBase, surfaceRaised, surfaceOverlay |
 | Text | `primary`, `secondary`, `muted`, `onAccent`, `onInverse`, `disabled` | `muted` = today's `textTertiary` (kept at ≥ 4.5:1 contrast) |
 | Borders | `subtle`, `strong`, `focus` | `subtle` = today's `outline` |
-| Accent | `default`, `pressed`, `subtle`, `on` | the colour of the main action and selection |
-| **Money** | `out`, `outSubtle`, `in`, `inSubtle` | **Not** "danger"/"success". Spending isn't an error (`LfColors.kt` KDoc) and the two books never share a colour role (Law 2). |
+| Action | `primary`, `onPrimary`, `pressed`, `subtle` | the main action and the selection. *(Built in B1 as `action`, not `accent`: `colors.accent` is the old flat name, kept as an alias until step G.)* |
+| **Money** | `outgoing`, `outgoingSubtle`, `incoming`, `incomingSubtle` *(not `out`/`in`: `in` is a Kotlin keyword)* | **Not** "danger"/"success". Spending isn't an error (`LfColors.kt` KDoc) and the two books never share a colour role (Law 2). |
 | Status | `warning(+Subtle)`, `danger(+Subtle)`, `success(+Subtle)`, `info(+Subtle)` | `danger` is for destructive actions and failures only, never for an expense amount |
 | Overlay | `scrim`, `focusRing` | |
 | Data | `chart.grid`, `chart.axis`, `chart.categorical(id, stored)` | the category colour generator moves behind a role, so a direction can retune it, but its per-theme contrast guarantee stays |
@@ -258,7 +258,7 @@ the same shapes.
 ```
 core/designsystem/src/main/java/com/ledgerflow/core/designsystem/
   theme/
-    tokens/primitive/   LfPalette.kt, LfScale.kt, LfTypefaces.kt      (internal)
+    primitive/          LfPrimitives.kt: LfPalette, LfScale, LfTypeScale (internal)   [built in B1]
     tokens/semantic/    LfColorRoles.kt, LfSpaceRoles.kt, LfShapeRoles.kt,
                         LfTypeRoles.kt, LfBorderRoles.kt, LfMotion.kt (public)
     tokens/component/   LfButtonTokens.kt, LfCardTokens.kt, LfRowTokens.kt, …  (internal)
@@ -269,7 +269,7 @@ core/designsystem/src/main/java/com/ledgerflow/core/designsystem/
   component/  pattern/  chart/  icon/  format/
 ```
 
-- Screens write `LfTheme.colors.money.out`, `LfTheme.space.screenEdge`,
+- Screens write `LfTheme.colors.money.outgoing`, `LfTheme.space.screenEdge`,
   `LfTheme.shapes.container`, `LfTheme.type.amountRow`: roles only. They mostly
   don't even need those, because templates and components apply them.
 - The roles are `@Immutable` classes provided through
@@ -300,7 +300,7 @@ core/designsystem/src/main/java/com/ledgerflow/core/designsystem/
    themes. A genuinely new *meaning* ("goal progress", say) becomes a new role,
    noted in the design-system guide, never a screen-local colour.
 4. **Money meanings stay fixed.** Anything that is money out or money in uses
-   `money.out`/`money.in`; anything else (a loan's balance, a goal's target)
+   `money.outgoing`/`money.incoming`; anything else (a loan's balance, a goal's target)
    uses neutral text or the accent, so no new feature can blur the two books
    (Law 2).
 5. **Outside Compose:** a future home-screen widget (V2-PLAN §6.7) or
@@ -535,7 +535,7 @@ one gate at a time to stay inside the dev box's RAM and heat limits.
 |---|---|---|---|---|
 | **A1** ✓ | Dark twin for every goldens test (`DarkGoldensRule`); 133 dark goldens recorded; `goldenThemePairsCheck` in `preMergeCheck` (§6.3). The four shell-hosted tab screens, Budgets and the component tests now render on the app background (`LfScaffold` / `surfaceBase`) instead of the bare test window, which moves 64 light goldens from `#FAFAFA` to `#F7F8FA` (≤ 3 levels per channel, checked by script) | No app change | review all dark goldens by eye | `test: dark-theme goldens for every screen, and a check that none is missing` |
 | **A2** ✓ | Material `ColorScheme` (all 48 roles) and `Shapes` (all 5) mapped from today's palette and radii (`LfMaterialTheme.kt`); `LfMaterialThemeTest` completeness tests; BUG63 (off switch) fixed with `Bug63_OffSwitchIsVisibleTest`; `material-date-picker` and `material-selection-controls` goldens in both themes. Goldens changed only at the switches (Settings, Payment apps) | Yes, small (switches; pickers and sheet off-golden) | the phone wasn't connected, so the pickers were checked through the new goldens; a device pass of both pickers and the Add sheet is still owed | `fix: BUG63 -- Material widgets inherit LedgerFlow's colours and corners; the off switch is visible again` |
-| **B1** | Primitive and semantic layers with **today's exact values**; old names become deprecated aliases | **No: every golden must be pixel-identical** | stability report | `refactor: design tokens in three layers, same values` |
+| **B1** ✓ | Primitive layer (`theme/primitive/LfPrimitives.kt`, internal) and semantic roles (`LfColors` grouped as `surface`/`text`/`border`/`action`/`money`/`status`/`chart`; `LfTheme.type`, `LfTheme.space`, `LfTheme.borders`) with **today's exact values**; the 12 flat colour names, the `xs`…`xxl` steps and `LfTheme.typography` are deprecated aliases; the A2 Material mapping reads the roles. `LfTokenLayersTest` pins every value | **No: every golden byte-identical after re-recording** | stability report | `refactor: design tokens in three layers, same values` |
 | **B2** | Component tokens for the existing components (button, card, dialog, chip, segmented control, field, entry row, charts) | No: pixel-identical | stability report; `inkDifferences` on rows | `refactor: components read component tokens` |
 | **B3** | Radii move out of `LfSpacing` into shape roles; `LfLayout` holds the layout constants | No: pixel-identical | | `refactor: shapes and layout constants leave LfSpacing` |
 | **C1** | `designTokenCheck` + allowlist of today's violations, in `preMergeCheck` | No | run it against a deliberately bad file | `build: designTokenCheck rejects raw colours, sizes, shapes and widgets outside the theme` |

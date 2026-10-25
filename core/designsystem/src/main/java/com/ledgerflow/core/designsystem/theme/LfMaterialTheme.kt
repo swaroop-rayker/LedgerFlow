@@ -26,78 +26,74 @@ import androidx.compose.ui.graphics.lerp
  * Two mappings are worth knowing:
  * - **`outline` is the medium grey, `outlineVariant` is the hairline.**
  *   Material draws control edges with `outline` (a switch's thumb and border, a
- *   text field) and decorative dividers with `outlineVariant`. [LfColors.outline]
- *   is a hairline, so it maps to the latter; the former gets
+ *   text field) and decorative dividers with `outlineVariant`. `border.subtle`
+ *   is the hairline, so it maps to the latter; the former gets
  *   [LfColors.textTertiary], which is what makes an off switch visible.
  * - **`surfaceTint` is transparent.** Material tints a raised surface with the
  *   primary colour; LedgerFlow separates surfaces with hairlines, not tints
  *   (`CLAUDE.md` §5).
  */
 internal fun lfColorScheme(colors: LfColors): ColorScheme {
-    val primaryContainer = lerp(colors.surfaceRaised, colors.accent, CONTAINER_TINT)
-    val errorContainer = lerp(colors.surfaceRaised, colors.debit, CONTAINER_TINT)
-    val highest = lerp(colors.surfaceOverlay, colors.outline, HIGHEST_CONTAINER_MIX)
+    val highest = lerp(colors.surface.overlay, colors.border.subtle, HIGHEST_CONTAINER_MIX)
     // Material's containers go from the page up: lowest, low, container, high,
     // highest. In the dark palette the raised surface is lighter than the page;
     // in the light palette it is white, lighter than the page too, so the order
     // of the two lowest steps is the other way round.
-    val lowest = if (colors.isDark) colors.surfaceBase else colors.surfaceRaised
-    val low = if (colors.isDark) colors.surfaceRaised else colors.surfaceBase
-    val inverseAccent = if (colors.isDark) LfLightColors.accent else LfDarkColors.accent
+    val lowest = if (colors.isDark) colors.surface.canvas else colors.surface.raised
+    val low = if (colors.isDark) colors.surface.raised else colors.surface.canvas
+    val inverseAction = if (colors.isDark) LfLightColors.action.primary else LfDarkColors.action.primary
 
-    // Every role is given, so the light and dark builders' different defaults
-    // never apply; one builder, named arguments, the compiler checks each name.
     return lightColorScheme(
-        primary = colors.accent,
-        onPrimary = colors.onAccent,
-        primaryContainer = primaryContainer,
-        onPrimaryContainer = colors.textPrimary,
-        inversePrimary = inverseAccent,
-        secondary = colors.textSecondary,
-        onSecondary = colors.surfaceBase,
-        secondaryContainer = colors.surfaceOverlay,
-        onSecondaryContainer = colors.textPrimary,
-        tertiary = colors.textSecondary,
-        onTertiary = colors.surfaceBase,
-        tertiaryContainer = colors.surfaceOverlay,
-        onTertiaryContainer = colors.textPrimary,
-        background = colors.surfaceBase,
-        onBackground = colors.textPrimary,
-        surface = colors.surfaceRaised,
-        onSurface = colors.textPrimary,
-        surfaceVariant = colors.surfaceOverlay,
-        onSurfaceVariant = colors.textSecondary,
+        primary = colors.action.primary,
+        onPrimary = colors.action.onPrimary,
+        primaryContainer = colors.action.subtle,
+        onPrimaryContainer = colors.text.primary,
+        inversePrimary = inverseAction,
+        secondary = colors.text.secondary,
+        onSecondary = colors.surface.canvas,
+        secondaryContainer = colors.surface.overlay,
+        onSecondaryContainer = colors.text.primary,
+        tertiary = colors.text.secondary,
+        onTertiary = colors.surface.canvas,
+        tertiaryContainer = colors.surface.overlay,
+        onTertiaryContainer = colors.text.primary,
+        background = colors.surface.canvas,
+        onBackground = colors.text.primary,
+        surface = colors.surface.raised,
+        onSurface = colors.text.primary,
+        surfaceVariant = colors.surface.overlay,
+        onSurfaceVariant = colors.text.secondary,
         surfaceTint = Color.Transparent,
-        inverseSurface = colors.textPrimary,
-        inverseOnSurface = colors.surfaceBase,
-        // Kept on the money-out colour, as before this step: splitting "danger"
-        // from "money out" is the semantic layer's job (plan §4.2, step B1).
-        error = colors.debit,
-        onError = colors.surfaceBase,
-        errorContainer = errorContainer,
-        onErrorContainer = colors.textPrimary,
-        outline = colors.textTertiary,
-        outlineVariant = colors.outline,
-        scrim = Color.Black,
-        surfaceBright = colors.surfaceOverlay,
+        inverseSurface = colors.surface.inverse,
+        inverseOnSurface = colors.text.onInverse,
+        // status.danger: the same coral as money.outgoing today, a separate role
+        // so a direction can tell a failure from an expense (plan §4.2).
+        error = colors.status.danger,
+        onError = colors.surface.canvas,
+        errorContainer = colors.status.dangerSubtle,
+        onErrorContainer = colors.text.primary,
+        outline = colors.border.strong,
+        outlineVariant = colors.border.subtle,
+        scrim = colors.surface.scrim,
+        surfaceBright = colors.surface.overlay,
         surfaceContainer = low,
-        surfaceContainerHigh = colors.surfaceOverlay,
+        surfaceContainerHigh = colors.surface.overlay,
         surfaceContainerHighest = highest,
         surfaceContainerLow = low,
         surfaceContainerLowest = lowest,
-        surfaceDim = colors.surfaceBase,
-        primaryFixed = primaryContainer,
-        primaryFixedDim = colors.accent,
-        onPrimaryFixed = colors.textPrimary,
-        onPrimaryFixedVariant = colors.textSecondary,
-        secondaryFixed = colors.surfaceOverlay,
-        secondaryFixedDim = colors.surfaceRaised,
-        onSecondaryFixed = colors.textPrimary,
-        onSecondaryFixedVariant = colors.textSecondary,
-        tertiaryFixed = colors.surfaceOverlay,
-        tertiaryFixedDim = colors.surfaceRaised,
-        onTertiaryFixed = colors.textPrimary,
-        onTertiaryFixedVariant = colors.textSecondary,
+        surfaceDim = colors.surface.canvas,
+        primaryFixed = colors.action.subtle,
+        primaryFixedDim = colors.action.primary,
+        onPrimaryFixed = colors.text.primary,
+        onPrimaryFixedVariant = colors.text.secondary,
+        secondaryFixed = colors.surface.overlay,
+        secondaryFixedDim = colors.surface.raised,
+        onSecondaryFixed = colors.text.primary,
+        onSecondaryFixedVariant = colors.text.secondary,
+        tertiaryFixed = colors.surface.overlay,
+        tertiaryFixedDim = colors.surface.raised,
+        onTertiaryFixed = colors.text.primary,
+        onTertiaryFixedVariant = colors.text.secondary,
     )
 }
 
@@ -113,9 +109,6 @@ internal fun lfShapes(spacing: LfSpacing): Shapes = Shapes(
 internal val LfDarkColorScheme: ColorScheme = lfColorScheme(LfDarkColors)
 internal val LfLightColorScheme: ColorScheme = lfColorScheme(LfLightColors)
 internal val LfMaterialShapes: Shapes = lfShapes(LfSpacing())
-
-/** How much of the accent (or debit) colour a Material "container" fill carries. */
-private const val CONTAINER_TINT = 0.24f
 
 /** `surfaceContainerHighest` sits halfway from the overlay surface to the hairline. */
 private const val HIGHEST_CONTAINER_MIX = 0.5f

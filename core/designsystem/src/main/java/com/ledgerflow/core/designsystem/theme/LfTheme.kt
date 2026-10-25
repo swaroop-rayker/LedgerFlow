@@ -18,8 +18,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ledgerflow.core.designsystem.component.GLYPH_MEASURER_CACHE_SIZE
+import com.ledgerflow.core.designsystem.theme.primitive.LfScale
+import com.ledgerflow.core.designsystem.theme.primitive.LfTypeScale
 import com.ledgerflow.core.designsystem.component.LocalLfGlyphMeasurer
 
 /**
@@ -59,6 +60,9 @@ public data class LfTypography(
 
     private val forLtr: LfTypography by lazy { aligned(LfTextAlign.startOf(LayoutDirection.Ltr)) }
     private val forRtl: LfTypography by lazy { aligned(LfTextAlign.startOf(LayoutDirection.Rtl)) }
+
+    /** These styles by job ([LfTypeRoles]); built once, so `LfTheme.type` costs no allocation per read. */
+    internal val roles: LfTypeRoles by lazy { toRoles() }
 
     private fun aligned(align: TextAlign): LfTypography = LfTypography(
         displayL = displayL.copy(textAlign = align),
@@ -140,31 +144,44 @@ private fun lfTextStyle(
 internal val LfTextDirection: TextDirection = TextDirection.ContentOrLtr
 
 public val LfDefaultTypography: LfTypography = LfTypography(
-    displayL = lfTextStyle(34.sp, 40.sp, FontWeight.SemiBold),
-    titleL = lfTextStyle(22.sp, 28.sp, FontWeight.SemiBold),
-    titleM = lfTextStyle(18.sp, 24.sp, FontWeight.Medium),
-    bodyL = lfTextStyle(16.sp, 24.sp),
-    bodyM = lfTextStyle(14.sp, 20.sp),
-    label = lfTextStyle(12.sp, 16.sp, FontWeight.Medium),
-    amountL = lfTextStyle(28.sp, 32.sp, FontWeight.SemiBold, listOf(TABULAR_FIGURES)),
-    amountM = lfTextStyle(18.sp, 22.sp, FontWeight.Medium, listOf(TABULAR_FIGURES)),
+    displayL = lfTextStyle(LfTypeScale.Size34, LfTypeScale.Line40, FontWeight.SemiBold),
+    titleL = lfTextStyle(LfTypeScale.Size22, LfTypeScale.Line28, FontWeight.SemiBold),
+    titleM = lfTextStyle(LfTypeScale.Size18, LfTypeScale.Line24, FontWeight.Medium),
+    bodyL = lfTextStyle(LfTypeScale.Size16, LfTypeScale.Line24),
+    bodyM = lfTextStyle(LfTypeScale.Size14, LfTypeScale.Line20),
+    label = lfTextStyle(LfTypeScale.Size12, LfTypeScale.Line16, FontWeight.Medium),
+    amountL = lfTextStyle(LfTypeScale.Size28, LfTypeScale.Line32, FontWeight.SemiBold, listOf(TABULAR_FIGURES)),
+    amountM = lfTextStyle(LfTypeScale.Size18, LfTypeScale.Line22, FontWeight.Medium, listOf(TABULAR_FIGURES)),
     mnemonicWord = lfTextStyle(
-        16.sp,
-        22.sp,
+        LfTypeScale.Size16,
+        LfTypeScale.Line22,
         FontWeight.Medium,
         listOf(TABULAR_FIGURES, DISAMBIGUATION),
     ),
 )
 
-/** Spacing scale. Nothing in the app may hardcode a dp value (CLAUDE.md §5). */
+/**
+ * Spacing scale. Nothing in the app may hardcode a dp value (CLAUDE.md §5).
+ *
+ * The six steps are deprecated in favour of the roles in `LfTheme.space`
+ * (step B1): a step says how big, a role says what for, and only the role can
+ * be retuned by a visual direction without moving the wrong gaps. The radii and
+ * the layout constants below leave this class in step B3.
+ */
 @Immutable
 public data class LfSpacing(
-    val xs: Dp = 4.dp,
-    val sm: Dp = 8.dp,
-    val md: Dp = 16.dp,
-    val lg: Dp = 24.dp,
-    val xl: Dp = 32.dp,
-    val xxl: Dp = 48.dp,
+    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, itemGap, inlineGap, rowInset, ...")
+    val xs: Dp = LfScale.Space4,
+    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, itemGap, inlineGap, rowInset, ...")
+    val sm: Dp = LfScale.Space8,
+    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, itemGap, inlineGap, rowInset, ...")
+    val md: Dp = LfScale.Space16,
+    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, itemGap, inlineGap, rowInset, ...")
+    val lg: Dp = LfScale.Space24,
+    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, listEnd, ...")
+    val xl: Dp = LfScale.Space32,
+    @Deprecated("Use a role from LfTheme.space, or LfSpacing.minTouchTarget for a touch target")
+    val xxl: Dp = LfScale.Space48,
     /** Minimum touch target (§9.6). Not negotiable. */
     val minTouchTarget: Dp = 48.dp,
 
@@ -210,25 +227,25 @@ public data class LfSpacing(
      */
     val peekCardWidth: Dp = 172.dp,
 
-    val cornerSmall: Dp = 8.dp,
-    val cornerMedium: Dp = 16.dp,
-    val cornerLarge: Dp = 24.dp,
+    val cornerSmall: Dp = LfScale.Radius8,
+    val cornerMedium: Dp = LfScale.Radius16,
+    val cornerLarge: Dp = LfScale.Radius24,
 )
 
-/** Motion durations (SPEC.md §9.5). */
+/** Motion durations (SPEC.md §9.5). Already roles by job; the values come from the primitive scale. */
 @Immutable
 public data class LfMotion(
-    val micro: Int = 120,
-    val standard: Int = 240,
-    val emphasized: Int = 400,
+    val micro: Int = LfScale.Duration120,
+    val standard: Int = LfScale.Duration240,
+    val emphasized: Int = LfScale.Duration400,
     /**
      * How long an outgoing screen takes to fade out before the incoming one
      * starts to fade in (BUG57). The two never overlap: overlapping is the
      * cross-fade that drew two screens' text over each other for 700 ms.
      */
-    val fadeOut: Int = 60,
+    val fadeOut: Int = LfScale.Duration60,
     /** How far a forward/back navigation slides its screens (BUG57). */
-    val axisSlide: Dp = 30.dp,
+    val axisSlide: Dp = LfScale.Slide30,
 )
 
 public val LocalLfTypography: androidx.compose.runtime.ProvidableCompositionLocal<LfTypography> =
@@ -262,6 +279,8 @@ public fun LfTheme(
         LocalLfColors provides colors,
         LocalLfTypography provides LfDefaultTypography,
         LocalLfSpacing provides LfSpacing(),
+        LocalLfSpaceRoles provides LfDefaultSpaceRoles,
+        LocalLfBorderRoles provides LfDefaultBorderRoles,
         LocalLfMotion provides LfMotion(),
         LocalLfGlyphMeasurer provides rememberTextMeasurer(cacheSize = GLYPH_MEASURER_CACHE_SIZE),
     ) {
@@ -279,15 +298,39 @@ public fun LfTheme(
     }
 }
 
-/** Token accessors. `LfTheme.colors.debit`, never a hardcoded hex. */
+/**
+ * Token accessors: semantic roles only (DESIGN_SYSTEM_PLAN §4.3).
+ * `LfTheme.colors.money.outgoing`, `LfTheme.type.body`, `LfTheme.space.screenEdge`,
+ * never a hard-coded hex, size or radius. The raw values behind the roles are
+ * `internal` to this module.
+ */
 public object LfTheme {
+    /** Colour roles: `surface`, `text`, `border`, `action`, `money`, `status`, `chart`. */
     public val colors: LfColors
         @Composable get() = LocalLfColors.current
 
+    /** Text styles by job, aligned to the current layout direction's leading edge (BUG61). */
+    public val type: LfTypeRoles
+        @Composable get() = LocalLfTypography.current.alignedTo(LocalLayoutDirection.current).roles
+
+    /** Space by job. */
+    public val space: LfSpaceRoles
+        @Composable get() = LocalLfSpaceRoles.current
+
+    /** Stroke widths by job; their colours are in [colors]`.border`. */
+    public val borders: LfBorderRoles
+        @Composable get() = LocalLfBorderRoles.current
+
     /** Aligned to the current layout direction's leading edge (BUG61). */
+    @Deprecated(
+        "Use LfTheme.type: displayL -> display, titleL -> title, titleM -> heading, bodyL -> body, " +
+            "bodyM -> bodySmall, label -> label, amountL -> amountHero, amountM -> amountRow, " +
+            "mnemonicWord -> mnemonic (DESIGN_SYSTEM_PLAN §4.2)",
+    )
     public val typography: LfTypography
         @Composable get() = LocalLfTypography.current.alignedTo(LocalLayoutDirection.current)
 
+    /** The spacing scale, radii and layout constants; its scale steps are deprecated for [space]. */
     public val spacing: LfSpacing
         @Composable get() = LocalLfSpacing.current
 
