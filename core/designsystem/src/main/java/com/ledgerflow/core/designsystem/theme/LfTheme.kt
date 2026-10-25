@@ -2,8 +2,6 @@ package com.ledgerflow.core.designsystem.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -255,35 +253,10 @@ public fun LfTheme(
 ) {
     val colors = if (darkTheme) LfDarkColors else LfLightColors
 
-    // Material components still need a ColorScheme; map our tokens onto it so a
-    // stray Material widget inherits the right surface instead of purple.
-    val materialScheme = if (darkTheme) {
-        darkColorScheme(
-            primary = colors.accent,
-            onPrimary = colors.onAccent,
-            background = colors.surfaceBase,
-            onBackground = colors.textPrimary,
-            surface = colors.surfaceRaised,
-            onSurface = colors.textPrimary,
-            surfaceVariant = colors.surfaceOverlay,
-            onSurfaceVariant = colors.textSecondary,
-            outline = colors.outline,
-            error = colors.debit,
-        )
-    } else {
-        lightColorScheme(
-            primary = colors.accent,
-            onPrimary = colors.onAccent,
-            background = colors.surfaceBase,
-            onBackground = colors.textPrimary,
-            surface = colors.surfaceRaised,
-            onSurface = colors.textPrimary,
-            surfaceVariant = colors.surfaceOverlay,
-            onSurfaceVariant = colors.textSecondary,
-            outline = colors.outline,
-            error = colors.debit,
-        )
-    }
+    // Material components still read Material's theme; every one of its colour
+    // roles and shapes is mapped from our tokens (LfMaterialTheme.kt), so a
+    // Material widget never falls back to Material's own purple or 28 dp corners.
+    val materialScheme = if (darkTheme) LfDarkColorScheme else LfLightColorScheme
 
     CompositionLocalProvider(
         LocalLfColors provides colors,
@@ -299,6 +272,7 @@ public fun LfTheme(
         // reads its typography directly rather than through [LfTheme.typography].
         MaterialTheme(
             colorScheme = materialScheme,
+            shapes = LfMaterialShapes,
             typography = lfMaterialTypographyFor(LocalLayoutDirection.current),
             content = content,
         )

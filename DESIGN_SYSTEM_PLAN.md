@@ -79,7 +79,7 @@ Verdicts: **Confirmed**, **Corrected** (the claim was wrong), **Incomplete**
   (`ledger-expenses-*-dark`). Fixed by the icon role in F4 or earlier in D3.
 - Switches in the off position almost vanish (Payment apps' Paytm row,
   Settings' App lock and Block screenshots): Material's unchecked track uses a
-  colour role `LfTheme` never sets. A2's complete colour mapping fixes it.
+  colour role `LfTheme` never sets. **Fixed in A2 as BUG63.**
 - Disabled buttons ("24 words to go", a disabled Approve) are very faint.
   Below 4.5:1 is allowed for disabled controls, but these sit at the edge of
   readable; a `text.disabled` role (§4.2) settles it in B1/E1.
@@ -495,7 +495,7 @@ a known audit gap closed in Phase E.
 6. **No dead ends.** For each screen, a unit test drives its UI state through
    every error and unavailable case and asserts there's at least one action.
    It's named per Law 7 where it comes from a bug
-   (`Bug63_SetupFailureOffersRetryTest`; the number is the next free one at the
+   (`BugNN_SetupFailureOffersRetryTest`; the number is the next free one at the
    time).
 7. **Written rules.** A short `docs/DESIGN_SYSTEM.md` usage guide, with
    `CLAUDE.md` §5 pointing to it (edited in Phase G, with your approval, since
@@ -534,7 +534,7 @@ one gate at a time to stay inside the dev box's RAM and heat limits.
 | Step | What changes | Visible? | Extra checks | Commit (example) |
 |---|---|---|---|---|
 | **A1** ✓ | Dark twin for every goldens test (`DarkGoldensRule`); 133 dark goldens recorded; `goldenThemePairsCheck` in `preMergeCheck` (§6.3). The four shell-hosted tab screens, Budgets and the component tests now render on the app background (`LfScaffold` / `surfaceBase`) instead of the bare test window, which moves 64 light goldens from `#FAFAFA` to `#F7F8FA` (≤ 3 levels per channel, checked by script) | No app change | review all dark goldens by eye | `test: dark-theme goldens for every screen, and a check that none is missing` |
-| **A2** | Material `ColorScheme` and `Shapes` filled completely from today's palette and radii; completeness tests; date pickers and the Add sheet stop using Material defaults | Yes, small (pickers and sheet only) | device screenshot of both pickers in both themes | `fix: date pickers and the Add sheet inherit LedgerFlow's colours and corners` |
+| **A2** ✓ | Material `ColorScheme` (all 48 roles) and `Shapes` (all 5) mapped from today's palette and radii (`LfMaterialTheme.kt`); `LfMaterialThemeTest` completeness tests; BUG63 (off switch) fixed with `Bug63_OffSwitchIsVisibleTest`; `material-date-picker` and `material-selection-controls` goldens in both themes. Goldens changed only at the switches (Settings, Payment apps) | Yes, small (switches; pickers and sheet off-golden) | the phone wasn't connected, so the pickers were checked through the new goldens; a device pass of both pickers and the Add sheet is still owed | `fix: BUG63 -- Material widgets inherit LedgerFlow's colours and corners; the off switch is visible again` |
 | **B1** | Primitive and semantic layers with **today's exact values**; old names become deprecated aliases | **No: every golden must be pixel-identical** | stability report | `refactor: design tokens in three layers, same values` |
 | **B2** | Component tokens for the existing components (button, card, dialog, chip, segmented control, field, entry row, charts) | No: pixel-identical | stability report; `inkDifferences` on rows | `refactor: components read component tokens` |
 | **B3** | Radii move out of `LfSpacing` into shape roles; `LfLayout` holds the layout constants | No: pixel-identical | | `refactor: shapes and layout constants leave LfSpacing` |
@@ -544,7 +544,7 @@ one gate at a time to stay inside the dev box's RAM and heat limits.
 | **D2** | Screens adopt templates, a few per commit (tabs · Inbox, Review, Entry · Settings pages · onboarding flows · Scan, Export, Diagnostics, Bin, Budgets, Organise) | Yes | per batch: goldens reviewed, 2.0, RTL | `refactor(inbox): Inbox and Review use the detail and form templates` |
 | **D3** | Shape and border roles applied consistently (cards, rows, fields, swipe tracks); hairline and dialog-height tokens; allowlist shrinks | Yes (corners) | | `fix(ui): one corner shape per role; hairlines from the theme` |
 | **E1** | `LfStateContent`, skeletons, `LfNotice`, `LfFeedbackHost`, field error line, progress step, all with goldens in both themes | No (components only) | contrast test | `feat(ui): shared loading, empty, error and feedback components` |
-| **E2–E6** | Screens adopt the state system in the D2 batches, closing §5.4's gaps. Each fix gets a Law 7 test named after it: **setup dead end first**, then Budgets' messages and delete confirmation, Entry's off-screen error, blank loading screens, the missing on-screen Back, the budget alert icon and tap | Yes | no-dead-end tests; device run of each fixed path | `fix(onboarding): BUG63 -- a failed setup offers Retry instead of "You're set up"` |
+| **E2–E6** | Screens adopt the state system in the D2 batches, closing §5.4's gaps. Each fix gets a Law 7 test named after it: **setup dead end first**, then Budgets' messages and delete confirmation, Entry's off-screen error, blank loading screens, the missing on-screen Back, the budget alert icon and tap | Yes | no-dead-end tests; device run of each fixed path | `fix(onboarding): BUGNN -- a failed setup offers Retry instead of "You're set up"` |
 | **F1** | Docs only: ADR-0031 (the chosen direction), `SPEC.md` §9 rewritten to match, `V2-PLAN.md` §8 updated | No | | `docs: ADR-0031 visual direction; SPEC §9 follows` |
 | **F2** | The chosen direction's primitives (and font file, if approved) replace today's; light and dark | **Yes: every golden** | contrast for every pair; review goldens screen by screen; device in both themes | `feat(ui): <direction> palette and type` |
 | **F3** | Component token changes for the direction (density, borders, shapes) | Yes | stability report; benchmarks on Ledger and Inbox | `feat(ui): <direction> component styling` |
