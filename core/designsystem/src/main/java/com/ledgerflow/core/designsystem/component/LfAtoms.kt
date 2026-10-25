@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -188,7 +187,7 @@ public fun LfButton(
         onClick = onClick,
         modifier = modifier.defaultMinSize(minHeight = tokens.minHeight),
         enabled = enabled && !loading,
-        shape = RoundedCornerShape(tokens.corner),
+        shape = tokens.shape,
         colors = when (style) {
             LfButtonStyle.Filled -> ButtonDefaults.buttonColors(
                 containerColor = tokens.filledContainer,
@@ -240,7 +239,7 @@ private fun OutlinedRowAction(
             minHeight = tokens.minHeight,
         ),
         enabled = enabled,
-        shape = RoundedCornerShape(tokens.corner),
+        shape = tokens.shape,
         border = BorderStroke(tokens.outlinedBorderWidth, tokens.outlinedBorder),
         // Material's default is 24dp a side, generous for a compact action and
         // enough on its own to push a second control off the line inside an
@@ -296,7 +295,7 @@ public fun LfCard(
     content: @Composable () -> Unit,
 ) {
     val tokens = LfCardTokens
-    val shape = RoundedCornerShape(tokens.corner)
+    val shape = tokens.shape
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -372,7 +371,7 @@ public fun LfTextField(
         },
         isError = isError,
         singleLine = singleLine,
-        shape = RoundedCornerShape(tokens.corner),
+        shape = tokens.shape,
         keyboardOptions = keyboardOptions,
         textStyle = tokens.textStyle,
         colors = OutlinedTextFieldDefaults.colors(

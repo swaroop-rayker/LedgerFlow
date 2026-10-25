@@ -2,8 +2,10 @@ package com.ledgerflow.core.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /*
@@ -19,7 +21,7 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
  */
 
 internal object LfEntryRowTokens {
-    val corner: Dp @Composable get() = LfTheme.spacing.cornerLarge
+    val shape: Shape @Composable get() = LfTheme.shapes.row
     val container: Color @Composable get() = LfTheme.colors.surface.raised
     val border: Color @Composable get() = LfTheme.colors.border.subtle
     val borderWidth: Dp @Composable get() = LfTheme.borders.hairline
@@ -35,9 +37,8 @@ internal object LfEntryRowTokens {
     /** Between the swatch, the texts and the amount. */
     val gap: Dp @Composable get() = LfTheme.space.itemGap
 
-    /** The category swatch. B3 moves this to a layout constant. */
-    @Suppress("DEPRECATION")
-    val swatchSize: Dp @Composable get() = LfTheme.spacing.lg
+    /** The category swatch: the same size as `LfCategoryDot`. */
+    val swatchSize: Dp = LfLayout.categoryDotSize
     val emptySwatchRing: Color @Composable get() = LfTheme.colors.border.subtle
 
     val titleStyle: TextStyle @Composable get() = LfTheme.type.body
@@ -51,7 +52,7 @@ internal object LfEntryRowTokens {
 
 /** The pickers' option rows, the multi-picker and the line-item editor. */
 internal object LfFormRowTokens {
-    val minHeight: Dp @Composable get() = LfTheme.spacing.minTouchTarget
+    val minHeight: Dp = LfLayout.minTouchTarget
     val paddingVertical: Dp @Composable get() = LfTheme.space.rowInsetVertical
     val compactPaddingVertical: Dp @Composable get() = LfTheme.space.inlineGap
     val gap: Dp @Composable get() = LfTheme.space.itemGap
@@ -71,9 +72,8 @@ internal object LfFormRowTokens {
 
 /** Recovery-phrase entry and the phrase scanner. */
 internal object LfPhraseTokens {
-    /** Between the entry's blocks. B3 gives 24 dp a layout role. */
-    @Suppress("DEPRECATION")
-    val sectionGap: Dp @Composable get() = LfTheme.spacing.lg
+    /** Between the entry's blocks. */
+    val sectionGap: Dp @Composable get() = LfTheme.space.blockGap
     val wordGap: Dp @Composable get() = LfTheme.space.inlineGap
     val rowGap: Dp @Composable get() = LfTheme.space.itemGap
     val scannerInset: Dp @Composable get() = LfTheme.space.itemGap

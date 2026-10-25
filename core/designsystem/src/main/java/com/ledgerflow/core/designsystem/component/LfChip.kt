@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,7 +15,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * A compact, tappable token.
@@ -34,9 +32,8 @@ public fun LfChip(
     contentDescription: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    val spacing = LfTheme.spacing
     val tokens = LfChipTokens
-    val shape = RoundedCornerShape(tokens.corner)
+    val shape = tokens.shape
 
     val palette = paletteFor(style)
 
@@ -46,7 +43,7 @@ public fun LfChip(
             .border(tokens.borderWidth, palette.outline, shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             // Chips are small by nature; the touch target must not be.
-            .defaultMinSize(minHeight = spacing.minTouchTarget)
+            .defaultMinSize(minHeight = tokens.minHeight)
             .padding(horizontal = tokens.paddingHorizontal, vertical = tokens.paddingVertical)
             .then(
                 contentDescription?.let { description ->

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * A small set of mutually exclusive options (SPEC.md §9.4).
@@ -40,13 +38,12 @@ public fun LfSegmentedControl(
     modifier: Modifier = Modifier,
 ) {
     require(options.size >= MIN_OPTIONS) { "A segmented control needs at least $MIN_OPTIONS options" }
-    val spacing = LfTheme.spacing
     val tokens = LfSegmentedTokens
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .background(tokens.track, RoundedCornerShape(tokens.trackCorner))
+            .background(tokens.track, tokens.trackShape)
             .padding(tokens.trackPadding),
     ) {
         // Unlike a button, a segment cannot grow to fit its label -- the cells
@@ -59,7 +56,7 @@ public fun LfSegmentedControl(
         // or overlap, and three options on a 360dp phone cannot have it any
         // other way.
         val perOption = maxWidth / options.size
-        val needed = spacing.segmentMinWidth * LocalDensity.current.fontScale
+        val needed = tokens.segmentMinWidth * LocalDensity.current.fontScale
 
         if (perOption >= needed) {
             Row(
@@ -95,16 +92,15 @@ private fun Segment(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val spacing = LfTheme.spacing
     val tokens = LfSegmentedTokens
     Box(
         modifier = modifier
             .background(
                 color = if (selected) tokens.selectedContainer else tokens.unselectedContainer,
-                shape = RoundedCornerShape(tokens.segmentCorner),
+                shape = tokens.segmentShape,
             )
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .defaultMinSize(minHeight = spacing.minTouchTarget)
+            .defaultMinSize(minHeight = tokens.segmentMinHeight)
             .padding(horizontal = tokens.segmentPaddingHorizontal, vertical = tokens.segmentPaddingVertical),
         contentAlignment = Alignment.Center,
     ) {

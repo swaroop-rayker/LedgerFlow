@@ -2,8 +2,11 @@ package com.ledgerflow.core.designsystem.component
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import com.ledgerflow.core.designsystem.theme.LfLayout
+import com.ledgerflow.core.designsystem.theme.LfLegacySmallCorner
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.theme.primitive.LfScale
 
@@ -12,11 +15,11 @@ import com.ledgerflow.core.designsystem.theme.primitive.LfScale
  * uses, named by the block's own parts.
  *
  * Colours and text come from the semantic roles (`LfTheme.colors`, `LfTheme.type`,
- * `LfTheme.space`, `LfTheme.borders`). A component's own geometry -- a button's
- * padding, a segment's inset -- comes from the primitive scale, because it is a
- * decision about that component rather than a meaning a screen would ask for.
- * Radii and layout minimums still come from `LfSpacing` until step B3 moves
- * them to shape roles and `LfLayout`.
+ * `LfTheme.space`, `LfTheme.borders`, `LfTheme.shapes`). A component's own
+ * geometry -- a button's padding, a segment's inset -- comes from the primitive
+ * scale, because it is a decision about that component rather than a meaning a
+ * screen would ask for. Touch targets and other thresholds come from `LfLayout`
+ * (step B3).
  *
  * All `internal`: a screen uses the component, never its tokens. A visual
  * direction that wants, say, borderless cards changes `LfCardTokens` and
@@ -32,8 +35,8 @@ internal object LfScaffoldTokens {
 }
 
 internal object LfButtonTokens {
-    val minHeight: Dp @Composable get() = LfTheme.spacing.minTouchTarget
-    val corner: Dp @Composable get() = LfTheme.spacing.cornerMedium
+    val minHeight: Dp = LfLayout.minTouchTarget
+    val shape: Shape @Composable get() = LfTheme.shapes.control
     val labelStyle: TextStyle @Composable get() = LfTheme.type.body
 
     val filledContainer: Color @Composable get() = LfTheme.colors.action.primary
@@ -52,7 +55,7 @@ internal object LfButtonTokens {
     val spinnerColor: Color @Composable get() = LfTheme.colors.action.onPrimary
 
     /** The row action ([LfButtonStyle.Outlined]). */
-    val outlinedMinWidth: Dp @Composable get() = LfTheme.spacing.actionMinWidth
+    val outlinedMinWidth: Dp = LfLayout.actionMinWidth
     val outlinedBorderWidth: Dp @Composable get() = LfTheme.borders.hairline
     val outlinedBorder: Color @Composable get() = LfTheme.colors.border.subtle
     val outlinedContainer: Color @Composable get() = LfTheme.colors.surface.overlay
@@ -65,12 +68,12 @@ internal object LfCardTokens {
     val container: Color @Composable get() = LfTheme.colors.surface.raised
     val border: Color @Composable get() = LfTheme.colors.border.subtle
     val borderWidth: Dp @Composable get() = LfTheme.borders.hairline
-    val corner: Dp @Composable get() = LfTheme.spacing.cornerMedium
+    val shape: Shape @Composable get() = LfTheme.shapes.container
     val inset: Dp @Composable get() = LfTheme.space.cardInset
 }
 
 internal object LfTextFieldTokens {
-    val corner: Dp @Composable get() = LfTheme.spacing.cornerSmall
+    val shape: Shape = LfLegacySmallCorner
     val textStyle: TextStyle @Composable get() = LfTheme.type.body
     val labelStyle: TextStyle @Composable get() = LfTheme.type.label
     val text: Color @Composable get() = LfTheme.colors.text.primary
@@ -83,7 +86,8 @@ internal object LfTextFieldTokens {
 }
 
 internal object LfChipTokens {
-    val corner: Dp @Composable get() = LfTheme.spacing.cornerSmall
+    val shape: Shape = LfLegacySmallCorner
+    val minHeight: Dp = LfLayout.minTouchTarget
     val borderWidth: Dp @Composable get() = LfTheme.borders.hairline
     val paddingHorizontal: Dp = LfScale.Space16
     val paddingVertical: Dp = LfScale.Space8
@@ -106,10 +110,13 @@ internal object LfChipTokens {
 
 internal object LfSegmentedTokens {
     val track: Color @Composable get() = LfTheme.colors.surface.raised
-    val trackCorner: Dp @Composable get() = LfTheme.spacing.cornerMedium
+    val trackShape: Shape @Composable get() = LfTheme.shapes.control
     val trackPadding: Dp = LfScale.Space4
     val gap: Dp = LfScale.Space4
-    val segmentCorner: Dp @Composable get() = LfTheme.spacing.cornerSmall
+    val segmentShape: Shape = LfLegacySmallCorner
+    val segmentMinHeight: Dp = LfLayout.minTouchTarget
+    /** Below this per option the control stacks its options ([LfLayout.segmentMinWidth]). */
+    val segmentMinWidth: Dp = LfLayout.segmentMinWidth
     val segmentPaddingHorizontal: Dp = LfScale.Space4
     val segmentPaddingVertical: Dp = LfScale.Space8
     val selectedContainer: Color @Composable get() = LfTheme.colors.action.primary
@@ -120,7 +127,7 @@ internal object LfSegmentedTokens {
 }
 
 internal object LfDialogTokens {
-    val corner: Dp @Composable get() = LfTheme.spacing.cornerLarge
+    val shape: Shape @Composable get() = LfTheme.shapes.dialog
     val container: Color @Composable get() = LfTheme.colors.surface.overlay
     val titleStyle: TextStyle @Composable get() = LfTheme.type.heading
     val title: Color @Composable get() = LfTheme.colors.text.primary
@@ -132,6 +139,7 @@ internal object LfDialogTokens {
 
 internal object LfIconButtonTokens {
     val tint: Color @Composable get() = LfTheme.colors.text.secondary
+    val touchTarget: Dp = LfLayout.minTouchTarget
     /** The ring a pressed icon draws: the touch target less 4 dp on each side. */
     val stateLayerInset: Dp = LfScale.Space4
     val glyph: Dp = LfScale.Space16
@@ -160,7 +168,8 @@ internal object LfNavTokens {
     val labelStyle: TextStyle @Composable get() = LfTheme.type.label
     val selected: Color @Composable get() = LfTheme.colors.action.primary
     val unselected: Color @Composable get() = LfTheme.colors.text.muted
-    val fabSize: Dp @Composable get() = LfTheme.spacing.minTouchTarget
+    val fabSize: Dp = LfLayout.minTouchTarget
+    val fabShape: Shape @Composable get() = LfTheme.shapes.full
     val fabContainer: Color @Composable get() = LfTheme.colors.action.primary
     val fabContent: Color @Composable get() = LfTheme.colors.action.onPrimary
 }
@@ -190,7 +199,7 @@ internal object LfDividerTokens {
 }
 
 internal object LfCategoryDotTokens {
-    val size: Dp = LfScale.Space24
+    val size: Dp = LfLayout.categoryDotSize
 }
 
 internal object LfAmountFieldTokens {

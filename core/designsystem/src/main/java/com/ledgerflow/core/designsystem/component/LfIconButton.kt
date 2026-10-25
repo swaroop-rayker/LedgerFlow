@@ -19,7 +19,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import kotlin.math.roundToInt
 
 /**
@@ -79,13 +78,12 @@ public fun LfIconButton(
     modifier: Modifier = Modifier,
     tint: Color = LfIconButtonTokens.tint,
 ) {
-    val spacing = LfTheme.spacing
     // Material 3's icon-button state layer: 40dp inside the 48dp target.
-    val stateLayer = spacing.minTouchTarget - LfIconButtonTokens.stateLayerInset * 2
+    val stateLayer = LfIconButtonTokens.touchTarget - LfIconButtonTokens.stateLayerInset * 2
     val glyph = LfIconButtonTokens.glyph
     Spacer(
         modifier = modifier
-            .size(spacing.minTouchTarget)
+            .size(LfIconButtonTokens.touchTarget)
             .clickable(
                 onClick = onClick,
                 role = Role.Button,

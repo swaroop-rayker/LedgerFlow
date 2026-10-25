@@ -17,7 +17,6 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.GLYPH_MEASURER_CACHE_SIZE
 import com.ledgerflow.core.designsystem.theme.primitive.LfScale
 import com.ledgerflow.core.designsystem.theme.primitive.LfTypeScale
@@ -161,12 +160,13 @@ public val LfDefaultTypography: LfTypography = LfTypography(
 )
 
 /**
- * Spacing scale. Nothing in the app may hardcode a dp value (CLAUDE.md §5).
+ * The old spacing scale, radii and layout constants. **Everything here is
+ * deprecated** and removed in step G.
  *
- * The six steps are deprecated in favour of the roles in `LfTheme.space`
- * (step B1): a step says how big, a role says what for, and only the role can
- * be retuned by a visual direction without moving the wrong gaps. The radii and
- * the layout constants below leave this class in step B3.
+ * The six steps gave way to the roles in `LfTheme.space` (step B1): a step says
+ * how big, a role says what for, and only the role can be retuned by a visual
+ * direction without moving the wrong gaps. In step B3 the radii moved to
+ * `LfTheme.shapes` and the layout constants to [LfLayout], with the same values.
  */
 @Immutable
 public data class LfSpacing(
@@ -180,55 +180,21 @@ public data class LfSpacing(
     val lg: Dp = LfScale.Space24,
     @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, listEnd, ...")
     val xl: Dp = LfScale.Space32,
-    @Deprecated("Use a role from LfTheme.space, or LfSpacing.minTouchTarget for a touch target")
+    @Deprecated("Use a role from LfTheme.space, or LfLayout.minTouchTarget for a touch target")
     val xxl: Dp = LfScale.Space48,
-    /** Minimum touch target (§9.6). Not negotiable. */
-    val minTouchTarget: Dp = 48.dp,
-
-    /**
-     * Minimum width for a row action.
-     *
-     * A short label like "Delete" or "Hide" otherwise renders as a tight pill,
-     * and looks especially unintended when it is the one control that wrapped
-     * onto its own line beneath two wider ones. This is a *minimum*: a button
-     * whose label needs more keeps its natural width, so widening can never
-     * clip anything (BUG9).
-     *
-     * **112, not 128.** A card's inner width on a 360dp phone is ~261dp, so two
-     * actions plus their 8dp gap have ~126dp each. 128 missed that by two
-     * device pixels and silently stacked all three actions one per line, which
-     * made the card twice as tall — a minimum width chosen at the boundary is a
-     * layout that flips on a rounding error. This leaves real headroom.
-     */
-    val actionMinWidth: Dp = 112.dp,
-
-    /**
-     * Width one segment of `LfSegmentedControl` needs at font scale 1.0.
-     *
-     * Below this the control stacks its options vertically instead of dividing
-     * the row. A segment cannot grow to fit its label the way a button can --
-     * the cells split a fixed width -- so without the switch the label has no
-     * option but to break mid-word, which is BUG9.
-     *
-     * Measured, not guessed: on a 360dp phone a screen-padded control gives
-     * ~101dp per option across three, and "Categories" needs ~78dp of that at
-     * font scale 1.15. 96 tripped at 1.15 and stacked a row that fitted
-     * perfectly well; 72 keeps it horizontal there and still stacks at 2.0,
-     * where the same option would need ~144dp.
-     */
-    val segmentMinWidth: Dp = 72.dp,
-
-    /**
-     * Width of one card in a horizontally-scrolling peek row.
-     *
-     * Sized so a second card is always partly visible on a 360dp screen. That
-     * sliver is the entire affordance -- a row of cards that happens to fit
-     * exactly reads as a complete list, and nobody swipes it.
-     */
-    val peekCardWidth: Dp = 172.dp,
-
+    @Deprecated("Moved to LfLayout", ReplaceWith("LfLayout.minTouchTarget"))
+    val minTouchTarget: Dp = LfLayout.minTouchTarget,
+    @Deprecated("Moved to LfLayout", ReplaceWith("LfLayout.actionMinWidth"))
+    val actionMinWidth: Dp = LfLayout.actionMinWidth,
+    @Deprecated("Moved to LfLayout", ReplaceWith("LfLayout.segmentMinWidth"))
+    val segmentMinWidth: Dp = LfLayout.segmentMinWidth,
+    @Deprecated("Moved to LfLayout", ReplaceWith("LfLayout.peekCardWidth"))
+    val peekCardWidth: Dp = LfLayout.peekCardWidth,
+    @Deprecated("Use a shape from LfTheme.shapes: control, row, container, dialog, full")
     val cornerSmall: Dp = LfScale.Radius8,
+    @Deprecated("Use LfTheme.shapes.container or LfTheme.shapes.control")
     val cornerMedium: Dp = LfScale.Radius16,
+    @Deprecated("Use LfTheme.shapes.row or LfTheme.shapes.dialog")
     val cornerLarge: Dp = LfScale.Radius24,
 )
 
@@ -281,6 +247,7 @@ public fun LfTheme(
         LocalLfSpacing provides LfSpacing(),
         LocalLfSpaceRoles provides LfDefaultSpaceRoles,
         LocalLfBorderRoles provides LfDefaultBorderRoles,
+        LocalLfShapeRoles provides LfDefaultShapeRoles,
         LocalLfMotion provides LfMotion(),
         LocalLfGlyphMeasurer provides rememberTextMeasurer(cacheSize = GLYPH_MEASURER_CACHE_SIZE),
     ) {
@@ -301,7 +268,7 @@ public fun LfTheme(
 /**
  * Token accessors: semantic roles only (DESIGN_SYSTEM_PLAN §4.3).
  * `LfTheme.colors.money.outgoing`, `LfTheme.type.body`, `LfTheme.space.screenEdge`,
- * never a hard-coded hex, size or radius. The raw values behind the roles are
+ * `LfTheme.shapes.container`, never a hard-coded hex, size or radius. The raw values behind the roles are
  * `internal` to this module.
  */
 public object LfTheme {
@@ -321,6 +288,10 @@ public object LfTheme {
     public val borders: LfBorderRoles
         @Composable get() = LocalLfBorderRoles.current
 
+    /** Corner shapes by job. Layout constants, which no style changes, are in [LfLayout]. */
+    public val shapes: LfShapeRoles
+        @Composable get() = LocalLfShapeRoles.current
+
     /** Aligned to the current layout direction's leading edge (BUG61). */
     @Deprecated(
         "Use LfTheme.type: displayL -> display, titleL -> title, titleM -> heading, bodyL -> body, " +
@@ -330,7 +301,8 @@ public object LfTheme {
     public val typography: LfTypography
         @Composable get() = LocalLfTypography.current.alignedTo(LocalLayoutDirection.current)
 
-    /** The spacing scale, radii and layout constants; its scale steps are deprecated for [space]. */
+    /** The old spacing scale, radii and layout constants, all deprecated: see [LfSpacing]. */
+    @Deprecated("Use LfTheme.space for gaps, LfTheme.shapes for corners and LfLayout for layout constants")
     public val spacing: LfSpacing
         @Composable get() = LocalLfSpacing.current
 

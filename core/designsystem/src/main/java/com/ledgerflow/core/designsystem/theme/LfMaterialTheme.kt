@@ -1,6 +1,5 @@
 package com.ledgerflow.core.designsystem.theme
 
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.lightColorScheme
@@ -97,18 +96,22 @@ internal fun lfColorScheme(colors: LfColors): ColorScheme {
     )
 }
 
-/** Material's shapes from the radius tokens, so pickers and sheets stop using Material's 28 dp. */
-internal fun lfShapes(spacing: LfSpacing): Shapes = Shapes(
-    extraSmall = RoundedCornerShape(spacing.cornerSmall),
-    small = RoundedCornerShape(spacing.cornerSmall),
-    medium = RoundedCornerShape(spacing.cornerMedium),
-    large = RoundedCornerShape(spacing.cornerLarge),
-    extraLarge = RoundedCornerShape(spacing.cornerLarge),
+/**
+ * Material's shapes from the shape roles, so pickers and sheets stop using
+ * Material's 28 dp. Material's two small slots (menus, text fields) take
+ * today's 8 dp, which has no role: see [LfLegacySmallCorner].
+ */
+internal fun lfShapes(shapes: LfShapeRoles): Shapes = Shapes(
+    extraSmall = LfLegacySmallCorner,
+    small = LfLegacySmallCorner,
+    medium = shapes.control,
+    large = shapes.dialog,
+    extraLarge = shapes.dialog,
 )
 
 internal val LfDarkColorScheme: ColorScheme = lfColorScheme(LfDarkColors)
 internal val LfLightColorScheme: ColorScheme = lfColorScheme(LfLightColors)
-internal val LfMaterialShapes: Shapes = lfShapes(LfSpacing())
+internal val LfMaterialShapes: Shapes = lfShapes(LfDefaultShapeRoles)
 
 /** `surfaceContainerHighest` sits halfway from the overlay surface to the hairline. */
 private const val HIGHEST_CONTAINER_MIX = 0.5f

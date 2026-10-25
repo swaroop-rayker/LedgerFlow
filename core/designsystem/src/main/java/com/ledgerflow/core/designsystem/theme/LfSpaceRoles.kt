@@ -20,6 +20,8 @@ public class LfSpaceRoles internal constructor(
     public val screenEdge: Dp,
     /** Between the sections of a screen (Home's cards, Settings' groups). */
     public val sectionGap: Dp,
+    /** Between the blocks of a one-task step (the phrase entry's instructions, words and actions). */
+    public val blockGap: Dp,
     /** Between items inside a section. */
     public val itemGap: Dp,
     /** Between pieces on one line: an icon and its label, a chip and the next. */
@@ -39,6 +41,7 @@ public class LfSpaceRoles internal constructor(
 internal val LfDefaultSpaceRoles: LfSpaceRoles = LfSpaceRoles(
     screenEdge = LfScale.Space24,
     sectionGap = LfScale.Space16,
+    blockGap = LfScale.Space24,
     itemGap = LfScale.Space8,
     inlineGap = LfScale.Space4,
     cardInset = LfScale.Space16,

@@ -2,8 +2,10 @@ package com.ledgerflow.core.designsystem.chart
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import com.ledgerflow.core.designsystem.theme.LfLegacySmallCorner
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.theme.primitive.LfScale
 
@@ -13,7 +15,7 @@ import com.ledgerflow.core.designsystem.theme.primitive.LfScale
  *
  * Same rules as the component tokens beside `LfComponentTokens`: colours and
  * text from the semantic roles, a chart's own spacing from the primitive scale,
- * radii from `LfSpacing` until step B3. `internal`, so a screen picks a chart,
+ * shapes from `LfTheme.shapes` (step B3). `internal`, so a screen picks a chart,
  * never its colours.
  *
  * Step B2 moved every chart onto these with today's values; every golden is
@@ -26,7 +28,8 @@ internal object LfChartTokens {
     val wideGap: Dp = LfScale.Space8
     /** Keeps an ellipsised label from running into the amount after it. */
     val figureInset: Dp = LfScale.Space16
-    val cellCorner: Dp @Composable get() = LfTheme.spacing.cornerSmall
+    /** Heatmap cells and leaderboard bars; Night Vault's tile radius in F6. */
+    val cellShape: Shape = LfLegacySmallCorner
 
     val labelStyle: TextStyle @Composable get() = LfTheme.type.label
     val textStyle: TextStyle @Composable get() = LfTheme.type.bodySmall

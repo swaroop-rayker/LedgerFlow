@@ -300,8 +300,10 @@ radius-16, inter-600      screen.edge, shape.container  row.border, chart.donutS
 | Data | `chart.grid`, `chart.axis`, `chart.categorical(id, stored)` | the category colour generator moves behind a role, so a direction can retune it, but its per-theme contrast guarantee stays |
 
 **Space** (`LfTheme.space`): `screenEdge` (one value for every screen),
-`sectionGap`, `itemGap`, `inlineGap`, `cardInset`, `rowInset`, `listEnd`,
-`actionBarInset`. The same scale as today's `xs…xxl` underneath.
+`sectionGap`, `blockGap` (between the blocks of a one-task step; added in B3
+for the phrase entry's 24 dp), `itemGap`, `inlineGap`, `cardInset`,
+`rowInset`, `listEnd`, `actionBarInset`. The same scale as today's `xs…xxl`
+underneath.
 
 **Shape** (`LfTheme.shapes`): `container` (cards, sections, sheet top corners),
 `row` (list rows), `control` (buttons, chips, segmented control, fields),
@@ -320,7 +322,7 @@ Night Vault's values, from the reference samples (2026-10-25; they replace the
 | `dialog` | 24 dp | dialogs, sheets |
 | `full` | 50 % | pills, chips, segmented tabs, the FAB, avatars, progress bars, PIN dots |
 
-**Size** (`LfLayout`, below): button 56 dp (large) and 40 dp (small); field
+**Size** (each component's tokens, since a direction changes them; F3 sets these): button 56 dp (large) and 40 dp (small); field
 56 dp; icon tile 40 dp; avatar 64 dp with a 2 dp ring; row minimum 56 dp;
 bottom bar 64 dp with a 56 dp + raised half above it. The 48 dp touch target
 stays the floor for anything smaller.
@@ -346,7 +348,9 @@ the same shapes.
 
 **Layout constants** (`LfLayout`, not a token, not changed by a style):
 `minTouchTarget`, `actionMinWidth`, `segmentMinWidth`, `peekCardWidth`,
-`dialogListMax` (once settled), and the component sizes above.
+`categoryDotSize` (the swatch `:core:ui`'s entry row draws into), and
+`dialogListMax` (once settled). A plain object, not a theme value: no direction
+changes a threshold that decides when a control stacks.
 
 ### 4.3 Where the tokens live and how screens use them
 
@@ -764,7 +768,7 @@ one gate at a time to stay inside the dev box's RAM and heat limits.
 | **A2** ✓ | Material `ColorScheme` (all 48 roles) and `Shapes` (all 5) mapped from today's palette and radii (`LfMaterialTheme.kt`); `LfMaterialThemeTest` completeness tests; BUG63 (off switch) fixed with `Bug63_OffSwitchIsVisibleTest`; `material-date-picker` and `material-selection-controls` goldens in both themes. Goldens changed only at the switches (Settings, Payment apps) | Yes, small (switches; pickers and sheet off-golden) | the phone wasn't connected, so the pickers were checked through the new goldens; a device pass of both pickers and the Add sheet is still owed | `fix: BUG63 -- Material widgets inherit LedgerFlow's colours and corners; the off switch is visible again` |
 | **B1** ✓ | Primitive layer (`theme/primitive/LfPrimitives.kt`, internal) and semantic roles (`LfColors` grouped as `surface`/`text`/`border`/`action`/`money`/`status`/`chart`; `LfTheme.type`, `LfTheme.space`, `LfTheme.borders`) with **today's exact values**; the 12 flat colour names, the `xs`…`xxl` steps and `LfTheme.typography` are deprecated aliases; the A2 Material mapping reads the roles. `LfTokenLayersTest` pins every value | **No: every golden byte-identical after re-recording** | stability report | `refactor: design tokens in three layers, same values` |
 | **B2** ✓ | Component tokens, all `internal`: `component/LfComponentTokens.kt` and `chart/LfChartTokens.kt` in `:core:designsystem` (colours and text from the roles, a component's own spacing from `LfScale`), and `LfUiTokens.kt` in `:core:ui` (public roles only). Every component and chart in `:core:designsystem`, and the entry row, pickers, line-item editor and phrase screens in `:core:ui`, read their tokens; none reads a deprecated alias except two 24 dp sizes in `:core:ui` (entry-row swatch, phrase-entry gap) that wait for B3's `LfLayout`. `chart.track` now points at `surface.overlay`, the colour four of the five charts actually draw their tracks in; nothing else read it | **No: every golden byte-identical after re-recording** | stability report: no new unstable parameter, every restartable composable still skippable; `LfEntryRowLayoutTest`'s `inkDifferences` check passes | `refactor: components read component tokens` |
-| **B3** | Radii move out of `LfSpacing` into the shape roles (`container`, `row`, `control`, `dialog`, `full`, §4.2); `LfLayout` holds the layout constants and the component sizes; both **at today's values** (the samples' values arrive in F3), and `:core:ui`'s two 24 dp sizes move onto them | No: pixel-identical | | `refactor: shapes and layout constants leave LfSpacing` |
+| **B3** ✓ | `LfTheme.shapes` (`LfShapeRoles`: `container` 16, `row` 24, `control` 16, `dialog` 24, `full` 50 %) and `LfLayout` (`minTouchTarget`, `actionMinWidth`, `segmentMinWidth`, `peekCardWidth`, `categoryDotSize`), **at today's values**; Material's `Shapes` read the roles. Today's 8 dp corner (fields, chips, segments, chart cells, Material's two small slots) has no role in Night Vault, so it is an internal `LfLegacySmallCorner` until F3. Every component and chart in `:core:designsystem` and `:core:ui` reads shapes and layout from these; `:core:ui`'s two 24 dp sizes moved to `LfLayout.categoryDotSize` and a new space role, `blockGap`. All of `LfSpacing` and `LfTheme.spacing` are now deprecated; feature screens keep the aliases until D3. `LfTokenLayersTest` pins the roles to the old values | **No: every golden byte-identical after re-recording** | stability report: no composable signature changed, every restartable composable still skippable | `refactor: shapes and layout constants leave LfSpacing` | `refactor: shapes and layout constants leave LfSpacing` |
 | **C1** | `designTokenCheck` + allowlist of today's violations, in `preMergeCheck` | No | run it against a deliberately bad file | `build: designTokenCheck rejects raw colours, sizes, shapes and widgets outside the theme` |
 | **C2** | `LfDatePickerDialog`, `LfDateRangePickerDialog`, `LfBottomSheet`, `LfSnackbarHost` wrappers; the 4 pickers and the Add sheet move to them; allowlist shrinks | No (A2 already themed them) | goldens of each wrapper, both themes | `refactor: pickers and sheets go through themed wrappers` |
 | **D1** | Templates (`LfTabPage`, `LfDetailPage`, `LfFormPage`, `LfFlowStep`, `LfSettingsPage`, `LfSheet`, `LfActionBar`) with today's look, including the four slots §5.6 says v2 needs (header search, filter band, selection mode, offline state), the samples' top bar (Back, centred title, overflow) on pushed pages, and a grouped-panel container for rows; **one screen edge margin and one list end** | Yes (margins) | device: insets with `uiautomator dump` + nav bar `mFrame`, before/after in the commit (`CLAUDE.md` §5) | `feat(ui): screen templates; one edge margin everywhere` |

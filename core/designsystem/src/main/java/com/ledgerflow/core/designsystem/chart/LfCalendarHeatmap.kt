@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -117,7 +116,7 @@ private fun androidx.compose.foundation.layout.RowScope.Cell(
         modifier = Modifier
             .weight(1f)
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(LfChartTokens.cellCorner))
+            .clip(LfChartTokens.cellShape)
             .background(fill)
             .semantics {
                 contentDescription = if (day.blank) {

@@ -1,7 +1,6 @@
 package com.ledgerflow.core.designsystem.theme
 
 import androidx.compose.foundation.shape.CornerBasedShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -97,13 +96,13 @@ class LfMaterialThemeTest {
         assertThat(getters.map { it.name.removePrefix("get") })
             .containsExactly("ExtraSmall", "Small", "Medium", "Large", "ExtraLarge")
 
-        val spacing = LfSpacing()
+        val roles = LfDefaultShapeRoles
         val expected = mapOf(
-            "ExtraSmall" to RoundedCornerShape(spacing.cornerSmall),
-            "Small" to RoundedCornerShape(spacing.cornerSmall),
-            "Medium" to RoundedCornerShape(spacing.cornerMedium),
-            "Large" to RoundedCornerShape(spacing.cornerLarge),
-            "ExtraLarge" to RoundedCornerShape(spacing.cornerLarge),
+            "ExtraSmall" to LfLegacySmallCorner,
+            "Small" to LfLegacySmallCorner,
+            "Medium" to roles.control,
+            "Large" to roles.dialog,
+            "ExtraLarge" to roles.dialog,
         )
         getters.forEach { getter ->
             assertThat(getter.invoke(LfMaterialShapes)).isEqualTo(expected.getValue(getter.name.removePrefix("get")))

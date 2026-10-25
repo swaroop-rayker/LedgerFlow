@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -101,7 +100,7 @@ public fun LfFab(
     Box(
         modifier = modifier
             .size(LfNavTokens.fabSize)
-            .background(LfNavTokens.fabContainer, CircleShape)
+            .background(LfNavTokens.fabContainer, LfNavTokens.fabShape)
             .selectable(selected = false, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

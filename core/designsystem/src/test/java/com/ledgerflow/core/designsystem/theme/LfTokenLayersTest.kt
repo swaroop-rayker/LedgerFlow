@@ -1,5 +1,7 @@
 package com.ledgerflow.core.designsystem.theme
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -119,6 +121,9 @@ class LfTokenLayersTest {
             .containsExactly(4.dp, 8.dp, 16.dp, 24.dp, 32.dp, 48.dp)
             .inOrder()
         assertThat(listOf(s.cornerSmall, s.cornerMedium, s.cornerLarge)).containsExactly(8.dp, 16.dp, 24.dp).inOrder()
+        assertThat(listOf(s.minTouchTarget, s.actionMinWidth, s.segmentMinWidth, s.peekCardWidth))
+            .containsExactly(48.dp, 112.dp, 72.dp, 172.dp)
+            .inOrder()
         val m = LfMotion()
         assertThat(listOf(m.micro, m.standard, m.emphasized, m.fadeOut)).containsExactly(120, 240, 400, 60).inOrder()
         assertThat(m.axisSlide).isEqualTo(30.dp)
@@ -135,6 +140,30 @@ class LfTokenLayersTest {
         assertThat(r.cardInset).isEqualTo(s.md) // LfCard's padding
         assertThat(r.rowInset).isEqualTo(s.md) // LfEntryRow's start inset
         assertThat(r.rowInsetVertical).isEqualTo(s.sm)
+        assertThat(r.blockGap).isEqualTo(s.lg) // LfPhraseEntry's gap between blocks
         assertThat(LfDefaultBorderRoles.hairline).isEqualTo(1.dp)
+    }
+
+    /** Step B3: each shape role is the radius its users had, so nothing on screen moved. */
+    @Test
+    fun shapeRolesKeepTodaysRadii() {
+        val r = LfDefaultShapeRoles
+        val s = LfSpacing()
+        assertThat(r.container).isEqualTo(RoundedCornerShape(s.cornerMedium)) // LfCard
+        assertThat(r.row).isEqualTo(RoundedCornerShape(s.cornerLarge)) // LfEntryRow
+        assertThat(r.control).isEqualTo(RoundedCornerShape(s.cornerMedium)) // LfButton
+        assertThat(r.dialog).isEqualTo(RoundedCornerShape(s.cornerLarge)) // LfDialog
+        assertThat(r.full).isEqualTo(CircleShape) // LfFab
+        assertThat(LfLegacySmallCorner).isEqualTo(RoundedCornerShape(s.cornerSmall)) // fields, chips
+    }
+
+    @Test
+    fun layoutConstantsMovedUnchanged() {
+        val s = LfSpacing()
+        assertThat(LfLayout.minTouchTarget).isEqualTo(s.minTouchTarget)
+        assertThat(LfLayout.actionMinWidth).isEqualTo(s.actionMinWidth)
+        assertThat(LfLayout.segmentMinWidth).isEqualTo(s.segmentMinWidth)
+        assertThat(LfLayout.peekCardWidth).isEqualTo(s.peekCardWidth)
+        assertThat(LfLayout.categoryDotSize).isEqualTo(s.lg)
     }
 }

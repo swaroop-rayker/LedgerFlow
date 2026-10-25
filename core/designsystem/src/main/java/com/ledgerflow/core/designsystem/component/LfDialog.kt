@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,7 +40,7 @@ public fun LfDialog(
         properties = DialogProperties(
             dismissOnClickOutside = emphasis == LfDialogEmphasis.Normal,
         ),
-        shape = RoundedCornerShape(tokens.corner),
+        shape = tokens.shape,
         containerColor = tokens.container,
         title = {
             Text(
