@@ -20,6 +20,7 @@ import com.ledgerflow.core.data.backup.SafBackupFolderResolver
 import com.ledgerflow.core.data.export.DefaultExportRepository
 import com.ledgerflow.core.data.inbox.DefaultPendingRepository
 import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
+import com.ledgerflow.core.data.ingest.DefaultPackageAllowlistRepository
 import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
 import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
@@ -40,6 +41,7 @@ import com.ledgerflow.core.domain.backup.RestoreRepository
 import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
+import com.ledgerflow.core.domain.ingest.PackageAllowlistRepository
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
@@ -230,6 +232,10 @@ public interface IngestModule {
 
     @Binds
     public fun rawIngestRepository(impl: DefaultRawIngestRepository): RawIngestRepository
+
+    /** The allowlist editor's view of the same table (V2-PLAN §3.4). */
+    @Binds
+    public fun packageAllowlistRepository(impl: DefaultPackageAllowlistRepository): PackageAllowlistRepository
 
     /**
      * Receipt images on disk (ADR-0023).

@@ -15,7 +15,8 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 decisions | Owner, 2026-10-24: seven PRs in order Appearance → Currency & region → Notifications (budget-alerts row + overspending) → Allowlist editor → App lock + screenshot block → Hide amounts + Data permissions → About. Lock on the platform `BiometricPrompt` (no `androidx.biometric`); preferences outside the vault under ADR-0030 |
 | V2-3 · Appearance | PR #8, `claude/v2-3-appearance` (§3.2; SPEC §9.3, §9.5; ADR-0030). Not yet merged |
 | V2-3 · Currency & region | PR #9, stacked on #8 (§3.3; SPEC §9.3, §16 Q26 closed; BUG62). Not yet merged |
-| V2-3 · Notifications | Built on `claude/v2-3-notifications`, stacked on Currency & region (§3.4: budget-alerts row, overspending alerts; SPEC §9.3, §5.7). Not yet merged |
+| V2-3 · Notifications | PR #10, stacked on #9 (§3.4: budget-alerts row, overspending alerts; SPEC §9.3, §5.7). Not yet merged |
+| V2-3 · Allowlist editor | Built on `claude/v2-3-allowlist-editor`, stacked on Notifications (§3.4; SPEC §9.3, §5.2, §16 Q4). Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -229,6 +230,11 @@ messaging app "once P5 ships the Settings editor"; P5 did not ship it. The
 editor belongs in this section, and §3.1's consequences (a bank SMS captured
 twice; reading every SMS notification, personal ones included) are its design
 brief, not afterthoughts.
+
+**Built (V2-3, 2026-10-24)** as Settings > Notifications > Payment apps: switch
+built-ins off and on, add from installed apps, remove added ones, and a
+warning naming §3.1's consequences before a messaging, SMS or email app is
+added. SPEC §9.3 has the detail.
 
 ### 3.5 Security & privacy
 **App lock** (§7.6, specified since v1, not yet built): `BiometricPrompt` with

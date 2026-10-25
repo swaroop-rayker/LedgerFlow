@@ -205,6 +205,14 @@ public interface PackageAllowlistDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     public suspend fun insertMissing(rows: List<PackageAllowlistEntity>)
 
+    /**
+     * Removes an app the user added (V2-PLAN §3.4). The repository refuses a
+     * built-in before it gets here: those are switched off, never deleted, or
+     * the next launch's seeder would quietly put them back on.
+     */
+    @Query("DELETE FROM package_allowlist WHERE package_name = :packageName")
+    public suspend fun delete(packageName: String): Int
+
 
     /**
      * Every row, for the backup export (ADR-0017, SPEC.md §5.9).
