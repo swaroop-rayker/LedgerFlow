@@ -310,6 +310,7 @@ The DEK is multi-wrapped by two factors: Android Keystore (KEK-A) and the 24-wor
 - **Never** write a `.lfbk` whose header isn't passed as GCM AAD (`SPEC.md` §5.9). An unauthenticated header lets an attacker steer the restore path.
 - **Never** make the Keystore path the only wrap.
 - **Never** set `setUserAuthenticationRequired(true)` on the DEK-wrapping key — biometric re-enrollment would nuke the user's data.
+- **The app lock (V2-3, SPEC §7.6) is a screen overlay and stays one.** It must never gate the vault opening, the DEK or any Keystore entry, and background work (capture, workers, notification actions, nightly backup) runs exactly as it did, locked or not. `AppLockStateTest` fails the build if `app/.../applock/` names `:core:crypto`, `:core:database`, the vault or the Keystore.
 - **Never** add a third wrap without a superseding ADR. Backups are phrase-derived only, and a device-local convenience factor must never become the weakest link protecting a file that could leave the device.
 - **Never** add a "skip" or "remind me later" to the onboarding word challenge.
 - **Never** wipe the database on a decryption failure. Route to the Recovery screen instead (`SPEC.md` §7.3).

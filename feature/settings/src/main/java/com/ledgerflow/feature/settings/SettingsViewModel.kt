@@ -7,8 +7,6 @@ import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.analytics.BudgetAlertChannel
 import com.ledgerflow.core.domain.appearance.AnimationPreference
 import com.ledgerflow.core.domain.appearance.AppearancePreferences
-import com.ledgerflow.core.domain.appearance.AppearanceStore
-import com.ledgerflow.core.domain.appearance.PhoneMotionSettings
 import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.backup.BackupRepository
@@ -17,7 +15,8 @@ import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.PackageAllowlistRepository
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.domain.ledger.LedgerRepository
-import com.ledgerflow.core.domain.region.RegionStore
+import com.ledgerflow.core.domain.security.LockTimeout
+import com.ledgerflow.core.domain.security.SecurityPreferences
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
 import com.ledgerflow.core.model.DateOrder
 import com.ledgerflow.core.model.LedgerType
@@ -44,23 +43,40 @@ public sealed interface SettingsEvent {
     public data object ReceiptDeleteDismissed : SettingsEvent
 
     /** Appearance (V2-3). Applies at once; the activity follows the store. */
-    public data class ThemePicked(val theme: ThemePreference) : SettingsEvent
+    public sealed interface AppearanceEvent : SettingsEvent
 
-    public data class AnimationsPicked(val animations: AnimationPreference) : SettingsEvent
+    public data class ThemePicked(val theme: ThemePreference) : AppearanceEvent
+
+    public data class AnimationsPicked(val animations: AnimationPreference) : AppearanceEvent
 
     /** Kept now, applied from the next launch (the shell reads it once). */
-    public data class StartScreenPicked(val startScreen: StartScreen) : SettingsEvent
+    public data class StartScreenPicked(val startScreen: StartScreen) : AppearanceEvent
 
     /** Currency & region (V2-3). Applies to every amount as it is next drawn. */
-    public data class GroupingPicked(val grouping: NumberGrouping) : SettingsEvent
+    public sealed interface RegionEvent : SettingsEvent
+
+    public data class GroupingPicked(val grouping: NumberGrouping) : RegionEvent
 
     /** Opens the date-order picker. */
-    public data object DateOrderRequested : SettingsEvent
+    public data object DateOrderRequested : RegionEvent
 
     /** Applies the order and closes the picker. */
-    public data class DateOrderPicked(val order: DateOrder) : SettingsEvent
+    public data class DateOrderPicked(val order: DateOrder) : RegionEvent
 
-    public data object DateOrderDismissed : SettingsEvent
+    public data object DateOrderDismissed : RegionEvent
+
+    /** Security & privacy (V2-3, SPEC §7.6). Turning the lock on needs a phone screen lock. */
+    public sealed interface SecurityEvent : SettingsEvent
+
+    public data class AppLockToggled(val enabled: Boolean) : SecurityEvent
+
+    public data object LockAfterRequested : SecurityEvent
+
+    public data class LockAfterPicked(val timeout: LockTimeout) : SecurityEvent
+
+    public data object LockAfterDismissed : SecurityEvent
+
+    public data class BlockScreenshotsToggled(val enabled: Boolean) : SecurityEvent
 }
 
 /**
@@ -162,6 +178,15 @@ public data class SettingsUiState(
 
     /** Apps whose notifications are read (the enabled allowlist, D-10); null until read. */
     val paymentApps: Int? = null,
+
+    /** Settings > Security & privacy (SPEC §7.6, V2-PLAN §3.5), outside the vault (ADR-0030). */
+    val security: SecurityPreferences = SecurityPreferences(),
+
+    /** The phone has a PIN, pattern or password; without one the app lock cannot be turned on. */
+    val hasScreenLock: Boolean = true,
+
+    /** True while the lock-after picker is up. */
+    val choosingLockAfter: Boolean = false,
 )
 
 @HiltViewModel
@@ -170,12 +195,16 @@ public class SettingsViewModel @Inject constructor(
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
     private val attachments: AttachmentRepository,
     backups: BackupRepository,
-    private val appearanceStore: AppearanceStore,
-    private val phoneMotion: PhoneMotionSettings,
-    private val regionStore: RegionStore,
+    device: DevicePreferences,
     private val budgetAlertChannel: BudgetAlertChannel,
     allowlist: PackageAllowlistRepository,
 ) : ViewModel() {
+
+    private val appearanceStore = device.appearance
+    private val phoneMotion = device.phoneMotion
+    private val regionStore = device.region
+    private val securityStore = device.security
+    private val deviceSecurity = device.deviceSecurity
 
     private val phoneAnimationsOn = MutableStateFlow(true)
 
@@ -184,6 +213,10 @@ public class SettingsViewModel @Inject constructor(
     private val choosingDateOrder = MutableStateFlow(false)
 
     private val budgetAlerts = MutableStateFlow<AlertChannelState?>(null)
+
+    private val hasScreenLock = MutableStateFlow(true)
+
+    private val choosingLockAfter = MutableStateFlow(false)
 
     /**
      * The polled half.
@@ -242,6 +275,9 @@ public class SettingsViewModel @Inject constructor(
         .combine(choosingDateOrder) { state, choosing -> state.copy(choosingDateOrder = choosing) }
         .combine(budgetAlerts) { state, alerts -> state.copy(budgetAlerts = alerts) }
         .combine(allowlist.observe()) { state, apps -> state.copy(paymentApps = apps.count { it.enabled }) }
+        .combine(securityStore.preferences) { state, security -> state.copy(security = security) }
+        .combine(hasScreenLock) { state, secure -> state.copy(hasScreenLock = secure) }
+        .combine(choosingLockAfter) { state, choosing -> state.copy(choosingLockAfter = choosing) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
     init {
@@ -256,6 +292,7 @@ public class SettingsViewModel @Inject constructor(
         // Likewise the notification channel: the user turns it on in Android's
         // settings and comes back.
         budgetAlerts.value = budgetAlertChannel.state()
+        hasScreenLock.value = deviceSecurity.hasScreenLock()
         viewModelScope.launch {
             captureHealth.value = getCaptureHealth()
             receipts.value = attachments.usage()
@@ -283,27 +320,62 @@ public class SettingsViewModel @Inject constructor(
                 receipts.value = attachments.usage()
             }
 
-            // Written and then read back through the store's flow, so the
-            // control shows what was kept rather than what was tapped.
-            is SettingsEvent.ThemePicked -> viewModelScope.launch { appearanceStore.setTheme(event.theme) }
+            is SettingsEvent.AppearanceEvent -> onAppearance(event)
 
-            is SettingsEvent.AnimationsPicked ->
-                viewModelScope.launch { appearanceStore.setAnimations(event.animations) }
+            is SettingsEvent.RegionEvent -> onRegion(event)
 
-            is SettingsEvent.StartScreenPicked ->
-                viewModelScope.launch { appearanceStore.setStartScreen(event.startScreen) }
+            is SettingsEvent.SecurityEvent -> onSecurity(event)
+        }
+    }
 
+    // Each written, then read back through its store's flow, so a control shows
+    // what was kept rather than what was tapped.
+    private fun onAppearance(event: SettingsEvent.AppearanceEvent) {
+        viewModelScope.launch {
+            when (event) {
+                is SettingsEvent.ThemePicked -> appearanceStore.setTheme(event.theme)
+                is SettingsEvent.AnimationsPicked -> appearanceStore.setAnimations(event.animations)
+                is SettingsEvent.StartScreenPicked -> appearanceStore.setStartScreen(event.startScreen)
+            }
+        }
+    }
+
+    private fun onRegion(event: SettingsEvent.RegionEvent) {
+        when (event) {
             is SettingsEvent.GroupingPicked -> viewModelScope.launch { regionStore.setGrouping(event.grouping) }
-
             SettingsEvent.DateOrderRequested -> choosingDateOrder.value = true
-
             SettingsEvent.DateOrderDismissed -> choosingDateOrder.value = false
-
             is SettingsEvent.DateOrderPicked -> {
                 choosingDateOrder.value = false
                 viewModelScope.launch { regionStore.setDateOrder(event.order) }
             }
         }
+    }
+
+    private fun onSecurity(event: SettingsEvent.SecurityEvent) {
+        when (event) {
+            is SettingsEvent.AppLockToggled -> setAppLock(event.enabled)
+            SettingsEvent.LockAfterRequested -> choosingLockAfter.value = true
+            SettingsEvent.LockAfterDismissed -> choosingLockAfter.value = false
+            is SettingsEvent.LockAfterPicked -> {
+                choosingLockAfter.value = false
+                viewModelScope.launch { securityStore.setLockAfter(event.timeout) }
+            }
+            is SettingsEvent.BlockScreenshotsToggled ->
+                viewModelScope.launch { securityStore.setBlockScreenshots(event.enabled) }
+        }
+    }
+
+    /**
+     * Turning the lock on is refused without a phone screen lock: the phone's
+     * prompt is what lifts it, and a lock nothing can lift would strand the
+     * user. The row's sentence says so. Turning it off is never refused.
+     */
+    private fun setAppLock(enabled: Boolean) {
+        val secure = deviceSecurity.hasScreenLock()
+        hasScreenLock.value = secure
+        if (enabled && !secure) return
+        viewModelScope.launch { securityStore.setAppLock(enabled) }
     }
 
     private companion object {

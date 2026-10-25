@@ -60,6 +60,10 @@ class DatastoreKeySurfaceTest {
         // ADR-0030's named exception (owner, 2026-10-24): overspending warnings
         // already sent, as opaque "budgetId@periodStart" entries. No amounts.
         "budget_overspend_announced",
+        // ADR-0030, Settings > Security & privacy: two switches and a timeout name.
+        "security_app_lock",
+        "security_lock_after",
+        "security_block_screenshots",
     )
 
     private val moduleSources: List<File> by lazy {

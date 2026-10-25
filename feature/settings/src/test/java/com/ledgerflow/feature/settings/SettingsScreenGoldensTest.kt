@@ -130,8 +130,9 @@ class SettingsScreenGoldensTest {
 
 /**
  * Taller than the shared phone canvas: V2-3's Appearance and Currency & region
- * sections took the tab past 1800 dp, and a golden of the top of a screen
- * reviews only the top (`ScreenGoldens`). Same 360 dp width.
+ * sections took the tab past 1800 dp, and Security & privacy past 2400, and a
+ * golden of the top of a screen reviews only the top (`ScreenGoldens`). Same
+ * 360 dp width.
  */
-private const val SETTINGS_1X = "w360dp-h2400dp"
-private const val SETTINGS_2X = "w360dp-h4800dp"
+private const val SETTINGS_1X = "w360dp-h2800dp"
+private const val SETTINGS_2X = "w360dp-h5600dp"

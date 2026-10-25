@@ -199,6 +199,8 @@ val EXPECTED_PERMISSIONS: Map<String, Set<String>> = mapOf(
     // exactly as smsFull does from SMS.
     "app/src/main/AndroidManifest.xml" to setOf(
         "android.permission.POST_NOTIFICATIONS",
+        // V2-3's app lock: the platform BiometricPrompt (SPEC §7.6). Normal, install-time.
+        "android.permission.USE_BIOMETRIC",
     ),
     // D-04. The one restricted permission LedgerFlow ever asks for, in the one
     // source set that may hold it.
