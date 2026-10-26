@@ -34,7 +34,7 @@ public class LfSpaceRoles internal constructor(
     public val rowInsetVertical: Dp,
     /** After a list's last item, so it clears the bar below it. */
     public val listEnd: Dp,
-    /** Around a pinned action bar's button, vertically. */
+    /** Above and below a pinned action bar's button. Small: `LfScaffold` has already inset the bar for the navigation bar. */
     public val actionBarInset: Dp,
 )
 
@@ -48,7 +48,7 @@ internal val LfDefaultSpaceRoles: LfSpaceRoles = LfSpaceRoles(
     rowInset = LfScale.Space16,
     rowInsetVertical = LfScale.Space8,
     listEnd = LfScale.Space32,
-    actionBarInset = LfScale.Space8,
+    actionBarInset = LfScale.Space4,
 )
 
 public val LocalLfSpaceRoles: androidx.compose.runtime.ProvidableCompositionLocal<LfSpaceRoles> =

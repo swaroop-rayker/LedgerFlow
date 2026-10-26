@@ -32,13 +32,27 @@ public fun LfScreenTitle(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
 ) {
+    LfTitleBlock(
+        title = title,
+        subtitle = subtitle,
+        modifier = modifier.fillMaxWidth().padding(horizontal = LfScreenTitleTokens.paddingHorizontal),
+    )
+}
+
+/**
+ * [LfScreenTitle] without its own side margin, for a page template that
+ * already applies the screen edge to everything it lays out.
+ */
+@Composable
+internal fun LfTitleBlock(
+    title: String,
+    subtitle: String?,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(
-                horizontal = LfScreenTitleTokens.paddingHorizontal,
-                vertical = LfScreenTitleTokens.paddingVertical,
-            ),
+            .padding(vertical = LfScreenTitleTokens.paddingVertical),
         verticalArrangement = Arrangement.spacedBy(LfScreenTitleTokens.gap),
     ) {
         Text(

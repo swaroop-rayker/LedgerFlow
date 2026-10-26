@@ -119,7 +119,7 @@ public fun NotificationAccessScreen(
             )
 
             Column(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
             ) {
                 PrivacyCard()

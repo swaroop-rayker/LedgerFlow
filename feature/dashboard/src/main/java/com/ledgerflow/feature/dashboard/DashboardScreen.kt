@@ -163,7 +163,7 @@ public fun DashboardScreen(
                 CaptureGapCard(
                     gap = gap,
                     onAcknowledge = onAcknowledgeCaptureGap,
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             }
         }
@@ -175,7 +175,7 @@ public fun DashboardScreen(
                     saveFailed = state.crashSaveFailed,
                     onSave = onSaveCrashReports,
                     onDismiss = onDismissCrashReports,
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             }
         }
@@ -185,7 +185,7 @@ public fun DashboardScreen(
                 BackupReminderCard(
                     reminder = reminder,
                     onBackUpNow = onBackUpNow,
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             }
         }
@@ -195,7 +195,7 @@ public fun DashboardScreen(
                 CaptureHealthBanner(
                     health = state.captureHealth,
                     onAction = onSetUpNotifications,
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             }
         }
@@ -208,9 +208,9 @@ public fun DashboardScreen(
             onOpenLedger = onOpenLedger,
         )
 
-        // The last card clears the bottom bar's shadow rather than touching it.
+        // The last card clears the bottom bar: the list end every list shares.
         item(key = "end", contentType = "end") {
-            Spacer(modifier = Modifier.height(LfTheme.spacing.md))
+            Spacer(modifier = Modifier.height(LfTheme.space.listEnd))
         }
     }
 }
@@ -234,7 +234,7 @@ private fun LazyListScope.homeBody(
             ReviewCard(
                 count = state.pendingCount,
                 onOpenInbox = onOpenInbox,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -254,7 +254,7 @@ private fun LazyListScope.homeBody(
             MonthCard(
                 summary = state.summary,
                 currency = state.baseCurrency,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
         state.summary?.let { summary ->
@@ -273,7 +273,7 @@ private fun LazyListScope.homeBody(
                 title = "Recent spending",
                 rows = rows,
                 onSeeAll = { onOpenLedger(LedgerType.DEBIT) },
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -283,7 +283,7 @@ private fun LazyListScope.homeBody(
                 title = "Recent income",
                 rows = rows,
                 onSeeAll = { onOpenLedger(LedgerType.CREDIT) },
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -302,7 +302,7 @@ private fun LazyListScope.spendingCards(
                 budgets = summary.budgets,
                 currency = state.baseCurrency,
                 onOpenBudgets = onOpenBudgets,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -312,7 +312,7 @@ private fun LazyListScope.spendingCards(
                 summary = summary,
                 currency = state.baseCurrency,
                 onOpenAnalytics = onOpenAnalytics,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -321,7 +321,7 @@ private fun LazyListScope.spendingCards(
             CoverageCard(
                 coverage = summary.captureCoverage,
                 onOpenAnalytics = onOpenAnalytics,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }

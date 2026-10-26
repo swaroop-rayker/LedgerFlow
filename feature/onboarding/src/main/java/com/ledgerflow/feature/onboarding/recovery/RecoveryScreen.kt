@@ -17,6 +17,7 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -58,7 +59,7 @@ public fun RecoveryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = LfTheme.spacing.lg)
+                .padding(horizontal = LfTheme.space.screenEdge)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
         ) {
@@ -94,10 +95,7 @@ public fun RecoveryScreen(
  */
 @Composable
 private fun SubmitBar(state: RecoveryUiState, onEvent: (RecoveryEvent) -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(LfTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-    ) {
+    LfActionBar {
         LfButton(
             text = if (state.isComplete) "Unlock" else "${state.remaining} words to go",
             onClick = { onEvent(RecoveryEvent.Submitted) },

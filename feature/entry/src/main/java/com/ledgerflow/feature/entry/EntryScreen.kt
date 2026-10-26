@@ -6,9 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -37,7 +37,6 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
 import com.ledgerflow.core.designsystem.component.LfAmountTone
@@ -51,13 +50,15 @@ import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTheme
-import com.ledgerflow.core.ui.picker.LfDetailRow
+import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.ui.lineitem.LfLineItemEditor
 import com.ledgerflow.core.ui.lineitem.LineItemEditorEvent
-import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.ui.picker.LfDetailRow
 import java.time.Instant
 import java.time.ZoneId
 
@@ -136,7 +137,7 @@ private fun EntryForm(
             .fillMaxSize()
             .padding(padding)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = LfTheme.spacing.lg),
+            .padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
     ) {
         LedgerSelector(state, onEvent)
@@ -513,12 +514,10 @@ private fun LineItemEditorEvent.toEntryEvent(): EntryEvent = when (this) {
 
 @Composable
 private fun SaveBar(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
-    // `xs` vertically, like every other pinned bar (the review screen's actions
-    // are this bar's closest sibling): LfScaffold has already inset it for the
-    // navigation bar. It was `md` all round, measured on SM-S721B 2026-10-12.
-    Column(
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.md, vertical = LfTheme.spacing.xs),
-    ) {
+    // An LfActionBar, like every pinned bar: LfScaffold has already inset it
+    // for the navigation bar. It was `md` all round, measured on SM-S721B
+    // 2026-10-12.
+    LfActionBar {
         LfActionRow {
             LfButton(
                 text = "Cancel",

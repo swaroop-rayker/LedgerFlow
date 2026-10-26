@@ -3,9 +3,11 @@ package com.ledgerflow.feature.settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,19 +19,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.format.DisplayDates
-import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.theme.LfTheme
-import com.ledgerflow.core.model.DateOrder
+import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.domain.security.LockTimeout
+import com.ledgerflow.core.model.DateOrder
 import java.util.Locale
 
 /**
@@ -93,7 +95,7 @@ public fun SettingsScreen(
     ) {
         LfScreenTitle(title = "Settings")
         Column(
-            modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
         ) {
             SettingsSections.forEach { section ->
@@ -105,6 +107,7 @@ public fun SettingsScreen(
                 }
             }
         }
+        Spacer(Modifier.height(LfTheme.space.listEnd))
     }
 }
 

@@ -29,10 +29,11 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfKeyboards
+import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.bidiIsolated
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
@@ -234,11 +235,9 @@ private fun primaryActionOf(
  * corollary is that a step must never put its *only* way forward in a secondary
  * action.
  *
- * Padding is horizontal `lg` to line up with the content's inset, and `sm`
- * vertically: [LfScaffold] has already inset this bar for the navigation bar,
- * so a uniform `lg` here would stack 24dp on top of an inset that exists for
- * the same purpose, and it comes out of the one part of the screen that
- * scrolls (CLAUDE.md §5).
+ * An [LfActionBar]: the screen edge across, to line up with the content, and a
+ * small inset vertically, since [LfScaffold] has already inset this bar for the
+ * navigation bar (CLAUDE.md §5).
  */
 @Composable
 private fun PrimaryActionBar(
@@ -248,15 +247,15 @@ private fun PrimaryActionBar(
     onChooseFolder: () -> Unit,
 ) {
     val action = primaryActionOf(state, onEvent, onContinue, onChooseFolder) ?: return
-    LfButton(
-        text = action.label,
-        onClick = action.onClick,
-        enabled = action.enabled,
-        loading = action.loading,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg, vertical = LfTheme.spacing.sm),
-    )
+    LfActionBar {
+        LfButton(
+            text = action.label,
+            onClick = action.onClick,
+            enabled = action.enabled,
+            loading = action.loading,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 @Composable

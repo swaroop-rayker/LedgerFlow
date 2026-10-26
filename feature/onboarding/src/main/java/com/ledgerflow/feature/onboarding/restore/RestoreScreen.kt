@@ -33,7 +33,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -41,6 +40,8 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -105,7 +106,7 @@ public fun RestoreScreen(
             // The action takes its own band above the heading (BUG17).
             if (leave != null && !state.isDone) {
                 LfActionRow(
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                     alignment = LfActionAlignment.Start,
                 ) {
                     LfButton(
@@ -129,7 +130,7 @@ public fun RestoreScreen(
 @Composable
 private fun RestoreBody(state: RestoreUiState, resuming: Boolean, onEvent: (RestoreEvent) -> Unit) {
     Column(
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
     ) {
         val result = state.result
@@ -289,7 +290,7 @@ private fun ResultMessage(outcome: RestoreOutcome) {
 
 @Composable
 private fun SubmitBar(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit, onSubmit: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(LfTheme.spacing.sm)) {
+    LfActionBar {
         if (state.isDone) {
             LfButton(
                 text = "Open my ledger",

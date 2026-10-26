@@ -1,7 +1,7 @@
 package com.ledgerflow.feature.export
 
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +30,7 @@ import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.export.ExportFormat
 
@@ -82,7 +83,7 @@ public fun ExportScreen(
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
             ) {
                 FileCard(state, suggestedFileName, onEvent)
@@ -221,16 +222,7 @@ private fun StatusCard(status: ExportStatus, onEvent: (ExportEvent) -> Unit) {
  */
 @Composable
 private fun ExportBar(state: ExportUiState, onEvent: (ExportEvent) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = LfTheme.spacing.lg,
-                end = LfTheme.spacing.lg,
-                top = LfTheme.spacing.xs,
-                bottom = LfTheme.spacing.xs,
-            ),
-    ) {
+    LfActionBar {
         LfButton(
             text = if (state.status == ExportStatus.Working) "Exporting…" else "Export ${state.format.title}",
             modifier = Modifier.fillMaxWidth(),

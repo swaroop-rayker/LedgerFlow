@@ -60,7 +60,7 @@ public fun AllowlistScreen(
     LfScaffold(modifier = modifier) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = LfTheme.spacing.lg),
+            contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         ) {
             item(key = "header", contentType = "header") {
@@ -97,7 +97,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.pickerItems(
 private fun Header(picking: Boolean, onBack: () -> Unit, onAdd: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
         LfActionRow(
-            modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+            modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             alignment = LfActionAlignment.Start,
         ) {
             LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline)
@@ -110,7 +110,7 @@ private fun Header(picking: Boolean, onBack: () -> Unit, onAdd: () -> Unit) {
         } else {
             LfScreenTitle(title = "Payment apps", subtitle = ALLOWLIST_EXPLAINER)
             LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 alignment = LfActionAlignment.Start,
             ) {
                 LfButton(text = "Add an app", onClick = onAdd, style = LfButtonStyle.Inline)
@@ -122,7 +122,7 @@ private fun Header(picking: Boolean, onBack: () -> Unit, onAdd: () -> Unit) {
 /** One app on the list: name, whether it is read, and how it got there. */
 @Composable
 private fun AllowlistRow(app: AllowlistedApp, onEvent: (AllowlistEvent) -> Unit) {
-    LfCard(modifier = Modifier.fillMaxWidth().padding(horizontal = LfTheme.spacing.lg)) {
+    LfCard(modifier = Modifier.fillMaxWidth().padding(horizontal = LfTheme.space.screenEdge)) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
             LfSwitchRow(
                 label = app.label ?: app.packageName,
@@ -151,7 +151,7 @@ private fun InstalledRow(app: InstalledApp, onPick: () -> Unit) {
     LfCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg)
+            .padding(horizontal = LfTheme.space.screenEdge)
             .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
             .clickable(onClick = onPick),
     ) {
@@ -172,7 +172,7 @@ private fun Note(text: String) {
         text = text,
         style = LfTheme.typography.bodyM,
         color = LfTheme.colors.textSecondary,
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
     )
 }
 

@@ -103,7 +103,7 @@ public fun LedgerScreen(
             options = listOf("Expenses", "Income"),
             selectedIndex = state.ledger.ordinal,
             onSelect = { onEvent(LedgerEvent.LedgerSelected(LedgerType.entries[it])) },
-            modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+            modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
         )
 
         state.message?.let { MessageBanner(message = it, onEvent = onEvent) }
@@ -163,7 +163,7 @@ private fun MessageBanner(message: String, onEvent: (LedgerEvent) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg),
+            .padding(horizontal = LfTheme.space.screenEdge),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -252,9 +252,9 @@ private fun EntryList(
         // inset instead of 24dp is 16dp back across the row, which is the
         // difference between the amount sitting beside the timestamp and being
         // pushed onto a line of its own.
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.md),
+        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.xxl),
+        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
     ) {
         unsavedBand(state, onOpenDraft, onReviewCandidate, onEvent)
 

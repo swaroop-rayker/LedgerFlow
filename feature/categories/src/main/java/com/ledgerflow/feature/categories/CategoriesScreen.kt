@@ -28,8 +28,6 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
-import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -39,6 +37,9 @@ import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
@@ -92,7 +93,7 @@ public fun CategoriesScreen(
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
             ) {
                 LfSegmentedControl(
@@ -146,16 +147,7 @@ private fun AddBar(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit)
     // this puts the button under the system bar (BUG5). The button cannot be
     // pushed down further than this; more list height has to come from the
     // header above it instead.
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = LfTheme.spacing.lg,
-                end = LfTheme.spacing.lg,
-                top = LfTheme.spacing.xs,
-                bottom = LfTheme.spacing.xs,
-            ),
-    ) {
+    LfActionBar {
         LfButton(
             text = label,
             modifier = Modifier.fillMaxWidth(),
@@ -209,10 +201,10 @@ private fun CategoryList(state: CategoriesUiState, onEvent: (CategoriesEvent) ->
         return
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.lg),
+        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            bottom = LfTheme.spacing.xxl,
+            bottom = LfTheme.space.listEnd,
         ),
     ) {
         state.tree.forEach { branch ->
@@ -386,10 +378,10 @@ private fun MerchantList(state: CategoriesUiState, onEvent: (CategoriesEvent) ->
         return
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.lg),
+        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            bottom = LfTheme.spacing.xxl,
+            bottom = LfTheme.space.listEnd,
         ),
     ) {
         items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
@@ -440,10 +432,10 @@ private fun PaymentMethodList(state: CategoriesUiState, onEvent: (CategoriesEven
         return
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.lg),
+        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            bottom = LfTheme.spacing.xxl,
+            bottom = LfTheme.space.listEnd,
         ),
     ) {
         items(methods.size, key = { methods[it].id }, contentType = { "method" }) { index ->

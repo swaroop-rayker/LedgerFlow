@@ -112,7 +112,7 @@ public fun OcrCaptureScreen(
             // Back on its own band above the title, as Diagnostics and Restore
             // place it (BUG17), rather than floating under the cards.
             LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 alignment = LfActionAlignment.Start,
             ) {
                 LfButton(text = "Back", style = LfButtonStyle.Inline, onClick = onBack)
@@ -149,7 +149,7 @@ private fun CaptureContent(
     onDocument: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
         Viewfinder(state = state, onEvent = onEvent)

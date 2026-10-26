@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -17,7 +18,9 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,7 +38,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 
 /**
  * The insets every LedgerFlow screen consumes: system bars and display cutout.
@@ -272,6 +274,14 @@ private fun OutlinedRowAction(
  * next line (`FlowRow`), rather than the label wrapping inside a control. There
  * is deliberately no ellipsis either -- a "Delet…" button is no more usable than
  * a broken one.
+ *
+ * **It says so to intrinsic measurement too.** Compose reports a text's minimum
+ * intrinsic width as its longest word, whatever `softWrap` says, so a layout
+ * asking how narrow a control can go heard "Move" for "Move back". At the 24 dp
+ * screen edge (design-system step D1) the Inbox gave that label 124 dp of the
+ * 127 it needs at font scale 2.0. `IntrinsicSize.Max` makes the minimum the
+ * whole label; it changes no layout, since the label already measured at its
+ * natural width.
  */
 @Composable
 private fun ButtonLabel(
@@ -285,6 +295,7 @@ private fun ButtonLabel(
         color = color,
         maxLines = 1,
         softWrap = false,
+        modifier = Modifier.width(IntrinsicSize.Max),
     )
 }
 

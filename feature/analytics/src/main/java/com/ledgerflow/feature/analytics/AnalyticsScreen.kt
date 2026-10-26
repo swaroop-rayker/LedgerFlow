@@ -87,7 +87,7 @@ public fun AnalyticsScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.xl),
+        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
     ) {
         item(key = "title", contentType = "title") {
             LfScreenTitle(title = "Analytics")
@@ -98,7 +98,7 @@ public fun AnalyticsScreen(
 
         item(key = "filters", contentType = "filters") {
             LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 alignment = LfActionAlignment.Start,
             ) {
                 LfButton(
@@ -641,7 +641,7 @@ private fun RangeRow(selected: AnalyticsRange, onEvent: (AnalyticsEvent) -> Unit
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
         contentPadding = PaddingValues(
-            horizontal = LfTheme.spacing.lg,
+            horizontal = LfTheme.space.screenEdge,
         ),
     ) {
         items(AnalyticsRange.entries, key = { it.name }) { range ->
@@ -685,7 +685,7 @@ private fun SectionCard(title: String?, content: @Composable () -> Unit) {
     LfCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg),
+            .padding(horizontal = LfTheme.space.screenEdge),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
             if (title != null) {

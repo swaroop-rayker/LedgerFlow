@@ -80,7 +80,7 @@ public fun DiagnosticsScreen(
             verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
         ) {
             LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 alignment = LfActionAlignment.Start,
             ) {
                 LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline)
@@ -92,9 +92,9 @@ public fun DiagnosticsScreen(
             )
             Column(
                 modifier = Modifier.padding(
-                    start = LfTheme.spacing.lg,
-                    end = LfTheme.spacing.lg,
-                    bottom = LfTheme.spacing.lg,
+                    start = LfTheme.space.screenEdge,
+                    end = LfTheme.space.screenEdge,
+                    bottom = LfTheme.space.listEnd,
                 ),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
             ) {

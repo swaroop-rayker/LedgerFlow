@@ -28,6 +28,7 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.LedgerType
@@ -107,7 +108,7 @@ private fun ReviewForm(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = LfTheme.spacing.md),
+            .padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
         LfScreenTitle(title = "Review", subtitle = state.provenanceLine())
@@ -243,9 +244,8 @@ private fun DetailRows(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit) {
 /**
  * Pinned, so the decision never requires finding the bottom of the form.
  *
- * `xs` padding only: [LfScaffold] has already inset this for the navigation
- * bar, and a uniform `lg` would stack 24dp on an inset that exists for the same
- * purpose — out of the one thing on screen that scrolls.
+ * An [LfActionBar]: the screen edge across and a small inset vertically, since
+ * [LfScaffold] has already inset it for the navigation bar.
  */
 @Composable
 private fun ReviewActions(
@@ -253,22 +253,21 @@ private fun ReviewActions(
     onEvent: (ReviewEvent) -> Unit,
     onBack: () -> Unit,
 ) {
-    LfActionRow(
-        alignment = LfActionAlignment.End,
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.md, vertical = LfTheme.spacing.xs),
-    ) {
-        LfButton(text = "Back", style = LfButtonStyle.Text, onClick = onBack)
-        LfButton(
-            text = "Discard",
-            style = LfButtonStyle.Outlined,
-            onClick = { onEvent(ReviewEvent.Discard) },
-        )
-        LfButton(
-            text = "Approve",
-            enabled = state.canApprove,
-            loading = state.submitting,
-            onClick = { onEvent(ReviewEvent.Approve) },
-        )
+    LfActionBar {
+        LfActionRow(alignment = LfActionAlignment.End) {
+            LfButton(text = "Back", style = LfButtonStyle.Text, onClick = onBack)
+            LfButton(
+                text = "Discard",
+                style = LfButtonStyle.Outlined,
+                onClick = { onEvent(ReviewEvent.Discard) },
+            )
+            LfButton(
+                text = "Approve",
+                enabled = state.canApprove,
+                loading = state.submitting,
+                onClick = { onEvent(ReviewEvent.Approve) },
+            )
+        }
     }
 }
 

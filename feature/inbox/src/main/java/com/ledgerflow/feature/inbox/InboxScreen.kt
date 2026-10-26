@@ -29,12 +29,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
@@ -43,9 +45,9 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
-import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -128,7 +130,6 @@ public fun InboxScreen(
             LfScreenTitle(
                 title = "Inbox",
                 subtitle = state.subtitle(),
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
             )
 
             FilterBand(state, onEvent)
@@ -139,7 +140,7 @@ public fun InboxScreen(
                 LfEmptyState(
                     title = state.emptyTitle(),
                     body = state.emptyBody(),
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             } else {
                 CandidateList(state, onEvent, onReview)
@@ -163,9 +164,9 @@ private fun CandidateList(
     onReview: (String) -> Unit,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.md),
+        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.md),
+        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
     ) {
         items(
             items = state.rows,
@@ -208,7 +209,7 @@ private fun CandidateList(
 private fun FilterBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
     LfActionRow(
         alignment = LfActionAlignment.Start,
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
     ) {
         state.visibleFilters.forEach { filter ->
             val count = state.counts[filter] ?: 0
@@ -245,7 +246,7 @@ private fun FilterBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
 private fun EraseBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
     LfActionRow(
         alignment = LfActionAlignment.Start,
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
     ) {
         LfButton(
             text = "Erase all",
@@ -485,35 +486,63 @@ private fun RowBody(
         },
     )
 
-    Row(
+    DetailBesideActions(
+        detail = {
+            Text(
+                // The stamp leads, and that ordering is the whole decision: this
+                // line is short of room and shares the row with the actions, so
+                // something gets ellipsised on a long one. Putting when-it-happened
+                // first means the account number is what goes, which is the least
+                // useful of the three and the one still visible on the review
+                // screen.
+                text = row.detailLine(),
+                style = LfTheme.typography.label,
+                color = LfTheme.colors.textTertiary,
+                // Two lines, not one: at font scale 2.0 one line cut the stamp to
+                // "19 Aug, 9:..." -- the hour went before the account number did.
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(end = LfTheme.spacing.sm),
+            )
+        },
+        actions = { RowActions(row, onEvent, onReview) },
+    )
+}
+
+/**
+ * The detail line beside the row's actions, sharing the line half and half --
+ * unless the actions' widest single control needs more than half, when the
+ * actions get that width and the detail line the rest.
+ *
+ * Half and half, and not left to a `Row`, for the reason the first device
+ * screenshot showed: `LfActionRow` is a FlowRow that fills its width, so beside
+ * an unweighted Text it claims the line and the provenance silently vanishes.
+ * But a FlowRow can wrap several controls inside its half and never one: with
+ * the 24 dp screen edge (design-system step D1), "Move back" at font scale 2.0
+ * needed 127 dp of a 124 dp half and was clipped (BUG9). The detail line can
+ * give way, since it already takes two lines and an ellipsis; a control's label
+ * cannot. Wherever the actions fit their half, which is every row at font
+ * scale 1.0, this is the `Row` it replaced, the leftover pixel included.
+ */
+@Composable
+private fun DetailBesideActions(detail: @Composable () -> Unit, actions: @Composable () -> Unit) {
+    Layout(
+        contents = listOf(detail, actions),
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Both weighted, and that is not arbitrary: `LfActionRow` is a FlowRow
-        // that calls `fillMaxWidth()` on itself, so an unweighted one beside a
-        // Text claims the whole line and squeezes the text to nothing -- which
-        // is exactly what the first device screenshot showed, provenance
-        // silently gone. Weighting both makes them share the line, and the
-        // FlowRow still wraps its controls whole inside its half at font scale
-        // 2.0 (BUG9).
-        Text(
-            // The stamp leads, and that ordering is the whole decision: this
-            // line is short of room and shares the row with the actions, so
-            // something gets ellipsised on a long one. Putting when-it-happened
-            // first means the account number is what goes, which is the least
-            // useful of the three and the one still visible on the review
-            // screen.
-            text = row.detailLine(),
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
-            // Two lines, not one: at font scale 2.0 one line cut the stamp to
-            // "19 Aug, 9:..." -- the hour went before the account number did.
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(end = LfTheme.spacing.sm),
-        )
-        RowActions(row, onEvent, onReview, Modifier.weight(1f))
+    ) { (detailMeasurables, actionMeasurables), constraints ->
+        val width = constraints.maxWidth
+        val actionsMeasurable = actionMeasurables.first()
+        // A Row of two equal weights gives the leftover pixel to the first.
+        val actionsWidth = maxOf(width / 2, actionsMeasurable.minIntrinsicWidth(constraints.maxHeight))
+            .coerceAtMost(width)
+        val detailWidth = width - actionsWidth
+        val actionsPlaceable = actionsMeasurable.measure(Constraints.fixedWidth(actionsWidth))
+        val detailPlaceable = detailMeasurables.first().measure(Constraints.fixedWidth(detailWidth))
+        val height = maxOf(detailPlaceable.height, actionsPlaceable.height)
+        layout(width, height) {
+            detailPlaceable.placeRelative(0, (height - detailPlaceable.height) / 2)
+            actionsPlaceable.placeRelative(detailWidth, (height - actionsPlaceable.height) / 2)
+        }
     }
 }
 

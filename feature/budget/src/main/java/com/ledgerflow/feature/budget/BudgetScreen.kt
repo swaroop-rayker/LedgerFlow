@@ -50,7 +50,7 @@ public fun BudgetScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.xl),
+        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
     ) {
         item(key = "title", contentType = "title") {
             LfScreenTitle(title = "Budgets")
@@ -58,7 +58,7 @@ public fun BudgetScreen(
 
         item(key = "add", contentType = "add") {
             LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 alignment = LfActionAlignment.Start,
             ) {
                 LfButton(
@@ -109,7 +109,7 @@ private fun BudgetCard(
     LfCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg),
+            .padding(horizontal = LfTheme.space.screenEdge),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
             LfBudgetBar(

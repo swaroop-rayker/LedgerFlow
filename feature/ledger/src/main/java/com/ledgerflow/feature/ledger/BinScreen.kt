@@ -42,6 +42,7 @@ import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.DeletedEntry
@@ -130,9 +131,9 @@ private fun BinList(state: BinUiState, onEvent: (BinEvent) -> Unit) {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.md),
+        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.md),
+        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
     ) {
         items(
             count = state.entries.size,
@@ -299,16 +300,7 @@ private fun BinSwatch(entry: DeletedEntry) {
  */
 @Composable
 private fun BinActions(state: BinUiState, onEvent: (BinEvent) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = LfTheme.spacing.md,
-                end = LfTheme.spacing.md,
-                top = LfTheme.spacing.xs,
-                bottom = LfTheme.spacing.xs,
-            ),
-    ) {
+    LfActionBar {
         LfActionRow(alignment = LfActionAlignment.End) {
             LfButton(
                 text = if (state.selectionCount == state.entries.size) "None" else "All",
@@ -379,7 +371,7 @@ private fun BinMessage(message: String, onEvent: (BinEvent) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.md),
+            .padding(horizontal = LfTheme.space.screenEdge),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {

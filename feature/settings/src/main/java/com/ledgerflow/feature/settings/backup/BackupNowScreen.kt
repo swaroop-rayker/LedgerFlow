@@ -18,7 +18,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -26,6 +25,8 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -70,7 +71,7 @@ public fun BackupNowScreen(
         ) {
             LfScreenTitle(title = "Back up now")
             Column(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
             ) {
                 Explanation(state.nightlyBackupsEnabled)
@@ -311,9 +312,7 @@ private fun ResultMessage(outcome: BackupOutcome) {
 
 @Composable
 private fun SubmitBar(state: BackupNowUiState, onEvent: (BackupNowEvent) -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(LfTheme.spacing.sm),
-    ) {
+    LfActionBar {
         LfButton(
             text = if (state.entry.isComplete) "Back up" else "${state.entry.remaining} words to go",
             onClick = { onEvent(BackupNowEvent.Submitted) },
