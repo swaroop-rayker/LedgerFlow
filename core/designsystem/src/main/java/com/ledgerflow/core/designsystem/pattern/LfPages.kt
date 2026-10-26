@@ -207,19 +207,20 @@ public fun LfFormPage(
 
 /**
  * One step of a flow that does one thing at a time: onboarding, Recovery,
- * Restore, the lock screen (V2: PIN setup, sign-in). A large heading and a line
- * of explanation, then the step, with its one action pinned below.
+ * the upgrade screens (V2: PIN setup, sign-in). A large heading and a line of
+ * explanation, then the step, with its one action pinned below; [actionBar] is
+ * null where the step has nothing to press (an upgrade in progress).
  */
 @Composable
 public fun LfFlowStep(
     title: String,
-    actionBar: @Composable () -> Unit,
+    actionBar: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
     body: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val space = LfTheme.space
-    LfScaffold(modifier = modifier, bottomBar = actionBar) { padding ->
+    LfScaffold(modifier = modifier, bottomBar = { actionBar?.invoke() }) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

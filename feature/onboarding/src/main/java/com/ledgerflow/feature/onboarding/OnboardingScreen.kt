@@ -34,6 +34,7 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.bidiIsolated
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFlowStep
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
@@ -67,9 +68,12 @@ public fun OnboardingScreen(
     RecoveryKitPicker(state, onEvent, kitFileName)
     state.kitConfirmFormat?.let { RecoveryKitConfirmDialog(it, onEvent) }
 
-    LfScaffold(
+    val copy = state.stepCopy()
+    LfFlowStep(
+        title = copy.title,
+        body = copy.body,
         modifier = modifier,
-        bottomBar = {
+        actionBar = {
             PrimaryActionBar(
                 state = state,
                 onEvent = onEvent,
@@ -77,28 +81,20 @@ public fun OnboardingScreen(
                 onChooseFolder = { chooseBackupTree() },
             )
         },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(LfTheme.spacing.lg)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
-        ) {
-            when (state.step) {
-                OnboardingStep.BaseCurrency -> {
-                    BaseCurrencyStep(state, onEvent)
-                    RestoreLink(onRestoreRequested)
-                }
-                OnboardingStep.PhraseDisplay -> PhraseDisplayStep(state, onEvent)
-                OnboardingStep.WordChallenge -> WordChallengeStep(state, onEvent)
-                OnboardingStep.RecoveryKit -> RecoveryKitStep(onEvent)
-                OnboardingStep.BackupLocation -> BackupLocationStep(onEvent)
-                OnboardingStep.Complete -> CompleteStep(state)
+    ) {
+        when (state.step) {
+            OnboardingStep.BaseCurrency -> {
+                BaseCurrencyStep(state, onEvent)
+                RestoreLink(onRestoreRequested)
             }
-            state.errorMessage?.let { ErrorFooter(it, onEvent) }
+            OnboardingStep.PhraseDisplay -> PhraseDisplayStep(state, onEvent)
+            OnboardingStep.WordChallenge -> WordChallengeStep(state, onEvent)
+            OnboardingStep.RecoveryKit -> RecoveryKitStep(onEvent)
+            OnboardingStep.BackupLocation -> BackupLocationStep(onEvent)
+            // Only a heading (the template's) while the key is made.
+            OnboardingStep.Complete -> Unit
         }
+        state.errorMessage?.let { ErrorFooter(it, onEvent) }
     }
 }
 
@@ -268,12 +264,45 @@ private fun ErrorFooter(message: String, onEvent: (OnboardingEvent) -> Unit) {
     )
 }
 
-@Composable
-private fun StepHeading(title: String, body: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-        Text(text = title, style = LfTheme.typography.displayL, color = LfTheme.colors.textPrimary)
-        Text(text = body, style = LfTheme.typography.bodyL, color = LfTheme.colors.textSecondary)
-    }
+/** Each step's heading, drawn by the template above the step's content. */
+private class StepCopy(val title: String, val body: String)
+
+private fun OnboardingUiState.stepCopy(): StepCopy = when (step) {
+    OnboardingStep.BaseCurrency -> StepCopy(
+        title = "Choose your currency",
+        // Stated plainly because §5.8 makes it permanent in v1. Discovering
+        // afterwards that it cannot be changed would be a bad surprise.
+        body = "All your amounts are stored in this currency. It cannot be changed later.",
+    )
+    OnboardingStep.PhraseDisplay -> StepCopy(
+        title = "Your recovery phrase",
+        body = "These 24 words are the only way to recover your data if you lose this " +
+            "device. Write them down on paper and keep them somewhere safe. " +
+            "Anyone with these words can read your backups.",
+    )
+    OnboardingStep.WordChallenge -> StepCopy(
+        title = "Confirm your phrase",
+        body = "Enter the words at these positions to confirm you wrote them down.",
+    )
+    OnboardingStep.RecoveryKit -> StepCopy(
+        title = "Save your Recovery Kit",
+        body = "Your 24 words and a QR code you can scan instead of typing them, on one " +
+            "printable page, with instructions for restoring your data. A text file — the " +
+            "words only, no code — is there for a password manager.",
+    )
+    OnboardingStep.BackupLocation -> StepCopy(
+        title = "Where should backups go?",
+        body = "LedgerFlow writes an encrypted backup every night. Only your recovery " +
+            "phrase can open it, so the location doesn't need to be private.",
+    )
+    OnboardingStep.Complete -> StepCopy(
+        title = if (isWorking) "Setting up your ledger" else "You're set up",
+        body = if (isWorking) {
+            "Generating your encryption key and creating the database."
+        } else {
+            "Your ledger is encrypted and recoverable."
+        },
+    )
 }
 
 /**
@@ -300,12 +329,6 @@ private fun RestoreLink(onRestoreRequested: () -> Unit) {
 
 @Composable
 private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Choose your currency",
-        // Stated plainly because §5.8 makes it permanent in v1. Discovering
-        // afterwards that it cannot be changed would be a bad surprise.
-        body = "All your amounts are stored in this currency. It cannot be changed later.",
-    )
     LfCard {
         Column {
             SupportedCurrencies.forEach { currency ->
@@ -347,13 +370,6 @@ private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent
 
 @Composable
 private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Your recovery phrase",
-        body = "These 24 words are the only way to recover your data if you lose this " +
-            "device. Write them down on paper and keep them somewhere safe. " +
-            "Anyone with these words can read your backups.",
-    )
-
     LfCard {
         if (!state.phraseRevealed) {
             // Hidden until deliberately revealed: the phrase should not be
@@ -403,11 +419,6 @@ private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEven
 
 @Composable
 private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Confirm your phrase",
-        body = "Enter the words at these positions to confirm you wrote them down.",
-    )
-
     state.challengePositions.forEachIndexed { index, position ->
         LfTextField(
             modifier = Modifier.phraseSecret(),
@@ -437,12 +448,6 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
 
 @Composable
 private fun RecoveryKitStep(onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Save your Recovery Kit",
-        body = "Your 24 words and a QR code you can scan instead of typing them, on one " +
-            "printable page, with instructions for restoring your data. A text file — the " +
-            "words only, no code — is there for a password manager.",
-    )
     // "Save as PDF" is the pinned primary; these two are the alternatives to it.
     LfButton(
         text = "Save as text file",
@@ -491,27 +496,10 @@ private fun RecoveryKitFormat.label(): String = when (this) {
 
 @Composable
 private fun BackupLocationStep(onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Where should backups go?",
-        body = "LedgerFlow writes an encrypted backup every night. Only your recovery " +
-            "phrase can open it, so the location doesn't need to be private.",
-    )
     LfButton(
         text = "Not now",
         onClick = { onEvent(OnboardingEvent.BackupLocationDeclined) },
         style = LfButtonStyle.Text,
-    )
-}
-
-@Composable
-private fun CompleteStep(state: OnboardingUiState) {
-    StepHeading(
-        title = if (state.isWorking) "Setting up your ledger" else "You're set up",
-        body = if (state.isWorking) {
-            "Generating your encryption key and creating the database."
-        } else {
-            "Your ledger is encrypted and recoverable."
-        },
     )
 }
 

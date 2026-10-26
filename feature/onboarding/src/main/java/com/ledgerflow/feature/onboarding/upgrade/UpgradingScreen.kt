@@ -14,6 +14,7 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.pattern.LfFlowStep
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
 import kotlin.math.ceil
@@ -166,29 +167,8 @@ private fun UpgradeFrame(
     modifier: Modifier = Modifier,
     detail: @Composable () -> Unit,
 ) {
-    LfScaffold(modifier = modifier) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(LfTheme.spacing.lg)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                Text(
-                    text = title,
-                    style = LfTheme.typography.displayL,
-                    color = LfTheme.colors.textPrimary,
-                )
-                Text(
-                    text = body,
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.textSecondary,
-                )
-            }
-            detail()
-        }
+    LfFlowStep(title = title, body = body, actionBar = null, modifier = modifier) {
+        detail()
     }
 }
 

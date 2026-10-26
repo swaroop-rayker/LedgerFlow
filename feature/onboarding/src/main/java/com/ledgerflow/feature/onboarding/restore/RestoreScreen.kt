@@ -42,6 +42,7 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -92,34 +93,25 @@ public fun RestoreScreen(
     val leave = onBack?.let { leavingVia(it, onEvent) }
     if (leave != null) RestoreBackHandler(state, leave, closeKeyboard)
 
-    LfScaffold(
+    LfFormPage(
+        title = if (resuming) "Finish restoring" else "Restore a backup",
+        actionBar = { SubmitBar(state, onEvent, onSubmit = closeKeyboard) },
         modifier = modifier,
-        bottomBar = { SubmitBar(state, onEvent, onSubmit = closeKeyboard) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            // The action takes its own band above the heading (BUG17).
-            if (leave != null && !state.isDone) {
-                LfActionRow(
-                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                    alignment = LfActionAlignment.Start,
-                ) {
-                    LfButton(
-                        text = "Back",
-                        onClick = leave,
-                        enabled = !state.isWorking,
-                        style = LfButtonStyle.Inline,
-                    )
-                }
+        // The action takes its own band above the heading (BUG17).
+        actions = if (leave != null && !state.isDone) {
+            {
+                LfButton(
+                    text = "Back",
+                    onClick = leave,
+                    enabled = !state.isWorking,
+                    style = LfButtonStyle.Inline,
+                )
             }
-            LfScreenTitle(title = if (resuming) "Finish restoring" else "Restore a backup")
-            RestoreBody(state, resuming, onEvent)
-        }
+        } else {
+            null
+        },
+    ) {
+        RestoreBody(state, resuming, onEvent)
     }
 }
 
@@ -129,10 +121,7 @@ public fun RestoreScreen(
  */
 @Composable
 private fun RestoreBody(state: RestoreUiState, resuming: Boolean, onEvent: (RestoreEvent) -> Unit) {
-    Column(
-        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
         val result = state.result
         if (result is RestoreOutcome.Done) {
             ResultMessage(result)

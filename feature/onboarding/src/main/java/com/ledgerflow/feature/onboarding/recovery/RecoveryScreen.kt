@@ -18,6 +18,7 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFlowStep
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -51,37 +52,30 @@ public fun RecoveryScreen(
         return
     }
 
-    LfScaffold(
+    LfFlowStep(
+        title = "Enter your recovery phrase",
+        body = state.reason.explanation(),
         modifier = modifier,
-        bottomBar = { SubmitBar(state, onEvent) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = LfTheme.space.screenEdge)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
-        ) {
-            Header(state)
+        actionBar = { SubmitBar(state, onEvent) },
+    ) {
+        Reassurance()
 
-            // Shared with "Back up now", including the keyboard setting that
-            // keeps the words out of the keyboard's dictionary (BUG25).
-            LfPhraseEntry(
-                words = state.words,
-                draft = state.draft,
-                suggestions = state.suggestions,
-                draftIsUnknown = state.draftIsUnknown,
-                requiredWordCount = state.requiredWordCount,
-                onDraftChange = { onEvent(RecoveryEvent.DraftChanged(it)) },
-                onSuggestionTap = { onEvent(RecoveryEvent.WordCommitted(it)) },
-                onWordRemove = { onEvent(RecoveryEvent.WordRemoved(it)) },
-                onScanRequested = { onEvent(RecoveryEvent.Scanner.Requested) },
-            )
+        // Shared with "Back up now", including the keyboard setting that
+        // keeps the words out of the keyboard's dictionary (BUG25).
+        LfPhraseEntry(
+            words = state.words,
+            draft = state.draft,
+            suggestions = state.suggestions,
+            draftIsUnknown = state.draftIsUnknown,
+            requiredWordCount = state.requiredWordCount,
+            onDraftChange = { onEvent(RecoveryEvent.DraftChanged(it)) },
+            onSuggestionTap = { onEvent(RecoveryEvent.WordCommitted(it)) },
+            onWordRemove = { onEvent(RecoveryEvent.WordRemoved(it)) },
+            onScanRequested = { onEvent(RecoveryEvent.Scanner.Requested) },
+        )
 
-            state.scanMessage?.let { ScanMessage(it) }
-            state.failure?.let { FailureMessage(it) }
-        }
+        state.scanMessage?.let { ScanMessage(it) }
+        state.failure?.let { FailureMessage(it) }
     }
 }
 
@@ -107,19 +101,7 @@ private fun SubmitBar(state: RecoveryUiState, onEvent: (RecoveryEvent) -> Unit) 
 }
 
 @Composable
-private fun Header(state: RecoveryUiState) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-        Text(
-            text = "Enter your recovery phrase",
-            style = LfTheme.typography.displayL,
-            color = LfTheme.colors.textPrimary,
-        )
-        Text(
-            text = state.reason.explanation(),
-            style = LfTheme.typography.bodyL,
-            color = LfTheme.colors.textSecondary,
-        )
-    }
+private fun Reassurance() {
     // Reassurance before the work, not after it. This screen is the one place a
     // user reasonably fears their data is gone; saying plainly that it is not is
     // the most useful sentence on the page.
