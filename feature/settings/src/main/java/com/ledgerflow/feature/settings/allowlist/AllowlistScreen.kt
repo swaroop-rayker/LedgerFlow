@@ -27,6 +27,7 @@ import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
+import com.ledgerflow.core.designsystem.pattern.LfDetailPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.AllowlistedApp
 import com.ledgerflow.core.domain.ingest.InstalledApp
@@ -57,25 +58,35 @@ public fun AllowlistScreen(
     state.confirming?.let { app -> PersonalMessagesWarning(app = app, onEvent = onEvent) }
     BackHandler(enabled = state.picking) { onEvent(AllowlistEvent.PickerClosed) }
 
-    LfScaffold(modifier = modifier) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            item(key = "header", contentType = "header") {
-                Header(
-                    picking = state.picking,
-                    onBack = if (state.picking) ({ onEvent(AllowlistEvent.PickerClosed) }) else onBack,
-                    onAdd = { onEvent(AllowlistEvent.AddRequested) },
-                )
-            }
-            if (state.picking) {
-                pickerItems(state, onEvent)
-            } else {
-                items(items = state.apps, key = { it.packageName }, contentType = { "app" }) { app ->
-                    AllowlistRow(app = app, onEvent = onEvent)
+    val back = if (state.picking) ({ onEvent(AllowlistEvent.PickerClosed) }) else onBack
+    LfDetailPage(
+        title = if (state.picking) "Add an app" else "Payment apps",
+        subtitle = if (state.picking) {
+            "Apps on this phone. Names only; nothing they posted is read."
+        } else {
+            ALLOWLIST_EXPLAINER
+        },
+        modifier = modifier,
+        actions = { LfButton(text = "Back", onClick = back, style = LfButtonStyle.Inline) },
+        notices = if (state.picking) {
+            null
+        } else {
+            {
+                LfActionRow(alignment = LfActionAlignment.Start) {
+                    LfButton(
+                        text = "Add an app",
+                        onClick = { onEvent(AllowlistEvent.AddRequested) },
+                        style = LfButtonStyle.Inline,
+                    )
                 }
+            }
+        },
+    ) {
+        if (state.picking) {
+            pickerItems(state, onEvent)
+        } else {
+            items(items = state.apps, key = { it.packageName }, contentType = { "app" }) { app ->
+                AllowlistRow(app = app, onEvent = onEvent)
             }
         }
     }
@@ -93,36 +104,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.pickerItems(
     }
 }
 
-@Composable
-private fun Header(picking: Boolean, onBack: () -> Unit, onAdd: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-        LfActionRow(
-            modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-            alignment = LfActionAlignment.Start,
-        ) {
-            LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline)
-        }
-        if (picking) {
-            LfScreenTitle(
-                title = "Add an app",
-                subtitle = "Apps on this phone. Names only; nothing they posted is read.",
-            )
-        } else {
-            LfScreenTitle(title = "Payment apps", subtitle = ALLOWLIST_EXPLAINER)
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                alignment = LfActionAlignment.Start,
-            ) {
-                LfButton(text = "Add an app", onClick = onAdd, style = LfButtonStyle.Inline)
-            }
-        }
-    }
-}
-
 /** One app on the list: name, whether it is read, and how it got there. */
 @Composable
 private fun AllowlistRow(app: AllowlistedApp, onEvent: (AllowlistEvent) -> Unit) {
-    LfCard(modifier = Modifier.fillMaxWidth().padding(horizontal = LfTheme.space.screenEdge)) {
+    LfCard(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
             LfSwitchRow(
                 label = app.label ?: app.packageName,
@@ -151,7 +136,6 @@ private fun InstalledRow(app: InstalledApp, onPick: () -> Unit) {
     LfCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = LfTheme.space.screenEdge)
             .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
             .clickable(onClick = onPick),
     ) {
@@ -172,7 +156,6 @@ private fun Note(text: String) {
         text = text,
         style = LfTheme.typography.bodyM,
         color = LfTheme.colors.textSecondary,
-        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
     )
 }
 

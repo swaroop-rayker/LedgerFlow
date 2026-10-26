@@ -27,6 +27,8 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -58,48 +60,36 @@ public fun BackupNowScreen(
 
     KitFlow(state, onEvent)
 
-    LfScaffold(
+    LfFormPage(
+        title = "Back up now",
+        actionBar = { SubmitBar(state, onEvent) },
         modifier = modifier,
-        bottomBar = { SubmitBar(state, onEvent) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-        ) {
-            LfScreenTitle(title = "Back up now")
-            Column(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-            ) {
-                Explanation(state.nightlyBackupsEnabled)
-                if (state.needsFolder) FolderPrompt(onEvent)
-                state.folderName?.let { FolderLine(it, state.folderChanged, state.isWorking, onEvent) }
-                state.failedNightlyAt?.let { FailedNightlyLine(it) }
-                state.result?.let { ResultMessage(it) }
-                if (state.kitOffered) KitOffer(state.isWorking, onEvent)
-                KitOutcome(state)
-                LfPhraseEntry(
-                    words = state.entry.words,
-                    draft = state.entry.draft,
-                    suggestions = state.entry.suggestions,
-                    draftIsUnknown = state.entry.draftIsUnknown,
-                    requiredWordCount = state.entry.requiredWordCount,
-                    onDraftChange = { onEvent(BackupNowEvent.DraftChanged(it)) },
-                    onSuggestionTap = { onEvent(BackupNowEvent.WordCommitted(it)) },
-                    onWordRemove = { onEvent(BackupNowEvent.WordRemoved(it)) },
-                    onScanRequested = { onEvent(BackupNowEvent.Scanner.Requested) },
-                )
-                state.scanMessage?.let {
-                    Text(
-                        text = "$it Type the words instead.",
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textSecondary,
-                    )
-                }
-            }
+        spacing = LfPageSpacing.Sections,
+    ) {
+        Explanation(state.nightlyBackupsEnabled)
+        if (state.needsFolder) FolderPrompt(onEvent)
+        state.folderName?.let { FolderLine(it, state.folderChanged, state.isWorking, onEvent) }
+        state.failedNightlyAt?.let { FailedNightlyLine(it) }
+        state.result?.let { ResultMessage(it) }
+        if (state.kitOffered) KitOffer(state.isWorking, onEvent)
+        KitOutcome(state)
+        LfPhraseEntry(
+            words = state.entry.words,
+            draft = state.entry.draft,
+            suggestions = state.entry.suggestions,
+            draftIsUnknown = state.entry.draftIsUnknown,
+            requiredWordCount = state.entry.requiredWordCount,
+            onDraftChange = { onEvent(BackupNowEvent.DraftChanged(it)) },
+            onSuggestionTap = { onEvent(BackupNowEvent.WordCommitted(it)) },
+            onWordRemove = { onEvent(BackupNowEvent.WordRemoved(it)) },
+            onScanRequested = { onEvent(BackupNowEvent.Scanner.Requested) },
+        )
+        state.scanMessage?.let {
+            Text(
+                text = "$it Type the words instead.",
+                style = LfTheme.typography.bodyM,
+                color = LfTheme.colors.textSecondary,
+            )
         }
     }
 }

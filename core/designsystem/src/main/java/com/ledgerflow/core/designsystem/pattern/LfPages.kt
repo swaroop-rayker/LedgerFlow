@@ -44,7 +44,9 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
  *
  * Every page has the same slots, top to bottom:
  * - `actions`: a band above the title (Back, Done, Add), on its own line so the
- *   title never competes with a control for one (BUG17);
+ *   title never competes with a control for one (BUG17). At the start by
+ *   default; Notification capture keeps its exit at the end until F5 gives
+ *   every pushed page the same top bar;
  * - the title and an optional subtitle;
  * - `search`, then `filters`: a field and a band of chips (V2-PLAN §5.6:
  *   Search, Help, the merchant picker; Merchants' Uncategorised, Receipts'
@@ -75,7 +77,7 @@ public fun LfTabPage(
     content: LazyListScope.() -> Unit,
 ) {
     PageList(
-        header = PageHeader(title, subtitle, actions, search, filters, notices),
+        header = PageHeader(title, subtitle, actions, LfActionAlignment.Start, search, filters, notices),
         statusContent = statusContent,
         spacing = spacing,
         pinHeader = pinHeader,
@@ -93,6 +95,7 @@ public fun LfDetailPage(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     actions: (@Composable () -> Unit)? = null,
+    actionsAlignment: LfActionAlignment = LfActionAlignment.Start,
     search: (@Composable () -> Unit)? = null,
     filters: (@Composable () -> Unit)? = null,
     notices: (@Composable ColumnScope.() -> Unit)? = null,
@@ -111,7 +114,7 @@ public fun LfDetailPage(
         snackbarHostState = snackbarHostState,
     ) { padding ->
         PageList(
-            header = PageHeader(title, subtitle, actions, search, filters, notices),
+            header = PageHeader(title, subtitle, actions, actionsAlignment, search, filters, notices),
             statusContent = statusContent,
             spacing = spacing,
             pinHeader = pinHeader,
@@ -133,6 +136,7 @@ public fun LfSettingsPage(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     actions: (@Composable () -> Unit)? = null,
+    actionsAlignment: LfActionAlignment = LfActionAlignment.Start,
     notices: (@Composable ColumnScope.() -> Unit)? = null,
     statusContent: (@Composable ColumnScope.() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
@@ -143,6 +147,7 @@ public fun LfSettingsPage(
         modifier = modifier,
         subtitle = subtitle,
         actions = actions,
+        actionsAlignment = actionsAlignment,
         notices = notices,
         statusContent = statusContent,
         snackbarHostState = snackbarHostState,
@@ -157,23 +162,29 @@ public fun LfSettingsPage(
  * once by `LfScaffold`.
  *
  * The only template whose [title] may be null: Add entry opens straight onto
- * the book and the amount, which are what the screen is for.
+ * the book and the amount, which are what the screen is for. [actionBar] is
+ * null for a scrolling page with nothing to submit (Notification capture).
  */
 @Composable
 @Suppress("LongParameterList") // A template is its slots; each is optional.
 public fun LfFormPage(
     title: String?,
-    actionBar: @Composable () -> Unit,
+    actionBar: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     actions: (@Composable () -> Unit)? = null,
+    actionsAlignment: LfActionAlignment = LfActionAlignment.Start,
     notices: (@Composable ColumnScope.() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
     spacing: LfPageSpacing = LfPageSpacing.Rows,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val space = LfTheme.space
-    LfScaffold(modifier = modifier, bottomBar = actionBar, snackbarHostState = snackbarHostState) { padding ->
+    LfScaffold(
+        modifier = modifier,
+        bottomBar = { actionBar?.invoke() },
+        snackbarHostState = snackbarHostState,
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -185,7 +196,8 @@ public fun LfFormPage(
             // Nothing at all when there is no header: an empty one would still
             // take a gap above the first field.
             if (title != null || actions != null || notices != null) {
-                PageHeader(title, subtitle, actions, search = null, filters = null, notices = notices).Draw()
+                PageHeader(title, subtitle, actions, actionsAlignment, search = null, filters = null, notices = notices)
+                    .Draw()
             }
             content()
             Spacer(Modifier.height(space.listEnd))
@@ -276,6 +288,7 @@ private class PageHeader(
     val title: String?,
     val subtitle: String?,
     val actions: (@Composable () -> Unit)?,
+    val actionsAlignment: LfActionAlignment,
     val search: (@Composable () -> Unit)?,
     val filters: (@Composable () -> Unit)?,
     val notices: (@Composable ColumnScope.() -> Unit)?,
@@ -283,7 +296,7 @@ private class PageHeader(
     @Composable
     fun Draw() {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
-            actions?.let { LfActionRow(alignment = LfActionAlignment.Start) { it() } }
+            actions?.let { LfActionRow(alignment = actionsAlignment) { it() } }
             title?.let { LfTitleBlock(title = it, subtitle = subtitle) }
             search?.invoke()
             filters?.invoke()

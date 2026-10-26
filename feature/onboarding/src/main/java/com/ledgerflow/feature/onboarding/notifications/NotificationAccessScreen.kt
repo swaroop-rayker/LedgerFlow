@@ -22,6 +22,7 @@ import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
@@ -87,69 +88,51 @@ public fun NotificationAccessScreen(
     doneLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    LfScaffold(modifier = modifier) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            // BUG17: the action gets its own line, and the heading gets the
-            // full width. See the header note above for why the shared
-            // `Row(title.weight(1f), action)` pattern cannot carry this title.
-            LfActionRow(
-                alignment = LfActionAlignment.End,
-                modifier = Modifier.padding(
-                    start = LfTheme.spacing.lg,
-                    end = LfTheme.spacing.md,
-                    top = LfTheme.spacing.xs,
-                ),
-            ) {
-                LfButton(
-                    text = doneLabel,
-                    style = LfButtonStyle.Text,
-                    onClick = { onEvent(NotificationAccessEvent.Done) },
-                )
-            }
-            LfScreenTitle(
-                title = "Notification capture",
-                subtitle = "Most UPI payments never send an SMS. Reading the " +
-                    "notification is how they reach your Inbox.",
+    // BUG17: the action gets its own line (the template's action band), and
+    // the heading gets the full width. See the header note above for why the
+    // shared `Row(title.weight(1f), action)` pattern cannot carry this title.
+    // No pinned bar: nothing here is submitted.
+    LfFormPage(
+        title = "Notification capture",
+        subtitle = "Most UPI payments never send an SMS. Reading the " +
+            "notification is how they reach your Inbox.",
+        actionBar = null,
+        modifier = modifier,
+        actions = {
+            LfButton(
+                text = doneLabel,
+                style = LfButtonStyle.Text,
+                onClick = { onEvent(NotificationAccessEvent.Done) },
             )
+        },
+        actionsAlignment = LfActionAlignment.End,
+    ) {
+        PrivacyCard()
 
-            Column(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            ) {
-                PrivacyCard()
+        GrantCard(
+            title = "Read payment notifications",
+            body = "Granted in Android's own settings — LedgerFlow cannot " +
+                "turn this on for you.",
+            granted = state.listenerGranted,
+            polled = state.polled,
+            actionLabel = "Open settings",
+            onAction = { onEvent(NotificationAccessEvent.OpenListenerSettings) },
+        )
 
-                GrantCard(
-                    title = "Read payment notifications",
-                    body = "Granted in Android's own settings — LedgerFlow cannot " +
-                        "turn this on for you.",
-                    granted = state.listenerGranted,
-                    polled = state.polled,
-                    actionLabel = "Open settings",
-                    onAction = { onEvent(NotificationAccessEvent.OpenListenerSettings) },
-                )
-
-                if (state.postNotificationsApplicable) {
-                    GrantCard(
-                        title = "Tell you when something arrives",
-                        // Says what declining costs, in the row where declining
-                        // happens. Nothing here is load-bearing for capture, and
-                        // a user who thinks it is will grant it for the wrong
-                        // reason and then stop reading.
-                        body = "Optional. Without it, candidates still reach your " +
-                            "Inbox — they just wait there quietly.",
-                        granted = state.postNotificationsGranted,
-                        polled = state.polled,
-                        actionLabel = "Allow",
-                        onAction = { onEvent(NotificationAccessEvent.RequestPostNotifications) },
-                    )
-                }
-            }
+        if (state.postNotificationsApplicable) {
+            GrantCard(
+                title = "Tell you when something arrives",
+                // Says what declining costs, in the row where declining
+                // happens. Nothing here is load-bearing for capture, and
+                // a user who thinks it is will grant it for the wrong
+                // reason and then stop reading.
+                body = "Optional. Without it, candidates still reach your " +
+                    "Inbox — they just wait there quietly.",
+                granted = state.postNotificationsGranted,
+                polled = state.polled,
+                actionLabel = "Allow",
+                onAction = { onEvent(NotificationAccessEvent.RequestPostNotifications) },
+            )
         }
     }
 }
