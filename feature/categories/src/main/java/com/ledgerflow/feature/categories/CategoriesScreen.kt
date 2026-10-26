@@ -40,6 +40,7 @@ import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfDetailPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
@@ -65,37 +66,18 @@ public fun CategoriesScreen(
 ) {
     state.dialog?.let { TaxonomyDialogHost(it, state, onEvent) }
 
-    LfScaffold(
+    // A pinned header of three stacked bands above a list that is the only
+    // thing here anyone scrolls, so every step of the gap scale between them is
+    // charged to the list: the switches stay `xs` apart, as they were.
+    LfDetailPage(
+        title = "Organise",
         modifier = modifier,
-        bottomBar = { AddBar(state, onEvent) },
-    ) { padding ->
-        // `sm` between the header blocks, not `md`. This screen's header is
-        // three stacked bands -- title, section control, ledger control -- above
-        // a list that is the only thing here anyone scrolls, so every step of
-        // the gap scale between them is charged to the list twice over.
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                LfScreenTitle(title = "Organise", modifier = Modifier.weight(1f))
-                // A full-screen destination reached from More, so it carries its
-                // own way out rather than relying on the gesture alone.
-                LfButton(
-                    text = "Done",
-                    style = LfButtonStyle.Text,
-                    onClick = onBack,
-                    modifier = Modifier.padding(end = LfTheme.spacing.md),
-                )
-            }
-
-            Column(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-            ) {
+        // A full-screen destination reached from Settings, so it carries its
+        // own way out rather than relying on the gesture alone.
+        actions = { LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack) },
+        actionsAlignment = LfActionAlignment.End,
+        filters = {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
                 LfSegmentedControl(
                     options = TaxonomySection.entries.map { it.label },
                     selectedIndex = state.section.ordinal,
@@ -113,15 +95,50 @@ public fun CategoriesScreen(
                         },
                     )
                 }
-                state.message?.let { MessageBanner(it, onEvent) }
             }
-
-            when (state.section) {
-                TaxonomySection.Categories -> CategoryList(state, onEvent)
-                TaxonomySection.Merchants -> MerchantList(state, onEvent)
-                TaxonomySection.PaymentMethods -> PaymentMethodList(state, onEvent)
-            }
+        },
+        notices = state.message?.let { message -> { MessageBanner(message, onEvent) } },
+        statusContent = if (state.sectionIsEmpty()) {
+            { EmptySection(state.section) }
+        } else {
+            null
+        },
+        actionBar = { AddBar(state, onEvent) },
+        pinHeader = true,
+    ) {
+        when (state.section) {
+            TaxonomySection.Categories -> categoryItems(state, onEvent)
+            TaxonomySection.Merchants -> merchantItems(state, onEvent)
+            TaxonomySection.PaymentMethods -> paymentMethodItems(state, onEvent)
         }
+    }
+}
+
+/**
+ * Empty means nothing live *and* nothing hidden: the hidden section has to stay
+ * reachable underneath, since a user who hid their last category is exactly
+ * the one who needs the way back.
+ */
+private fun CategoriesUiState.sectionIsEmpty(): Boolean = hidden.isEmpty() && when (section) {
+    TaxonomySection.Categories -> tree.isEmpty()
+    TaxonomySection.Merchants -> merchants.isEmpty()
+    TaxonomySection.PaymentMethods -> paymentMethods.isEmpty()
+}
+
+@Composable
+private fun EmptySection(section: TaxonomySection) {
+    when (section) {
+        TaxonomySection.Categories -> LfEmptyState(
+            title = "No categories yet",
+            body = "Categories group your spending. Add one to get started.",
+        )
+        TaxonomySection.Merchants -> LfEmptyState(
+            title = "No merchants yet",
+            body = "Merchants are created as you record spending, and can be " +
+                "renamed or merged here when the same shop shows up twice.",
+        )
+        TaxonomySection.PaymentMethods ->
+            LfEmptyState(title = "No payment methods", body = "Add the cards and accounts you use.")
     }
 }
 
@@ -186,38 +203,22 @@ private fun MessageBanner(message: String, onEvent: (CategoriesEvent) -> Unit) {
     }
 }
 
-@Composable
-private fun CategoryList(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
-    // The empty state is about the *live* tree, and the hidden section still has
-    // to be reachable underneath it -- a user who hid their last category is
-    // exactly the one who needs the way back, and telling them to "add one to
-    // get started" while the one they want sits hidden below is the version of
-    // this screen that caused the complaint.
-    if (state.tree.isEmpty() && state.hidden.isEmpty()) {
-        LfEmptyState(
-            title = "No categories yet",
-            body = "Categories group your spending. Add one to get started.",
-        )
-        return
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            bottom = LfTheme.space.listEnd,
-        ),
-    ) {
-        state.tree.forEach { branch ->
-            // Keyed per branch rather than per row: the connector rail has to
-            // measure against the height of the children it spans, so a branch
-            // is one item. Stable keys and a contentType still apply (CLAUDE.md
-            // §5) -- without them every edit recomposes the whole list.
-            item(key = branch.parent.id, contentType = "branch") {
-                CategoryBranch(branch, onEvent)
-            }
+// The empty state is about the *live* tree, and the hidden section still has to
+// be reachable underneath it -- a user who hid their last category is exactly
+// the one who needs the way back, and telling them to "add one to get started"
+// while the one they want sits hidden below is the version of this screen that
+// caused the complaint. See [sectionIsEmpty].
+private fun LazyListScope.categoryItems(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
+    state.tree.forEach { branch ->
+        // Keyed per branch rather than per row: the connector rail has to
+        // measure against the height of the children it spans, so a branch
+        // is one item. Stable keys and a contentType still apply (CLAUDE.md
+        // §5) -- without them every edit recomposes the whole list.
+        item(key = branch.parent.id, contentType = "branch") {
+            CategoryBranch(branch, onEvent)
         }
-        hiddenSection(state, onEvent)
     }
+    hiddenSection(state, onEvent)
 }
 
 /**
@@ -366,29 +367,12 @@ private fun TaxonomyCard(
     )
 }
 
-@Composable
-private fun MerchantList(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
+private fun LazyListScope.merchantItems(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
     val merchants = state.merchants
-    if (merchants.isEmpty() && state.hidden.isEmpty()) {
-        LfEmptyState(
-            title = "No merchants yet",
-            body = "Merchants are created as you record spending, and can be " +
-                "renamed or merged here when the same shop shows up twice.",
-        )
-        return
+    items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
+        MerchantCard(merchants[index], onEvent)
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            bottom = LfTheme.space.listEnd,
-        ),
-    ) {
-        items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
-            MerchantCard(merchants[index], onEvent)
-        }
-        hiddenSection(state, onEvent)
-    }
+    hiddenSection(state, onEvent)
 }
 
 @Composable
@@ -424,25 +408,12 @@ private fun MerchantCard(merchant: Merchant, onEvent: (CategoriesEvent) -> Unit)
     }
 }
 
-@Composable
-private fun PaymentMethodList(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
+private fun LazyListScope.paymentMethodItems(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
     val methods = state.paymentMethods
-    if (methods.isEmpty() && state.hidden.isEmpty()) {
-        LfEmptyState(title = "No payment methods", body = "Add the cards and accounts you use.")
-        return
+    items(methods.size, key = { methods[it].id }, contentType = { "method" }) { index ->
+        PaymentMethodCard(methods[index], onEvent)
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            bottom = LfTheme.space.listEnd,
-        ),
-    ) {
-        items(methods.size, key = { methods[it].id }, contentType = { "method" }) { index ->
-            PaymentMethodCard(methods[index], onEvent)
-        }
-        hiddenSection(state, onEvent)
-    }
+    hiddenSection(state, onEvent)
 }
 
 @Composable

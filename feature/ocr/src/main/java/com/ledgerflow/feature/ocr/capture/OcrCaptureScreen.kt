@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -43,6 +43,7 @@ import com.ledgerflow.core.designsystem.component.LfCaptureGuide
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import kotlinx.coroutines.launch
 
@@ -101,45 +102,35 @@ public fun OcrCaptureScreen(
         if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    LfScaffold(modifier = modifier) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            // Back on its own band above the title, as Diagnostics and Restore
-            // place it (BUG17), rather than floating under the cards.
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                alignment = LfActionAlignment.Start,
-            ) {
-                LfButton(text = "Back", style = LfButtonStyle.Inline, onClick = onBack)
-            }
-            LfScreenTitle(title = "Scan a receipt")
-
-            CaptureContent(
-                state = state,
-                onEvent = onEvent,
-                onGallery = {
-                    galleryLauncher.launch(
-                        androidx.activity.result.PickVisualMediaRequest(
-                            ActivityResultContracts.PickVisualMedia.ImageOnly,
-                        ),
-                    )
-                },
-                onDocument = { documentLauncher.launch(IMPORT_MIME_TYPES) },
-            )
-        }
+    // Back on its own band above the title, as Diagnostics and Restore place it
+    // (BUG17), rather than floating under the cards. Nothing is pinned: the
+    // camera's own controls are the actions.
+    LfFormPage(
+        title = "Scan a receipt",
+        actionBar = null,
+        modifier = modifier,
+        actions = { LfButton(text = "Back", style = LfButtonStyle.Inline, onClick = onBack) },
+    ) {
+        CaptureContent(
+            state = state,
+            onEvent = onEvent,
+            onGallery = {
+                galleryLauncher.launch(
+                    androidx.activity.result.PickVisualMediaRequest(
+                        ActivityResultContracts.PickVisualMedia.ImageOnly,
+                    ),
+                )
+            },
+            onDocument = { documentLauncher.launch(IMPORT_MIME_TYPES) },
+        )
     }
 }
 
 /**
  * Everything under the title: the camera, what it read, and the import row.
  *
- * Inset like every other screen's cards. They ran edge to edge here, the one
- * screen that did, under a title inset by `lg` (P5 step 4).
+ * Inset like every other screen's cards, by the template. They ran edge to
+ * edge here, the one screen that did, under a title inset by `lg` (P5 step 4).
  */
 @Composable
 private fun CaptureContent(
@@ -148,10 +139,7 @@ private fun CaptureContent(
     onGallery: () -> Unit,
     onDocument: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
         Viewfinder(state = state, onEvent = onEvent)
 
         state.result?.let {

@@ -31,6 +31,7 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.export.ExportFormat
 
@@ -58,38 +59,17 @@ public fun ExportScreen(
     if (state.confirming) WarningDialog(onEvent)
     DestinationPicker(state, suggestedFileName, onEvent)
 
-    LfScaffold(
+    // "Done" takes the action band above the title (BUG17), at the end where
+    // it sat beside the title before.
+    LfFormPage(
+        title = "Export",
+        actionBar = { ExportBar(state, onEvent) },
         modifier = modifier,
-        bottomBar = { ExportBar(state, onEvent) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                LfScreenTitle(title = "Export", modifier = Modifier.weight(1f))
-                LfButton(
-                    text = "Done",
-                    style = LfButtonStyle.Text,
-                    onClick = onBack,
-                    modifier = Modifier.padding(end = LfTheme.spacing.md),
-                )
-            }
-
-            Column(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            ) {
-                FileCard(state, suggestedFileName, onEvent)
-                state.status.let { status -> StatusCard(status, onEvent) }
-            }
-        }
+        actions = { LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack) },
+        actionsAlignment = LfActionAlignment.End,
+    ) {
+        FileCard(state, suggestedFileName, onEvent)
+        state.status.let { status -> StatusCard(status, onEvent) }
     }
 }
 

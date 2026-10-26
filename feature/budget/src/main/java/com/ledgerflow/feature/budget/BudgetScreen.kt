@@ -25,6 +25,7 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.BudgetProgress
 
@@ -47,20 +48,13 @@ public fun BudgetScreen(
     onEvent: (BudgetEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
-    ) {
-        item(key = "title", contentType = "title") {
-            LfScreenTitle(title = "Budgets")
-        }
-
-        item(key = "add", contentType = "add") {
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                alignment = LfActionAlignment.Start,
-            ) {
+    // No scaffold of its own: the shell hosts this screen, so the template
+    // without one.
+    LfTabPage(
+        title = "Budgets",
+        modifier = modifier,
+        notices = {
+            LfActionRow(alignment = LfActionAlignment.Start) {
                 LfButton(
                     text = "Add budget",
                     onClick = { onEvent(BudgetEvent.AddClicked) },
@@ -68,10 +62,9 @@ public fun BudgetScreen(
                     enabled = state.canAddBudget,
                 )
             }
-        }
-
-        if (state.showEmptyState) {
-            item(key = "empty", contentType = "empty") {
+        },
+        statusContent = if (state.showEmptyState) {
+            {
                 LfEmptyState(
                     title = "No budgets yet",
                     body = if (state.canAddBudget) {
@@ -85,9 +78,10 @@ public fun BudgetScreen(
                     },
                 )
             }
-            return@LazyColumn
-        }
-
+        } else {
+            null
+        },
+    ) {
         items(state.budgets, key = { it.budget.id }, contentType = { "budget" }) { progress ->
             BudgetCard(
                 progress = progress,
@@ -106,11 +100,7 @@ private fun BudgetCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    LfCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.space.screenEdge),
-    ) {
+    LfCard(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
             LfBudgetBar(
                 label = progress.categoryName,

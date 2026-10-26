@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +44,8 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfDetailPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.DeletedEntry
@@ -71,35 +74,25 @@ public fun BinScreen(
 ) {
     state.confirmation?.let { BinConfirmationDialog(it, onEvent) }
 
-    LfScaffold(
+    // Pinned header, as before: the count in the subtitle is what the actions
+    // below act on. "Done" takes the action band above the title (BUG17).
+    LfDetailPage(
+        title = "Deleted entries",
+        subtitle = subtitleFor(state),
         modifier = modifier,
-        bottomBar = { if (state.entries.isNotEmpty()) BinActions(state, onEvent) },
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                LfScreenTitle(
-                    title = "Deleted entries",
-                    subtitle = subtitleFor(state),
-                    modifier = Modifier.weight(1f),
-                )
-                LfButton(
-                    text = "Done",
-                    style = LfButtonStyle.Text,
-                    onClick = onBack,
-                    modifier = Modifier.padding(end = LfTheme.spacing.md),
-                )
-            }
-
-            state.message?.let { BinMessage(it, onEvent) }
-
-            BinList(state, onEvent)
-        }
+        actions = { LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack) },
+        actionsAlignment = LfActionAlignment.End,
+        notices = state.message?.let { message -> { BinMessage(message, onEvent) } },
+        statusContent = when {
+            !state.isLoaded -> { {} }
+            state.entries.isEmpty() -> { { NothingDeleted() } }
+            else -> null
+        },
+        actionBar = if (state.entries.isNotEmpty()) { { BinActions(state, onEvent) } } else null,
+        spacing = LfPageSpacing.Dense,
+        pinHeader = true,
+    ) {
+        binRows(state, onEvent)
     }
 }
 
@@ -117,37 +110,29 @@ private fun subtitleFor(state: BinUiState): String? = when {
 }
 
 @Composable
-private fun BinList(state: BinUiState, onEvent: (BinEvent) -> Unit) {
-    if (!state.isLoaded) return
+private fun NothingDeleted() {
+    LfEmptyState(
+        title = "Nothing deleted",
+        body = "Entries you delete are kept here until you erase them. " +
+            "Nothing is lost in the meantime — they just stop counting " +
+            "towards your ledger and totals.",
+    )
+}
 
-    if (state.entries.isEmpty()) {
-        LfEmptyState(
-            title = "Nothing deleted",
-            body = "Entries you delete are kept here until you erase them. " +
-                "Nothing is lost in the meantime — they just stop counting " +
-                "towards your ledger and totals.",
+/** The binned entries, as the page template's list content. */
+private fun LazyListScope.binRows(state: BinUiState, onEvent: (BinEvent) -> Unit) {
+    items(
+        count = state.entries.size,
+        key = { state.entries[it].selectionKey() },
+        contentType = { BIN_ROW_TYPE },
+    ) { index ->
+        val entry = state.entries[index]
+        BinRow(
+            entry = entry,
+            selected = entry.selectionKey() in state.selected,
+            enabled = !state.isWorking,
+            onEvent = onEvent,
         )
-        return
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
-    ) {
-        items(
-            count = state.entries.size,
-            key = { state.entries[it].selectionKey() },
-            contentType = { BIN_ROW_TYPE },
-        ) { index ->
-            val entry = state.entries[index]
-            BinRow(
-                entry = entry,
-                selected = entry.selectionKey() in state.selected,
-                enabled = !state.isWorking,
-                onEvent = onEvent,
-            )
-        }
     }
 }
 
@@ -369,9 +354,7 @@ private fun BinConfirmationDialog(confirmation: BinConfirmation, onEvent: (BinEv
 @Composable
 private fun BinMessage(message: String, onEvent: (BinEvent) -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.space.screenEdge),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {

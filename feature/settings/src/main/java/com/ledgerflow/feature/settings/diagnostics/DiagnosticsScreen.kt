@@ -17,8 +17,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.format.DisplayDates
-import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
@@ -29,6 +27,9 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.diagnostics.CaptureOutcomes
 import com.ledgerflow.core.domain.diagnostics.DiagnosticsWindow
@@ -71,46 +72,26 @@ public fun DiagnosticsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LfScaffold(modifier = modifier) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        ) {
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                alignment = LfActionAlignment.Start,
-            ) {
-                LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline)
+    // A scrolling page with nothing to submit: the form template, no bar.
+    LfFormPage(
+        title = "Diagnostics",
+        subtitle = "What automatic capture did with the messages it saw. " +
+            "Counts only — no message text, no amounts.",
+        actionBar = null,
+        modifier = modifier,
+        actions = { LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline) },
+    ) {
+        LfSegmentedControl(
+            options = WINDOWS.map(::windowLabel),
+            selectedIndex = WINDOWS.indexOf(state.window),
+            onSelect = { index -> onEvent(DiagnosticsEvent.WindowSelected(WINDOWS[index])) },
+        )
+        when (val report = state.report) {
+            DiagnosticsReport.Loading -> Unit
+            DiagnosticsReport.Unavailable -> DiagnosticsCard(heading = "Nothing to count") {
+                BodyText("Your data could not be opened to count it. Close the app and open it again.")
             }
-            LfScreenTitle(
-                title = "Diagnostics",
-                subtitle = "What automatic capture did with the messages it saw. " +
-                    "Counts only — no message text, no amounts.",
-            )
-            Column(
-                modifier = Modifier.padding(
-                    start = LfTheme.space.screenEdge,
-                    end = LfTheme.space.screenEdge,
-                    bottom = LfTheme.space.listEnd,
-                ),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            ) {
-                LfSegmentedControl(
-                    options = WINDOWS.map(::windowLabel),
-                    selectedIndex = WINDOWS.indexOf(state.window),
-                    onSelect = { index -> onEvent(DiagnosticsEvent.WindowSelected(WINDOWS[index])) },
-                )
-                when (val report = state.report) {
-                    DiagnosticsReport.Loading -> Unit
-                    DiagnosticsReport.Unavailable -> DiagnosticsCard(heading = "Nothing to count") {
-                        BodyText("Your data could not be opened to count it. Close the app and open it again.")
-                    }
-                    is DiagnosticsReport.Ready -> ReportCards(report.diagnostics, onOpenSuppressed)
-                }
-            }
+            is DiagnosticsReport.Ready -> ReportCards(report.diagnostics, onOpenSuppressed)
         }
     }
 }
