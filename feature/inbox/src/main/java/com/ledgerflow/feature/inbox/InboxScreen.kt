@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
@@ -52,6 +53,7 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
+import com.ledgerflow.core.designsystem.pattern.LfDetailPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingTransaction
@@ -122,66 +124,51 @@ public fun InboxScreen(
 
     state.confirmation?.let { EraseConfirmationDialog(it, onEvent) }
 
-    LfScaffold(modifier = modifier, snackbarHostState = snackbarHostState) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            LfScreenTitle(
-                title = "Inbox",
-                subtitle = state.subtitle(),
-            )
-
-            FilterBand(state, onEvent)
-
-            if (state.canErase && state.rows.isNotEmpty()) EraseBand(state, onEvent)
-
-            if (state.rows.isEmpty() && !state.loading) {
-                LfEmptyState(
-                    title = state.emptyTitle(),
-                    body = state.emptyBody(),
-                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                )
-            } else {
-                CandidateList(state, onEvent, onReview)
-            }
-        }
+    // The header is pinned: the filters are what the queue is read through.
+    LfDetailPage(
+        title = "Inbox",
+        subtitle = state.subtitle(),
+        modifier = modifier,
+        filters = { FilterBand(state, onEvent) },
+        notices = if (state.canErase && state.rows.isNotEmpty()) {
+            { EraseBand(state, onEvent) }
+        } else {
+            null
+        },
+        statusContent = if (state.rows.isEmpty() && !state.loading) {
+            { LfEmptyState(title = state.emptyTitle(), body = state.emptyBody()) }
+        } else {
+            null
+        },
+        snackbarHostState = snackbarHostState,
+        pinHeader = true,
+    ) {
+        candidateRows(state, onEvent, onReview)
     }
 }
 
 /**
- * The queue itself.
- *
- * Split out of [InboxScreen] when the erase band pushed that function past
- * detekt's length limit. The division is the one `LedgerFlowShell` already
- * makes: the outer function decides what chrome is on screen, this decides what
- * is under it.
+ * The queue itself, as the page template's list content: the template owns the
+ * edge, the gap between rows and the list end.
  */
-@Composable
-private fun CandidateList(
+private fun LazyListScope.candidateRows(
     state: InboxUiState,
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
-    ) {
-        items(
-            items = state.rows,
-            key = { it.id },
-            // One row type, so the compiler can reuse every slot.
-            contentType = { "pending" },
-        ) { row ->
-            SwipeableRow(
-                row = row,
-                selectable = state.canErase,
-                selected = row.id in state.selected,
-                onEvent = onEvent,
-                onReview = onReview,
-            )
-        }
+    items(
+        items = state.rows,
+        key = { it.id },
+        // One row type, so the compiler can reuse every slot.
+        contentType = { "pending" },
+    ) { row ->
+        SwipeableRow(
+            row = row,
+            selectable = state.canErase,
+            selected = row.id in state.selected,
+            onEvent = onEvent,
+            onReview = onReview,
+        )
     }
 }
 
@@ -207,10 +194,7 @@ private fun CandidateList(
  */
 @Composable
 private fun FilterBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
-    LfActionRow(
-        alignment = LfActionAlignment.Start,
-        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-    ) {
+    LfActionRow(alignment = LfActionAlignment.Start) {
         state.visibleFilters.forEach { filter ->
             val count = state.counts[filter] ?: 0
             LfChip(
@@ -244,10 +228,7 @@ private fun FilterBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
  */
 @Composable
 private fun EraseBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
-    LfActionRow(
-        alignment = LfActionAlignment.Start,
-        modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-    ) {
+    LfActionRow(alignment = LfActionAlignment.Start) {
         LfButton(
             text = "Erase all",
             style = LfButtonStyle.Inline,

@@ -29,6 +29,7 @@ import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.LedgerType
@@ -77,12 +78,10 @@ public fun ReviewScreen(
 
     ReviewDialogs(state, onEvent)
 
-    LfScaffold(
-        modifier = modifier,
-        snackbarHostState = snackbarHostState,
-        bottomBar = { if (!state.missing) ReviewActions(state, onEvent, onBack) },
-    ) { padding ->
-        if (state.missing) {
+    if (state.missing) {
+        // No form and no bar: the item is gone. E1's state component takes
+        // this over; until then it is the empty state on a plain scaffold.
+        LfScaffold(modifier = modifier, snackbarHostState = snackbarHostState) { padding ->
             LfEmptyState(
                 title = "Not here any more",
                 body = "This item was already reviewed, or it has been removed.",
@@ -90,62 +89,59 @@ public fun ReviewScreen(
                 onAction = onBack,
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
-            return@LfScaffold
         }
+        return
+    }
 
-        ReviewForm(state, onEvent, Modifier.padding(padding))
+    LfFormPage(
+        title = "Review",
+        subtitle = state.provenanceLine(),
+        actionBar = { ReviewActions(state, onEvent, onBack) },
+        modifier = modifier,
+        snackbarHostState = snackbarHostState,
+    ) {
+        ReviewFields(state, onEvent)
     }
 }
 
 /** The form itself, in the entry screen's order: how much, then what for. */
 @Composable
-private fun ReviewForm(
+private fun ReviewFields(
     state: ReviewUiState,
     onEvent: (ReviewEvent) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-    ) {
-        LfScreenTitle(title = "Review", subtitle = state.provenanceLine())
+    state.capturedText?.let { CapturedMessage(it) }
 
-        state.capturedText?.let { CapturedMessage(it) }
+    LfTextField(
+        value = state.amountText,
+        onValueChange = { onEvent(ReviewEvent.AmountChanged(it)) },
+        label = "Amount",
+        modifier = Modifier.fillMaxWidth(),
+    )
 
-        LfTextField(
-            value = state.amountText,
-            onValueChange = { onEvent(ReviewEvent.AmountChanged(it)) },
-            label = "Amount",
-            modifier = Modifier.fillMaxWidth(),
-        )
+    // Under the amount, because that is the order of the decision:
+    // how much, then what for (§5.4, ADR-0018).
+    LfSegmentedControl(
+        options = listOf("Single item", "Itemised"),
+        selectedIndex = if (state.itemised) 1 else 0,
+        onSelect = { onEvent(ReviewEvent.ModeSelected(itemised = it == 1)) },
+    )
 
-        // Under the amount, because that is the order of the decision:
-        // how much, then what for (§5.4, ADR-0018).
-        LfSegmentedControl(
-            options = listOf("Single item", "Itemised"),
-            selectedIndex = if (state.itemised) 1 else 0,
-            onSelect = { onEvent(ReviewEvent.ModeSelected(itemised = it == 1)) },
-        )
-
-        if (state.itemised) {
-            LfLineItemEditor(
-                state = state.editorState(),
-                onEvent = { onEvent(it.toReviewEvent()) },
-            )
-        }
-
-        DetailRows(state, onEvent)
-
-        LfTextField(
-            value = state.noteText,
-            onValueChange = { onEvent(ReviewEvent.NoteChanged(it)) },
-            label = "Note",
-            modifier = Modifier.fillMaxWidth(),
+    if (state.itemised) {
+        LfLineItemEditor(
+            state = state.editorState(),
+            onEvent = { onEvent(it.toReviewEvent()) },
         )
     }
+
+    DetailRows(state, onEvent)
+
+    LfTextField(
+        value = state.noteText,
+        onValueChange = { onEvent(ReviewEvent.NoteChanged(it)) },
+        label = "Note",
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /**

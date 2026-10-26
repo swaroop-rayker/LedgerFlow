@@ -155,11 +155,14 @@ public fun LfSettingsPage(
  * A form: Add entry, Review, Export, Back up now. Scrolls as one column, so a
  * field error below the fold can be scrolled to, and the keyboard is paid for
  * once by `LfScaffold`.
+ *
+ * The only template whose [title] may be null: Add entry opens straight onto
+ * the book and the amount, which are what the screen is for.
  */
 @Composable
 @Suppress("LongParameterList") // A template is its slots; each is optional.
 public fun LfFormPage(
-    title: String,
+    title: String?,
     actionBar: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
@@ -179,7 +182,11 @@ public fun LfFormPage(
                 .padding(horizontal = space.screenEdge),
             verticalArrangement = Arrangement.spacedBy(spacing.gap()),
         ) {
-            PageHeader(title, subtitle, actions, search = null, filters = null, notices = notices).Draw()
+            // Nothing at all when there is no header: an empty one would still
+            // take a gap above the first field.
+            if (title != null || actions != null || notices != null) {
+                PageHeader(title, subtitle, actions, search = null, filters = null, notices = notices).Draw()
+            }
             content()
             Spacer(Modifier.height(space.listEnd))
         }
@@ -266,7 +273,7 @@ public fun LfPanel(
 /** The header slots, drawn the same way by every template. */
 @Immutable
 private class PageHeader(
-    val title: String,
+    val title: String?,
     val subtitle: String?,
     val actions: (@Composable () -> Unit)?,
     val search: (@Composable () -> Unit)?,
@@ -277,7 +284,7 @@ private class PageHeader(
     fun Draw() {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             actions?.let { LfActionRow(alignment = LfActionAlignment.Start) { it() } }
-            LfTitleBlock(title = title, subtitle = subtitle)
+            title?.let { LfTitleBlock(title = it, subtitle = subtitle) }
             search?.invoke()
             filters?.invoke()
             notices?.let { Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) { it() } }

@@ -54,6 +54,8 @@ import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.ui.lineitem.LfLineItemEditor
@@ -108,16 +110,19 @@ public fun EntryScreen(
         }
     }
 
-    LfScaffold(
+    // No title: the form opens straight onto the book and the amount.
+    LfFormPage(
+        title = null,
+        actionBar = { SaveBar(state, onEvent) },
         modifier = modifier,
-        bottomBar = { SaveBar(state, onEvent) },
-    ) { padding ->
-        EntryForm(state, onEvent, amountFocus, padding)
+        spacing = LfPageSpacing.Sections,
+    ) {
+        EntryFields(state, onEvent, amountFocus)
     }
 }
 
 /**
- * Everything that scrolls.
+ * Everything that scrolls, laid out by the form template.
  *
  * Split out of [EntryScreen] when the itemised-mode control pushed that
  * function past detekt's length and complexity thresholds. The limits were
@@ -126,72 +131,62 @@ public fun EntryScreen(
  * inside it.
  */
 @Composable
-private fun EntryForm(
+private fun EntryFields(
     state: EntryUiState,
     onEvent: (EntryEvent) -> Unit,
     amountFocus: FocusRequester,
-    padding: PaddingValues,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = LfTheme.space.screenEdge),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-    ) {
-        LedgerSelector(state, onEvent)
+    LedgerSelector(state, onEvent)
 
-        LfAmountField(
-            value = state.amountText,
-            onValueChange = { onEvent(EntryEvent.AmountChanged(it)) },
-            currencyCode = state.currencyCode,
-            focusRequester = amountFocus,
-            label = if (state.ledger == LedgerType.DEBIT) "Amount spent" else "Amount received",
-            // Neutral until there is an amount. A coral zero on an
-            // untouched form reads as an error rather than as an expense,
-            // and it is the UI asserting something the user has not said.
-            tone = when {
-                state.amountMinor == 0L -> LfAmountTone.Neutral
-                state.ledger == LedgerType.DEBIT -> LfAmountTone.Debit
-                else -> LfAmountTone.Credit
-            },
+    LfAmountField(
+        value = state.amountText,
+        onValueChange = { onEvent(EntryEvent.AmountChanged(it)) },
+        currencyCode = state.currencyCode,
+        focusRequester = amountFocus,
+        label = if (state.ledger == LedgerType.DEBIT) "Amount spent" else "Amount received",
+        // Neutral until there is an amount. A coral zero on an
+        // untouched form reads as an error rather than as an expense,
+        // and it is the UI asserting something the user has not said.
+        tone = when {
+            state.amountMinor == 0L -> LfAmountTone.Neutral
+            state.ledger == LedgerType.DEBIT -> LfAmountTone.Debit
+            else -> LfAmountTone.Credit
+        },
+    )
+
+    // Only once there is an amount -- the same rule the unsaved shelf
+    // follows below. On an untouched form this is a control for a
+    // decision the user has not reached yet.
+    if (state.amountMinor > 0L) ModeSelector(state, onEvent)
+
+    if (state.resumedFromDraft) ResumeNotice(onEvent)
+    if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
+    // Also shown with an empty shelf once the form has an amount, so
+    // "Start another" exists *before* there is a second draft. Gated on
+    // `unsaved` alone it only appeared once something was already
+    // parked -- which is the one state from which you can never park
+    // anything.
+    if (state.unsaved.isNotEmpty() || state.amountMinor > 0L) {
+        UnsavedStack(state, onEvent)
+    }
+
+    DetailRows(state, onEvent)
+
+    LfTextField(
+        value = state.note,
+        onValueChange = { onEvent(EntryEvent.NoteChanged(it)) },
+        label = "Note (optional)",
+    )
+
+    if (state.itemised) {
+        LfLineItemEditor(
+            state = state.editor,
+            onEvent = { onEvent(it.toEntryEvent()) },
         )
+    }
 
-        // Only once there is an amount -- the same rule the unsaved shelf
-        // follows below. On an untouched form this is a control for a
-        // decision the user has not reached yet.
-        if (state.amountMinor > 0L) ModeSelector(state, onEvent)
-
-        if (state.resumedFromDraft) ResumeNotice(onEvent)
-        if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
-        // Also shown with an empty shelf once the form has an amount, so
-        // "Start another" exists *before* there is a second draft. Gated on
-        // `unsaved` alone it only appeared once something was already
-        // parked -- which is the one state from which you can never park
-        // anything.
-        if (state.unsaved.isNotEmpty() || state.amountMinor > 0L) {
-            UnsavedStack(state, onEvent)
-        }
-
-        DetailRows(state, onEvent)
-
-        LfTextField(
-            value = state.note,
-            onValueChange = { onEvent(EntryEvent.NoteChanged(it)) },
-            label = "Note (optional)",
-        )
-
-        if (state.itemised) {
-            LfLineItemEditor(
-                state = state.editor,
-                onEvent = { onEvent(it.toEntryEvent()) },
-            )
-        }
-
-        state.message?.let {
-            Text(text = it, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
-        }
+    state.message?.let {
+        Text(text = it, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
     }
 }
 
