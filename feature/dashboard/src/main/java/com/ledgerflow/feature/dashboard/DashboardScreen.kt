@@ -27,7 +27,6 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.chart.LfBudgetBar
 import com.ledgerflow.core.designsystem.chart.LfCategoryPalette
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
@@ -38,8 +37,11 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.BookMonth
@@ -143,18 +145,16 @@ public fun DashboardScreen(
     onOpenAnalytics: () -> Unit = {},
     onOpenLedger: (LedgerType) -> Unit = {},
 ) {
-    // A `LazyColumn`, not a scrolling `Column`, for the tab switch: a `Column`
+    // A lazy list, not a scrolling `Column`, for the tab switch: a `Column`
     // composes and measures every card and both recent lists on the frame Home
     // appears, including everything below the fold -- the costliest first frame
-    // of the four tabs (28 ms, PERF-120HZ-PLAN §5). One item per card, under the
-    // same `spacedBy`, so the layout is the one the `Column` drew.
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+    // of the four tabs (28 ms, PERF-120HZ-PLAN §5). One item per card; the
+    // template supplies the edge, the gap between cards and the list end.
+    LfTabPage(
+        title = "Home",
+        modifier = modifier,
+        spacing = LfPageSpacing.Sections,
     ) {
-        item(key = "title", contentType = "title") {
-            LfScreenTitle(title = "Home")
-        }
 
         // First: a loss has already happened, where the cards below it are
         // about what to do next.
@@ -163,7 +163,6 @@ public fun DashboardScreen(
                 CaptureGapCard(
                     gap = gap,
                     onAcknowledge = onAcknowledgeCaptureGap,
-                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             }
         }
@@ -175,7 +174,6 @@ public fun DashboardScreen(
                     saveFailed = state.crashSaveFailed,
                     onSave = onSaveCrashReports,
                     onDismiss = onDismissCrashReports,
-                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             }
         }
@@ -185,7 +183,6 @@ public fun DashboardScreen(
                 BackupReminderCard(
                     reminder = reminder,
                     onBackUpNow = onBackUpNow,
-                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             }
         }
@@ -195,7 +192,6 @@ public fun DashboardScreen(
                 CaptureHealthBanner(
                     health = state.captureHealth,
                     onAction = onSetUpNotifications,
-                    modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
                 )
             }
         }
@@ -207,11 +203,6 @@ public fun DashboardScreen(
             onOpenAnalytics = onOpenAnalytics,
             onOpenLedger = onOpenLedger,
         )
-
-        // The last card clears the bottom bar: the list end every list shares.
-        item(key = "end", contentType = "end") {
-            Spacer(modifier = Modifier.height(LfTheme.space.listEnd))
-        }
     }
 }
 
@@ -234,7 +225,6 @@ private fun LazyListScope.homeBody(
             ReviewCard(
                 count = state.pendingCount,
                 onOpenInbox = onOpenInbox,
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -254,7 +244,6 @@ private fun LazyListScope.homeBody(
             MonthCard(
                 summary = state.summary,
                 currency = state.baseCurrency,
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
         state.summary?.let { summary ->
@@ -273,7 +262,6 @@ private fun LazyListScope.homeBody(
                 title = "Recent spending",
                 rows = rows,
                 onSeeAll = { onOpenLedger(LedgerType.DEBIT) },
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -283,7 +271,6 @@ private fun LazyListScope.homeBody(
                 title = "Recent income",
                 rows = rows,
                 onSeeAll = { onOpenLedger(LedgerType.CREDIT) },
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -302,7 +289,6 @@ private fun LazyListScope.spendingCards(
                 budgets = summary.budgets,
                 currency = state.baseCurrency,
                 onOpenBudgets = onOpenBudgets,
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -312,7 +298,6 @@ private fun LazyListScope.spendingCards(
                 summary = summary,
                 currency = state.baseCurrency,
                 onOpenAnalytics = onOpenAnalytics,
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }
@@ -321,7 +306,6 @@ private fun LazyListScope.spendingCards(
             CoverageCard(
                 coverage = summary.captureCoverage,
                 onOpenAnalytics = onOpenAnalytics,
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
             )
         }
     }

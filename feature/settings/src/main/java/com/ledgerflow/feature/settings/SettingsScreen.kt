@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -27,6 +28,8 @@ import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
@@ -87,27 +90,21 @@ public fun SettingsScreen(
         SettingsItem.Diagnostics to onDiagnostics,
     )
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+    // One item per section: a lazy list, as every tab is, so the tab switch
+    // composes only the sections on screen.
+    LfTabPage(
+        title = "Settings",
+        modifier = modifier,
+        spacing = LfPageSpacing.Sections,
     ) {
-        LfScreenTitle(title = "Settings")
-        Column(
-            modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-        ) {
-            SettingsSections.forEach { section ->
-                Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                    SectionHeading(section.heading)
-                    section.items.forEach { item ->
-                        SettingsItemRow(item = item, state = state, onClick = links[item], onEvent = onEvent)
-                    }
+        items(SettingsSections, key = { it.heading }, contentType = { "section" }) { section ->
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+                SectionHeading(section.heading)
+                section.items.forEach { item ->
+                    SettingsItemRow(item = item, state = state, onClick = links[item], onEvent = onEvent)
                 }
             }
         }
-        Spacer(Modifier.height(LfTheme.space.listEnd))
     }
 }
 

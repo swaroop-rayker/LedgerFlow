@@ -3,6 +3,7 @@ package com.ledgerflow.core.designsystem.pattern
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,6 +23,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfBottomSheet
@@ -65,12 +69,16 @@ public fun LfTabPage(
     filters: (@Composable () -> Unit)? = null,
     notices: (@Composable ColumnScope.() -> Unit)? = null,
     statusContent: (@Composable ColumnScope.() -> Unit)? = null,
+    spacing: LfPageSpacing = LfPageSpacing.Rows,
+    pinHeader: Boolean = false,
     listState: LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit,
 ) {
     PageList(
         header = PageHeader(title, subtitle, actions, search, filters, notices),
         statusContent = statusContent,
+        spacing = spacing,
+        pinHeader = pinHeader,
         listState = listState,
         modifier = modifier.fillMaxSize(),
         content = content,
@@ -92,6 +100,8 @@ public fun LfDetailPage(
     actionBar: (@Composable () -> Unit)? = null,
     selectionBar: (@Composable () -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
+    spacing: LfPageSpacing = LfPageSpacing.Rows,
+    pinHeader: Boolean = false,
     listState: LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit,
 ) {
@@ -103,6 +113,8 @@ public fun LfDetailPage(
         PageList(
             header = PageHeader(title, subtitle, actions, search, filters, notices),
             statusContent = statusContent,
+            spacing = spacing,
+            pinHeader = pinHeader,
             listState = listState,
             modifier = Modifier.fillMaxSize().padding(padding),
             content = content,
@@ -134,6 +146,7 @@ public fun LfSettingsPage(
         notices = notices,
         statusContent = statusContent,
         snackbarHostState = snackbarHostState,
+        spacing = LfPageSpacing.Sections,
         content = content,
     )
 }
@@ -153,6 +166,7 @@ public fun LfFormPage(
     actions: (@Composable () -> Unit)? = null,
     notices: (@Composable ColumnScope.() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
+    spacing: LfPageSpacing = LfPageSpacing.Rows,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val space = LfTheme.space
@@ -163,7 +177,7 @@ public fun LfFormPage(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = space.screenEdge),
-            verticalArrangement = Arrangement.spacedBy(space.itemGap),
+            verticalArrangement = Arrangement.spacedBy(spacing.gap()),
         ) {
             PageHeader(title, subtitle, actions, search = null, filters = null, notices = notices).Draw()
             content()
@@ -272,32 +286,90 @@ private class PageHeader(
 }
 
 /**
+ * How far apart a page's items sit: `Dense` for a long list of transactions
+ * (the Ledger), `Rows` for most lists, `Sections` for a page of cards or
+ * groups (Home, Settings). One choice per page, so the gaps cannot drift
+ * between screens that show the same kind of thing.
+ */
+public enum class LfPageSpacing { Dense, Rows, Sections }
+
+@Composable
+internal fun LfPageSpacing.gap(): Dp = when (this) {
+    LfPageSpacing.Dense -> LfTheme.space.inlineGap
+    LfPageSpacing.Rows -> LfTheme.space.itemGap
+    LfPageSpacing.Sections -> LfTheme.space.sectionGap
+}
+
+/**
+ * Lets one item of a template's list reach past the screen edge to the side of
+ * the screen: a row that scrolls sideways (Analytics' ranges, the entry form's
+ * suggestions) and pads its own content back in, so its first chip starts on
+ * the edge and the rest scroll under the margin rather than stopping at it.
+ */
+@Composable
+public fun Modifier.lfFullBleed(): Modifier {
+    val edge = with(LocalDensity.current) { LfTheme.space.screenEdge.roundToPx() }
+    return layout { measurable, constraints ->
+        val wide = constraints.copy(
+            minWidth = constraints.minWidth + edge * 2,
+            maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + edge * 2 else constraints.maxWidth,
+        )
+        val placeable = measurable.measure(wide)
+        layout(placeable.width - edge * 2, placeable.height) { placeable.place(-edge, 0) }
+    }
+}
+
+/**
  * The scrolling part of a list page: header, then the content or the state
  * that replaces it, then [LfTheme.space]`.listEnd` so the last row clears the
  * bar below. Every item sits inside the screen edge.
+ *
+ * With [pinHeader] the header stays put above the list, as the Ledger's,
+ * Inbox's and bin's always have: their filters are what the list is read
+ * through. Otherwise it scrolls away with the list (Home, Analytics, Settings).
  */
 @Composable
 private fun PageList(
     header: PageHeader,
     statusContent: (@Composable ColumnScope.() -> Unit)?,
+    spacing: LfPageSpacing,
+    pinHeader: Boolean,
     listState: LazyListState,
     modifier: Modifier,
     content: LazyListScope.() -> Unit,
 ) {
     val space = LfTheme.space
-    LazyColumn(
-        modifier = modifier,
-        state = listState,
-        contentPadding = PaddingValues(start = space.screenEdge, end = space.screenEdge, bottom = space.listEnd),
-        verticalArrangement = Arrangement.spacedBy(space.itemGap),
-    ) {
-        item(key = HEADER_KEY, contentType = HEADER_KEY) { header.Draw() }
+    val gap = spacing.gap()
+    val padding = PaddingValues(start = space.screenEdge, end = space.screenEdge, bottom = space.listEnd)
+    val body: LazyListScope.() -> Unit = {
         if (statusContent != null) {
             item(key = STATUS_KEY, contentType = STATUS_KEY) {
                 Column(verticalArrangement = Arrangement.spacedBy(space.itemGap)) { statusContent() }
             }
         } else {
             content()
+        }
+    }
+    if (pinHeader) {
+        Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(space.itemGap)) {
+            Box(Modifier.padding(horizontal = space.screenEdge)) { header.Draw() }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                state = listState,
+                contentPadding = padding,
+                verticalArrangement = Arrangement.spacedBy(gap),
+                content = body,
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier,
+            state = listState,
+            contentPadding = padding,
+            verticalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            item(key = HEADER_KEY, contentType = HEADER_KEY) { header.Draw() }
+            body()
         }
     }
 }

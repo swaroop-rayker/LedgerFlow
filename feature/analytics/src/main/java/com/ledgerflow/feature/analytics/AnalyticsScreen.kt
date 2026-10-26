@@ -25,7 +25,6 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
@@ -52,7 +51,10 @@ import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.pattern.LfTabPage
+import com.ledgerflow.core.designsystem.pattern.lfFullBleed
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
@@ -84,23 +86,12 @@ public fun AnalyticsScreen(
     onEvent: (AnalyticsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = PaddingValues(bottom = LfTheme.space.listEnd),
-    ) {
-        item(key = "title", contentType = "title") {
-            LfScreenTitle(title = "Analytics")
-        }
-        item(key = "ranges", contentType = "ranges") {
+    LfTabPage(
+        title = "Analytics",
+        modifier = modifier,
+        filters = {
             RangeRow(selected = state.range, onEvent = onEvent)
-        }
-
-        item(key = "filters", contentType = "filters") {
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.space.screenEdge),
-                alignment = LfActionAlignment.Start,
-            ) {
+            LfActionRow(alignment = LfActionAlignment.Start) {
                 LfButton(
                     // The count is on the control, so an active filter is
                     // visible without opening the sheet -- a screen quietly
@@ -122,8 +113,8 @@ public fun AnalyticsScreen(
                 // affordance: it shows when a custom range is active, which a
                 // button never could.
             }
-        }
-
+        },
+    ) {
         val snapshot = state.snapshot
         if (state.showEmptyState || snapshot == null) {
             // **A panned window that is empty still keeps its chart.** Found on
@@ -637,8 +628,10 @@ private fun RangeRow(selected: AnalyticsRange, onEvent: (AnalyticsEvent) -> Unit
     // A horizontally scrolling row rather than a wrapping one: seven ranges in
     // chronological order are a scale, and a scale that wraps mid-way reads as
     // two groups.
+    // Full bleed: the chips scroll under the screen edge rather than stopping
+    // at it, and the content padding starts the first one on the edge.
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().lfFullBleed(),
         horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
         contentPadding = PaddingValues(
             horizontal = LfTheme.space.screenEdge,
@@ -683,9 +676,7 @@ private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {
 @Composable
 private fun SectionCard(title: String?, content: @Composable () -> Unit) {
     LfCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.space.screenEdge),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
             if (title != null) {

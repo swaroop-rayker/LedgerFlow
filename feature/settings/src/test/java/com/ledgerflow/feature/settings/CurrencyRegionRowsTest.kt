@@ -14,7 +14,7 @@ import com.ledgerflow.core.model.DateOrder
 import com.ledgerflow.core.model.NumberGrouping
 import com.ledgerflow.core.model.RegionConventions
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
-import com.ledgerflow.core.testing.screenshot.PHONE_1X
+import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,7 +28,9 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
+// PHONE_2X's height: the Settings tab is a lazy list (design-system step D2), so
+// only what fits is composed, and every section has to fit for these checks.
+@Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_2X)
 class CurrencyRegionRowsTest {
 
     @get:Rule
