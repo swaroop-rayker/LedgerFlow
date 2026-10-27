@@ -12,7 +12,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Tab switches, Home → Ledger → Analytics → Settings → Home (BUG57;
+ * Tab switches, Home → Ledger → Analytics → Profile → Home (BUG57;
  * `docs/PERF-120HZ-PLAN.md` §1.5 and §5).
  *
  * The surface the transition bug lived on: Navigation's default 700 ms
@@ -57,8 +57,10 @@ class TabSwitchBenchmark {
     }
 
     private companion object {
-        // "Settings" was "More" until V2-2: the same rows, so runs either side compare.
-        val TABS = listOf("Ledger", "Analytics", "Settings", "Home")
+        // The fourth tab was "More" until V2-2 and "Settings" until design-system
+        // D4. Profile is a much lighter screen than the Settings tab was, so runs
+        // from before D4 do not compare on that leg.
+        val TABS = listOf("Ledger", "Analytics", "Profile", "Home")
         const val ITERATIONS = 5
         const val ROUNDS = 2
         const val SETTLE_MS = 1_000L

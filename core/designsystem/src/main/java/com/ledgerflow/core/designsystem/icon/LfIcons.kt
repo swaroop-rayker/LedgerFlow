@@ -1,11 +1,13 @@
 package com.ledgerflow.core.designsystem.icon
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -29,8 +31,14 @@ public object LfIcons {
 
     public val Dashboard: ImageVector = Icons.Filled.Home
     public val Ledger: ImageVector = Icons.AutoMirrored.Filled.List
-    /** The Settings tab (V2-2, which replaced More in the bar). */
+    /** Settings (V2-2), reached from Profile since design-system step D4. */
     public val Settings: ImageVector = Icons.Filled.Settings
+
+    /** The Profile tab (design-system step D4, which replaced Settings in the bar). */
+    public val Profile: ImageVector = Icons.Filled.Person
+
+    /** "Opens a page": `LfNavRow`'s trailing mark. Auto-mirrored, so it points onward in RTL. */
+    public val Chevron: ImageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight
     public val Add: ImageVector = Icons.Filled.Add
 
     /** Dismiss. Never used for a destructive action without a confirmation. */

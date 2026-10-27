@@ -1,7 +1,8 @@
 package com.ledgerflow.feature.settings
 
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -21,7 +22,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The Settings tab's layout and wiring (V2-2, `docs/V2-PLAN.md` D7).
+ * Settings' layout and wiring (V2-2, `docs/V2-PLAN.md` D7; one page per
+ * section since design-system step D4).
  *
  * V2-2 moved More's eight rows under four headings. A move has two ways to go
  * wrong that no golden reports by name: a row that drops out (the screen still
@@ -31,8 +33,8 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-// PHONE_2X's height: the Settings tab is a lazy list (design-system step D2), so
-// only what fits is composed, and every section has to fit for these checks.
+// PHONE_2X's height: each page is a lazy list (design-system step D2), so only
+// what fits is composed, and a whole page has to fit for these checks.
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_2X)
 class SettingsSectionsTest {
 
@@ -138,12 +140,23 @@ class SettingsSectionsTest {
     }
 
     @Test
+    fun everySection_hasItsOwnPage_inOrder() {
+        // D4: each section is a page, and the index lists them in this order.
+        assertThat(SettingsSections.map { it.page }).containsExactlyElementsIn(SettingsPage.entries).inOrder()
+        SettingsPage.entries.forEach { assertThat(settingsPageNamed(it.name)).isEqualTo(it) }
+        assertThat(settingsPageNamed("Settings")).isNull()
+    }
+
+    @Test
     fun everyRow_opensWhatItNames() {
         val opened = mutableListOf<String>()
+        var page by mutableStateOf(SettingsPage.Notifications)
         rule.setContent {
             LfTheme {
-                SettingsScreen(
+                SettingsSectionScreen(
+                    page = page,
                     state = SettingsUiState(isLoaded = true),
+                    onBack = { opened += "back" },
                     onCategories = { opened += "categories" },
                     onBudgets = { opened += "budgets" },
                     onExport = { opened += "export" },
@@ -158,20 +171,32 @@ class SettingsSectionsTest {
             }
         }
 
-        navigatingRows.forEach { (item, callback) ->
-            opened.clear()
-            rule.onNodeWithText(item.title).performScrollTo().performClick()
+        // Every page, every navigating row on it: each opens exactly its own.
+        SettingsSections.forEach { section ->
+            page = section.page
             rule.waitForIdle()
-            assertWithMessage("tapping \"${item.title}\"").that(opened).containsExactly(callback)
+            section.items.filter { it in navigatingRows }.forEach { item ->
+                opened.clear()
+                rule.onNodeWithText(item.title).performScrollTo().performClick()
+                rule.waitForIdle()
+                assertWithMessage("tapping \"${item.title}\" on ${section.heading}")
+                    .that(opened).containsExactly(navigatingRows.getValue(item))
+            }
+            opened.clear()
+            rule.onNodeWithText("Back").performClick()
+            assertWithMessage("Back on ${section.heading}").that(opened).containsExactly("back")
         }
     }
 
     @Test
-    fun eachSectionName_isAHeading_andNothingElseIs() {
+    fun eachPage_isTitledWithItsSection_andShowsOnlyItsRows() {
+        var page by mutableStateOf(SettingsPage.Notifications)
         rule.setContent {
             LfTheme {
-                SettingsScreen(
+                SettingsSectionScreen(
+                    page = page,
                     state = SettingsUiState(isLoaded = true),
+                    onBack = {},
                     onCategories = {},
                     onBudgets = {},
                     onExport = {},
@@ -186,14 +211,29 @@ class SettingsSectionsTest {
             }
         }
 
-        // TalkBack's "headings" navigation is how a screen-reader user skips a
-        // section (§9.6), so each name must be one and no row may be.
-        val headings = rule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
-            .fetchSemanticsNodes()
-            .map { node -> node.config[SemanticsProperties.Text].joinToString { it.text } }
-        assertThat(headings).containsExactlyElementsIn(SettingsSections.map { it.heading }).inOrder()
         SettingsSections.forEach { section ->
+            page = section.page
+            rule.waitForIdle()
             rule.onAllNodesWithText(section.heading).assertCountEquals(1)
+            SettingsItem.entries.forEach { item ->
+                val expected = if (item in section.items) 1 else 0
+                rule.onAllNodesWithText(item.title).assertCountEquals(expected)
+            }
+        }
+    }
+
+    @Test
+    fun index_listsEverySection_andOpensItsPage() {
+        val opened = mutableListOf<SettingsPage>()
+        rule.setContent {
+            LfTheme {
+                SettingsIndexScreen(state = SettingsUiState(isLoaded = true), onPage = { opened += it }, onBack = {})
+            }
+        }
+        SettingsSections.forEach { section ->
+            opened.clear()
+            rule.onNodeWithText(section.heading).performScrollTo().performClick()
+            assertWithMessage("tapping \"${section.heading}\"").that(opened).containsExactly(section.page)
         }
     }
 }

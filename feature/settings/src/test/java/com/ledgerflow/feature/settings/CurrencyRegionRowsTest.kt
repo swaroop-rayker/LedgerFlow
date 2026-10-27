@@ -41,8 +41,10 @@ class CurrencyRegionRowsTest {
     private fun show(state: SettingsUiState) {
         rule.setContent {
             LfTheme {
-                SettingsScreen(
+                SettingsSectionScreen(
+                    page = SettingsPage.Region,
                     state = state,
+                    onBack = {},
                     onCategories = {},
                     onBudgets = {},
                     onExport = {},

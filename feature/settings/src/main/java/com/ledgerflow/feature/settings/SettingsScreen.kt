@@ -9,17 +9,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import com.ledgerflow.core.designsystem.component.LfButton
+import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
@@ -28,8 +27,7 @@ import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.DisplayLocale
-import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
-import com.ledgerflow.core.designsystem.pattern.LfTabPage
+import com.ledgerflow.core.designsystem.pattern.LfSettingsPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
@@ -38,22 +36,25 @@ import com.ledgerflow.core.model.DateOrder
 import java.util.Locale
 
 /**
- * The Settings tab (SPEC.md §9.3; `docs/V2-PLAN.md` §3, D7).
+ * One Settings page: a section's rows (SPEC.md §9.3; `docs/V2-PLAN.md` §3, D7).
  *
- * It replaced the More tab in the bar at V2-2, and every row More had moved
- * here unchanged -- same title, same subtitle, same destination. What V2-2
- * added is the grouping ([SettingsSections]), and nothing else: the sections
- * V2-PLAN §3 adds later (Appearance, Currency & region, App lock, Drive,
+ * Settings was the fourth tab until design-system step D4, one list of seven
+ * sections. Profile took the tab, Settings became an index of the sections
+ * ([SettingsIndexScreen]) and each section is this page. **The rows did not
+ * change**: same titles, sentences, dialogs and destinations, in the same
+ * order, and [SettingsSections] is still the one place that says which row
+ * lives where. The sections V2-PLAN §3 adds later (App lock PIN, Drive,
  * About...) are **absent until they are built**, with no "coming soon" rows
- * (owner, 2026-10-21) -- a row that cannot do anything is worse than none, the
- * rule the centre action's dial has always followed.
+ * (owner, 2026-10-21) -- a row that cannot do anything is worse than none.
  *
  * Navigation callbacks rather than routes -- the shell owns the graph, so this
  * module never learns that `:feature:categories` exists.
  */
 @Composable
-public fun SettingsScreen(
+public fun SettingsSectionScreen(
+    page: SettingsPage,
     state: SettingsUiState,
+    onBack: () -> Unit,
     onCategories: () -> Unit,
     onBudgets: () -> Unit,
     onExport: () -> Unit,
@@ -89,17 +90,17 @@ public fun SettingsScreen(
         SettingsItem.LockAfter to { onEvent(SettingsEvent.LockAfterRequested) },
         SettingsItem.Diagnostics to onDiagnostics,
     )
+    val section = SettingsSections.single { it.page == page }
 
-    // One item per section: a lazy list, as every tab is, so the tab switch
-    // composes only the sections on screen.
-    LfTabPage(
-        title = "Settings",
+    LfSettingsPage(
+        title = section.heading,
         modifier = modifier,
-        spacing = LfPageSpacing.Sections,
+        actions = { LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline) },
     ) {
-        items(SettingsSections, key = { it.heading }, contentType = { "section" }) { section ->
+        // One item rather than one per row, so the rows keep the 8 dp between
+        // them they had under their heading on the old tab.
+        item(key = page.name, contentType = "section") {
             Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                SectionHeading(section.heading)
                 section.items.forEach { item ->
                     SettingsItemRow(item = item, state = state, onClick = links[item], onEvent = onEvent)
                 }
@@ -107,6 +108,17 @@ public fun SettingsScreen(
         }
     }
 }
+
+/**
+ * The Settings pages, one per section, in [SettingsSections]' order.
+ *
+ * Public because the shell's route names one: `Destination.SettingsSection`
+ * carries [name], and the shell reads it back with [settingsPageNamed].
+ */
+public enum class SettingsPage { Notifications, Organise, Data, Security, Appearance, Region, Tools }
+
+/** The page a route's argument names, or null for a name no page has. */
+public fun settingsPageNamed(name: String): SettingsPage? = SettingsPage.entries.firstOrNull { it.name == name }
 
 /** Every row the Settings tab has. [SettingsSections] decides where each goes. */
 internal enum class SettingsItem {
@@ -138,8 +150,8 @@ internal enum class SettingsItem {
     Diagnostics,
 }
 
-/** One heading and the rows under it, in drawing order. */
-internal data class SettingsSection(val heading: String, val items: List<SettingsItem>)
+/** One page: its name and its rows, in drawing order. */
+internal data class SettingsSection(val page: SettingsPage, val heading: String, val items: List<SettingsItem>)
 
 /**
  * The tab's layout, as data, so `SettingsSectionsTest` can hold it: a row that
@@ -174,11 +186,13 @@ internal data class SettingsSection(val heading: String, val items: List<Setting
  */
 internal val SettingsSections: List<SettingsSection> = listOf(
     SettingsSection(
+        SettingsPage.Notifications,
         "Notifications",
         listOf(SettingsItem.NotificationCapture, SettingsItem.PaymentApps, SettingsItem.BudgetAlerts),
     ),
-    SettingsSection("Organise", listOf(SettingsItem.Categories, SettingsItem.Budgets)),
+    SettingsSection(SettingsPage.Organise, "Organise", listOf(SettingsItem.Categories, SettingsItem.Budgets)),
     SettingsSection(
+        SettingsPage.Data,
         "Data",
         listOf(
             SettingsItem.BackUpNow,
@@ -188,18 +202,21 @@ internal val SettingsSections: List<SettingsSection> = listOf(
         ),
     ),
     SettingsSection(
+        SettingsPage.Security,
         "Security & privacy",
         listOf(SettingsItem.AppLock, SettingsItem.LockAfter, SettingsItem.BlockScreenshots),
     ),
     SettingsSection(
+        SettingsPage.Appearance,
         "Appearance",
         listOf(SettingsItem.Theme, SettingsItem.Animations, SettingsItem.StartScreen),
     ),
     SettingsSection(
+        SettingsPage.Region,
         "Currency & region",
         listOf(SettingsItem.BaseCurrency, SettingsItem.NumberGrouping, SettingsItem.DateOrder),
     ),
-    SettingsSection("Tools", listOf(SettingsItem.Diagnostics)),
+    SettingsSection(SettingsPage.Tools, "Tools", listOf(SettingsItem.Diagnostics)),
 )
 
 /**
@@ -436,21 +453,6 @@ internal fun captureSubtitle(state: SettingsUiState): String = when (state.captu
         "Not available on this device."
 }
 
-/**
- * A section's name: a plain line over its rows, not a card of its own, so the
- * screen keeps one shape (the rows' card). Marked as a heading so TalkBack can
- * move between sections (§9.6).
- */
-@Composable
-private fun SectionHeading(title: String) {
-    Text(
-        text = title,
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
-        modifier = Modifier.semantics { heading() },
-    )
-}
-
 @Composable
 private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
     LfCard(
@@ -626,12 +628,14 @@ private fun ChoiceRow(
 @Composable
 private fun SettingsPreview() {
     LfTheme {
-        SettingsScreen(
+        SettingsSectionScreen(
+            page = SettingsPage.Data,
             state = SettingsUiState(
                 deletedCount = 3,
                 isLoaded = true,
                 receipts = AttachmentUsage(count = 12, bytes = 3_400_000L),
             ),
+            onBack = {},
             onCategories = {},
             onBudgets = {},
             onExport = {},
@@ -653,8 +657,10 @@ private fun SettingsPreview() {
 @Composable
 private fun SettingsEmptyBinPreview() {
     LfTheme {
-        SettingsScreen(
+        SettingsSectionScreen(
+            page = SettingsPage.Data,
             state = SettingsUiState(deletedCount = 0, isLoaded = true),
+            onBack = {},
             onCategories = {},
             onBudgets = {},
             onExport = {},

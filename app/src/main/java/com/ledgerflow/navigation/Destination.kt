@@ -29,12 +29,30 @@ public sealed interface Destination {
     public data object Analytics : Destination
 
     /**
-     * The fourth tab (V2-2, `docs/V2-PLAN.md` D7). It replaced More in the bar,
-     * and every row More had moved here; the one tool, Diagnostics, is a
-     * section of it rather than a screen of one row.
+     * The fourth tab since design-system step D4 (DESIGN_SYSTEM_PLAN Q8,
+     * `docs/V2-PLAN.md` D7 as amended). It replaced Settings in the bar, and
+     * Settings is its first row.
+     */
+    @Serializable
+    public data object Profile : Destination
+
+    /**
+     * The Settings index, reached from Profile: one row per section. Full-screen
+     * since D4; it was the fourth tab from V2-2, when it replaced More.
      */
     @Serializable
     public data object Settings : Destination
+
+    /**
+     * One Settings section's page, reached from the index.
+     *
+     * [section] is a `SettingsPage` name. **The property name is a contract**,
+     * as [Entry.draftId] is, and a string rather than the enum so the route
+     * stays a plain serializable type; `settingsPageNamed` reads it back, and
+     * `ProfileSettingsRoutesTest` fails if a page's name stops round-tripping.
+     */
+    @Serializable
+    public data class SettingsSection(val section: String) : Destination
 
     /**
      * Full-screen, reached from the centre action — or from a pending row in
@@ -52,7 +70,7 @@ public sealed interface Destination {
     @Serializable
     public data class Entry(val draftId: String? = null) : Destination
 
-    /** Reached from Settings. */
+    /** Reached from Settings > Organise. */
     @Serializable
     public data object Categories : Destination
 
@@ -141,5 +159,5 @@ internal val BottomBarDestinations: List<Destination> = listOf(
     Destination.Dashboard,
     Destination.Ledger,
     Destination.Analytics,
-    Destination.Settings,
+    Destination.Profile,
 )

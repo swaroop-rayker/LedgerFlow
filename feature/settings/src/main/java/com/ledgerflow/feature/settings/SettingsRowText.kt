@@ -221,7 +221,7 @@ internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoi
     -> null
 }
 
-private val ThemePreference.label: String
+internal val ThemePreference.label: String
     get() = when (this) {
         ThemePreference.SYSTEM -> "System"
         ThemePreference.LIGHT -> "Light"
