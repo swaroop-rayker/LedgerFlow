@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
@@ -23,6 +24,8 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfFeedback
+import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.pattern.LfTabPage
@@ -48,6 +51,18 @@ public fun BudgetScreen(
     onEvent: (BudgetEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // BUG68: "Budget saved", "Budget deleted" and "Could not delete" were set
+    // and never drawn. Posted to the window's one snackbar, so "Budget saved"
+    // shows as the editor closes; cleared once posted, so the same message
+    // twice in a row still shows twice.
+    val feedback = LfFeedback.current
+    state.message?.let { message ->
+        LaunchedEffect(message) {
+            feedback.post(message)
+            onEvent(BudgetEvent.MessageShown)
+        }
+    }
+
     // No scaffold of its own: the shell hosts this screen, so the template
     // without one.
     LfTabPage(
@@ -163,5 +178,5 @@ private fun periodSummary(progress: BudgetProgress): String {
 @PreviewLightDark
 @Composable
 private fun BudgetPreview() {
-    LfTheme { BudgetScreen(state = BudgetUiState(isLoading = false), onEvent = {}) }
+    LfTheme { LfScaffold { BudgetScreen(state = BudgetUiState(isLoading = false), onEvent = {}) } }
 }
