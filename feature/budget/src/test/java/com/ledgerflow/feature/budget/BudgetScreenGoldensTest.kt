@@ -8,7 +8,12 @@ import com.ledgerflow.core.domain.analytics.Budget
 import com.ledgerflow.core.domain.analytics.BudgetProgress
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.Money
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import com.github.takahirom.roborazzi.captureScreenRoboImage
+import com.ledgerflow.core.testing.screenshot.GOLDEN_DIR
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
 import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
@@ -16,6 +21,7 @@ import org.junit.Rule
 import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -82,6 +88,32 @@ open class BudgetScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun none_2x() = capture("budgets-none-2x", none, 2f)
+
+    /** BUG69's confirmation, a sheet over the list. */
+    @Test fun deleteSheet_1x() = withSheet("budgets-delete-sheet-1x", 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun deleteSheet_2x() = withSheet("budgets-delete-sheet-2x", 2f)
+
+    /**
+     * A sheet is its own window: it ignores [captureScreenGolden]'s density
+     * override and is not under its one root, so the font scale goes through
+     * the configuration and the whole screen is captured.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    private fun withSheet(name: String, fontScale: Float) {
+        if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale)
+        rule.setContent {
+            GoldenTheme.Provide {
+                LfTheme { LfScaffold { BudgetScreen(state = two.copy(confirmingDeleteId = "g"), onEvent = {}) } }
+            }
+        }
+        rule.waitForIdle()
+        captureScreenRoboImage(
+            "$GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
+    }
 
     private companion object {
         const val START = 20_667

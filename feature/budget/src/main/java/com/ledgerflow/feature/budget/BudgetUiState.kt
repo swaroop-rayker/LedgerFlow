@@ -29,7 +29,16 @@ public data class BudgetUiState(
     val subcategoriesForPicked: List<Category> = emptyList(),
     val editor: BudgetEditorState? = null,
     val message: String? = null,
+    /**
+     * The budget whose delete is being confirmed (BUG69), or null. Delete was
+     * one tap; nothing is deleted until the sheet's Delete is pressed.
+     */
+    val confirmingDeleteId: String? = null,
 ) {
+    /** The budget [confirmingDeleteId] names, if it is still on screen. */
+    public val confirmingDelete: BudgetProgress?
+        get() = confirmingDeleteId?.let { id -> budgets.firstOrNull { it.budget.id == id } }
+
     public val showEmptyState: Boolean get() = !isLoading && budgets.isEmpty()
 
     /**
@@ -85,7 +94,12 @@ public enum class BudgetPickerField { CATEGORY, SUBCATEGORY }
 public sealed interface BudgetEvent {
     public data object AddClicked : BudgetEvent
     public data class EditClicked(val id: String) : BudgetEvent
+    /** A row's Delete: asks first (BUG69). */
     public data class DeleteClicked(val id: String) : BudgetEvent
+
+    /** The confirmation's Delete: only now is the budget deleted. */
+    public data object DeleteConfirmed : BudgetEvent
+    public data object DeleteCancelled : BudgetEvent
     public data class CategoryPicked(val categoryId: String) : BudgetEvent
     public data class PeriodPicked(val period: BudgetPeriod) : BudgetEvent
     public data class SubcategoryPicked(val subcategoryId: String?) : BudgetEvent

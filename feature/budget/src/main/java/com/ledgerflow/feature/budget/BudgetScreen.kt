@@ -28,6 +28,7 @@ import com.ledgerflow.core.designsystem.component.LfFeedback
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.pattern.LfConfirmSheet
 import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.BudgetProgress
@@ -62,6 +63,8 @@ public fun BudgetScreen(
             onEvent(BudgetEvent.MessageShown)
         }
     }
+
+    state.confirmingDelete?.let { DeleteBudgetSheet(it, onEvent) }
 
     // No scaffold of its own: the shell hosts this screen, so the template
     // without one.
@@ -158,6 +161,22 @@ private fun BudgetCard(
             }
         }
     }
+}
+
+/**
+ * BUG69: Delete was one tap. A sheet, not a `Warning` dialog (owner,
+ * 2026-10-27): no spending is touched and the budget can be added again, so
+ * the step is consequential rather than irreversible (§5.2).
+ */
+@Composable
+private fun DeleteBudgetSheet(progress: BudgetProgress, onEvent: (BudgetEvent) -> Unit) {
+    LfConfirmSheet(
+        title = "Delete the ${progress.categoryName} budget?",
+        body = "Your spending isn't affected. Only this limit and its alerts go.",
+        confirmLabel = "Delete",
+        onConfirm = { onEvent(BudgetEvent.DeleteConfirmed) },
+        onDismiss = { onEvent(BudgetEvent.DeleteCancelled) },
+    )
 }
 
 /**
