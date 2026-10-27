@@ -137,14 +137,14 @@ open class SettingsScreenGoldensTest {
         paymentApps = 20,
     )
 
-    // Profile: no header yet (owner, 2026-10-27), two rows.
-    @Test fun profile_1x() = capture("profile-1x", livedIn, 1f) { ProfileScreen(onSettings = {}, onExport = {}) }
+    // Profile: no header yet (owner, 2026-10-27); Organise, Data, Settings (BUG65).
+    @Test fun profile_1x() = capture("profile-1x", livedIn, 1f) { ProfileScreen(onPage = {}, onSettings = {}) }
 
     @Config(qualifiers = PHONE_2X)
-    @Test fun profile_2x() = capture("profile-2x", livedIn, 2f) { ProfileScreen(onSettings = {}, onExport = {}) }
+    @Test fun profile_2x() = capture("profile-2x", livedIn, 2f) { ProfileScreen(onPage = {}, onSettings = {}) }
 
     @Test fun profile_rtl_1x() =
-        capture("profile-rtl-1x", livedIn, 1f, LayoutDirection.Rtl) { ProfileScreen(onSettings = {}, onExport = {}) }
+        capture("profile-rtl-1x", livedIn, 1f, LayoutDirection.Rtl) { ProfileScreen(onPage = {}, onSettings = {}) }
 
     // The index: each section's current value, where one value says it.
     @Test fun index_livedIn_1x() = index("settings-index-lived-in-1x", livedIn, 1f, LayoutDirection.Ltr)

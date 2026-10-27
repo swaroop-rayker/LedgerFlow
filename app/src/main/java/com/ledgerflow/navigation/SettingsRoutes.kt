@@ -26,14 +26,17 @@ import com.ledgerflow.feature.settings.settingsPageNamed
  * Profile, the Settings index and the section pages (design-system step D4).
  *
  * Back unwinds them in the order they were opened: a section, then Settings,
- * then Profile. Settings and its pages are full-screen, as Categories is, so
- * the bar shows on Profile alone.
+ * then Profile -- or, for Organise and Data, which Profile opens itself
+ * (BUG65), straight back to Profile. Settings and its pages are full-screen,
+ * as Categories is, so the bar shows on Profile alone.
  */
 internal fun NavGraphBuilder.profileAndSettingsDestinations(navController: NavHostController) {
     composable<Destination.Profile> {
+        // Organise and Data open straight from Profile (BUG65), so Back from
+        // them returns here rather than to Settings.
         ProfileScreen(
+            onPage = { page -> navController.navigate(settingsRouteFor(page)) },
             onSettings = { navController.navigate(Destination.Settings) },
-            onExport = { navController.navigate(Destination.Export) },
         )
     }
     composable<Destination.Settings> {

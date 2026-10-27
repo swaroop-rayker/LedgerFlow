@@ -223,14 +223,15 @@ class SettingsSectionsTest {
     }
 
     @Test
-    fun index_listsEverySection_andOpensItsPage() {
+    fun index_listsItsSections_andOpensEachPage() {
         val opened = mutableListOf<SettingsPage>()
         rule.setContent {
             LfTheme {
                 SettingsIndexScreen(state = SettingsUiState(isLoaded = true), onPage = { opened += it }, onBack = {})
             }
         }
-        SettingsSections.forEach { section ->
+        // Organise and Data are opened from Profile instead (BUG65).
+        SettingsIndexSections.forEach { section ->
             opened.clear()
             rule.onNodeWithText(section.heading).performScrollTo().performClick()
             assertWithMessage("tapping \"${section.heading}\"").that(opened).containsExactly(section.page)

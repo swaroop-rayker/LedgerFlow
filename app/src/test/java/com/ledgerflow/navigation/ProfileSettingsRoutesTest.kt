@@ -121,7 +121,7 @@ class ProfileSettingsRoutesTest {
     }
 
     @Test
-    fun back_unwindsASection_thenSettings_thenProfile() {
+    fun back_unwindsASection_thenSettings_thenProfile_andDataReturnsToProfile() {
         lateinit var navController: NavHostController
         rule.setContent {
             LfTheme {
@@ -142,7 +142,7 @@ class ProfileSettingsRoutesTest {
         rule.runOnUiThread {
             navController.switchTab(Destination.Profile)
             navController.navigate(Destination.Settings)
-            navController.navigate(settingsRouteFor(SettingsPage.Data))
+            navController.navigate(settingsRouteFor(SettingsPage.Appearance))
         }
         rule.waitForIdle()
         rule.onNodeWithText("Section page").assertExists()
@@ -158,5 +158,12 @@ class ProfileSettingsRoutesTest {
         rule.waitForIdle()
         assertWithMessage("Back from Settings").that(currentIs(Destination.Profile)).isTrue()
         rule.onNodeWithText("Profile screen").assertExists()
+
+        // Data and Organise open from Profile itself (BUG65): Back returns there.
+        rule.runOnUiThread { navController.navigate(settingsRouteFor(SettingsPage.Data)) }
+        rule.waitForIdle()
+        rule.runOnUiThread { navController.popBackStack() }
+        rule.waitForIdle()
+        assertWithMessage("Back from Data opened on Profile").that(currentIs(Destination.Profile)).isTrue()
     }
 }

@@ -20,9 +20,10 @@ import com.ledgerflow.core.domain.security.SecurityPreferences
 /**
  * Settings: one row per section, each opening its page (design-system step D4).
  *
- * Reached from Profile. The rows are [SettingsSections] in order, so a section
- * added there is a row here with nothing else to wire. They sit in one panel,
- * as a list of places to go should: scanned, not read.
+ * Reached from Profile. The rows are [SettingsSections] in order, minus the
+ * [ProfilePages] Profile opens itself (BUG65), so a section added there is a
+ * row here with nothing else to wire. They sit in one panel, as a list of
+ * places to go should: scanned, not read.
  */
 @Composable
 public fun SettingsIndexScreen(
@@ -38,7 +39,7 @@ public fun SettingsIndexScreen(
     ) {
         item(key = "pages", contentType = "panel") {
             LfPanel {
-                SettingsSections.forEachIndexed { index, section ->
+                SettingsIndexSections.forEachIndexed { index, section ->
                     if (index > 0) LfDivider()
                     LfNavRow(
                         title = section.heading,
@@ -50,6 +51,9 @@ public fun SettingsIndexScreen(
         }
     }
 }
+
+/** The sections the index lists: every one Profile does not open itself. */
+internal val SettingsIndexSections: List<SettingsSection> = SettingsSections.filter { it.page !in ProfilePages }
 
 /**
  * What a section's row says beside its name, when one value says it (owner,
