@@ -8,7 +8,9 @@ import com.ledgerflow.core.domain.ledger.DraftSummaryFields
 import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.DeleteEntryUseCase
+import com.ledgerflow.core.domain.usecase.RestoreEntryUseCase
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
@@ -183,6 +185,66 @@ class LedgerViewModelTest {
         assertThat(viewModel.state.value.confirmation).isNull()
     }
 
+    /** E5: a confirmed delete offers Undo, naming the entry it deleted. */
+    @Test
+    fun deleteConfirmed_offersUndo() = runTest(dispatcher) {
+        val viewModel = viewModel()
+
+        viewModel.onEvent(LedgerEvent.DeleteRequested("entry-1", "₹69.00 · Transport"))
+        viewModel.onEvent(LedgerEvent.ConfirmationAccepted)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(viewModel.state.value.undoable)
+            .isEqualTo(LedgerUndo(LedgerType.DEBIT, "entry-1", "₹69.00 · Transport"))
+    }
+
+    /**
+     * Undo restores into the book the entry was deleted from, even after the
+     * tab has switched -- an id carries no book (Law 2).
+     */
+    @Test
+    fun undo_restoresIntoTheBookItCameFrom() = runTest(dispatcher) {
+        val viewModel = viewModel()
+
+        viewModel.onEvent(LedgerEvent.DeleteRequested("entry-1", "₹69.00 · Transport"))
+        viewModel.onEvent(LedgerEvent.ConfirmationAccepted)
+        dispatcher.scheduler.advanceUntilIdle()
+        viewModel.onEvent(LedgerEvent.LedgerSelected(LedgerType.CREDIT))
+        viewModel.onEvent(LedgerEvent.UndoDelete)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(ledger.restored).containsExactly(LedgerType.DEBIT to "entry-1")
+        assertThat(viewModel.state.value.undoable).isNull()
+    }
+
+    @Test
+    fun undoExpired_restoresNothing() = runTest(dispatcher) {
+        val viewModel = viewModel()
+
+        viewModel.onEvent(LedgerEvent.DeleteRequested("entry-1", "₹69.00 · Transport"))
+        viewModel.onEvent(LedgerEvent.ConfirmationAccepted)
+        dispatcher.scheduler.advanceUntilIdle()
+        viewModel.onEvent(LedgerEvent.UndoExpired)
+        viewModel.onEvent(LedgerEvent.UndoDelete) // a late tap on a snackbar already gone
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(ledger.restored).isEmpty()
+        assertThat(viewModel.state.value.undoable).isNull()
+    }
+
+    /** A refused delete offers nothing to undo. */
+    @Test
+    fun deleteRefused_offersNoUndo() = runTest(dispatcher) {
+        ledger.deleteResult = LedgerResult.Failure(LedgerError.EntryNotFound("entry-1"))
+        val viewModel = viewModel()
+
+        viewModel.onEvent(LedgerEvent.DeleteRequested("entry-1", "₹69.00 · Transport"))
+        viewModel.onEvent(LedgerEvent.ConfirmationAccepted)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(viewModel.state.value.undoable).isNull()
+    }
+
     @Test
     fun messageDismissed_clearsIt() = runTest(dispatcher) {
         ledger.deleteResult = LedgerResult.Failure(LedgerError.EntryNotFound("entry-1"))
@@ -348,6 +410,7 @@ class LedgerViewModelTest {
             ledger = ledger,
             drafts = drafts,
             deleteEntry = DeleteEntryUseCase(ledger),
+            restoreEntry = RestoreEntryUseCase(ledger, NoOpBudgetAlertTrigger),
             observePending = ObservePendingUseCase(pending),
             clock = Clock { FIXED_NOW },
         )

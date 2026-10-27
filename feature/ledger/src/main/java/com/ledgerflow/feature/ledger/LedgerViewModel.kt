@@ -14,7 +14,9 @@ import com.ledgerflow.core.domain.ledger.DraftSummary
 import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
+import com.ledgerflow.core.domain.usecase.BinnedRef
 import com.ledgerflow.core.domain.usecase.DeleteEntryUseCase
+import com.ledgerflow.core.domain.usecase.RestoreEntryUseCase
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -57,6 +59,7 @@ public class LedgerViewModel @Inject constructor(
     private val ledger: LedgerRepository,
     private val drafts: DraftRepository,
     private val deleteEntry: DeleteEntryUseCase,
+    private val restoreEntry: RestoreEntryUseCase,
     private val observePending: ObservePendingUseCase,
     private val clock: Clock,
 ) : ViewModel() {
@@ -167,6 +170,9 @@ public class LedgerViewModel @Inject constructor(
             LedgerEvent.ConfirmationDismissed -> local.update { it.copy(confirmation = null) }
 
             LedgerEvent.MessageDismissed -> local.update { it.copy(message = null) }
+
+            LedgerEvent.UndoDelete -> undo()
+            LedgerEvent.UndoExpired -> local.update { it.copy(undoable = null) }
         }
     }
 
@@ -199,12 +205,36 @@ public class LedgerViewModel @Inject constructor(
      */
     private fun delete(confirmation: LedgerConfirmation.DeleteEntry) {
         viewModelScope.launch {
-            val outcome = deleteEntry(local.value.ledger, confirmation.id)
+            val book = local.value.ledger
+            val outcome = deleteEntry(book, confirmation.id)
             local.update {
                 it.copy(
                     confirmation = null,
                     message = (outcome as? LedgerResult.Failure)?.error?.toMessage(),
+                    undoable = if (outcome is LedgerResult.Success) {
+                        LedgerUndo(book, confirmation.id, confirmation.label)
+                    } else {
+                        null
+                    },
                 )
+            }
+        }
+    }
+
+    /**
+     * Puts the entry just deleted back, through the bin's own door
+     * ([RestoreEntryUseCase], which `LedgerSingleWriterTest` guards), in the book
+     * it was deleted from -- not whichever tab is showing now.
+     */
+    private fun undo() {
+        val undoable = local.value.undoable ?: return
+        local.update { it.copy(undoable = null) }
+        viewModelScope.launch {
+            val restored = restoreEntry(listOf(BinnedRef(undoable.ledger, undoable.id)))
+            if (restored == 0) {
+                local.update {
+                    it.copy(message = "That entry couldn't be put back. It is still in Deleted entries.")
+                }
             }
         }
     }
@@ -286,6 +316,7 @@ public class LedgerViewModel @Inject constructor(
         isLoaded = true,
         confirmation = local.confirmation,
         message = local.message,
+        undoable = local.undoable,
     )
 
     /**
@@ -302,6 +333,7 @@ public class LedgerViewModel @Inject constructor(
         val currencyCode: String = DEFAULT_CURRENCY,
         val confirmation: LedgerConfirmation? = null,
         val message: String? = null,
+        val undoable: LedgerUndo? = null,
     )
 
     private companion object {

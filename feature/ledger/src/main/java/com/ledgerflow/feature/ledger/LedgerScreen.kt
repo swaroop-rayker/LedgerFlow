@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -40,11 +41,14 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfFeedback
 import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.icon.LfIcons
@@ -90,6 +94,16 @@ public fun LedgerScreen(
     val items = entries.collectAsLazyPagingItems()
 
     state.confirmation?.let { Confirmation(it, onEvent) }
+
+    // E5: a delete says where the entry went and offers to put it back, on the
+    // window's one snackbar. The confirmation before it stays.
+    val feedback = LfFeedback.current
+    state.undoable?.let { undoable ->
+        LaunchedEffect(undoable) {
+            val undone = feedback.show("Moved to Deleted entries", actionLabel = "Undo")
+            onEvent(if (undone) LedgerEvent.UndoDelete else LedgerEvent.UndoExpired)
+        }
+    }
 
     EntryList(
         items = items,
@@ -193,18 +207,7 @@ private fun EntryList(
     // page has loaded — showing an empty state there would flash "nothing here"
     // at a user whose ledger is full.
     val settled = items.loadState.refresh !is LoadState.Loading
-    val status: (@Composable ColumnScope.() -> Unit)? = when {
-        // Nothing is drawn until the drafts query has answered. Composing the
-        // list first and prepending the unsaved section afterwards put that
-        // section above the scroll anchor and out of sight -- see
-        // [LedgerUiState.isLoaded].
-        !state.isLoaded -> { {} }
-        // The empty state is about the *book*, so unsaved entries do not count
-        // towards it — but it must not hide them either. With drafts on screen
-        // the list still renders; without them it is genuinely empty.
-        settled && state.showsNothing(items.itemCount) -> { { EmptyBook(state) } }
-        else -> null
-    }
+    val status = statusFor(state, settled, items.itemCount)
 
     val snapshot = items.itemSnapshotList
     // One painter for every row's delete control: a painter per row was a
@@ -642,6 +645,31 @@ internal fun EntryRowBody(
  */
 private fun LedgerListItem.deleteLabel(title: String): String =
     MoneyFormat.symbolised(amount.minor, currency) + SEPARATOR + title
+
+/**
+ * What stands in for the list, if anything.
+ *
+ * Nothing is drawn until the drafts query has answered: composing the list
+ * first and prepending the unsaved section afterwards put that section above
+ * the scroll anchor and out of sight -- see [LedgerUiState.isLoaded]. Until the
+ * drafts and the first page have both answered, still skeletons after 300 ms
+ * rather than a blank page (E5).
+ *
+ * The empty state is about the *book*, so unsaved entries do not count towards
+ * it -- but it must not hide them either. With drafts on screen the list still
+ * renders; without them it is genuinely empty.
+ */
+private fun statusFor(
+    state: LedgerUiState,
+    settled: Boolean,
+    itemCount: Int,
+): (@Composable ColumnScope.() -> Unit)? = when {
+    !state.isLoaded || (!settled && itemCount == 0) -> {
+        { LfStateContent(state = LfContentState.Loading) {} }
+    }
+    settled && state.showsNothing(itemCount) -> { { EmptyBook(state) } }
+    else -> null
+}
 
 /**
  * The empty book — two of them, and they are not the same sentence.

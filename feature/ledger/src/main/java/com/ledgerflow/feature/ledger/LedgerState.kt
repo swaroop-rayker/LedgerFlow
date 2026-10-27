@@ -128,7 +128,18 @@ public data class LedgerUiState(
 
     /** A refusal the user should see, in words they can act on. */
     val message: String? = null,
+
+    /**
+     * The entry just moved to the bin, while its Undo is offered (E5). The
+     * delete is a soft delete, so it can be put back at once; the confirmation
+     * before it stays, because the icon is one mis-scroll away.
+     */
+    val undoable: LedgerUndo? = null,
 )
+
+/** A deleted entry the snackbar can still put back: its book, its id, and how to name it. */
+@Immutable
+public data class LedgerUndo(val ledger: LedgerType, val id: String, val label: String)
 
 /**
  * A question the user has been asked, and what it is about.
@@ -233,4 +244,10 @@ public sealed interface LedgerEvent {
     public data object ConfirmationDismissed : LedgerEvent
 
     public data object MessageDismissed : LedgerEvent
+
+    /** The snackbar's Undo: the entry just deleted goes back (E5). */
+    public data object UndoDelete : LedgerEvent
+
+    /** The snackbar went without its Undo being tapped. */
+    public data object UndoExpired : LedgerEvent
 }
