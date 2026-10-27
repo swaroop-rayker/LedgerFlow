@@ -8,11 +8,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
@@ -23,7 +21,10 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfDivider
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfFeedback
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
@@ -65,23 +66,12 @@ public fun ReviewScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(state.finished) { if (state.finished) onDone() }
-
-    state.message?.let { message ->
-        LaunchedEffect(message) {
-            snackbarHostState.showSnackbar(message)
-            onEvent(ReviewEvent.MessageShown)
-        }
-    }
-
     ReviewDialogs(state, onEvent)
 
     if (state.missing) {
-        // No form and no bar: the item is gone. E1's state component takes
-        // this over; until then it is the empty state on a plain scaffold.
-        LfScaffold(modifier = modifier, snackbarHostState = snackbarHostState) { padding ->
+        // No form and no bar: the item is gone. The empty state on a plain
+        // scaffold, with its way back.
+        LfScaffold(modifier = modifier) { padding ->
             LfEmptyState(
                 title = "Not here any more",
                 body = "This item was already reviewed, or it has been removed.",
@@ -93,15 +83,63 @@ public fun ReviewScreen(
         return
     }
 
+    if (state.loading) {
+        // E4: the form used to draw empty -- a blank amount, no category --
+        // for the moment the candidate took to read, then fill in. The heading
+        // and still skeletons after 300 ms instead, and no Approve to press on
+        // a form that is not there yet. Back stays, so a slow read can be left.
+        LfFormPage(
+            title = "Review",
+            actionBar = null,
+            modifier = modifier,
+            actions = { LfButton(text = "Back", style = LfButtonStyle.Text, onClick = onBack) },
+        ) {
+            LfStateContent(state = LfContentState.Loading) {}
+        }
+        return
+    }
+
     LfFormPage(
         title = "Review",
         subtitle = state.provenanceLine(),
         actionBar = { ReviewActions(state, onEvent, onBack) },
         modifier = modifier,
-        snackbarHostState = snackbarHostState,
     ) {
+        ReviewFeedback(state, onEvent, onDone)
         ReviewFields(state, onEvent)
     }
+}
+
+/**
+ * Review's messages, on the window's one snackbar (`LfFeedback`) rather than a
+ * host of its own: two hosts on one screen is what E1's feedback removed.
+ *
+ * BUG73: an approval closed Review without a word, where the Inbox row's own
+ * Approve says "Added to your ledger." It says which book now, posted so the
+ * line survives this screen closing and shows over the Inbox it returns to.
+ */
+@Composable
+private fun ReviewFeedback(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit, onDone: () -> Unit) {
+    val feedback = LfFeedback.current
+    state.message?.let { message ->
+        LaunchedEffect(message) {
+            feedback.show(message)
+            onEvent(ReviewEvent.MessageShown)
+        }
+    }
+    LaunchedEffect(state.finished) {
+        if (state.finished) {
+            feedback.post(approvedMessage(state.ledger))
+            onDone()
+        }
+    }
+}
+
+/** What an approval says (BUG73). */
+internal fun approvedMessage(ledger: LedgerType?): String = when (ledger) {
+    LedgerType.DEBIT -> "Added to Expenses"
+    LedgerType.CREDIT -> "Added to Income"
+    null -> "Added to your ledger."
 }
 
 /** The form itself, in the entry screen's order: how much, then what for. */

@@ -85,6 +85,8 @@ open class EntryScreenGoldensTest {
         merchants = listOf(bigBazaar),
     )
 
+    private val saveError = filled.copy(message = "That category is no longer available. Choose another.")
+
     @Test fun fresh_1x() = capture("entry-fresh-1x", fresh, 1f)
 
     @Config(qualifiers = PHONE_2X)
@@ -94,6 +96,12 @@ open class EntryScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun filled_2x() = capture("entry-filled-2x", filled, 2f)
+
+    /** BUG72: a refused save, above Save in the pinned bar. */
+    @Test fun saveError_1x() = capture("entry-save-error-1x", saveError, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun saveError_2x() = capture("entry-save-error-2x", saveError, 2f)
 
     /** RTL (BUG61): the amount field starts on the right, its "₹" still before the number. */
     @Test fun filledRtl_1x() = capture("entry-filled-rtl-1x", filled, 1f, LayoutDirection.Rtl)

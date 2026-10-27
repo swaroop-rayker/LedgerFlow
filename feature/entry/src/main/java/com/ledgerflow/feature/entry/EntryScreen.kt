@@ -44,6 +44,8 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDivider
+import com.ledgerflow.core.designsystem.component.LfErrorNotice
+import com.ledgerflow.core.designsystem.component.LfFeedback
 import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
@@ -83,12 +85,6 @@ public fun EntryScreen(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // The commit is the ViewModel's; leaving is the shell's. Keying on the id
-    // rather than a boolean means a second save cannot be swallowed by a flag
-    // that was never reset.
-    LaunchedEffect(state.savedEntryId) {
-        if (state.savedEntryId != null) onDone()
-    }
     // Cancel decides in the ViewModel whether it parks the form or leaves, so
     // the screen only reacts to the answer.
     LaunchedEffect(state.dismissed) {
@@ -115,8 +111,36 @@ public fun EntryScreen(
         modifier = modifier,
         spacing = LfPageSpacing.Sections,
     ) {
+        SavedFeedback(state, onDone)
         EntryFields(state, onEvent, amountFocus)
     }
+}
+
+/**
+ * The commit is the ViewModel's; leaving is the shell's. Keying on the id
+ * rather than a boolean means a second save cannot be swallowed by a flag that
+ * was never reset.
+ *
+ * BUG73: the form used to close on a save without a word. It says where the
+ * entry went, on the window's one snackbar, so the line outlives this screen
+ * and shows on the one it returns to. Inside the page's content because that is
+ * where the window's feedback is provided.
+ */
+@Composable
+private fun SavedFeedback(state: EntryUiState, onDone: () -> Unit) {
+    val feedback = LfFeedback.current
+    LaunchedEffect(state.savedEntryId) {
+        if (state.savedEntryId != null) {
+            feedback.post(savedMessage(state.ledger))
+            onDone()
+        }
+    }
+}
+
+/** What a save says (BUG73), naming the book the way the Ledger's tabs do. */
+internal fun savedMessage(ledger: LedgerType): String = when (ledger) {
+    LedgerType.DEBIT -> "Saved to Expenses"
+    LedgerType.CREDIT -> "Saved to Income"
 }
 
 /**
@@ -181,10 +205,6 @@ private fun EntryFields(
             state = state.editor,
             onEvent = { onEvent(it.toEntryEvent()) },
         )
-    }
-
-    state.message?.let {
-        Text(text = it, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
     }
 }
 
@@ -511,6 +531,17 @@ private fun SaveBar(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     // for the navigation bar. It was `md` all round, measured on SM-S721B
     // 2026-10-12.
     LfActionBar {
+        // BUG72: a refused save was a line at the very end of the form, under
+        // the note and any line items -- off screen whenever the form was taller
+        // than the window, so Save looked like it did nothing. It is drawn in
+        // the pinned bar now, directly above the button that raised it.
+        state.message?.let { message ->
+            LfErrorNotice(
+                title = message,
+                actionLabel = "OK",
+                onAction = { onEvent(EntryEvent.MessageDismissed) },
+            )
+        }
         LfActionRow {
             LfButton(
                 text = "Cancel",
