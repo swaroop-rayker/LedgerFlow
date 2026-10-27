@@ -90,6 +90,12 @@ public data class OnboardingUiState(
      */
     val kitPickerRequest: RecoveryKitFormat? = null,
 
+    /**
+     * "Not now" was tapped on the backup step and its warning is showing
+     * (BUG67). Declining happens only when the warning is accepted.
+     */
+    val confirmingBackupDecline: Boolean = false,
+
     /** Persistable SAF tree for nightly backups, or null if declined. */
     val backupTreeUri: String? = null,
 
@@ -132,6 +138,14 @@ public sealed interface OnboardingEvent {
 
     public data object RecoveryKitDismissed : OnboardingEvent
     public data class BackupLocationGranted(val uri: String) : OnboardingEvent
+
+    /** "Not now" tapped: opens the warning, declines nothing yet (BUG67). */
+    public data object BackupLocationDeclineRequested : OnboardingEvent
+
+    /** The warning was dismissed; the step is unanswered again. */
+    public data object BackupLocationDeclineCancelled : OnboardingEvent
+
+    /** The warning was accepted: no folder, and the gate moves on. */
     public data object BackupLocationDeclined : OnboardingEvent
     public data object ErrorDismissed : OnboardingEvent
 

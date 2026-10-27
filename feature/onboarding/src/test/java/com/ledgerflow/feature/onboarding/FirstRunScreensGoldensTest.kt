@@ -6,7 +6,12 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import com.github.takahirom.roborazzi.captureScreenRoboImage
+import com.ledgerflow.core.testing.screenshot.GOLDEN_DIR
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
 import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
@@ -23,6 +28,7 @@ import org.junit.Rule
 import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -61,6 +67,8 @@ open class FirstRunScreensGoldensTest {
         challengePositions = listOf(3, 11, 19),
         challengeError = true,
     )
+
+    private val backup = OnboardingUiState(step = OnboardingStep.BackupLocation)
 
     private val setupFailed = OnboardingUiState(step = OnboardingStep.Complete, setupFailed = true)
 
@@ -115,6 +123,43 @@ open class FirstRunScreensGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun setupFailed_2x() = onboarding("onboarding-setup-failed-2x", setupFailed, 2f)
+
+    @Test fun backup_1x() = onboarding("onboarding-backup-1x", backup, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun backup_2x() = onboarding("onboarding-backup-2x", backup, 2f)
+
+    /** BUG67's warning, a sheet over the step. */
+    @Test fun skipBackups_1x() = withSheet("onboarding-skip-backups-1x", 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun skipBackups_2x() = withSheet("onboarding-skip-backups-2x", 2f)
+
+    /**
+     * A sheet is its own window, which ignores the [captureScreenGolden]
+     * density override and is not under its one root: the font scale goes
+     * through the configuration and the whole screen is captured.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    private fun withSheet(name: String, fontScale: Float) {
+        if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale)
+        rule.setContent {
+            GoldenTheme.Provide {
+                LfTheme {
+                    OnboardingScreen(
+                        state = backup.copy(confirmingBackupDecline = true),
+                        onEvent = {},
+                        onGeneratePhrase = {},
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        captureScreenRoboImage(
+            "$GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
+    }
 
     @Test
     fun notifications_1x() = rule.captureScreenGolden("notifications-off-1x", 1f) {

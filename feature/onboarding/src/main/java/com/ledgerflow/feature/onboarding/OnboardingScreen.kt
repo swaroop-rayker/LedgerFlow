@@ -35,6 +35,7 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.bidiIsolated
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfConfirmSheet
 import com.ledgerflow.core.designsystem.pattern.LfFlowStep
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
@@ -68,6 +69,7 @@ public fun OnboardingScreen(
     val chooseBackupTree = rememberBackupTreeLauncher(onEvent)
     RecoveryKitPicker(state, onEvent, kitFileName)
     state.kitConfirmFormat?.let { RecoveryKitConfirmDialog(it, onEvent) }
+    if (state.confirmingBackupDecline) SkipBackupsSheet(onEvent)
 
     val copy = state.stepCopy()
     LfFlowStep(
@@ -521,8 +523,26 @@ private fun RecoveryKitFormat.label(): String = when (this) {
 private fun BackupLocationStep(onEvent: (OnboardingEvent) -> Unit) {
     LfButton(
         text = "Not now",
-        onClick = { onEvent(OnboardingEvent.BackupLocationDeclined) },
+        onClick = { onEvent(OnboardingEvent.BackupLocationDeclineRequested) },
         style = LfButtonStyle.Text,
+    )
+}
+
+/**
+ * The warning `OnboardingStep.BackupLocation` always promised and "Not now"
+ * never showed (BUG67). A sheet, not a `Warning` dialog: declining can be
+ * undone from Back up now at any time, so it is consequential rather than
+ * irreversible (§5.2).
+ */
+@Composable
+private fun SkipBackupsSheet(onEvent: (OnboardingEvent) -> Unit) {
+    LfConfirmSheet(
+        title = "Skip nightly backups?",
+        body = "Nothing is backed up until you choose a folder in Profile > Data > Back up " +
+            "now. If this phone is lost or reset before then, your ledger goes with it.",
+        confirmLabel = "Not now",
+        onConfirm = { onEvent(OnboardingEvent.BackupLocationDeclined) },
+        onDismiss = { onEvent(OnboardingEvent.BackupLocationDeclineCancelled) },
     )
 }
 

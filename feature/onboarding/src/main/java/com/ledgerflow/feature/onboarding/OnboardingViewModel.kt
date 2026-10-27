@@ -92,6 +92,15 @@ public class OnboardingViewModel @Inject constructor(
                     completeBackupLocation(granted = true, treeUri = event.uri)
                 }
 
+            OnboardingEvent.BackupLocationDeclineRequested ->
+                ifAt(OnboardingStep.BackupLocation, step) {
+                    _state.update { it.copy(confirmingBackupDecline = true) }
+                }
+
+            // Housekeeping, so not step-guarded: it only closes the warning.
+            OnboardingEvent.BackupLocationDeclineCancelled ->
+                _state.update { it.copy(confirmingBackupDecline = false) }
+
             OnboardingEvent.BackupLocationDeclined ->
                 ifAt(OnboardingStep.BackupLocation, step) {
                     completeBackupLocation(granted = false, treeUri = null)
@@ -283,6 +292,7 @@ public class OnboardingViewModel @Inject constructor(
             it.copy(
                 backupLocationGranted = granted,
                 backupTreeUri = treeUri,
+                confirmingBackupDecline = false,
                 step = OnboardingStep.Complete,
             )
         }
