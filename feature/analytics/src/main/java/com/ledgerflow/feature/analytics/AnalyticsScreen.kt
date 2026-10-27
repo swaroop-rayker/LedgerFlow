@@ -49,7 +49,9 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -141,10 +143,18 @@ public fun AnalyticsScreen(
  * flash of "no spending" before the real numbers arrived.
  */
 private fun LazyListScope.emptySection(state: AnalyticsUiState) {
+    // E5: loading is still skeletons after 300 ms, not an empty card titled
+    // "Loading" -- that read as a finding ("nothing here") for as long as it
+    // stayed.
+    if (state.isLoading) {
+        item(key = "loading", contentType = "loading") {
+            LfStateContent(state = LfContentState.Loading) {}
+        }
+        return
+    }
     item(key = "empty", contentType = "empty") {
         LfEmptyState(
             title = when {
-                state.isLoading -> "Loading"
                 state.emptyBecauseFiltered -> "Nothing matched"
                 state.range == AnalyticsRange.CUSTOM -> "Nothing in this range"
                 else -> "Nothing to chart yet"
@@ -155,7 +165,6 @@ private fun LazyListScope.emptySection(state: AnalyticsUiState) {
             // approve a transaction, which is how someone concludes their data
             // has gone missing.
             body = when {
-                state.isLoading -> "Reading your ledger."
                 state.emptyBecauseFiltered -> "No spending matches these filters."
                 state.range == AnalyticsRange.CUSTOM -> "Drag the chart or pick another range."
                 else -> "Approve a transaction and it will show up here."
