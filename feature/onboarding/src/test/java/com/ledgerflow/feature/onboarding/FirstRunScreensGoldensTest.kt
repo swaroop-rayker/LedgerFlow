@@ -62,6 +62,8 @@ open class FirstRunScreensGoldensTest {
         challengeError = true,
     )
 
+    private val setupFailed = OnboardingUiState(step = OnboardingStep.Complete, setupFailed = true)
+
     private val notificationsOff = NotificationAccessUiState(
         listenerGranted = false,
         postNotificationsGranted = true,
@@ -107,6 +109,12 @@ open class FirstRunScreensGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun kit_2x() = onboarding("onboarding-kit-2x", OnboardingUiState(step = OnboardingStep.RecoveryKit), 2f)
+
+    /** BUG66: a setup that did not finish, and its one way forward. */
+    @Test fun setupFailed_1x() = onboarding("onboarding-setup-failed-1x", setupFailed, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun setupFailed_2x() = onboarding("onboarding-setup-failed-2x", setupFailed, 2f)
 
     @Test
     fun notifications_1x() = rule.captureScreenGolden("notifications-off-1x", 1f) {

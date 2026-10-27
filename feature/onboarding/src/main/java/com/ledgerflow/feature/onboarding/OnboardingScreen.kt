@@ -29,6 +29,7 @@ import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfErrorNotice
 import com.ledgerflow.core.designsystem.component.LfKeyboards
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfTextField
@@ -91,8 +92,9 @@ public fun OnboardingScreen(
             OnboardingStep.WordChallenge -> WordChallengeStep(state, onEvent)
             OnboardingStep.RecoveryKit -> RecoveryKitStep(onEvent)
             OnboardingStep.BackupLocation -> BackupLocationStep(onEvent)
-            // Only a heading (the template's) while the key is made.
-            OnboardingStep.Complete -> Unit
+            // Only a heading (the template's) while the key is made, and a
+            // way forward if making it failed (BUG66).
+            OnboardingStep.Complete -> if (state.setupFailed) SetupFailedNotice(onEvent)
         }
         state.errorMessage?.let { ErrorFooter(it, onEvent) }
     }
@@ -295,13 +297,34 @@ private fun OnboardingUiState.stepCopy(): StepCopy = when (step) {
         body = "LedgerFlow writes an encrypted backup every night. Only your recovery " +
             "phrase can open it, so the location doesn't need to be private.",
     )
-    OnboardingStep.Complete -> StepCopy(
-        title = if (isWorking) "Setting up your ledger" else "You're set up",
-        body = if (isWorking) {
-            "Generating your encryption key and creating the database."
-        } else {
-            "Your ledger is encrypted and recoverable."
-        },
+    OnboardingStep.Complete -> when {
+        isWorking -> StepCopy(
+            title = "Setting up your ledger",
+            body = "Generating your encryption key and creating the database.",
+        )
+        // BUG66: this said "You're set up" over the failure, with only "Dismiss"
+        // under it. Success never reaches this branch for long -- the vault
+        // opening is what moves the app on -- so a step still showing after the
+        // work stopped is a failure until proved otherwise.
+        setupFailed -> StepCopy(
+            title = "Couldn't finish setting up",
+            body = "Nothing was lost, and your recovery phrase is unchanged. You won't " +
+                "need to write it down again.",
+        )
+        else -> StepCopy(
+            title = "You're set up",
+            body = "Your ledger is encrypted and recoverable.",
+        )
+    }
+}
+
+/** The failed setup's one way forward: the same setup again (BUG66). */
+@Composable
+private fun SetupFailedNotice(onEvent: (OnboardingEvent) -> Unit) {
+    LfErrorNotice(
+        title = "Your ledger wasn't created",
+        actionLabel = "Try again",
+        onAction = { onEvent(OnboardingEvent.SetupRetried) },
     )
 }
 
@@ -545,6 +568,20 @@ private fun OnboardingChallengePreview() {
                 challengePositions = listOf(3, 11, 19),
                 challengeError = true,
             ),
+            onEvent = {},
+            onGeneratePhrase = {},
+        )
+    }
+}
+
+@PreviewScreenSizes
+@PreviewFontScale
+@PreviewLightDark
+@Composable
+private fun OnboardingSetupFailedPreview() {
+    LfTheme {
+        OnboardingScreen(
+            state = OnboardingUiState(step = OnboardingStep.Complete, setupFailed = true),
             onEvent = {},
             onGeneratePhrase = {},
         )

@@ -94,6 +94,13 @@ public data class OnboardingUiState(
     val backupTreeUri: String? = null,
 
     val isWorking: Boolean = false,
+
+    /**
+     * The last step's setup did not finish (BUG66). The phrase, currency and
+     * folder are all still here, so [OnboardingEvent.SetupRetried] runs the
+     * same request again. Until then the step must not say "You're set up".
+     */
+    val setupFailed: Boolean = false,
     val errorMessage: String? = null,
 ) {
     /** Drives the challenge's continue button. All three, or none. */
@@ -127,4 +134,7 @@ public sealed interface OnboardingEvent {
     public data class BackupLocationGranted(val uri: String) : OnboardingEvent
     public data object BackupLocationDeclined : OnboardingEvent
     public data object ErrorDismissed : OnboardingEvent
+
+    /** "Try again" after a failed setup: the same words, currency and folder (BUG66). */
+    public data object SetupRetried : OnboardingEvent
 }

@@ -201,7 +201,7 @@ class Bug30_PhraseIsForgottenWhenItsScreenIsDoneTest {
         vm.walkTheGate()
         advanceUntilIdle()
 
-        assertThat(vm.state.value.errorMessage).isNotNull()
+        assertThat(vm.state.value.setupFailed).isTrue()
         assertThat(vm.state.value.mnemonic).hasSize(PHRASE_WORDS)
     }
 
