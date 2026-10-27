@@ -24,9 +24,11 @@ import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.pattern.LfFormPage
@@ -86,12 +88,28 @@ public fun DiagnosticsScreen(
             selectedIndex = WINDOWS.indexOf(state.window),
             onSelect = { index -> onEvent(DiagnosticsEvent.WindowSelected(WINDOWS[index])) },
         )
-        when (val report = state.report) {
-            DiagnosticsReport.Loading -> Unit
-            DiagnosticsReport.Unavailable -> DiagnosticsCard(heading = "Nothing to count") {
-                BodyText("Your data could not be opened to count it. Close the app and open it again.")
+        // E3: still skeletons after 300 ms instead of a blank page while the
+        // counts are read; and BUG71, a report that could not be read offers
+        // Try again instead of only telling the user to restart the app.
+        val report = state.report
+        LfStateContent(
+            state = when (report) {
+                DiagnosticsReport.Loading -> LfContentState.Loading
+                DiagnosticsReport.Unavailable -> LfContentState.Error(
+                    title = "Couldn't count your messages",
+                    body = "Your data could not be opened to count it. If trying again " +
+                        "doesn't work, close the app and open it again.",
+                    onRetry = { onEvent(DiagnosticsEvent.Retried) },
+                    actionLabel = "Try again",
+                )
+                is DiagnosticsReport.Ready -> LfContentState.Ready
+            },
+        ) {
+            if (report is DiagnosticsReport.Ready) {
+                Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
+                    ReportCards(report.diagnostics, onOpenSuppressed)
+                }
             }
-            is DiagnosticsReport.Ready -> ReportCards(report.diagnostics, onOpenSuppressed)
         }
     }
 }

@@ -76,6 +76,8 @@ open class DiagnosticsScreenTest {
             }
         }
 
+    private val unavailable = DiagnosticsUiState(report = DiagnosticsReport.Unavailable)
+
     private val full = DiagnosticsUiState(report = DiagnosticsReport.Ready(PreviewDiagnostics))
 
     /** A fresh install: the first card alone, saying nothing arrived. */
@@ -121,6 +123,12 @@ open class DiagnosticsScreenTest {
 
     @Config(qualifiers = TALL_2X)
     @Test fun troubled_2x() = capture("diagnostics-troubled-2x", troubled, 2f)
+
+    /** BUG71: a report that could not be read, and its Try again. */
+    @Test fun unavailable_1x() = capture("diagnostics-unavailable-1x", unavailable, 1f)
+
+    @Config(qualifiers = TALL_2X)
+    @Test fun unavailable_2x() = capture("diagnostics-unavailable-2x", unavailable, 2f)
 
     // ── BUG17: the title never breaks mid-word ──────────────────────────────
     //
