@@ -110,6 +110,7 @@ class Bug69_BudgetDeleteAsksFirstTest {
                             confirmingDeleteId = ID,
                         ),
                         onEvent = { events += it },
+                        onBack = {},
                     )
                 }
             }

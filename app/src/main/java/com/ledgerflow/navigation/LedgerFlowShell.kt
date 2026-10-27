@@ -369,7 +369,7 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
             onDone = { navController.popBackStack() },
         )
     }
-    composable<Destination.Budgets> { BudgetRoute() }
+    composable<Destination.Budgets> { BudgetRoute(onBack = { navController.popBackStack() }) }
     composable<Destination.Categories> {
         val viewModel: CategoriesViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -525,10 +525,10 @@ private fun LedgerRoute(navController: NavHostController, handle: SavedStateHand
  * short enough to read in one go.
  */
 @Composable
-private fun BudgetRoute() {
+private fun BudgetRoute(onBack: () -> Unit) {
     val viewModel: BudgetViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    BudgetScreen(state = state, onEvent = viewModel::onEvent)
+    BudgetScreen(state = state, onEvent = viewModel::onEvent, onBack = onBack)
     state.editor?.let { editor ->
         BudgetEditorDialog(
             editor = editor,

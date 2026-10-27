@@ -34,6 +34,7 @@ class Bug68_BudgetMessagesAreShownTest {
                     BudgetScreen(
                         state = BudgetUiState(isLoading = false, message = "Could not delete"),
                         onEvent = { events += it },
+                        onBack = {},
                     )
                 }
             }

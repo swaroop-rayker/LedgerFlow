@@ -46,7 +46,7 @@ open class BudgetScreenGoldensTest {
         rule.captureScreenGolden(name, fontScale) {
             // In LfScaffold, as the shell hosts it: the screen paints no
             // background of its own.
-            LfTheme { LfScaffold { BudgetScreen(state = state, onEvent = {}) } }
+            LfTheme { LfScaffold { BudgetScreen(state = state, onEvent = {}, onBack = {}) } }
         }
 
     private fun progress(id: String, name: String, limit: Long, spent: Long, projected: Long) = BudgetProgress(
@@ -105,7 +105,11 @@ open class BudgetScreenGoldensTest {
         if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale)
         rule.setContent {
             GoldenTheme.Provide {
-                LfTheme { LfScaffold { BudgetScreen(state = two.copy(confirmingDeleteId = "g"), onEvent = {}) } }
+                LfTheme {
+                    LfScaffold {
+                        BudgetScreen(state = two.copy(confirmingDeleteId = "g"), onEvent = {}, onBack = {})
+                    }
+                }
             }
         }
         rule.waitForIdle()

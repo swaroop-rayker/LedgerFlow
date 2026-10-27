@@ -29,7 +29,7 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.pattern.LfConfirmSheet
-import com.ledgerflow.core.designsystem.pattern.LfTabPage
+import com.ledgerflow.core.designsystem.pattern.LfDetailPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.BudgetProgress
 
@@ -50,6 +50,7 @@ import com.ledgerflow.core.domain.analytics.BudgetProgress
 public fun BudgetScreen(
     state: BudgetUiState,
     onEvent: (BudgetEvent) -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // BUG68: "Budget saved", "Budget deleted" and "Could not delete" were set
@@ -66,11 +67,14 @@ public fun BudgetScreen(
 
     state.confirmingDelete?.let { DeleteBudgetSheet(it, onEvent) }
 
-    // No scaffold of its own: the shell hosts this screen, so the template
-    // without one.
-    LfTabPage(
+    // BUG70: a full-screen destination with no way out but the gesture. The
+    // detail template, with "Done" in the band above the title, at the end
+    // (BUG17's placement), as Organise, Export and Deleted entries have it.
+    LfDetailPage(
         title = "Budgets",
         modifier = modifier,
+        actions = { LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack) },
+        actionsAlignment = LfActionAlignment.End,
         notices = {
             LfActionRow(alignment = LfActionAlignment.Start) {
                 LfButton(
@@ -197,5 +201,5 @@ private fun periodSummary(progress: BudgetProgress): String {
 @PreviewLightDark
 @Composable
 private fun BudgetPreview() {
-    LfTheme { LfScaffold { BudgetScreen(state = BudgetUiState(isLoading = false), onEvent = {}) } }
+    LfTheme { LfScaffold { BudgetScreen(state = BudgetUiState(isLoading = false), onEvent = {}, onBack = {}) } }
 }
