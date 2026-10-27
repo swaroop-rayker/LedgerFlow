@@ -4,17 +4,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.PaymentMethodType
 
@@ -211,7 +211,7 @@ private fun ReassignBeforeEraseDialog(
         detail = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
             ) {
                 if (dialog.candidates.isEmpty()) {
@@ -262,7 +262,7 @@ private fun ReassignDialog(
         detail = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
             ) {
                 dialog.candidates.forEach { choice ->
@@ -295,7 +295,7 @@ private fun MergeDialog(
         detail = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
             ) {
                 if (dialog.candidates.isEmpty()) {
@@ -333,7 +333,7 @@ private fun PaymentMethodDialog(
         detail = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
             ) {
@@ -387,7 +387,6 @@ private fun ErrorText(message: String) {
     Text(text = message, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
 }
 
-private const val PICKER_MAX_HEIGHT = 280
 
 /** "entry" or "entries". One place, so the two re-assign dialogs cannot drift. */
 private fun entryNoun(count: Int): String = if (count == 1) "entry" else "entries"

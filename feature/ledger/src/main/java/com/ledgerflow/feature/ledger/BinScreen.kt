@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Text
@@ -31,7 +29,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -46,6 +43,7 @@ import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
 import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.DeletedEntry
@@ -155,7 +153,7 @@ private fun BinRow(
 ) {
     val spacing = LfTheme.spacing
     val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerLarge)
+    val shape = LfTheme.shapes.row
 
     // displayCategoryName, not categoryName: an itemised entry files at line
     // grain and has none of its own (ADR-0018), so without the fallback a
@@ -177,8 +175,9 @@ private fun BinRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.surfaceRaised, shape)
+            // A selected row's accent edge marks a state.
             .border(
-                HAIRLINE.dp,
+                if (selected) LfTheme.borders.emphasis else LfTheme.borders.hairline,
                 if (selected) colors.accent else colors.outline,
                 shape,
             )
@@ -268,8 +267,8 @@ private fun BinSwatch(entry: DeletedEntry) {
         } else {
             Box(
                 modifier = Modifier
-                    .size(LfTheme.spacing.lg)
-                    .border(HAIRLINE.dp, LfTheme.colors.outline, CircleShape),
+                    .size(LfLayout.categoryDotSize)
+                    .border(LfTheme.borders.hairline, LfTheme.colors.outline, LfTheme.shapes.full),
             )
         }
     }

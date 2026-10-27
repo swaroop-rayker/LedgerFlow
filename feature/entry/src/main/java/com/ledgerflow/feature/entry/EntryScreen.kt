@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -36,7 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
 import com.ledgerflow.core.designsystem.component.LfAmountTone
@@ -334,14 +332,14 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
     val spacing = LfTheme.spacing
     val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerMedium)
+    val shape = LfTheme.shapes.container
 
     Box(
         modifier = Modifier
             .width(spacing.peekCardWidth)
             .clip(shape)
             .background(colors.surfaceRaised)
-            .border(1.dp, colors.outline, shape)
+            .border(LfTheme.borders.hairline, colors.outline, shape)
             // The whole card opens it. A card whose only tap target is a small
             // button inside it is a card people tap and nothing happens.
             .clickable { onEvent(EntryEvent.DraftOpened(draft.id)) }

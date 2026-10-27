@@ -11,29 +11,11 @@
 # Rules: colour, alpha, size, shape, type, material-theme, icon, widget.
 # Recorded at step C1 (2026-10-25): 38 in 15 files.
 # Step C2: the 8 picker and sheet widgets moved to their Lf wrappers; 30 in 12 files.
+# Step D3: corners, hairlines, dialog list heights and the swipe tint read the
+# theme; 2 in 2 files.
 
-# --- Corners: screens move onto LfTheme.shapes in step D3.
+# --- Corners.
 core/ui/src/main/java/com/ledgerflow/core/ui/entry/LfEntryRow.kt shape 1 -- the empty swatch's ring is a circle; becomes LfIconTile in F3
-feature/categories/src/main/java/com/ledgerflow/feature/categories/CategoriesScreen.kt shape 1 -- Organise's 8 dp field group; LfFieldGroup in D3
-feature/entry/src/main/java/com/ledgerflow/feature/entry/EntryScreen.kt shape 1 -- the suggestion peek card; LfTheme.shapes.container in D3
-feature/inbox/src/main/java/com/ledgerflow/feature/inbox/InboxScreen.kt shape 3 -- swipe track and row corners built from a spacing step; LfSwipeRow in D3
-feature/ledger/src/main/java/com/ledgerflow/feature/ledger/BinScreen.kt shape 2 -- row corner and the empty-swatch ring; LfTheme.shapes in D3
-feature/ledger/src/main/java/com/ledgerflow/feature/ledger/LedgerScreen.kt shape 3 -- swipe track and row corners built from a spacing step; LfSwipeRow in D3
-
-# --- Sizes: hairlines and dialog heights become tokens in step D3.
-core/ui/src/main/java/com/ledgerflow/core/ui/picker/LfMultiPickerDialog.kt size 1 -- 320 dp list height; LfLayout.dialogListMax in D3
-core/ui/src/main/java/com/ledgerflow/core/ui/picker/LfPickerOption.kt size 1 -- 320 dp list height; LfLayout.dialogListMax in D3
-feature/analytics/src/main/java/com/ledgerflow/feature/analytics/AnalyticsFilterSheet.kt size 1 -- 380 dp sheet height; LfLayout.dialogListMax in D3
-feature/budget/src/main/java/com/ledgerflow/feature/budget/BudgetEditorDialog.kt size 1 -- 380 dp editor height; LfLayout.dialogListMax in D3
-feature/categories/src/main/java/com/ledgerflow/feature/categories/CategoriesScreen.kt size 3 -- tree rails (2) and a 1 dp border; LfTheme.borders.hairline in D3
-feature/categories/src/main/java/com/ledgerflow/feature/categories/TaxonomyDialogHost.kt size 4 -- 280 dp list height in four dialogs; LfLayout.dialogListMax in D3
-feature/entry/src/main/java/com/ledgerflow/feature/entry/EntryScreen.kt size 1 -- the peek card's 1 dp border; LfTheme.borders.hairline in D3
-feature/inbox/src/main/java/com/ledgerflow/feature/inbox/InboxScreen.kt size 1 -- HAIRLINE.dp row border; LfTheme.borders.hairline in D3
-feature/ledger/src/main/java/com/ledgerflow/feature/ledger/BinScreen.kt size 2 -- HAIRLINE.dp borders (row, swatch ring); LfTheme.borders.hairline in D3
-feature/ledger/src/main/java/com/ledgerflow/feature/ledger/LedgerScreen.kt size 2 -- HAIRLINE.dp borders (row, the draft being edited); borders.hairline and borders.emphasis in D3
-
-# --- Colour.
-feature/inbox/src/main/java/com/ledgerflow/feature/inbox/InboxScreen.kt alpha 1 -- discard swipe track tinted from debit; money.outgoingSubtle in D3
 
 # --- Icons: one icon family through LfIcons in step F4.
 feature/budget/src/main/java/com/ledgerflow/feature/budget/notify/BudgetNotifications.kt icon 1 -- budget alert's stock warning icon (audit gap); app icon in F4

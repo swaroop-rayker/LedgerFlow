@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -27,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -251,7 +249,7 @@ private fun CategoryBranch(branch: CategoryTree, onEvent: (CategoriesEvent) -> U
             Box(
                 modifier = Modifier
                     .padding(start = spacing.md)
-                    .width(RAIL_THICKNESS.dp)
+                    .width(LfTheme.borders.hairline)
                     .fillMaxHeight()
                     .background(LfTheme.colors.outline),
             )
@@ -261,7 +259,7 @@ private fun CategoryBranch(branch: CategoryTree, onEvent: (CategoriesEvent) -> U
                         Box(
                             modifier = Modifier
                                 .width(spacing.md)
-                                .height(RAIL_THICKNESS.dp)
+                                .height(LfTheme.borders.hairline)
                                 .background(LfTheme.colors.outline),
                         )
                         CategoryRow(child, isChild = true, onEvent = onEvent)
@@ -333,9 +331,6 @@ private fun CategoryRow(
     }
 }
 
-/** Hairline. Thin enough to read as a connector rather than as a border. */
-private const val RAIL_THICKNESS = 1
-
 /**
  * The one card shape this screen uses, for all three sections.
  *
@@ -356,12 +351,12 @@ private fun TaxonomyCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val spacing = LfTheme.spacing
-    val shape = RoundedCornerShape(spacing.cornerSmall)
+    val shape = LfTheme.shapes.row
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(LfTheme.colors.surfaceRaised, shape)
-            .border(1.dp, LfTheme.colors.outline, shape)
+            .border(LfTheme.borders.hairline, LfTheme.colors.outline, shape)
             .padding(horizontal = spacing.md, vertical = spacing.sm),
         content = content,
     )

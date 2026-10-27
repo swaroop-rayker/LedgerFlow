@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -227,7 +226,10 @@ class LfEntryRowLayoutTest {
 private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: Painter?) {
     val spacing = LfTheme.spacing
     val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerLarge)
+    // The one deliberate departure from verbatim: the corner reads the role, as
+    // the real row does, so D3 moving `row` to 16 dp is not mistaken for a
+    // layout change. This test holds the layout, not a radius.
+    val shape = LfTheme.shapes.row
     val title = item.entryTitle()
     val stamp = TimeStamp.of(item.occurredAt, withDate)
     val note = item.note?.takeIf { it.isNotBlank() }

@@ -14,9 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.ui.LfFormRowTokens
 
 /** One selectable option: an id to report back, and a label to show. */
@@ -80,7 +80,7 @@ public fun LfPickerDialog(
                 }
                 Column(
                     modifier = Modifier
-                        .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                        .heightIn(max = LfLayout.dialogListMax)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     if (createLabel != null && onCreate != null) {
@@ -183,5 +183,3 @@ public fun LfDetailRow(
     }
 }
 
-/** Tall enough for a real category list, short enough to leave the dialog a dialog. */
-private const val PICKER_MAX_HEIGHT = 320

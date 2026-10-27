@@ -16,13 +16,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.ui.LfFormRowTokens
 
 /**
@@ -90,7 +90,7 @@ public fun LfMultiPickerDialog(
                 }
                 Column(
                     modifier = Modifier
-                        .heightIn(max = MULTI_PICKER_MAX_HEIGHT.dp)
+                        .heightIn(max = LfLayout.dialogListMax)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     if (options.isEmpty()) {
@@ -170,5 +170,3 @@ public fun summariseSelection(
     else -> "${selectedIds.size} selected"
 }
 
-/** Matches [LfPickerDialog]'s list height, so the two dialogs are one size. */
-private const val MULTI_PICKER_MAX_HEIGHT = 320

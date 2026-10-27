@@ -13,9 +13,6 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
@@ -26,6 +23,8 @@ import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDatePickerDialog
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.Category
@@ -113,7 +112,7 @@ private fun EditorForm(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = EDITOR_MAX_HEIGHT)
+            .heightIn(max = LfLayout.dialogListMax)
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
     ) {
@@ -329,11 +328,3 @@ private fun BudgetPeriod.label(): String = when (this) {
     BudgetPeriod.YEARLY -> "Yearly"
 }
 
-/**
- * Tall enough for the picker, short enough to leave the actions on screen.
- *
- * Measured against the device's 360dp-wide, ~780dp-tall viewport: beyond this
- * the dialog's own Cancel/Save row starts being pushed off, which is a worse
- * failure than scrolling.
- */
-private val EDITOR_MAX_HEIGHT: Dp = 380.dp

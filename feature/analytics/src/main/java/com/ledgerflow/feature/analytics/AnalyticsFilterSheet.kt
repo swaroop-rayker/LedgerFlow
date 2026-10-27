@@ -16,9 +16,6 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -26,6 +23,8 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDateRangePickerDialog
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
@@ -108,7 +107,7 @@ private fun FilterForm(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = SHEET_MAX_HEIGHT)
+            .heightIn(max = LfLayout.dialogListMax)
             .verticalScroll(rememberScrollState()),
     ) {
         // "Clear all" belongs in the content, not on the dismiss button:
@@ -489,5 +488,3 @@ private fun EntrySource.label(): String = when (this) {
 }
 
 private const val MILLIS_PER_DAY = 86_400_000L
-
-private val SHEET_MAX_HEIGHT: Dp = 380.dp

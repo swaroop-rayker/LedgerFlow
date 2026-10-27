@@ -9,16 +9,17 @@ import com.ledgerflow.core.designsystem.theme.primitive.LfScale
 /**
  * Corner shapes by job (DESIGN_SYSTEM_PLAN §4.2), read as `LfTheme.shapes.container`.
  *
- * Today's values (step B3): each role is the radius its main users already
- * have, so nothing on screen moves. Night Vault's values from the reference
- * samples (16 dp controls and panels, 24 dp sheets) arrive in step F3, and
- * so does the one place they disagree with today: list rows, 24 dp now.
+ * Step B3 set each role to the radius its main users already had. Step D3
+ * moved every standalone row onto [row] and gave it Night Vault's 16 dp
+ * early (owner, 2026-10-26), so rows change once rather than twice: they had
+ * been 24 dp (the Ledger and the bin) and 8 dp (the Inbox, the Ledger's
+ * unsaved rows, Organise). The other roles already hold Night Vault's values.
  */
 @Immutable
 public class LfShapeRoles internal constructor(
     /** Cards, grouped panels and sections. */
     public val container: CornerBasedShape,
-    /** A list row that stands on its own (the Ledger's entry rows). */
+    /** A list row that stands on its own: the Ledger, Inbox, bin and Organise rows. */
     public val row: CornerBasedShape,
     /** Buttons and other controls. */
     public val control: CornerBasedShape,
@@ -30,7 +31,7 @@ public class LfShapeRoles internal constructor(
 
 internal val LfDefaultShapeRoles: LfShapeRoles = LfShapeRoles(
     container = RoundedCornerShape(LfScale.Radius16),
-    row = RoundedCornerShape(LfScale.Radius24),
+    row = RoundedCornerShape(LfScale.Radius16),
     control = RoundedCornerShape(LfScale.Radius16),
     dialog = RoundedCornerShape(LfScale.Radius24),
     full = RoundedCornerShape(percent = FULLY_ROUND_PERCENT),

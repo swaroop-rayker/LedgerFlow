@@ -144,13 +144,16 @@ class LfTokenLayersTest {
         assertThat(LfDefaultBorderRoles.hairline).isEqualTo(1.dp)
     }
 
-    /** Step B3: each shape role is the radius its users had, so nothing on screen moved. */
+    /**
+     * Step B3: each shape role is the radius its users had, so nothing on screen
+     * moved. Step D3 then set `row` to 16 dp (owner, 2026-10-26).
+     */
     @Test
     fun shapeRolesKeepTodaysRadii() {
         val r = LfDefaultShapeRoles
         val s = LfSpacing()
         assertThat(r.container).isEqualTo(RoundedCornerShape(s.cornerMedium)) // LfCard
-        assertThat(r.row).isEqualTo(RoundedCornerShape(s.cornerLarge)) // LfEntryRow
+        assertThat(r.row).isEqualTo(RoundedCornerShape(s.cornerMedium)) // every standalone row, D3
         assertThat(r.control).isEqualTo(RoundedCornerShape(s.cornerMedium)) // LfButton
         assertThat(r.dialog).isEqualTo(RoundedCornerShape(s.cornerLarge)) // LfDialog
         assertThat(r.full).isEqualTo(CircleShape) // LfFab
@@ -165,5 +168,6 @@ class LfTokenLayersTest {
         assertThat(LfLayout.segmentMinWidth).isEqualTo(s.segmentMinWidth)
         assertThat(LfLayout.peekCardWidth).isEqualTo(s.peekCardWidth)
         assertThat(LfLayout.categoryDotSize).isEqualTo(s.lg)
+        assertThat(LfLayout.dialogListMax).isEqualTo(320.dp) // D3: one of five values
     }
 }

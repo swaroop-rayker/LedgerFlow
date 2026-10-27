@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
@@ -33,7 +32,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.LoadStates
 import androidx.paging.PagingData
@@ -341,12 +339,8 @@ private fun CandidateRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceRaised, RoundedCornerShape(LfTheme.spacing.sm))
-            .border(
-                HAIRLINE.dp,
-                LfTheme.colors.outline,
-                RoundedCornerShape(LfTheme.spacing.sm),
-            )
+            .background(LfTheme.colors.surfaceRaised, LfTheme.shapes.row)
+            .border(LfTheme.borders.hairline, LfTheme.colors.outline, LfTheme.shapes.row)
             .clickable { onReview(candidate.id) }
             .clearAndSetSemantics {
                 contentDescription = "$TO_REVIEW_MARKER, $amount, $title, $stamp. " +
@@ -475,7 +469,7 @@ private fun PendingRow(
 ) {
     val spacing = LfTheme.spacing
     val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerLarge)
+    val shape = LfTheme.shapes.row
 
     val title = listOfNotNull(draft.merchantName, draft.categoryName)
         .joinToString(SEPARATOR)
@@ -499,7 +493,7 @@ private fun PendingRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.surfaceRaised, shape)
-            .border(HAIRLINE.dp, colors.accent, shape)
+            .border(LfTheme.borders.emphasis, colors.accent, shape)
             .padding(start = spacing.md, end = spacing.xs, top = spacing.sm, bottom = spacing.sm),
         horizontalArrangement = Arrangement.spacedBy(spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
@@ -711,9 +705,6 @@ private fun EmptyBook(state: LedgerUiState) {
 internal fun occurredStamp(occurredAt: Long, withDate: Boolean): String =
     TimeStamp.of(occurredAt, withDate)
 
-/** Hairline. The same weight the taxonomy cards and the nesting rail use. */
-internal const val HAIRLINE = 1
-
 private const val BAND_HEADER_TYPE = "band"
 private const val ENTRY_TYPE = "entry"
 
@@ -735,7 +726,7 @@ internal const val UNSAVED_DETAIL_MAX_LINES = 2
 /**
  * An entry filed under nothing. §5.1 writes these when a parse fails.
  *
- * `internal` so the bin says the same word, the way it shares [HAIRLINE]. Both
+ * `internal` so the bin says the same word. Both
  * screens reach it only after the line-item fallback has come back empty too
  * (ADR-0018), so it now means "genuinely nothing" on either.
  */

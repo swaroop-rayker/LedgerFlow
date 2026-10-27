@@ -64,4 +64,14 @@ public object LfLayout {
      * Its initial is half this, pinned to the shape rather than the font scale.
      */
     public val categoryDotSize: Dp = LfScale.Space24
+
+    /**
+     * How tall a scrolling list inside a dialog or sheet may get before it
+     * scrolls: the pickers, the Analytics filter sheet and the budget editor.
+     *
+     * One value for one job (step D3, owner 2026-10-26). There were five, at
+     * 280, 320 and 380 dp. 320 leaves the dialog's own buttons on screen on a
+     * 360 x 780 dp phone, which the budget editor's 380 was chosen to protect.
+     */
+    public val dialogListMax: Dp = 320.dp
 }

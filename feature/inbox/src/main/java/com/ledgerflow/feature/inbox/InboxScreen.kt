@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,7 +37,6 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
@@ -341,10 +339,9 @@ private fun SwipeableRow(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        LfTheme.colors.debit.copy(alpha = DISCARD_TRACK_ALPHA),
-                        RoundedCornerShape(LfTheme.spacing.sm),
-                    )
+                    // Discarding is a destructive action, not money, so the
+                    // track takes the danger tint rather than the debit colour.
+                    .background(LfTheme.colors.status.dangerSubtle, LfTheme.shapes.row)
                     .padding(horizontal = LfTheme.spacing.md),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -384,12 +381,8 @@ private fun PendingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceBase, RoundedCornerShape(LfTheme.spacing.sm))
-            .border(
-                HAIRLINE.dp,
-                LfTheme.colors.outline,
-                RoundedCornerShape(LfTheme.spacing.sm),
-            )
+            .background(LfTheme.colors.surfaceBase, LfTheme.shapes.row)
+            .border(LfTheme.borders.hairline, LfTheme.colors.outline, LfTheme.shapes.row)
             .padding(
                 start = if (selectable) LfTheme.spacing.xs else LfTheme.spacing.md,
                 end = LfTheme.spacing.md,
@@ -699,11 +692,6 @@ private fun PendingTransaction.provenance(): String {
         extracted.accountLast4?.let { add("A/C $it") }
     }.joinToString(" · ")
 }
-
-private const val HAIRLINE = 1
-
-/** The swipe track, tinted toward the debit colour without shouting. */
-private const val DISCARD_TRACK_ALPHA = 0.12f
 
 // ── Previews ─────────────────────────────────────────────────────────────────
 //
