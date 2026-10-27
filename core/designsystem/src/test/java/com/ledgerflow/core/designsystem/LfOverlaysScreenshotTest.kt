@@ -27,6 +27,12 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDatePickerDialog
 import com.ledgerflow.core.designsystem.component.LfDateRangePickerDialog
 import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.pattern.LfConfirmSheet
+import com.ledgerflow.core.designsystem.pattern.LfFilterChoice
+import com.ledgerflow.core.designsystem.pattern.LfFilterGroup
+import com.ledgerflow.core.designsystem.pattern.LfFilterSheet
+import com.ledgerflow.core.designsystem.pattern.LfOptionsSheet
+import com.ledgerflow.core.designsystem.pattern.LfSheetOption
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import com.ledgerflow.core.testing.screenshot.GOLDEN_DIR
@@ -35,6 +41,7 @@ import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -56,7 +63,20 @@ open class LfOverlaysScreenshotTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private fun capture(name: String, content: @Composable () -> Unit) {
+    /**
+     * [fontScale] is set on the device configuration, not as a `LocalDensity`
+     * override: a sheet or dialog is a window of its own and takes its density
+     * from the configuration, so an override draws the page at 2.0 and the
+     * sheet at 1.0.
+     *
+     * **No right-to-left sheet golden.** Under Robolectric a dialog window stays
+     * left-to-right whatever the configuration says (tried: `ldrtl`, an `ar`
+     * locale, a `LocalLayoutDirection` override), so a golden named RTL would
+     * show LTR. The parts inside a sheet -- `LfNavRow`, `LfChip` -- have real RTL
+     * goldens on the pages that use them, and sheets in RTL are a device check.
+     */
+    private fun capture(name: String, fontScale: Float = 1f, content: @Composable () -> Unit) {
+        if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale)
         composeRule.setContent {
             GoldenTheme.Provide {
                 LfTheme {
@@ -125,6 +145,69 @@ open class LfOverlaysScreenshotTest {
             }
         }
     }
+
+    private val addOptions = listOf(
+        LfSheetOption(label = "Scan a receipt", onClick = {}),
+        LfSheetOption(label = "Manual entry", onClick = {}),
+        LfSheetOption(label = "Inbox", onClick = {}, value = "3"),
+    )
+
+    /** The Add sheet since step E1: the options variant. */
+    @Test
+    fun optionsSheet() = capture("lf-options-sheet") { LfOptionsSheet(options = addOptions, onDismiss = {}) }
+
+    @Test
+    fun optionsSheet_2x() = capture("lf-options-sheet-2x", fontScale = 2f) {
+        LfOptionsSheet(options = addOptions, onDismiss = {})
+    }
+
+    @Test
+    fun confirmSheet() = capture("lf-confirm-sheet") {
+        LfConfirmSheet(
+            title = "Sign out of Google Drive?",
+            body = "Backups stop going to Drive. Everything on this phone stays as it is.",
+            confirmLabel = "Sign out",
+            onConfirm = {},
+            onDismiss = {},
+        )
+    }
+
+    private val filterGroups = listOf(
+        LfFilterGroup(
+            label = "Category",
+            choices = listOf(
+                LfFilterChoice(label = "Groceries", selected = true, onToggle = {}),
+                LfFilterChoice(label = "Eating out", selected = false, onToggle = {}),
+                LfFilterChoice(label = "Transport", selected = true, onToggle = {}),
+                LfFilterChoice(label = "Rent", selected = false, onToggle = {}),
+            ),
+        ),
+        LfFilterGroup(
+            label = "Source",
+            choices = listOf(
+                LfFilterChoice(label = "SMS", selected = false, onToggle = {}),
+                LfFilterChoice(label = "Notification", selected = false, onToggle = {}),
+                LfFilterChoice(label = "Receipt", selected = true, onToggle = {}),
+                LfFilterChoice(label = "By hand", selected = false, onToggle = {}),
+            ),
+        ),
+    )
+
+    @Composable
+    private fun Filters() = LfFilterSheet(
+        title = "Filters",
+        groups = filterGroups,
+        onReset = {},
+        onApply = {},
+        onDismiss = {},
+    )
+
+    @Test
+    fun filterSheet() = capture("lf-filter-sheet") { Filters() }
+
+    @Test
+    fun filterSheet_2x() = capture("lf-filter-sheet-2x", fontScale = 2f) { Filters() }
+
 
     /** A message with its action, through `LfScaffold`'s host as every screen gets it. */
     @Test

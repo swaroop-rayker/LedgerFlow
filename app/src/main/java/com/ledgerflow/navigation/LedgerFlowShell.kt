@@ -1,8 +1,5 @@
 package com.ledgerflow.navigation
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,13 +23,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.designsystem.component.LfBottomBar
-import com.ledgerflow.core.designsystem.component.LfBottomSheet
-import com.ledgerflow.core.designsystem.component.LfButton
-import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfNavItem
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.icon.LfIcons
-import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.designsystem.pattern.LfOptionsSheet
+import com.ledgerflow.core.designsystem.pattern.LfSheetOption
 import com.ledgerflow.core.domain.appearance.MotionLevel
 import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.inbox.InboxFilter
@@ -437,8 +432,9 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
  * is **absent rather than disabled** until P4 — a control that cannot do
  * anything is worse than its absence.
  *
- * The Inbox row carries its count in the label rather than as a superscript
- * badge, so it survives font scale 2.0 by wrapping like any other label (BUG9).
+ * The Inbox row carries its count as the row's value rather than as a
+ * superscript badge, so it survives font scale 2.0 by moving under the label
+ * like any other row's value (BUG9).
  */
 @Composable
 private fun CentreActionDial(
@@ -448,36 +444,20 @@ private fun CentreActionDial(
     onInbox: () -> Unit,
     onScanReceipt: () -> Unit,
 ) {
-    LfBottomSheet(onDismiss = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = LfTheme.spacing.md,
-                    end = LfTheme.spacing.md,
-                    bottom = LfTheme.spacing.md,
-                ),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            LfButton(
-                text = "Scan a receipt",
-                onClick = onScanReceipt,
-                style = LfButtonStyle.Outlined,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            LfButton(
-                text = "Manual entry",
-                onClick = onManualEntry,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            LfButton(
-                text = if (pendingCount > 0) "Inbox ($pendingCount)" else "Inbox",
-                style = LfButtonStyle.Tonal,
+    // The options sheet since design-system step E1: three rows in one panel
+    // rather than three differently weighted buttons, the count beside Inbox.
+    LfOptionsSheet(
+        onDismiss = onDismiss,
+        options = listOf(
+            LfSheetOption(label = "Scan a receipt", onClick = onScanReceipt),
+            LfSheetOption(label = "Manual entry", onClick = onManualEntry),
+            LfSheetOption(
+                label = "Inbox",
                 onClick = onInbox,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
+                value = pendingCount.takeIf { it > 0 }?.toString(),
+            ),
+        ),
+    )
 }
 
 /**
