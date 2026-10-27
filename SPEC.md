@@ -2408,3 +2408,14 @@ a device run per check. Until then contrast is a manual row (`TESTING.md` H4).
     exists), so the failure is answered by onboarding's own Try again. That is
     a change in the vault (`CLAUDE.md` §7), out of the redesign's scope, and
     the owner decides.
+
+28. **"Update blocked" offers nothing to press** (found in design-system step
+    E2, 2026-10-27). Every `UpgradeBlockReason` is drawn with an explanation
+    and no action, so a user who frees up space, as the low-storage version
+    asks, has to know to close and reopen the app for the upgrade to be tried
+    again. `DESIGN_SYSTEM_PLAN.md` §6 point 6 wants every error to offer a way
+    forward. A "Try again" would re-run `openOnLaunch`, which re-runs the
+    pre-migration guard and the migration itself (`CLAUDE.md` §7, migrations);
+    whether that is safe for each reason (for `MigrationFailed` with the
+    snapshot restored, and without) is the vault's question, not the screen's.
+    Left unchanged by the redesign; the owner decides.

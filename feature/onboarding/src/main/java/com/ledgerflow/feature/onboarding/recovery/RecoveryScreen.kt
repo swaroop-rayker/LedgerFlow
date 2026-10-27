@@ -131,7 +131,10 @@ private fun FailureMessage(failure: RecoveryFailure) {
     Text(
         text = failure.message(),
         style = LfTheme.typography.bodyM,
-        color = LfTheme.colors.debit,
+        // A form's error line, in the problem colour rather than money-out's
+        // (E2). Not a notice: the pinned Unlock is the retry, and a notice
+        // would need a second one.
+        color = LfTheme.colors.status.danger,
         textAlign = LfTextAlign.start,
     )
 }

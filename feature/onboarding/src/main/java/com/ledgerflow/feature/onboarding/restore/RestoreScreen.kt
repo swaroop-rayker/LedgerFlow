@@ -38,6 +38,8 @@ import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.DisplayDates
@@ -268,13 +270,22 @@ private fun ChosenBackup(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit)
     }
 }
 
+/**
+ * The restore's answer. Success is a success notice; a failure is the form's
+ * error line, in the problem colour, with the pinned Restore as its retry. It
+ * was money-in green and money-out coral, which say something else (E2).
+ */
 @Composable
 private fun ResultMessage(outcome: RestoreOutcome) {
-    Text(
-        text = outcome.message(),
-        style = LfTheme.typography.bodyM,
-        color = if (outcome.isSuccess) LfTheme.colors.credit else LfTheme.colors.debit,
-    )
+    if (outcome.isSuccess) {
+        LfNotice(tone = LfNoticeTone.Success, title = outcome.message())
+    } else {
+        Text(
+            text = outcome.message(),
+            style = LfTheme.typography.bodyM,
+            color = LfTheme.colors.status.danger,
+        )
+    }
 }
 
 @Composable

@@ -44,23 +44,18 @@ public fun UpgradingScreen(
     to: Int,
     modifier: Modifier = Modifier,
 ) {
-    UpgradeFrame(
+    // Said plainly, because the one thing a user must not do here is
+    // force-stop the app halfway through a migration. The template's "what is
+    // safe" line, under the heading, rather than a card of its own (E2).
+    LfFlowStep(
         title = "Updating your ledger",
         body = "Moving your data from format $from to $to. This only happens after an " +
             "app update and usually takes a moment.",
+        safeNote = "A copy of your data was saved first, so nothing is at risk if " +
+            "this is interrupted. Please leave the app open.",
+        actionBar = null,
         modifier = modifier,
-    ) {
-        LfCard {
-            Text(
-                // Said plainly, because the one thing a user must not do here is
-                // force-stop the app halfway through a migration.
-                text = "A copy of your data was saved first, so nothing is at risk if " +
-                    "this is interrupted. Please leave the app open.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
-            )
-        }
-    }
+    ) {}
 }
 
 /**

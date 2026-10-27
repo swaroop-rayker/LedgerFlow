@@ -258,13 +258,17 @@ private fun PrimaryActionBar(
     }
 }
 
+/**
+ * A step's failure (a Recovery Kit that could not be written, say). An error
+ * notice, in the problem colour rather than money-out's (E2); the step's own
+ * button is still the way to try again.
+ */
 @Composable
 private fun ErrorFooter(message: String, onEvent: (OnboardingEvent) -> Unit) {
-    Text(text = message, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
-    LfButton(
-        text = "Dismiss",
-        onClick = { onEvent(OnboardingEvent.ErrorDismissed) },
-        style = LfButtonStyle.Text,
+    LfErrorNotice(
+        title = message,
+        actionLabel = "Dismiss",
+        onAction = { onEvent(OnboardingEvent.ErrorDismissed) },
     )
 }
 
@@ -461,7 +465,8 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
             text = "That didn't match. Check your written copy — we've picked three " +
                 "different words to try again.",
             style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.debit,
+            // The field error's colour, not money-out's (E2).
+            color = LfTheme.colors.status.danger,
         )
     }
 

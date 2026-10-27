@@ -3,6 +3,7 @@ package com.ledgerflow.feature.onboarding
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
@@ -70,6 +71,22 @@ open class FirstRunScreensGoldensTest {
 
     private val backup = OnboardingUiState(step = OnboardingStep.BackupLocation)
 
+    private val kitFailed = OnboardingUiState(
+        step = OnboardingStep.RecoveryKit,
+        errorMessage = "Couldn't write the Recovery Kit to that location.",
+    )
+
+    private val restoreDone = RestoreUiState(
+        entry = PhraseEntry(requiredWordCount = 24),
+        result = RestoreOutcome.Done(
+            rows = 412,
+            imagesRestored = 9,
+            imagesNotFound = 3,
+            imagesUnreadable = 0,
+            imagesFailed = 0,
+        ),
+    )
+
     private val setupFailed = OnboardingUiState(step = OnboardingStep.Complete, setupFailed = true)
 
     private val notificationsOff = NotificationAccessUiState(
@@ -128,6 +145,24 @@ open class FirstRunScreensGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun backup_2x() = onboarding("onboarding-backup-2x", backup, 2f)
+
+    /** A step's own failure, as an error notice (E2). */
+    @Test fun kitFailed_1x() = onboarding("onboarding-kit-failed-1x", kitFailed, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun kitFailed_2x() = onboarding("onboarding-kit-failed-2x", kitFailed, 2f)
+
+    /** A finished restore's report, as a success notice (E2). */
+    @Test
+    fun restoreDone_1x() = rule.captureScreenGolden("restore-done-1x", 1f) {
+        LfTheme { RestoreScreen(state = restoreDone, resuming = false, onEvent = {}, onBack = {}) }
+    }
+
+    @Config(qualifiers = PHONE_2X)
+    @Test
+    fun restoreDone_2x() = rule.captureScreenGolden("restore-done-2x", 2f) {
+        LfTheme { RestoreScreen(state = restoreDone, resuming = false, onEvent = {}, onBack = {}) }
+    }
 
     /** BUG67's warning, a sheet over the step. */
     @Test fun skipBackups_1x() = withSheet("onboarding-skip-backups-1x", 1f)
