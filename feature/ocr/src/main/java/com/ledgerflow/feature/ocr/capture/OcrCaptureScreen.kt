@@ -1,8 +1,11 @@
 package com.ledgerflow.feature.ocr.capture
 
 import android.Manifest
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.compose.CameraXViewfinder
@@ -34,6 +37,7 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
@@ -100,6 +104,17 @@ public fun OcrCaptureScreen(
             android.content.pm.PackageManager.PERMISSION_GRANTED
         onEvent(OcrCaptureEvent.CameraPermissionChanged(granted))
         if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+    // BUG74: back from the phone's settings with the camera allowed, the
+    // viewfinder starts without the user leaving this screen and coming back.
+    LifecycleResumeEffect(state.cameraPermission) {
+        if (state.cameraPermission == CameraPermission.Denied &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            onEvent(OcrCaptureEvent.CameraPermissionChanged(true))
+        }
+        onPauseOrDispose {}
     }
 
     // Back on its own band above the title, as Diagnostics and Restore place it
@@ -191,13 +206,7 @@ private fun Viewfinder(state: OcrCaptureUiState, onEvent: (OcrCaptureEvent) -> U
                     color = LfTheme.colors.textSecondary,
                 )
 
-                CameraPermission.Denied -> Text(
-                    // Not an error. Two of three inputs still work, and saying
-                    // so is more useful than a permission lecture.
-                    text = "No camera access. You can still import a photo or a PDF below.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
-                )
+                CameraPermission.Denied -> CameraRefused()
 
                 CameraPermission.Granted -> CameraPane(
                     state = state,
@@ -207,6 +216,39 @@ private fun Viewfinder(state: OcrCaptureUiState, onEvent: (OcrCaptureEvent) -> U
                 )
             }
         }
+    }
+}
+
+/**
+ * The camera was refused. Not an error: two of three inputs still work, and
+ * saying so is more useful than a permission lecture.
+ *
+ * BUG74: it was only that sentence. Once Android has been told no, it stops
+ * asking, so the camera could be turned back on only by someone who knew to
+ * find the app in the phone's settings. "Allow in Settings" opens that page,
+ * and the screen checks again when it comes back to the foreground.
+ */
+@Composable
+private fun CameraRefused() {
+    val context = LocalContext.current
+    Text(
+        text = "No camera access. You can still import a photo or a PDF below.",
+        style = LfTheme.typography.bodyM,
+        color = LfTheme.colors.textSecondary,
+    )
+    LfActionRow(alignment = LfActionAlignment.End) {
+        LfButton(
+            text = "Allow in Settings",
+            style = LfButtonStyle.Inline,
+            onClick = {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null),
+                    ),
+                )
+            },
+        )
     }
 }
 
