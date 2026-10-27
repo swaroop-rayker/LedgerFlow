@@ -28,6 +28,9 @@ import androidx.compose.ui.semantics.semantics
  * carries nothing to a screen reader or to colour-blind eyes. The action is an
  * in-card `Inline` button at the end, as every in-card action is (`CLAUDE.md`
  * §5). Success and warning notices are announced politely when they appear.
+ *
+ * [secondaryLabel] is a second, lesser answer drawn before the action ("Dismiss"
+ * beside "Save report", E5); like the action, it needs its callback to appear.
  */
 @Composable
 public fun LfNotice(
@@ -37,6 +40,8 @@ public fun LfNotice(
     body: String? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
 ) {
     val tokens = LfNoticeTokens
     val (edge, fill) = when (tone) {
@@ -50,7 +55,10 @@ public fun LfNotice(
         announce = tone != LfNoticeTone.Info,
         title = title,
         body = body,
-        action = if (actionLabel != null && onAction != null) actionLabel to onAction else null,
+        actions = listOfNotNull(
+            if (secondaryLabel != null && onSecondary != null) secondaryLabel to onSecondary else null,
+            if (actionLabel != null && onAction != null) actionLabel to onAction else null,
+        ),
         modifier = modifier,
     )
 }
@@ -76,7 +84,7 @@ public fun LfErrorNotice(
         announce = true,
         title = title,
         body = body,
-        action = actionLabel to onAction,
+        actions = listOf(actionLabel to onAction),
         modifier = modifier,
     )
 }
@@ -88,7 +96,7 @@ private fun NoticeBox(
     announce: Boolean,
     title: String,
     body: String?,
-    action: Pair<String, () -> Unit>?,
+    actions: List<Pair<String, () -> Unit>>,
     modifier: Modifier,
 ) {
     val tokens = LfNoticeTokens
@@ -103,9 +111,11 @@ private fun NoticeBox(
     ) {
         Text(text = title, style = tokens.titleStyle, color = tokens.text)
         body?.let { Text(text = it, style = tokens.bodyStyle, color = tokens.text) }
-        action?.let { (label, onClick) ->
+        if (actions.isNotEmpty()) {
             LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(text = label, onClick = onClick, style = LfButtonStyle.Inline)
+                actions.forEach { (label, onClick) ->
+                    LfButton(text = label, onClick = onClick, style = LfButtonStyle.Inline)
+                }
             }
         }
     }

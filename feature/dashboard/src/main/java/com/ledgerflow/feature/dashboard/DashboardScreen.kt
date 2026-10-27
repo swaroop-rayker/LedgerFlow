@@ -29,13 +29,13 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.core.designsystem.chart.LfBudgetBar
 import com.ledgerflow.core.designsystem.chart.LfCategoryPalette
-import com.ledgerflow.core.designsystem.component.LfActionAlignment
-import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -650,38 +650,21 @@ private fun CaptureHealthBanner(
     modifier: Modifier = Modifier,
 ) {
     val dead = health == NotificationCaptureHealth.DEAD
-    LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = if (dead) {
-                    "Notification capture has stopped"
-                } else {
-                    "Notification capture is off"
-                },
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.warn,
-            )
-            Text(
-                text = if (dead) {
-                    "Android hasn't reconnected LedgerFlow's listener for over " +
-                        "${DEAD_THRESHOLD_HOURS} hours. Battery optimisation is the " +
-                        "usual cause. Payments are not reaching your Inbox."
-                } else {
-                    "Most UPI payments never send an SMS, so they are not reaching " +
-                        "your Inbox at all."
-                },
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
-            )
-            LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(
-                    text = if (dead) "Check settings" else "Set up",
-                    style = LfButtonStyle.Inline,
-                    onClick = onAction,
-                )
-            }
-        }
-    }
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = if (dead) "Notification capture has stopped" else "Notification capture is off",
+        body = if (dead) {
+            "Android hasn't reconnected LedgerFlow's listener for over " +
+                "${DEAD_THRESHOLD_HOURS} hours. Battery optimisation is the " +
+                "usual cause. Payments are not reaching your Inbox."
+        } else {
+            "Most UPI payments never send an SMS, so they are not reaching " +
+                "your Inbox at all."
+        },
+        actionLabel = if (dead) "Check settings" else "Set up",
+        onAction = onAction,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -698,27 +681,18 @@ private fun BackupReminderCard(
     onBackUpNow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = when (reminder) {
-                    BackupReminder.NeverBackedUp ->
-                        "No backup yet. Your data exists only on this phone."
-                    is BackupReminder.Stale ->
-                        "Last backup ${reminder.daysAgo} days ago. Anything since is only on this phone."
-                },
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.warn,
-            )
-            LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(
-                    text = "Back up now",
-                    style = LfButtonStyle.Inline,
-                    onClick = onBackUpNow,
-                )
-            }
-        }
-    }
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = when (reminder) {
+            BackupReminder.NeverBackedUp ->
+                "No backup yet. Your data exists only on this phone."
+            is BackupReminder.Stale ->
+                "Last backup ${reminder.daysAgo} days ago. Anything since is only on this phone."
+        },
+        actionLabel = "Back up now",
+        onAction = onBackUpNow,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -738,18 +712,13 @@ private fun CaptureGapCard(
 ) {
     val first = TimeStamp.of(gap.firstMissedAt, withDate = true)
     val last = TimeStamp.of(gap.lastMissedAt, withDate = true)
-    LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = captureGapSentence(first, last),
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.warn,
-            )
-            LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(text = "Got it", style = LfButtonStyle.Inline, onClick = onAcknowledge)
-            }
-        }
-    }
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = captureGapSentence(first, last),
+        actionLabel = "Got it",
+        onAction = onAcknowledge,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -769,26 +738,16 @@ private fun CrashReportCard(
     modifier: Modifier = Modifier,
 ) {
     val latest = TimeStamp.of(reports.latestAt, withDate = true)
-    LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = crashReportSentence(reports.count, latest),
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
-            )
-            if (saveFailed) {
-                Text(
-                    text = "The report couldn't be saved there. It is still on this phone.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.warn,
-                )
-            }
-            LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(text = "Dismiss", style = LfButtonStyle.Inline, onClick = onDismiss)
-                LfButton(text = "Save report", style = LfButtonStyle.Inline, onClick = onSave)
-            }
-        }
-    }
+    LfNotice(
+        tone = LfNoticeTone.Info,
+        title = crashReportSentence(reports.count, latest),
+        body = if (saveFailed) "The report couldn't be saved there. It is still on this phone." else null,
+        actionLabel = "Save report",
+        onAction = onSave,
+        secondaryLabel = "Dismiss",
+        onSecondary = onDismiss,
+        modifier = modifier,
+    )
 }
 
 /** The crash card's words: once, or how many times and the latest. */
