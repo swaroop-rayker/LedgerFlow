@@ -248,6 +248,26 @@ internal object LfNoticeTokens {
     val errorFill: Color @Composable get() = LfTheme.colors.status.dangerSubtle
 }
 
+/**
+ * [LfSkeletonRow] (step E1): a row's card, with hairline-coloured bars for its
+ * lines. Not the chart track: on the light theme's white row that is about
+ * 1.1:1 and the bars all but vanished; the hairline is about 1.35:1 in both.
+ */
+internal object LfSkeletonTokens {
+    val container: Color @Composable get() = LfTheme.colors.surface.raised
+    val edge: Color @Composable get() = LfTheme.colors.border.subtle
+    val edgeWidth: Dp @Composable get() = LfTheme.borders.hairline
+    val rowShape: Shape @Composable get() = LfTheme.shapes.row
+    val insetHorizontal: Dp @Composable get() = LfTheme.space.rowInset
+    val insetVertical: Dp @Composable get() = LfTheme.space.rowInsetVertical
+    val rowGap: Dp @Composable get() = LfTheme.space.itemGap
+    val lineGap: Dp @Composable get() = LfTheme.space.itemGap
+    val bar: Color @Composable get() = LfTheme.colors.border.subtle
+    val barShape: Shape @Composable get() = LfTheme.shapes.full
+    val titleHeight: Dp = LfScale.Space16
+    val detailHeight: Dp = LfScale.Space8
+}
+
 /** [LfProgressBar] (step E1): the budget bar's track, height and ink. */
 internal object LfProgressBarTokens {
     val height: Dp = LfScale.Space8

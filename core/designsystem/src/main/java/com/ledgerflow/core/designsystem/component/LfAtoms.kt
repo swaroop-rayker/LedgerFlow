@@ -33,6 +33,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -80,6 +83,12 @@ private val LfDrawingInsets: WindowInsets
  * it — so the content viewport shrinks and Compose scrolls the focused field
  * into view, and the pinned bar rides above the keyboard. Putting it on either
  * child instead double-counts against the other, which is the bug this fixed.
+ *
+ * **Shows the window's [LfFeedback]** (step E1): the outermost scaffold makes
+ * one when nothing above provides it, every scaffold inside shares it, and the
+ * innermost draws it, so a message appears once, above that screen's own
+ * pinned bar. A scaffold given its own [snackbarHostState] shows that instead
+ * and leaves the shared one to the scaffold around it.
  */
 @Composable
 public fun LfScaffold(
@@ -87,6 +96,34 @@ public fun LfScaffold(
     topBar: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
     snackbarHostState: SnackbarHostState? = null,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    val parentFeedback = LocalLfFeedback.current
+    val ownFeedback = remember { LfFeedback() }
+    // Only the scaffold that made the feedback gives it a scope: the outermost,
+    // which outlives every screen inside it.
+    if (parentFeedback == null) ownFeedback.ownScope()
+    val feedback = parentFeedback ?: ownFeedback
+    val claim = remember { Any() }
+    if (snackbarHostState == null) {
+        DisposableEffect(feedback) {
+            feedback.claims += claim
+            onDispose { feedback.claims -= claim }
+        }
+    }
+    CompositionLocalProvider(LocalLfFeedback provides feedback) {
+        ScaffoldBody(modifier, topBar, bottomBar, snackbarHostState, feedback, claim, content)
+    }
+}
+
+@Composable
+private fun ScaffoldBody(
+    modifier: Modifier,
+    topBar: @Composable () -> Unit,
+    bottomBar: @Composable () -> Unit,
+    snackbarHostState: SnackbarHostState?,
+    feedback: LfFeedback,
+    claim: Any,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val insets = LfDrawingInsets
@@ -111,7 +148,10 @@ public fun LfScaffold(
         contentColor = LfScaffoldTokens.content,
         contentWindowInsets = insets,
         snackbarHost = {
-            snackbarHostState?.let { LfSnackbarHost(it) }
+            when {
+                snackbarHostState != null -> LfSnackbarHost(snackbarHostState)
+                feedback.claims.lastOrNull() === claim -> LfSnackbarHost(feedback.hostState)
+            }
         },
         content = { padding ->
             // BUG49: mark what this scaffold paid for as consumed, so a scaffold
