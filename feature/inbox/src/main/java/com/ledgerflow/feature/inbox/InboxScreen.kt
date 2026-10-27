@@ -46,7 +46,9 @@ import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -133,10 +135,12 @@ public fun InboxScreen(
         } else {
             null
         },
-        statusContent = if (state.rows.isEmpty() && !state.loading) {
-            { LfEmptyState(title = state.emptyTitle(), body = state.emptyBody()) }
-        } else {
-            null
+        // E4: still skeletons after 300 ms while the queue is first read,
+        // instead of a page with filters and nothing under them.
+        statusContent = when {
+            state.loading -> { { LfStateContent(state = LfContentState.Loading) {} } }
+            state.rows.isEmpty() -> { { LfEmptyState(title = state.emptyTitle(), body = state.emptyBody()) } }
+            else -> null
         },
         snackbarHostState = snackbarHostState,
         pinHeader = true,
