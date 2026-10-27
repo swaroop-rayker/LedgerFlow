@@ -102,7 +102,7 @@ internal fun LedgerFlowShell(
     // destination we recognise is cleared exactly once and never retried.
     LaunchedEffect(deepLink) {
         if (deepLink == null) return@LaunchedEffect
-        InboxDeepLink.parse(deepLink)?.let(navController::navigate)
+        (InboxDeepLink.parse(deepLink) ?: BudgetsDeepLink.parse(deepLink))?.let(navController::navigate)
         onDeepLinkHandled()
     }
 
@@ -391,7 +391,7 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
     composable<Destination.BackUpNow> {
         val viewModel: BackupNowViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
-        BackupNowScreen(state = state, onEvent = viewModel::onEvent)
+        BackupNowScreen(state = state, onEvent = viewModel::onEvent, onBack = { navController.popBackStack() })
     }
     composable<Destination.Export> { ExportRoute(onBack = navController::popBackStack) }
     composable<Destination.PaymentApps> {

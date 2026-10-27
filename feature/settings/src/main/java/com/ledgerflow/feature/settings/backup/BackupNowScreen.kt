@@ -23,6 +23,8 @@ import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.format.DisplayDates
@@ -47,6 +49,7 @@ import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
 public fun BackupNowScreen(
     state: BackupNowUiState,
     onEvent: (BackupNowEvent) -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (state.isScanning) {
@@ -60,10 +63,17 @@ public fun BackupNowScreen(
 
     KitFlow(state, onEvent)
 
+    // BUG76: a full-screen page with no on-screen way out. "Done" above the
+    // title, at the end (BUG17), as Export and Organise have it -- off while a
+    // backup is being written, so the screen is not left mid-write.
     LfFormPage(
         title = "Back up now",
         actionBar = { SubmitBar(state, onEvent) },
         modifier = modifier,
+        actions = {
+            LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack, enabled = !state.isWorking)
+        },
+        actionsAlignment = LfActionAlignment.End,
         spacing = LfPageSpacing.Sections,
     ) {
         Explanation(state.nightlyBackupsEnabled)
@@ -138,14 +148,13 @@ private fun Explanation(nightlyBackupsEnabled: Boolean) {
 @Composable
 private fun FailedNightlyLine(at: Long) {
     val date = DisplayDates.medium(at)
-    LfCard {
-        Text(
-            text = "The automatic backup on $date couldn't be written. Your earlier backups are " +
-                "untouched. Backing up here now will fix it.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.debit,
-        )
-    }
+    // A warning notice rather than a card of money-out text (E6): the pinned
+    // Back up below is the fix it names.
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = "The automatic backup on $date couldn't be written. Your earlier backups are " +
+            "untouched. Backing up here now will fix it.",
+    )
 }
 
 /**
@@ -256,11 +265,21 @@ private fun KitOutcome(state: BackupNowUiState) {
             "Try another place."
         else -> return
     }
-    Text(
-        text = text,
-        style = LfTheme.typography.bodyM,
-        color = if (state.kitSaved) LfTheme.colors.credit else LfTheme.colors.debit,
-    )
+    OutcomeLine(text, success = state.kitSaved)
+}
+
+/**
+ * A result: a success notice, or the form's error line in the problem colour
+ * with the pinned button as its retry -- never money-in green or money-out
+ * coral, which mean something else (E6, as Restore in E2).
+ */
+@Composable
+private fun OutcomeLine(text: String, success: Boolean) {
+    if (success) {
+        LfNotice(tone = LfNoticeTone.Success, title = text)
+    } else {
+        Text(text = text, style = LfTheme.typography.bodyM, color = LfTheme.colors.status.danger)
+    }
 }
 
 /** The D-07 warning, then the picker: the two steps between "Save Recovery Kit" and a file. */
@@ -293,11 +312,7 @@ private fun RecoveryKitPicker(requested: Boolean, onEvent: (BackupNowEvent) -> U
 
 @Composable
 private fun ResultMessage(outcome: BackupOutcome) {
-    Text(
-        text = outcome.message(),
-        style = LfTheme.typography.bodyM,
-        color = if (outcome.isSuccess) LfTheme.colors.credit else LfTheme.colors.debit,
-    )
+    OutcomeLine(outcome.message(), success = outcome.isSuccess)
 }
 
 @Composable
@@ -345,6 +360,7 @@ private fun BackupNowNeedsFolderPreview() {
                 folderChecked = true,
             ),
             onEvent = {},
+            onBack = {},
         )
     }
 }
@@ -372,6 +388,7 @@ private fun BackupNowDonePreview() {
                 ),
             ),
             onEvent = {},
+            onBack = {},
         )
     }
 }

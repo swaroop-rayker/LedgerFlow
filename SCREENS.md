@@ -86,7 +86,7 @@ missing or doesn't match what the code says Â· **Thin** = placeholder-level UI Â
 | Budget editor (dialog) | `feature/budget/src/main/java/com/ledgerflow/feature/budget/BudgetEditorDialog.kt:50` | Category, amount, period (inline chips), start date, alert switch | Add budget / Edit | **Note.** The budget-alert switch lives here until a Notifications page exists |
 | Budget category / subcategory picker (dialog) | `feature/budget/src/main/java/com/ledgerflow/feature/budget/BudgetEditorDialog.kt:198` | Pick what the budget covers | Fields in the Budget editor | **OK** |
 | Budget start date (dialog) | `feature/budget/src/main/java/com/ledgerflow/feature/budget/BudgetEditorDialog.kt:269` | Pick the start date | "Starts" in the Budget editor | **OK** |
-| Back up now | `feature/settings/src/main/java/com/ledgerflow/feature/settings/backup/BackupNowScreen.kt:44` | Choose or change the backup folder (inline prompt), enter or scan the 24 words, back up, save a Recovery Kit | Settings "Back up now", Home backup reminder | **Gap.** No on-screen Back, only the system gesture |
+| Back up now | `feature/settings/src/main/java/com/ledgerflow/feature/settings/backup/BackupNowScreen.kt:44` | Choose or change the backup folder (inline prompt), enter or scan the 24 words, back up, save a Recovery Kit | Settings "Back up now", Home backup reminder | **OK.** "Done" above the title (BUG76) |
 | Export | `feature/export/src/main/java/com/ledgerflow/feature/export/ExportScreen.kt:50` | Export to Excel or CSV through the system save dialog | Settings "Export" | **OK.** Exported / Not exported results |
 | Export without encryption? (dialog) | `feature/export/src/main/java/com/ledgerflow/feature/export/ExportScreen.kt:262` | Warns that the file is unencrypted | Starting an export | **OK** |
 | Deleted entries | `feature/ledger/src/main/java/com/ledgerflow/feature/ledger/BinScreen.kt:65` | Restore or permanently erase deleted entries, both books | Settings "Deleted entries" | **OK** |
@@ -96,7 +96,7 @@ missing or doesn't match what the code says Â· **Thin** = placeholder-level UI Â
 | Payment to review (notification) | `feature/ingest/src/main/java/com/ledgerflow/feature/ingest/notify/AndroidInboxNotifier.kt:102` | Approve / Review / Discard from the shade | Posted when a payment is captured | **OK.** A tap opens Review |
 | "N payments to review" (notification) | `feature/ingest/src/main/java/com/ledgerflow/feature/ingest/notify/AndroidInboxNotifier.kt:166` | Group summary when more than 3 are waiting | Posted automatically | **OK.** A tap opens Inbox |
 | Could not approve / discard (notification) | `feature/ingest/src/main/java/com/ledgerflow/feature/ingest/notify/InboxActionReceiver.kt` | Reports a failed action from the shade | A notification action that fails | **OK** |
-| Budget alert (notification) | `feature/budget/src/main/java/com/ledgerflow/feature/budget/notify/BudgetNotifications.kt:60` | "Groceries at 80%" / "budget used up" | Posted after an approval crosses a threshold | **Gap.** Tapping it does nothing (no tap action), and it uses Android's stock warning icon |
+| Budget alert (notification) | `feature/budget/src/main/java/com/ledgerflow/feature/budget/notify/BudgetNotifications.kt:60` | "Groceries at 80%" / "budget used up" | Posted after an approval crosses a threshold | **Note.** A tap opens Budgets (BUG75). Still Android's stock warning icon until F4 |
 
 ## Not in the app
 

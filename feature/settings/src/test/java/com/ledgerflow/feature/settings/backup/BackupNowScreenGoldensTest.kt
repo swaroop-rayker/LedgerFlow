@@ -39,7 +39,7 @@ open class BackupNowScreenGoldensTest {
 
     private fun capture(name: String, state: BackupNowUiState, fontScale: Float) =
         rule.captureScreenGolden(name, fontScale) {
-            LfTheme { BackupNowScreen(state = state, onEvent = {}) }
+            LfTheme { BackupNowScreen(state = state, onEvent = {}, onBack = {}) }
         }
 
     private val needsFolder = BackupNowUiState(

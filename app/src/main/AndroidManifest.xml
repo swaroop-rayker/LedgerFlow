@@ -79,6 +79,16 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="ledgerflow" android:host="inbox" />
             </intent-filter>
+
+            <!--
+              BUG75: a budget alert's tap, `ledgerflow://budgets`. Not
+              BROWSABLE, for the reason above.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="ledgerflow" android:host="budgets" />
+            </intent-filter>
         </activity>
 
         <!--
