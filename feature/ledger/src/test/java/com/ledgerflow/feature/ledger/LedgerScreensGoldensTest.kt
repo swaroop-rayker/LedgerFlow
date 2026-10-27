@@ -78,9 +78,9 @@ open class LedgerScreensGoldensTest {
             }
         }
 
-    private fun bin(name: String, fontScale: Float) =
+    private fun bin(name: String, fontScale: Float, state: BinUiState = binState) =
         rule.captureScreenGolden(name, fontScale) {
-            LfTheme { BinScreen(state = binState, onEvent = {}, onBack = {}) }
+            LfTheme { BinScreen(state = state, onEvent = {}, onBack = {}) }
         }
 
     private fun item(
@@ -226,6 +226,12 @@ open class LedgerScreensGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun empty_2x() = ledger("ledger-empty-2x", state(LedgerType.CREDIT, false), emptyList(), 2f)
+
+    /** What a restore did, as a success notice (E3). */
+    @Test fun binRestored_1x() = bin("bin-restored-1x", 1f, binState.copy(message = "Restored 2 entries."))
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun binRestored_2x() = bin("bin-restored-2x", 2f, binState.copy(message = "Restored 2 entries."))
 
     @Test fun bin_1x() = bin("bin-1x", 1f)
 

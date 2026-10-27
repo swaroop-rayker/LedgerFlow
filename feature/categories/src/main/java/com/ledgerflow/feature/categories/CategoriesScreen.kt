@@ -30,6 +30,8 @@ import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfScaffold
@@ -180,25 +182,18 @@ private fun AddBar(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit)
     }
 }
 
+/**
+ * Why a change was refused ("Groceries" already exists here), as a warning
+ * notice: the shared notice, in the amber the line already used (E3).
+ */
 @Composable
 private fun MessageBanner(message: String, onEvent: (CategoriesEvent) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.warn,
-            modifier = Modifier.weight(1f),
-        )
-        LfButton(
-            text = "OK",
-            onClick = { onEvent(CategoriesEvent.MessageDismissed) },
-            style = LfButtonStyle.Text,
-        )
-    }
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = message,
+        actionLabel = "OK",
+        onAction = { onEvent(CategoriesEvent.MessageDismissed) },
+    )
 }
 
 // The empty state is about the *live* tree, and the hidden section still has to

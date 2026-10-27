@@ -23,6 +23,7 @@ import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfErrorNotice
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
@@ -171,25 +172,14 @@ private fun StatusCard(status: ExportStatus, onEvent: (ExportEvent) -> Unit) {
             }
         }
 
-        is ExportStatus.Failed -> LfCard {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-                Text(
-                    text = "Not exported",
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.debit,
-                )
-                Text(
-                    text = status.message,
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
-                )
-                LfButton(
-                    text = "OK",
-                    style = LfButtonStyle.Text,
-                    onClick = { onEvent(ExportEvent.StatusDismissed) },
-                )
-            }
-        }
+        // An error notice rather than a card titled in money-out's colour
+        // (E3). Export, still pinned below, is the way to try again.
+        is ExportStatus.Failed -> LfErrorNotice(
+            title = "Not exported",
+            body = status.message,
+            actionLabel = "OK",
+            onAction = { onEvent(ExportEvent.StatusDismissed) },
+        )
     }
 }
 

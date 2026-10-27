@@ -36,9 +36,13 @@ import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
@@ -82,7 +86,8 @@ public fun BinScreen(
         actionsAlignment = LfActionAlignment.End,
         notices = state.message?.let { message -> { BinMessage(message, onEvent) } },
         statusContent = when {
-            !state.isLoaded -> { {} }
+            // Still skeletons after 300 ms rather than a blank page (E3).
+            !state.isLoaded -> { { LfStateContent(state = LfContentState.Loading) {} } }
             state.entries.isEmpty() -> { { NothingDeleted() } }
             else -> null
         },
@@ -349,26 +354,18 @@ private fun BinConfirmationDialog(confirmation: BinConfirmation, onEvent: (BinEv
     )
 }
 
-/** What happened, in a line the user can dismiss. */
+/**
+ * What happened ("Restored 3 entries."), as a success notice the user can
+ * dismiss: the shared notice, not a line of its own (E3).
+ */
 @Composable
 private fun BinMessage(message: String, onEvent: (BinEvent) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
-            modifier = Modifier.weight(1f),
-        )
-        LfButton(
-            text = "OK",
-            style = LfButtonStyle.Text,
-            onClick = { onEvent(BinEvent.MessageDismissed) },
-        )
-    }
+    LfNotice(
+        tone = LfNoticeTone.Success,
+        title = message,
+        actionLabel = "OK",
+        onAction = { onEvent(BinEvent.MessageDismissed) },
+    )
 }
 
 /**

@@ -61,6 +61,8 @@ open class CategoriesScreenGoldensTest {
         ),
     )
 
+    private val refused by lazy { categories.copy(message = "\"Groceries\" already exists here.") }
+
     private val merchants = CategoriesUiState(
         section = TaxonomySection.Merchants,
         merchants = listOf(
@@ -87,6 +89,12 @@ open class CategoriesScreenGoldensTest {
             ),
         ),
     )
+
+    /** A refused change, as a warning notice (E3). */
+    @Test fun refused_1x() = capture("organise-refused-1x", refused, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun refused_2x() = capture("organise-refused-2x", refused, 2f)
 
     @Test fun categories_1x() = capture("organise-categories-1x", categories, 1f)
 

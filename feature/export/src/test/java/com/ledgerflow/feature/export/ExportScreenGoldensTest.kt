@@ -43,6 +43,10 @@ open class ExportScreenGoldensTest {
             }
         }
 
+    private val failed = ExportUiState(
+        status = ExportStatus.Failed("That location could not be written to. Try somewhere else."),
+    )
+
     private val done = ExportUiState(
         status = ExportStatus.Done(fileCount = 24, rowCount = 1_482, format = ExportFormat.XLSX),
     )
@@ -56,6 +60,12 @@ open class ExportScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun done_2x() = capture("export-done-2x", done, 2f)
+
+    /** A failed export, as an error notice (E3). */
+    @Test fun failed_1x() = capture("export-failed-1x", failed, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun failed_2x() = capture("export-failed-2x", failed, 2f)
 }
 
 /** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
