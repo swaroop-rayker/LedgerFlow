@@ -36,6 +36,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 
@@ -355,6 +357,13 @@ public object LfKeyboards {
     )
 }
 
+/**
+ * A text field. [error], when set, is the message **directly under the field**
+ * (DESIGN_SYSTEM_PLAN §5.3, step E1), in place of [supportingText] and in the
+ * danger colour, and screen readers hear it as the field's error. Check when
+ * the user taps the action or leaves the field, not on every keystroke.
+ * [isError] alone marks the field without a message, as before.
+ */
 @Composable
 public fun LfTextField(
     value: String,
@@ -363,6 +372,7 @@ public fun LfTextField(
     modifier: Modifier = Modifier,
     supportingText: String? = null,
     isError: Boolean = false,
+    error: String? = null,
     singleLine: Boolean = true,
     keyboardOptions: KeyboardOptions = KeyboardOptions(
         // Recovery words and merchant keys are lowercase; auto-capitalising
@@ -374,12 +384,14 @@ public fun LfTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { error?.let { error(it) } },
         label = { Text(text = label, style = tokens.labelStyle) },
-        supportingText = supportingText?.let {
+        supportingText = (error ?: supportingText)?.let {
             { Text(text = it, style = tokens.labelStyle) }
         },
-        isError = isError,
+        isError = isError || error != null,
         singleLine = singleLine,
         shape = tokens.shape,
         keyboardOptions = keyboardOptions,
@@ -390,6 +402,10 @@ public fun LfTextField(
             focusedBorderColor = tokens.focusedBorder,
             unfocusedBorderColor = tokens.unfocusedBorder,
             errorBorderColor = tokens.errorBorder,
+            errorSupportingTextColor = tokens.errorText,
+            errorLabelColor = tokens.errorText,
+            errorCursorColor = tokens.cursor,
+            errorTextColor = tokens.text,
             focusedLabelColor = tokens.focusedLabel,
             unfocusedLabelColor = tokens.unfocusedLabel,
             cursorColor = tokens.cursor,

@@ -82,6 +82,8 @@ internal object LfTextFieldTokens {
     val focusedBorder: Color @Composable get() = LfTheme.colors.border.focus
     val unfocusedBorder: Color @Composable get() = LfTheme.colors.border.subtle
     val errorBorder: Color @Composable get() = LfTheme.colors.status.danger
+    /** The error line under a field (step E1). */
+    val errorText: Color @Composable get() = LfTheme.colors.status.danger
     val focusedLabel: Color @Composable get() = LfTheme.colors.action.primary
     val unfocusedLabel: Color @Composable get() = LfTheme.colors.text.secondary
     val cursor: Color @Composable get() = LfTheme.colors.action.primary
@@ -220,6 +222,39 @@ internal object LfEmptyStateTokens {
     val title: Color @Composable get() = LfTheme.colors.text.primary
     val bodyStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
     val body: Color @Composable get() = LfTheme.colors.text.secondary
+}
+
+/**
+ * [LfNotice] and [LfErrorNotice] (step E1): the tone's faint fill, its colour as
+ * the edge, and primary text on both, which `NoticeContrastTest` holds at 4.5:1.
+ */
+internal object LfNoticeTokens {
+    val shape: Shape @Composable get() = LfTheme.shapes.container
+    val edgeWidth: Dp @Composable get() = LfTheme.borders.hairline
+    val insetHorizontal: Dp @Composable get() = LfTheme.space.cardInset
+    val insetVertical: Dp @Composable get() = LfTheme.space.rowInsetVertical
+    val gap: Dp @Composable get() = LfTheme.space.inlineGap
+    val titleStyle: TextStyle @Composable get() = LfTheme.type.body
+    val bodyStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
+    val text: Color @Composable get() = LfTheme.colors.text.primary
+
+    val infoEdge: Color @Composable get() = LfTheme.colors.status.info
+    val infoFill: Color @Composable get() = LfTheme.colors.status.infoSubtle
+    val successEdge: Color @Composable get() = LfTheme.colors.status.success
+    val successFill: Color @Composable get() = LfTheme.colors.status.successSubtle
+    val warningEdge: Color @Composable get() = LfTheme.colors.status.warning
+    val warningFill: Color @Composable get() = LfTheme.colors.status.warningSubtle
+    val errorEdge: Color @Composable get() = LfTheme.colors.status.danger
+    val errorFill: Color @Composable get() = LfTheme.colors.status.dangerSubtle
+}
+
+/** [LfProgressBar] (step E1): the budget bar's track, height and ink. */
+internal object LfProgressBarTokens {
+    val height: Dp = LfScale.Space8
+    val track: Color @Composable get() = LfTheme.colors.chart.track
+    val accent: Color @Composable get() = LfTheme.colors.action.primary
+    val positive: Color @Composable get() = LfTheme.colors.status.success
+    val warning: Color @Composable get() = LfTheme.colors.status.warning
 }
 
 internal object LfDividerTokens {

@@ -8,12 +8,9 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -24,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ledgerflow.core.designsystem.component.ProgressTrack
 
 /**
  * Budget progress (`SPEC.md` §5.6 A7, §5.7).
@@ -95,14 +93,14 @@ public fun LfBudgetBar(
             )
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height)
-                .clip(RoundedCornerShape(height / 2))
-                .background(tokens.track),
+        // LfProgressBar's track (step E1), with the burn-rate tick on top. The
+        // bar says nothing itself: the row's description above already does.
+        ProgressTrack(
+            fraction = fraction,
+            fill = fill,
+            track = tokens.track,
+            height = height,
         ) {
-            FractionalBar(fraction = fraction.coerceIn(0f, 1f), color = fill)
             // Only when the projection is both meaningful and not already true.
             if (projectedFraction > fraction && projectedFraction <= 1f) {
                 ProjectionTick(fraction = projectedFraction, color = tokens.reference)
@@ -137,19 +135,6 @@ internal fun BudgetAmounts(
         onTextLayout = onTextLayout,
         modifier = Modifier.clearAndSetSemantics { },
     )
-}
-
-@Composable
-private fun FractionalBar(fraction: Float, color: Color) {
-    Layout(
-        content = {},
-        modifier = Modifier
-            .background(color)
-            .clearAndSetSemantics { },
-    ) { _, constraints ->
-        val width = (constraints.maxWidth * fraction).toInt().coerceIn(0, constraints.maxWidth)
-        layout(width, constraints.maxHeight) {}
-    }
 }
 
 /**

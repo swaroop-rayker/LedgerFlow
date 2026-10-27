@@ -210,6 +210,12 @@ public fun LfFormPage(
  * the upgrade screens (V2: PIN setup, sign-in). A large heading and a line of
  * explanation, then the step, with its one action pinned below; [actionBar] is
  * null where the step has nothing to press (an upgrade in progress).
+ *
+ * **Long blocking work** (DESIGN_SYSTEM_PLAN §5.1, step E1): setup, restore,
+ * an upgrade, a backup. [progress] shows how far it has got -- usually an
+ * `LfProgressBar` -- and [safeNote] says what is safe while it runs ("Your data
+ * is untouched"), under the bar, because the question someone watching a long
+ * job asks is whether they can lose anything.
  */
 @Composable
 public fun LfFlowStep(
@@ -217,6 +223,8 @@ public fun LfFlowStep(
     actionBar: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
     body: String? = null,
+    progress: (@Composable () -> Unit)? = null,
+    safeNote: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val space = LfTheme.space
@@ -232,6 +240,14 @@ public fun LfFlowStep(
             Column(verticalArrangement = Arrangement.spacedBy(space.itemGap)) {
                 Text(text = title, style = LfTheme.type.display, color = LfTheme.colors.text.primary)
                 body?.let { Text(text = it, style = LfTheme.type.body, color = LfTheme.colors.text.secondary) }
+            }
+            if (progress != null || safeNote != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(space.itemGap)) {
+                    progress?.invoke()
+                    safeNote?.let {
+                        Text(text = it, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.secondary)
+                    }
+                }
             }
             content()
         }
