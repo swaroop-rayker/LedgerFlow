@@ -72,9 +72,12 @@ internal object LfScale {
     val Space16 = 16.dp
     val Space24 = 24.dp
     val Space32 = 32.dp
+    val Space40 = 40.dp
     val Space48 = 48.dp
+    val Space56 = 56.dp
 
     val Radius8 = 8.dp
+    val Radius12 = 12.dp
     val Radius16 = 16.dp
     val Radius24 = 24.dp
 
@@ -104,4 +107,9 @@ internal object LfTypeScale {
     val Line20 = 20.sp
     val Size12 = 12.sp
     val Line16 = 16.sp
+
+    // Not a step of the scale: the floor and step for text that shrinks to fit
+    // one line (the bottom bar's labels, BUG77).
+    val Size6 = 6.sp
+    val Step05 = 0.5.sp
 }

@@ -98,8 +98,8 @@ class LfMaterialThemeTest {
 
         val roles = LfDefaultShapeRoles
         val expected = mapOf(
-            "ExtraSmall" to LfLegacySmallCorner,
-            "Small" to LfLegacySmallCorner,
+            "ExtraSmall" to roles.control, // every control since F3
+            "Small" to roles.control,
             "Medium" to roles.control,
             "Large" to roles.dialog,
             "ExtraLarge" to roles.dialog,

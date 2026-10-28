@@ -66,6 +66,12 @@ public object LfLayout {
     public val categoryDotSize: Dp = LfScale.Space24
 
     /**
+     * A category's tinted tile on an entry row (step F3, the reference
+     * samples). Its initial is 40 % of this, pinned to the shape as the dot's is.
+     */
+    public val categoryTileSize: Dp = LfScale.Space40
+
+    /**
      * How tall a scrolling list inside a dialog or sheet may get before it
      * scrolls: the pickers, the Analytics filter sheet and the budget editor.
      *

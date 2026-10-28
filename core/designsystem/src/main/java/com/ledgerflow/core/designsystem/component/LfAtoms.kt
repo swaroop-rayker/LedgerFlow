@@ -228,7 +228,7 @@ public fun LfButton(
 
     Button(
         onClick = onClick,
-        modifier = modifier.defaultMinSize(minHeight = tokens.minHeight),
+        modifier = modifier.defaultMinSize(minHeight = tokens.mainMinHeight),
         enabled = enabled && !loading,
         shape = tokens.shape,
         colors = when (style) {
@@ -279,7 +279,7 @@ private fun OutlinedRowAction(
         onClick = onClick,
         modifier = modifier.defaultMinSize(
             minWidth = tokens.outlinedMinWidth,
-            minHeight = tokens.minHeight,
+            minHeight = tokens.outlinedMinHeight,
         ),
         enabled = enabled,
         shape = tokens.shape,

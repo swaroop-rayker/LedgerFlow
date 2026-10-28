@@ -27,6 +27,8 @@ public class LfShapeRoles internal constructor(
     public val dialog: CornerBasedShape,
     /** Fully round: pills, the + button, dots. */
     public val full: CornerBasedShape,
+    /** A 40 dp icon tile (step F3): 12, since 16 on a square that small reads as a circle. */
+    public val tile: CornerBasedShape,
 )
 
 internal val LfDefaultShapeRoles: LfShapeRoles = LfShapeRoles(
@@ -35,14 +37,17 @@ internal val LfDefaultShapeRoles: LfShapeRoles = LfShapeRoles(
     control = RoundedCornerShape(LfScale.Radius16),
     dialog = RoundedCornerShape(LfScale.Radius24),
     full = RoundedCornerShape(percent = FULLY_ROUND_PERCENT),
+    tile = RoundedCornerShape(LfScale.Radius12),
 )
 
 /**
- * The 8 dp corner that text fields, chips, segments and chart cells use today.
+ * The 8 dp corner the charts' cells still use.
  *
- * Not a role: Night Vault has no 8 dp shape. In step F3 fields take `control`,
- * chips and segments take `full`, and chart cells take the tile radius. Until
- * then their component tokens read this, so B3 moves nothing on screen.
+ * Not a role: Night Vault has no 8 dp shape. Fields, chips, segments, the
+ * snackbar and Material's two small slots left it at step F3 (`control`, and
+ * `full` for chips and segments). The heatmap's cells keep it until F6 restyles
+ * the charts: at their size the 12 dp tile radius would turn a square into a
+ * dot.
  */
 internal val LfLegacySmallCorner: CornerBasedShape = RoundedCornerShape(LfScale.Radius8)
 

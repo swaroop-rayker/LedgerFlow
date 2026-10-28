@@ -37,8 +37,9 @@ internal object LfEntryRowTokens {
     /** Between the swatch, the texts and the amount. */
     val gap: Dp @Composable get() = LfTheme.space.itemGap
 
-    /** The category swatch: the same size as `LfCategoryDot`. */
-    val swatchSize: Dp = LfLayout.categoryDotSize
+    /** The category's tinted tile (step F3; it was the 24 dp `LfCategoryDot`). */
+    val swatchSize: Dp = LfLayout.categoryTileSize
+    val swatchShape: Shape @Composable get() = LfTheme.shapes.tile
     val emptySwatchRing: Color @Composable get() = LfTheme.colors.border.subtle
 
     val titleStyle: TextStyle @Composable get() = LfTheme.type.body

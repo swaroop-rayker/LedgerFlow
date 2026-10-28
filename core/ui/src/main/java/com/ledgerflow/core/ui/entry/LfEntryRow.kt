@@ -4,11 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,7 +26,7 @@ import androidx.compose.ui.unit.constrainHeight
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
 import com.ledgerflow.core.designsystem.component.LfIconButton
-import com.ledgerflow.core.designsystem.component.lfCategoryDot
+import com.ledgerflow.core.designsystem.component.lfCategoryTile
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
@@ -281,43 +278,41 @@ public fun LedgerListItem.entryTitle(): String {
 }
 
 /**
- * The category's colour, on the naming line.
+ * The category's tinted tile, beside the name (step F3, the reference samples).
  *
- * Centred inside a box exactly one naming line tall, rather than nudged down by
- * a hand-picked padding. The line box is what the swatch has to align with, and
- * it is the thing that grows with the font scale — a fixed offset would drift
- * away from the text it is aligning to the moment the user changes their type
- * size.
+ * Top-aligned with the name rather than centred on the row: centring a swatch
+ * against two lines parked it beside the timestamp, which read as though it
+ * labelled that (reported on device). It was a 24 dp dot centred in the naming
+ * line; at 40 dp it is taller than that line, so it simply starts where the
+ * name starts.
  *
- * The slot is reserved even for an entry filed under nothing, so names stay in
- * a scannable column instead of stepping in and out by 24dp on every unfiled
- * row.
+ * The slot is reserved even for an entry filed under nothing (an empty ring in
+ * the tile's shape), so names stay in a scannable column instead of stepping in
+ * and out on every unfiled row.
  *
- * **One leaf node, drawn** (PERF-120HZ-PLAN §2.2). It was a `Box` one line tall
- * centring an [LfCategoryDot], itself a `Box` around a `Text`: four nodes per
- * row for a coloured circle. `wrapContentHeight` centres the 24dp square in the
- * line box exactly as `Alignment.Center` did, and the swatch or the ring is
- * drawn into it.
+ * **One leaf node, drawn** (PERF-120HZ-PLAN §2.2): the tile and its initial are
+ * drawn into this `Spacer`, as the dot was.
  */
 @Composable
 private fun EntrySwatch(item: LedgerListItem) {
-    val namingLine = with(LocalDensity.current) {
-        LfEntryRowTokens.titleStyle.lineHeight.toDp()
-    }
     // The display variants, not the raw column: an itemised entry's swatch
     // comes from its largest line item's category (ADR-0018), same as the
     // title text above does.
     val categoryName = item.displayCategoryName
     val categoryColor = item.displayCategoryColorArgb
-    val square = Modifier
-        .height(namingLine)
-        .wrapContentHeight()
-        .size(LfEntryRowTokens.swatchSize)
+    // F3: the samples' 40 dp tinted tile, top-aligned with the name. Taller than
+    // the name's line, so it is no longer centred in one; it starts where the
+    // name starts, which keeps it labelling the name and not the timestamp.
+    val square = Modifier.size(LfEntryRowTokens.swatchSize)
     Spacer(
         modifier = if (categoryName != null && categoryColor != null) {
-            square.lfCategoryDot(name = categoryName, colorArgb = categoryColor)
+            square.lfCategoryTile(name = categoryName, colorArgb = categoryColor)
         } else {
-            square.border(LfEntryRowTokens.borderWidth, LfEntryRowTokens.emptySwatchRing, CircleShape)
+            square.border(
+                LfEntryRowTokens.borderWidth,
+                LfEntryRowTokens.emptySwatchRing,
+                LfEntryRowTokens.swatchShape,
+            )
         },
     )
 }

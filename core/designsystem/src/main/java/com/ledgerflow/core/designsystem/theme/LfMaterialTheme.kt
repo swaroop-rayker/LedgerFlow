@@ -99,11 +99,11 @@ internal fun lfColorScheme(colors: LfColors): ColorScheme {
 /**
  * Material's shapes from the shape roles, so pickers and sheets stop using
  * Material's 28 dp. Material's two small slots (menus, text fields) take
- * today's 8 dp, which has no role: see [LfLegacySmallCorner].
+ * `control` since F3, as every control does.
  */
 internal fun lfShapes(shapes: LfShapeRoles): Shapes = Shapes(
-    extraSmall = LfLegacySmallCorner,
-    small = LfLegacySmallCorner,
+    extraSmall = shapes.control,
+    small = shapes.control,
     medium = shapes.control,
     large = shapes.dialog,
     extraLarge = shapes.dialog,

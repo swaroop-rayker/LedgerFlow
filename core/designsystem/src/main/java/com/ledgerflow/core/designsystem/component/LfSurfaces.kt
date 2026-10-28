@@ -185,5 +185,23 @@ public fun Modifier.lfCategoryDot(name: String, colorArgb: Int): Modifier =
             ),
         )
 
+/**
+ * Draws the category's tinted tile (step F3, ADR-0031) into the bounds of the
+ * node this modifies: the reference samples' icon tile, carrying the initial
+ * until F4 brings icons. The entry row's swatch slot; size it 40 dp square.
+ * No semantics, for the reason [LfCategoryDot] gives.
+ */
+public fun Modifier.lfCategoryTile(name: String, colorArgb: Int): Modifier =
+    this
+        .clearAndSetSemantics {}
+        .then(
+            CategoryDotElement(
+                initial = name.firstOrNull()?.uppercase().orEmpty(),
+                color = Color(colorArgb),
+                ink = LfCategoryInk,
+                tile = true,
+            ),
+        )
+
 /** The one ink every category swatch is designed against. */
 public val LfCategoryInk: Color = Color.White

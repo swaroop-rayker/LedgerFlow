@@ -5,12 +5,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import com.ledgerflow.core.designsystem.theme.LfDarkColors
 import com.ledgerflow.core.designsystem.theme.LfLayout
-import com.ledgerflow.core.designsystem.theme.LfLegacySmallCorner
 import com.ledgerflow.core.designsystem.theme.LfLightColors
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.theme.primitive.LfScale
+import com.ledgerflow.core.designsystem.theme.primitive.LfTypeScale
 
 /*
  * Component tokens (DESIGN_SYSTEM_PLAN §4.1, step B2): what each building block
@@ -38,6 +39,15 @@ internal object LfScaffoldTokens {
 
 internal object LfButtonTokens {
     val minHeight: Dp = LfLayout.minTouchTarget
+
+    /** A screen's main action, Filled or Tonal: the samples' large button (F3, ADR-0031). */
+    val mainMinHeight: Dp = LfScale.Space56
+
+    /**
+     * The small, bordered row action: 40 dp drawn. Material pads it to the 48 dp
+     * touch target around the drawing, so it is no smaller to a finger (§9.6).
+     */
+    val outlinedMinHeight: Dp = LfScale.Space40
     val shape: Shape @Composable get() = LfTheme.shapes.control
     val labelStyle: TextStyle @Composable get() = LfTheme.type.body
 
@@ -75,7 +85,7 @@ internal object LfCardTokens {
 }
 
 internal object LfTextFieldTokens {
-    val shape: Shape = LfLegacySmallCorner
+    val shape: Shape @Composable get() = LfTheme.shapes.control
     val textStyle: TextStyle @Composable get() = LfTheme.type.body
     val labelStyle: TextStyle @Composable get() = LfTheme.type.label
     val text: Color @Composable get() = LfTheme.colors.text.primary
@@ -90,7 +100,7 @@ internal object LfTextFieldTokens {
 }
 
 internal object LfChipTokens {
-    val shape: Shape = LfLegacySmallCorner
+    val shape: Shape @Composable get() = LfTheme.shapes.full
     val minHeight: Dp = LfLayout.minTouchTarget
     val borderWidth: Dp @Composable get() = LfTheme.borders.hairline
     val paddingHorizontal: Dp = LfScale.Space16
@@ -114,10 +124,10 @@ internal object LfChipTokens {
 
 internal object LfSegmentedTokens {
     val track: Color @Composable get() = LfTheme.colors.surface.raised
-    val trackShape: Shape @Composable get() = LfTheme.shapes.control
+    val trackShape: Shape @Composable get() = LfTheme.shapes.full
     val trackPadding: Dp = LfScale.Space4
     val gap: Dp = LfScale.Space4
-    val segmentShape: Shape = LfLegacySmallCorner
+    val segmentShape: Shape @Composable get() = LfTheme.shapes.full
     val segmentMinHeight: Dp = LfLayout.minTouchTarget
     /** Below this per option the control stacks its options ([LfLayout.segmentMinWidth]). */
     val segmentMinWidth: Dp = LfLayout.segmentMinWidth
@@ -161,7 +171,7 @@ internal object LfSheetTokens {
 
 /** [LfSnackbarHost]: an inverse strip, the action in the other theme's action colour. */
 internal object LfSnackbarTokens {
-    val shape: Shape = LfLegacySmallCorner
+    val shape: Shape @Composable get() = LfTheme.shapes.control
     val container: Color @Composable get() = LfTheme.colors.surface.inverse
     val content: Color @Composable get() = LfTheme.colors.text.onInverse
     val action: Color
@@ -197,9 +207,26 @@ internal object LfNavTokens {
     val itemPaddingVertical: Dp = LfScale.Space4
     val itemGap: Dp = LfScale.Space4
     val labelStyle: TextStyle @Composable get() = LfTheme.type.label
+    /**
+     * The smallest a bar label may step down to, and the step (BUG77): 6 sp,
+     * so the longest label, "Analytics", still fits a 72 dp cell at font scale
+     * 2.0. Used only when the scale's size would not fit.
+     */
+    val labelMinSize: TextUnit = LfTypeScale.Size6
+    val labelSizeStep: TextUnit = LfTypeScale.Step05
     val selected: Color @Composable get() = LfTheme.colors.action.primary
     val unselected: Color @Composable get() = LfTheme.colors.text.muted
-    val fabSize: Dp = LfLayout.minTouchTarget
+    /**
+     * The samples' + (F3): a 56 dp circle, raised half above the bar, with a
+     * 4 dp ring outside it in the page colour so it reads as cut out of what is
+     * behind it (64 dp in all, as the canvas draws it).
+     */
+    val fabSize: Dp = LfScale.Space56
+    val fabRingWidth: Dp = LfScale.Space4
+    val fabRing: Color @Composable get() = LfTheme.colors.surface.canvas
+    /** The hairline along the bar's top edge, between it and the content. */
+    val edge: Color @Composable get() = LfTheme.colors.border.subtle
+    val edgeWidth: Dp @Composable get() = LfTheme.borders.hairline
     val fabShape: Shape @Composable get() = LfTheme.shapes.full
     val fabContainer: Color @Composable get() = LfTheme.colors.action.primary
     val fabContent: Color @Composable get() = LfTheme.colors.action.onPrimary
