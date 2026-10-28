@@ -13,8 +13,6 @@
 # Step C2: the 8 picker and sheet widgets moved to their Lf wrappers; 30 in 12 files.
 # Step D3: corners, hairlines, dialog list heights and the swipe tint read the
 # theme; 2 in 2 files.
-
-# --- Corners.
-
-# --- Icons: one icon family through LfIcons in step F4.
-feature/budget/src/main/java/com/ledgerflow/feature/budget/notify/BudgetNotifications.kt icon 1 -- budget alert's stock warning icon (audit gap); app icon in F4
+# Step F3: the entry row's empty swatch takes the tile's shape; 1 in 1 file.
+# Step F4: the budget alert draws Lucide's wallet, the app's one icon family;
+# 0. The list is empty: a line added now is a new exception, reviewed as one.

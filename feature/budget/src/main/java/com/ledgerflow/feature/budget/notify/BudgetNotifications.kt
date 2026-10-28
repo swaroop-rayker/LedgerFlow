@@ -14,6 +14,7 @@ import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.usecase.BudgetAlert
+import com.ledgerflow.feature.budget.R
 import java.time.LocalDate
 
 /**
@@ -65,7 +66,7 @@ public object BudgetNotifications {
         val (title, text) = wordsFor(alert, currency)
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setSmallIcon(R.drawable.ic_lf_budget_notification)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)

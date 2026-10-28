@@ -1,81 +1,67 @@
 package com.ledgerflow.core.designsystem.icon
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 
 /**
- * The app's icon set.
+ * The app's icon set: one family, Lucide (step F4, ADR-0031), named by job.
  *
- * Six come from `material-icons-core`, which the version catalog already
- * carries. The bar chart does not: charting icons live in
- * `material-icons-extended`, which is a very large artifact to pull in for one
- * glyph against a 15 MB budget (SPEC.md §11) that ML Kit still has to fit into
- * at P4. It is three rounded rectangles, so it is drawn here.
+ * It was six icons from `material-icons-core` and a bar chart drawn here,
+ * which is two families on one bar. Every icon is now Lucide's geometry from
+ * [LfLucide], stroked 2 dp with round ends as the family draws it; `Icon`
+ * tints the stroke. Call sites name the job ("Delete"), never the glyph, so a
+ * future change of family is this file.
  *
- * Everything is routed through this object rather than referenced directly at
- * call sites, so swapping in a real icon pack later is one file.
+ * Built lazily and once each: an `ImageVector` is immutable, and every caller
+ * shares the instance (a list still builds one painter for all its rows,
+ * `CLAUDE.md` §8).
  */
 public object LfIcons {
 
-    public val Dashboard: ImageVector = Icons.Filled.Home
-    public val Ledger: ImageVector = Icons.AutoMirrored.Filled.List
-    /** Settings (V2-2), reached from Profile since design-system step D4. */
-    public val Settings: ImageVector = Icons.Filled.Settings
+    public val Dashboard: ImageVector by lazy { lucide("Home", LfLucide.House) }
+    public val Ledger: ImageVector by lazy { lucide("Ledger", LfLucide.ListRows) }
+    public val Analytics: ImageVector by lazy { lucide("Analytics", LfLucide.ChartColumn) }
 
     /** The Profile tab (design-system step D4, which replaced Settings in the bar). */
-    public val Profile: ImageVector = Icons.Filled.Person
+    public val Profile: ImageVector by lazy { lucide("Profile", LfLucide.UserRound) }
+
+    /** Settings (V2-2), reached from Profile since design-system step D4. */
+    public val Settings: ImageVector by lazy { lucide("Settings", LfLucide.Settings) }
 
     /** "Opens a page": `LfNavRow`'s trailing mark. Auto-mirrored, so it points onward in RTL. */
-    public val Chevron: ImageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight
-    public val Add: ImageVector = Icons.Filled.Add
+    public val Chevron: ImageVector by lazy { lucide("Chevron", LfLucide.ChevronRight, autoMirror = true) }
 
-    /** Dismiss. Never used for a destructive action without a confirmation. */
-    public val Close: ImageVector = Icons.Filled.Close
+    public val Add: ImageVector by lazy { lucide("Add", LfLucide.Plus) }
+    public val Close: ImageVector by lazy { lucide("Close", LfLucide.X) }
+    public val Delete: ImageVector by lazy { lucide("Delete", LfLucide.Trash) }
 
-    /**
-     * Remove. **Always behind a confirmation** -- it sits in a scrolling list of
-     * small controls, which is one mis-tap away from destroying a real entry.
-     */
-    public val Delete: ImageVector = Icons.Filled.Delete
-
-    /** Three ascending bars on a 24dp grid, matching the core set's weight. */
-    public val Analytics: ImageVector by lazy {
+    private fun lucide(name: String, paths: List<String>, autoMirror: Boolean = false): ImageVector =
         ImageVector.Builder(
-            name = "LfAnalytics",
-            defaultWidth = ICON_SIZE.dp,
-            defaultHeight = ICON_SIZE.dp,
-            viewportWidth = ICON_SIZE,
-            viewportHeight = ICON_SIZE,
+            name = "Lf$name",
+            defaultWidth = GRID.dp,
+            defaultHeight = GRID.dp,
+            viewportWidth = GRID,
+            viewportHeight = GRID,
+            autoMirror = autoMirror,
         ).apply {
-            bar(x = 4f, top = 13f)
-            bar(x = 10.5f, top = 7f)
-            bar(x = 17f, top = 10f)
+            paths.forEach { data ->
+                addPath(
+                    pathData = PathParser().parsePathString(data).toNodes(),
+                    fill = null,
+                    stroke = SolidColor(Color.Black),
+                    strokeLineWidth = STROKE,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                )
+            }
         }.build()
-    }
 
-    private fun ImageVector.Builder.bar(x: Float, top: Float) {
-        path(fill = SolidColor(Color.Black)) {
-            moveTo(x, top)
-            horizontalLineTo(x + BAR_WIDTH)
-            verticalLineTo(BASELINE)
-            horizontalLineTo(x)
-            close()
-        }
-    }
-
-    private const val ICON_SIZE = 24f
-    private const val BAR_WIDTH = 3f
-    private const val BASELINE = 20f
+    /** Lucide's grid and stroke, as its SVGs declare them. */
+    private const val GRID = 24f
+    private const val STROKE = 2f
 }

@@ -145,6 +145,17 @@ pill segmented tabs; the filter bar (period pill and filter icon); the raised-+
 bottom bar; a top bar with Back, a centred title and an overflow (F5). Profile
 replaces the Settings tab (D4, `docs/V2-PLAN.md` D7 as amended).
 
+### Icons (step F4)
+
+**Lucide** (owner, 2026-10-28): the line family the canvas drew in, 2 dp
+strokes with round ends on a 24 dp grid, ISC licence at
+`assets/licenses/Lucide-ISC.txt`. Copied, not depended on: the 29 icons the
+app uses live as path data in `LfLucide.kt` and are named by job through
+`LfIcons`; the notification icons are the same geometry as vector drawables.
+`material-icons-core` was dropped with the last Material icon. Material Symbols
+Rounded was the alternative: filled shapes (safer in a status bar) but closer
+to stock Android than to the canvas.
+
 ### Not taken from the samples
 
 The violet palette; the iOS kit; one card per transaction row (rows stay
