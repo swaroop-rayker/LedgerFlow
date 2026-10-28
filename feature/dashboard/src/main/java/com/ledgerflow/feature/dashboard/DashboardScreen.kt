@@ -21,6 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -33,7 +36,9 @@ import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfLinkBanner
 import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
@@ -41,6 +46,7 @@ import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.pattern.LfPanel
 import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
@@ -156,6 +162,13 @@ public fun DashboardScreen(
         spacing = LfPageSpacing.Sections,
     ) {
 
+        // F5: the canvas's one-line status, always there, so a healthy Home
+        // still says that capture is on and when the last backup was. The
+        // notices below it remain the way a problem is raised.
+        item(key = "status", contentType = "status") {
+            StatusLine(health = state.captureHealth, lastBackup = state.lastBackup)
+        }
+
         // First: a loss has already happened, where the cards below it are
         // about what to do next.
         state.captureGap?.let { gap ->
@@ -221,11 +234,9 @@ private fun LazyListScope.homeBody(
     // Not inside the summary branch: a first-day user with only pending
     // suggestions has nothing in either book and still has work waiting.
     if (state.showsReview) {
-        item(key = "review", contentType = "card") {
-            ReviewCard(
-                count = state.pendingCount,
-                onOpenInbox = onOpenInbox,
-            )
+        item(key = "review", contentType = "banner") {
+            // The samples' link banner (F5): the whole line opens the Inbox.
+            LfLinkBanner(title = "${state.pendingCount} waiting in the Inbox", onClick = onOpenInbox)
         }
     }
 
@@ -245,6 +256,9 @@ private fun LazyListScope.homeBody(
                 summary = state.summary,
                 currency = state.baseCurrency,
             )
+        }
+        item(key = "analytics", contentType = "banner") {
+            LfLinkBanner(title = "See this month in Analytics", onClick = onOpenAnalytics)
         }
         state.summary?.let { summary ->
             spendingCards(
@@ -297,7 +311,6 @@ private fun LazyListScope.spendingCards(
             RunwayCard(
                 summary = summary,
                 currency = state.baseCurrency,
-                onOpenAnalytics = onOpenAnalytics,
             )
         }
     }
@@ -306,23 +319,6 @@ private fun LazyListScope.spendingCards(
             CoverageCard(
                 coverage = summary.captureCoverage,
                 onOpenAnalytics = onOpenAnalytics,
-            )
-        }
-    }
-}
-
-/** Inbox items waiting (Law 1: nothing reaches a book without this tap). */
-@Composable
-private fun ReviewCard(count: Int, onOpenInbox: () -> Unit, modifier: Modifier = Modifier) {
-    LfCard(modifier = modifier) {
-        LineWithAction(
-            action = "Open Inbox",
-            onAction = onOpenInbox,
-        ) {
-            Text(
-                text = "To review: $count",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
             )
         }
     }
@@ -449,6 +445,7 @@ private fun BudgetsCard(
                     label = progress.categoryName,
                     formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
                     formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
+                    amounts = budgetLeft(progress.spent.minor, progress.budget.amount.minor, currency),
                     fraction = progress.fraction,
                     projectedFraction = progress.projectedFraction,
                     color = LfCategoryPalette.colorForId(
@@ -469,7 +466,6 @@ private fun BudgetsCard(
 private fun RunwayCard(
     summary: HomeSummary,
     currency: String,
-    onOpenAnalytics: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LfCard(modifier = modifier) {
@@ -480,13 +476,12 @@ private fun RunwayCard(
                 style = LfTheme.typography.bodyL,
                 color = LfTheme.colors.textPrimary,
             )
-            LineWithAction(action = "Open Analytics", onAction = onOpenAnalytics) {
-                Text(
-                    text = runwayDetail(summary.runway.map { it.name }),
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
-                )
-            }
+            // Analytics is the banner above it now (F5): one way there per screen.
+            Text(
+                text = runwayDetail(summary.runway.map { it.name }),
+                style = LfTheme.typography.label,
+                color = LfTheme.colors.textSecondary,
+            )
         }
     }
 }
@@ -530,9 +525,72 @@ private fun RecentSection(
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
         SectionHeading(title = title, action = "See all", onAction = onSeeAll)
-        rows.forEach { row -> key(row.id) { LfEntryRow(item = row, withDate = true) } }
+        // F5: one panel with hairlines between the rows, the samples' grouped
+        // list, rather than a bordered card per row.
+        LfPanel {
+            rows.forEachIndexed { index, row ->
+                key(row.id) {
+                    if (index > 0) LfDivider()
+                    LfEntryRow(item = row, withDate = true, grouped = true)
+                }
+            }
+        }
     }
 }
+
+/**
+ * What is left of a budget, or how far over it is (step F5, the canvas's
+ * "250 left of 5,000"): the headroom is what someone acts on.
+ */
+internal fun budgetLeft(spentMinor: Long, budgetMinor: Long, currency: String): String {
+    val budget = MoneyFormat.symbolised(budgetMinor, currency)
+    return if (spentMinor <= budgetMinor) {
+        MoneyFormat.symbolised(budgetMinor - spentMinor, currency) + " left of " + budget
+    } else {
+        MoneyFormat.symbolised(spentMinor - budgetMinor, currency) + " over " + budget
+    }
+}
+
+/**
+ * The canvas's status line (step F5): capture's state and the last backup, in
+ * Plex Mono, under the title. A dot in capture's colour leads it, and the
+ * words say the same thing, so the colour is never the only cue (SPEC 9.6).
+ */
+@Composable
+private fun StatusLine(health: NotificationCaptureHealth, lastBackup: LastBackup?) {
+    val colors = LfTheme.colors
+    val (capture, dot) = when (health) {
+        NotificationCaptureHealth.CONNECTED -> "Capture on" to colors.status.success
+        NotificationCaptureHealth.NOT_GRANTED -> "Capture off" to colors.status.warning
+        NotificationCaptureHealth.DEAD -> "Capture stopped" to colors.status.danger
+        NotificationCaptureHealth.RECONNECTING -> "Capture reconnecting" to colors.text.muted
+        NotificationCaptureHealth.UNAVAILABLE -> "Capture unavailable" to colors.text.muted
+    }
+    Text(
+        text = buildAnnotatedString {
+            withStyle(SpanStyle(color = dot)) { append(STATUS_DOT) }
+            append(" ")
+            append(listOfNotNull(capture, backupPhrase(lastBackup)).joinToString(STATUS_SEPARATOR))
+        },
+        style = LfTheme.type.figureLabel,
+        color = colors.text.secondary,
+    )
+}
+
+/** The status line's backup half; null before the date has been read. */
+internal fun backupPhrase(lastBackup: LastBackup?): String? = when (lastBackup) {
+    null -> null
+    LastBackup.Never -> "No backup yet"
+    is LastBackup.DaysAgo -> when (lastBackup.days) {
+        0L -> "Backed up today"
+        1L -> "Backed up yesterday"
+        else -> "Backed up ${lastBackup.days} days ago"
+    }
+}
+
+/** A filled circle and a middle dot, as code points (CLAUDE.md 5). */
+private val STATUS_DOT: String = Char(0x25CF).toString()
+private val STATUS_SEPARATOR: String = " " + Char(0x00B7) + " "
 
 /**
  * A section's name with its one action on the same line.

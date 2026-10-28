@@ -271,7 +271,8 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
                     leading = {
                         Text(
                             text = detail,
-                            style = LfTheme.typography.label,
+                            // F5's departure: the detail is in Plex Mono, as the row draws it.
+                            style = LfTheme.type.figureLabel,
                             color = LfTheme.colors.textTertiary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

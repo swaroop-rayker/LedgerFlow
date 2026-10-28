@@ -31,6 +31,11 @@ public class LfTypeRoles internal constructor(
     public val label: TextStyle,
     /** The smallest text: footnotes and stamps. Today the same as [label]. */
     public val caption: TextStyle,
+    /**
+     * [label]'s size in IBM Plex Mono (step F5, ADR-0031): times, dates and the
+     * status line, the small figures the canvas sets in the numbers' face.
+     */
+    public val figureLabel: TextStyle,
     /** A screen's headline figure. */
     public val amountHero: TextStyle,
     /** An amount in a row or card. */
@@ -50,6 +55,7 @@ internal fun LfTypography.toRoles(): LfTypeRoles = LfTypeRoles(
     bodySmall = bodyM,
     label = label,
     caption = label,
+    figureLabel = label.copy(fontFamily = LfFigureFontFamily),
     amountHero = amountL,
     amountRow = amountM,
     amountSmall = amountM,

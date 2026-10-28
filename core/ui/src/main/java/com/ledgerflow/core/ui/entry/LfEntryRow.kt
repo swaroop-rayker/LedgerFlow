@@ -74,6 +74,9 @@ import com.ledgerflow.core.ui.LfEntryRowTokens
  * returns to `md` because there is no touch target carrying its own.
  *
  * @param withDate false under a band header that already says the day.
+ * @param grouped true inside a panel that holds several rows with hairlines
+ *   between them (step F5, the reference samples): the row draws no card of
+ *   its own, so the panel is the one outline.
  */
 @Composable
 public fun LfEntryRow(
@@ -82,6 +85,7 @@ public fun LfEntryRow(
     modifier: Modifier = Modifier,
     deleteIcon: Painter? = null,
     onDelete: () -> Unit = {},
+    grouped: Boolean = false,
 ) {
     val tokens = LfEntryRowTokens
     val shape = tokens.shape
@@ -103,8 +107,15 @@ public fun LfEntryRow(
     Layout(
         modifier = modifier
             .fillMaxWidth()
-            .background(tokens.container, shape)
-            .border(tokens.borderWidth, tokens.border, shape)
+            .then(
+                if (grouped) {
+                    Modifier
+                } else {
+                    Modifier
+                        .background(tokens.container, shape)
+                        .border(tokens.borderWidth, tokens.border, shape)
+                },
+            )
             // Tighter on the trailing edge: the delete control is a 48dp touch
             // target around a 16dp glyph, so it carries ~16dp of its own inset
             // and a full `md` on top would leave the icon looking adrift.

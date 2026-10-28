@@ -53,13 +53,16 @@ public fun LfBudgetBar(
     color: Color = LfChartTokens.series,
     height: Dp = DefaultBarHeight,
     contentDescription: String? = null,
+    amounts: String? = null,
 ) {
     val tokens = LfChartTokens
     val over = fraction > 1f
     val fill = if (over) tokens.overBudget else color
 
-    val spoken = contentDescription
-        ?: "$label, $formattedSpent of $formattedBudget"
+    // [amounts] replaces "spent of budget" where a screen says it another way
+    // (Home's "₹250 left of ₹5,000", step F5); the spoken line follows it.
+    val pair = amounts ?: "$formattedSpent of $formattedBudget"
+    val spoken = contentDescription ?: "$label, $pair"
 
     Column(
         modifier = modifier
@@ -88,7 +91,7 @@ public fun LfBudgetBar(
                 modifier = Modifier.clearAndSetSemantics { },
             )
             BudgetAmounts(
-                text = "$formattedSpent of $formattedBudget",
+                text = pair,
                 color = if (over) tokens.overBudget else tokens.secondaryText,
             )
         }

@@ -44,7 +44,8 @@ internal object LfEntryRowTokens {
 
     val titleStyle: TextStyle @Composable get() = LfTheme.type.body
     val title: Color @Composable get() = LfTheme.colors.text.primary
-    val detailStyle: TextStyle @Composable get() = LfTheme.type.caption
+    /** The time and note: the label's size in Plex Mono since F5 (ADR-0031). */
+    val detailStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
     val detail: Color @Composable get() = LfTheme.colors.text.muted
     val amountStyle: TextStyle @Composable get() = LfTheme.type.amountRow
     val outgoing: Color @Composable get() = LfTheme.colors.money.outgoing
