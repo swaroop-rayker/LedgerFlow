@@ -1753,33 +1753,40 @@ BUG8(d) requires a verified snapshot before any migration runs. The policy is ri
 ## 9. UI / UX Specification
 
 ### 9.1 Visual direction
-Toshl-adjacent: soft, rounded, generous whitespace, colour used as *information* rather than decoration. **Semi-dark** as the default and primary theme (not OLED black — a warm-neutral dark that's easy on the eyes at night).
+**Night Vault** (ADR-0031, owner 2026-10-25): dark and private, colour used as *information* rather than decoration, compact (`CLAUDE.md` §5's brief). **Dark is the default and primary theme** — graphite, not OLED black — with a light mirror. Shapes, sizes and components come from the owner's reference samples (`D:\LF_UI_UX_design_sample`, outside the repo); the samples' violet palette does not. The canvas is the visual record: https://claude.ai/artifact/BHYXqJ93MQQKV9CJErQJ7N.
 
-**Palette (dark, default):**
-| Token | Value | Use |
-|---|---|---|
-| `surfaceBase` | `#15171C` | app background |
-| `surfaceRaised` | `#1D2027` | cards, sheets |
-| `surfaceOverlay` | `#252932` | dialogs, menus, elevated chips |
-| `outline` | `#333846` | hairlines, dividers |
-| `textPrimary` | `#E8EAF0` | |
-| `textSecondary` | `#9AA1B4` | |
-| `textTertiary` | `#7F8798` | |
-| `accent` | `#6E8BFF` | primary actions, selection |
-| `debit` | `#FF7A85` | expense amounts (muted coral, not alarm-red) |
-| `credit` | `#5FD0A6` | income amounts (muted mint) |
-| `warn` | `#F2B457` | budget warnings |
+**Status:** the roles below exist in `LfTheme` (design-system steps B1–B3) and every screen reads them; the Night Vault *values* replace the previous palette at design-system step F2, where every golden changes once and is reviewed. Until then the build draws the previous values, which are in `LfPrimitives.kt` and this section's history.
 
-**Contrast is a gate, not a guideline.** §9.6 mandates WCAG AA, which is **4.5:1 for normal text** and 3:1 for large text (≥18.66 px bold / ≥24 px regular). `textTertiary` was originally `#6B7285`, which measures **3.73:1** against `surfaceBase` — it failed AA for body text while being specified as a text colour. It is now `#7F8798` (**4.97:1**). Every text-on-surface token pair is asserted by a unit test in `:core:designsystem` that computes the WCAG contrast ratio from the token values; a palette edit that drops a pair below its threshold fails the build rather than shipping. For reference the other pairs against `surfaceBase` are `textPrimary` ≈ 13.5:1 and `textSecondary` ≈ 6.9:1.
+**Colour roles** (`LfTheme.colors`):
+| Role | Dark (default) | Light | Use |
+|---|---|---|---|
+| `surface.canvas` | `#121316` | `#F4F3F0` | app background |
+| `surface.raised` | `#1A1B1F` | `#FFFFFF` | panels, cards, sheets |
+| `surface.overlay` | `#222429` | set in F2 | dialogs, the tonal button, icon buttons |
+| `text.primary` | `#ECE8E0` (bone) | `#17181B` | |
+| `text.secondary` | `#A39F96` | `#55534D` | |
+| `border.subtle` | `#2B2D33` | `#E3E0D9` | hairlines inside and around panels |
+| `border.strong` | `#3A3D44` | set in F2 | outlined controls |
+| `action.primary` | bone, graphite text | `#17181B`, white text | the filled button, switches, checks, selection |
+| `money.outgoing` | `#FF8A80` | `#B3362F` | money out, and nothing else |
+| `money.incoming` | `#6FD6A8` | `#1D7350` | money in, and nothing else |
+| `status.warning` | `#F2B457` | `#8F5B00` | attention: budgets, reminders |
+| `status.danger` | `#F49AC1` (pink) | set in F2 | errors and destructive actions — **never** money-out's coral, so a problem cannot be read as an amount |
 
-Light theme is a required mirror (same tokens, light values). Dynamic colour (Material You) is **off by default**, offered as an opt-in toggle — brand consistency wins for a finance app.
+A tinted fill (`*Subtle`: notices, icon tiles, the Inbox discard track) is the role's colour over the surface at `SUBTLE_TINT`. "Set in F2" values are chosen inside the contrast gate below, not by eye.
+
+**Contrast is a gate, not a guideline.** §9.6 mandates WCAG AA, which is **4.5:1 for normal text** and 3:1 for large text (≥18.66 px bold / ≥24 px regular) and for non-text marks. Every text-on-surface role pair is asserted by `LfContrastTest`, which computes the WCAG ratio from the token values; notice text on every tone fill, a field's error line, and each progress fill on its track by `NoticeContrastTest` (design-system E1). A palette edit that drops a pair below its threshold fails the build rather than shipping. (The previous palette's `textTertiary` once measured 3.73:1 against its background while specified as a text colour; that is the failure the gate exists for.)
+
+**No dynamic colour (Material You).** Colour carries meaning here, and a wallpaper must not be able to repaint money out as green; `LfTheme` does not offer it. The theme setting (Settings > Appearance, V2-3) chooses System, Light or Dark and never changes the palette.
 
 **Category colours** come from a curated 16-swatch palette, all WCAG AA against both surfaces. Never let users pick arbitrary colours that break contrast.
 
 ### 9.2 Typography
 Single variable font family (Inter or Manrope, bundled — no runtime download). Tabular figures **mandatory** for all amounts (`FontFeature "tnum"`) so columns align.
 
-Scale: `displayL 34/40` · `titleL 22/28` · `titleM 18/24` · `bodyL 16/24` · `bodyM 14/20` · `label 12/16` · `amountL 28/32 tnum` · `amountM 18/22 tnum`.
+Scale, as roles (`LfTheme.type`; the old names are deprecated aliases until design-system step G): `display 34/40` (was `displayL`) · `title 22/28` (`titleL`) · `heading 18/24` (`titleM`) · `body 16/24` (`bodyL`) · `bodySmall 14/20` (`bodyM`) · `label 12/16` · `amountHero 28/32` (`amountL`) · `amountRow 18/22` (`amountM`), plus `caption`, `amountSmall` and `mnemonic`.
+
+**Two families from F2 (ADR-0031).** Inter for names, sentences, labels and controls, as below. **IBM Plex Mono** for every amount and date and for Home's status line: monospaced, so figures align without depending on `tnum`. It is a second bundled file under the SIL Open Font License 1.1 — never downloaded (Law 6), its licence beside Inter's in `assets/licenses/`, its weights cut in XML as Inter's are, its size counted against §11's budget and stated in the F2 commit. Until F2 every style is Inter, with `tnum` on the amount styles. `mnemonic` stays Inter with `ss02` (below): changing the face a recovery word is copied from is its own decision.
 
 **Settled: Inter.** `InterVariable.ttf` from the Inter 4.1 release, unmodified, at `core/designsystem/src/main/res/font/`, ~859 KB against §11's provisional 15 MB budget. SIL Open Font License 1.1. Manrope was the other candidate and is a fifth of the size; Inter was chosen for the finance-specific features it carries beyond `tnum` — `zero` and `case` — and for the larger glyph set. Neither candidate has Arabic, so AED's "د.إ" falls back to the system font either way.
 
@@ -1808,7 +1815,16 @@ The OFL requires the licence to travel with every copy of the font, and an APK i
 - **Home (V2-1, `docs/V2-PLAN.md` BUG-C; BUG54).** Under the banners (capture gap, crash report, backup reminder, capture health), in this order, each card hidden when it has nothing to say: **To review: N** → Inbox; **This month** — the calendar month to date (owner, 2026-10-14), *Spent* and *Received* on a line each, never combined (Law 2), each compared in words with the same days of last month ("₹5,310.00 more than 1–16 Sep"; clamped to the shorter month), then "Spent today"; **Budgets** — the three closest to their limit, as `LfBudgetBar` (the owner chose the bar over a ring); **Coming up** — detected recurring charges expected from today to the month's end; **captured automatically** — the month's spending by value, the count beneath (C1); **Recent spending** and **Recent income** — each book's newest five, the Ledger's own row, two lists never interleaved. "Nothing here yet" only when both books are empty. Figures are read after first frame (`GetHomeSummaryUseCase`: one debit snapshot plus three totals) and again on every change to either book and every resume; the month card holds its height with placeholders until they land. "See all" opens the Ledger on that book (a one-shot request on the tab's entry, `LedgerBookRequest`). `ReportDrawnWhen` marks Home fully drawn when the figures land; measured on LF Bench (SM-S721B, Android 17, 2026-10-16): first frame ~140 ms, fully drawn ~2.65 s, of which ~2.1 s was SQLCipher deriving the key once per connection (BUG56). Since ADR-0029: fully drawn 0.71–0.73 s. Since the vault opens on the IO dispatcher from its first line (2026-10-18), a median of 698 ms against 725 ms (interleaved). Before that, each step of the unlock resumed on the main thread while it drew the first frame. Markers that day put the rest at: ~45 ms to the unlock, the Keystore unwrap ~262 ms (KEK-A is StrongBox, at ~60 ms per secure-element round trip), the one key derivation ~205 ms, Home's reads ~100 ms, and ~50 ms to the frame that reports.
 
 ### 9.4 Component inventory (`:core:designsystem`)
-`LfScaffold`, `LfTopBar`, `LfBottomBar`, `LfFab`, `LfCard`, `LfListItem`, `LfChip` (filter/assist/input), `LfSegmentedControl`, `LfTabRow`, `LfButton` (filled/tonal/outlined/text/inline), `LfIconButton`, `LfSwitch`, `LfCheckbox`, `LfTextField`, `LfAmountField` (editable, system keyboard — ADR-0012), `LfDateRangeBar`, `LfBottomSheet`, `LfDialog`, `LfSnackbar` (toast-equivalent — Material `Snackbar`, not `android.widget.Toast`), `LfEmptyState`, `LfShimmer`, `LfProgressRing`, `LfCategoryDot`, `LfMerchantAvatar`, `LfChart*`.
+What exists, by job (design-system steps B–E; F3 restyles them to §9.1, and V2 phases add the rest from `DESIGN_SYSTEM_PLAN.md` §3 in this style):
+
+- **Page templates** (`pattern/`): `LfTabPage`, `LfDetailPage`, `LfSettingsPage`, `LfFormPage`, `LfFlowStep` (with `progress` and `safeNote` for long work), `LfPanel`, `LfActionBar` (every pinned bar), `LfSelectionBar`, `LfSheet`. A new screen starts from one of these rather than from `LfScaffold`.
+- **Scaffold and navigation:** `LfScaffold` (insets once, BUG49; hosts the window's one snackbar), `LfBottomBar`, `LfFab`, `LfScreenTitle`, `LfNavRow` (title, current value, chevron).
+- **Controls:** `LfButton` (filled / tonal / outlined / text / inline), `LfIconButton`, `LfChip`, `LfSegmentedControl`, `LfSwitchRow`, `LfTextField` (with an `error` line), `LfAmountField` (editable, system keyboard — ADR-0012), `LfActionRow` / `LfAdaptiveRow` (whole controls wrap, BUG9).
+- **Containers:** `LfCard`, `LfDivider`, `LfCategoryDot`.
+- **Overlays** (themed wrappers; the raw Material ones are banned outside them by `designTokenCheck`): `LfDialog`, `LfBottomSheet`, `LfDatePickerDialog`, `LfDateRangePickerDialog`, `LfDatePicker`, `LfSnackbarHost`; and the sheets `LfOptionsSheet` (the Add sheet), `LfConfirmSheet` (a consequential, undoable step), `LfFilterSheet`. An irreversible step stays a `Warning` `LfDialog` that names the count (§5.2).
+- **States** (E1): `LfStateContent` over `LfContentState` — Loading (nothing for 300 ms, then still `LfSkeletonList` rows, a line at 10 s; it never spins), Empty in four kinds (`LfEmptyKind`; "no matches" must offer the way out), Error (Retry required), Unavailable (its fix required); `LfEmptyState`.
+- **Feedback** (E1): `LfNotice` (info / success / warning; up to two actions), `LfErrorNotice` (cannot be built without an action), `LfProgressBar`, and `LfFeedback`, the window's one snackbar (`post()` outlives the screen that raised it: "Saved to Expenses"). A Material `Snackbar`, never `android.widget.Toast`.
+- **Charts** (ADR-0005): `LfStackedBarChart`, `LfMirroredBarChart`, `LfHorizontalBarChart`, `LfDonutChart`, `LfTreemap`, `LfCalendarHeatmap`, `LfBudgetBar`, `LfCaptureGuide`; `LfAreaChart` arrives in F6 (ADR-0031).
 
 ### 9.5 Motion
 Spring-based, `MotionScheme` tokens. Durations: micro 120 ms, standard 240 ms, emphasized 400 ms, plus `fadeOut` 60 ms and an `axisSlide` of 30 dp (`LfMotion`). **Screen transitions are fade-throughs, never cross-fades** (BUG57): the outgoing screen has faded out before the incoming one starts to fade in, so no frame shows two screens' text. A bottom-tab switch is a plain fade-through (60 ms out, then 120 ms in); every other navigation is a shared-axis slide of 30 dp over 240 ms with the same fade-through inside it, reversed on back and mirrored in RTL (`NavMotion`, `:app`). Shared-element transitions for card → detail. `AnimatedContent` for period switching. Predictive back supported on all screens. **Every animation respects `Settings.Global.ANIMATOR_DURATION_SCALE` and reduced-motion accessibility settings.** For screen transitions that is explicit, not only Compose's own scaling: at a scale of 0 ("Remove animations") `NavMotion` sets none at all, re-read on every resume. **Settings > Appearance > Animations (V2-3)** sits under that switch, never over it: **Full** is the above; **Reduced** keeps every fade-through and drops the 30 dp slide, so nothing moves sideways; **Off** is exactly what the phone's switch does — `MainActivity` builds the window's recomposer with its own `MotionDurationScale` (`AppMotionDurationScale`), which is the phone's scale normally and zero under Off, so every Compose animation (Material's sheets, switches and ripples included, and dialogs, which compose under it) runs at zero duration, not only the app's transitions. `Bug57_TabSwitchDoesNotOverlapScreensTest` holds Reduced to the no-overlap rule and to a left edge that never moves; `AppMotionDurationScaleTest` holds the scale.
@@ -1850,6 +1866,8 @@ revealed.
 The primitives live in `:core:designsystem` as `LfStackedBarChart`, `LfLineChart`, `LfDonutChart`, `LfHorizontalBarChart`, `LfCalendarHeatmap` and `LfBudgetRing` (P3), joined at P4 by `LfSparkline`, `LfBridgeChart` and `LfDotPlot` for the item-grain views. Six primitives cover the whole of P3, and a striking number of the surfaces in §5.6 are *a list with a small graphic* rather than a chart — which is deliberate, and is what `CLAUDE.md`'s compactness brief asks for. They share one **axis engine**, whose tick selection is unit-tested independently of rendering (`AxisTicksTest`): it is the one piece of this with a correct answer that does not depend on how it looks — the module whose Roborazzi harness already records every golden at 1× and 2× font scale, so the §12 font-scale gate applies to charts mechanically. If the time chart's axis proves to be a tar pit, ADR-0005's stated reversal is to put a library behind `LfStackedBarChart` alone.
 
 Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — achieved by pre-binning to the display resolution before handing data to the chart. No chart ever receives more points than it has horizontal pixels.
+
+**Style (ADR-0031; built at design-system step F6).** One book per chart (Law 2). A new `LfAreaChart` for single-series trends: a monotone cubic curve that never leaves the data's range (unit-tested), a fill fading from 24 % to 0 %, the latest or selected point marked by a value pill in IBM Plex Mono. The donut: rounded caps, 2 dp gaps, a centre total, category colours and never a gradient. Bars: rounded tops on a quiet track. Progress and budget bars: 8 dp, fully rounded. Goldens at 1x and 2x in both themes; semantics per segment (§9.6). The primitives that exist today are listed in §9.4; the names above that were planned at P3/P4 are the original plan.
 
 ---
 
@@ -2130,6 +2148,7 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | 0024 | OpenCV for photographed-page perspective correction, and the APK budget | ✅ **Accepted** — **added**, `org.opencv:opencv:4.14.0`, used only by `OpenCvPageCorrector` (four-point warp before recognition; refuses rather than guesses). Measured on the device: four angles that read 0–3 items or no total uncorrected all read exactly once warped, in 18–33 ms. Arm64 release split **18.18 → 42.94 MiB**; libraries 16 KB-aligned, no permissions merged. **Budget 25 → 50 MB.** A core+imgproc-only build is the recorded next reduction (§5.3, §11, §15.4) |
 | 0025 | How do backups get triggered, when the app never holds the phrase? | ✅ **Part 1 Accepted** — manual "Back up now" that asks for the 24 words each time, checked against the vault before sealing (§16 Q23). **Part 2 Proposed** — nightly backups sealed to a phrase-derived public key; not decided, not built |
 | 0026 | How is a backup restored, and under which phrase? | ✅ **Accepted** — at first run only, from a link on onboarding's first screen; folder then list (or a single file); the backup is proven to open before anything is written; a fresh DEK wrapped under **the backup's own phrase**; never over an existing vault; a marker file written before the wrap routes an interrupted restore back to itself. Closes Q11 (§5.9, §7.3, §7.4) |
+| 0031 | What does the app look like after the design-system work? | ✅ **Accepted** — **Night Vault** (Phase 2's direction B): graphite and bone, coral and mint for money only, amber for attention, pink for problems; Inter for words and IBM Plex Mono for numbers and dates; shapes, sizes and components from the owner's reference samples. Applied from design-system step F2. §9.1–§9.2 |
 
 **ADR-0003 is not reopened.** The kickoff listed it as a blocking decision, but §14 has it Accepted and §7.2 specifies it. The *design* — multi-wrapped DEK, phrase-primary — is settled and stays settled. What was genuinely open is the **library and implementation** choice underneath it, which is a different decision with different trade-offs (binary size, native dependencies, maintenance status) and therefore gets its own record: **ADR-0010**. Amending an accepted ADR to smuggle in a new decision is how decision logs stop being trustworthy.
 

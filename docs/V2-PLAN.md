@@ -22,7 +22,8 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
 FX ADR (D2) take the next free numbers when they are written, not 0029/0030.
-ADR-0030 is now V2-3's device preferences (2026-10-24), so D1 and D2 start at 0031.
+ADR-0030 is now V2-3's device preferences (2026-10-24), and ADR-0031 the
+design-system's visual direction (Night Vault, 2026-10-28), so D1 and D2 start at 0032.
 Schema v12 is BUG58's, so merchant categories (§5.5) become v13 and V2-7's
 tables v14 and later.
 
@@ -486,5 +487,16 @@ BUG-A's measurement).
 
 The two-factor key scheme and phrase derivation (§7.2), the two isolated
 ledgers (Law 2), approval before anything reaches the ledger (Law 1), money as
-`Long` (Law 3), non-destructive migrations (Law 4), on-device OCR and parsing,
-and the palette.
+`Long` (Law 3), non-destructive migrations (Law 4), and on-device OCR and
+parsing.
+
+**The palette changes once, and not in a v2 phase.** The design-system work
+(`DESIGN_SYSTEM_PLAN.md`, branch `redesign/design-system`) replaces it with
+Night Vault's colours and type and the reference samples' shapes and components
+(ADR-0031, 2026-10-28). A v2 phase does not choose colours, corners or sizes of
+its own: its screens are built from the design system's roles (`LfTheme`,
+`LfLayout`) and its templates, and a component the system lacks is added to
+`:core:designsystem` in that phase, in the system's style (`DESIGN_SYSTEM_PLAN.md`
+§3 lists the ones v2 is expected to need: auth fields, the PIN pad, the profile
+header). What colour *means* does not change: money out, money in and attention
+keep their own colours, and problems use a fourth, never money-out's.
