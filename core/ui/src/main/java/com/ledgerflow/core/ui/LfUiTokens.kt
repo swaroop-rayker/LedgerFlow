@@ -22,6 +22,8 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 
 internal object LfEntryRowTokens {
     val shape: Shape @Composable get() = LfTheme.shapes.row
+    /** A grouped panel's corner (step F5): the container role's 16 dp, read as a size. */
+    val groupRadius: Dp = LfLayout.panelRadius
     val container: Color @Composable get() = LfTheme.colors.surface.raised
     val border: Color @Composable get() = LfTheme.colors.border.subtle
     val borderWidth: Dp @Composable get() = LfTheme.borders.hairline

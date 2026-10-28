@@ -25,8 +25,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.constrainHeight
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.lfCategoryTile
+import com.ledgerflow.core.designsystem.component.lfGroupSlice
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
@@ -77,6 +79,9 @@ import com.ledgerflow.core.ui.LfEntryRowTokens
  * @param grouped true inside a panel that holds several rows with hairlines
  *   between them (step F5, the reference samples): the row draws no card of
  *   its own, so the panel is the one outline.
+ * @param groupPosition where the row sits in a panel it draws itself, one
+ *   slice per row, for a lazy list whose rows cannot share a parent (the
+ *   Ledger's days, step F5). Null: a standalone card, or [grouped].
  */
 @Composable
 public fun LfEntryRow(
@@ -86,6 +91,7 @@ public fun LfEntryRow(
     deleteIcon: Painter? = null,
     onDelete: () -> Unit = {},
     grouped: Boolean = false,
+    groupPosition: LfGroupPosition? = null,
 ) {
     val tokens = LfEntryRowTokens
     val shape = tokens.shape
@@ -108,7 +114,16 @@ public fun LfEntryRow(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (grouped) {
+                if (groupPosition != null) {
+                    Modifier.lfGroupSlice(
+                        position = groupPosition,
+                        container = tokens.container,
+                        edge = tokens.border,
+                        edgeWidth = tokens.borderWidth,
+                        radius = tokens.groupRadius,
+                        dividerInset = tokens.insetStart,
+                    )
+                } else if (grouped) {
                     Modifier
                 } else {
                     Modifier

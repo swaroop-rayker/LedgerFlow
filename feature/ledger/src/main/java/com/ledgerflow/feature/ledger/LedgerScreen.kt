@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,6 +46,7 @@ import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfFeedback
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
@@ -230,8 +232,10 @@ private fun EntryList(
             cacheWindow = LazyLayoutCacheWindow(aheadFraction = CACHE_AHEAD, behindFraction = CACHE_BEHIND),
         )
         // The header is pinned, as it always was: the book switch is what the
-        // list is read through. `Dense` because this list holds a row per
-        // transaction, and every step of the gap scale is charged to it.
+        // list is read through. `None` since step F5: each band's rows join
+        // into one panel with hairlines between them (the reference samples),
+        // so the list puts no gap between rows; the unsaved rows, still cards
+        // of their own, carry theirs.
         LfTabPage(
             title = "Ledger",
             modifier = modifier,
@@ -244,7 +248,7 @@ private fun EntryList(
             },
             notices = state.message?.let { message -> { MessageBanner(message = message, onEvent = onEvent) } },
             statusContent = status,
-            spacing = LfPageSpacing.Dense,
+            spacing = LfPageSpacing.None,
             pinHeader = true,
             listState = listState,
         ) {
@@ -256,6 +260,14 @@ private fun EntryList(
 
                 val bucket = recencyBucketOf(item.localDate, state.today)
                 val previousBucket = previous?.let { recencyBucketOf(it.localDate, state.today) }
+                val next = snapshot.getOrNull(index + 1)
+                // The panel closes where the next row's band differs, or at the
+                // end of the book. A next row not loaded yet keeps it open: the
+                // page arrives as it scrolls in, and the read is one neighbour,
+                // as the headers' is.
+                val closes = index == items.itemCount - 1 ||
+                    (next != null && recencyBucketOf(next.localDate, state.today) != bucket)
+                val position = groupPosition(opens = bucket != previousBucket, closes = closes)
 
                 if (bucket != previousBucket) {
                     stickyHeader(key = "band-${bucket.name}", contentType = BAND_HEADER_TYPE) {
@@ -272,6 +284,7 @@ private fun EntryList(
                         item = row,
                         withDate = bucket.needsDate,
                         deleteIcon = deleteIcon,
+                        groupPosition = position,
                         onDelete = {
                             onEvent(LedgerEvent.DeleteRequested(row.id, row.deleteLabel(row.entryTitle())))
                         },
@@ -280,6 +293,14 @@ private fun EntryList(
             }
         }
     }
+}
+
+/** Where a row sits in its band's panel (step F5). */
+internal fun groupPosition(opens: Boolean, closes: Boolean): LfGroupPosition = when {
+    opens && closes -> LfGroupPosition.Only
+    opens -> LfGroupPosition.First
+    closes -> LfGroupPosition.Last
+    else -> LfGroupPosition.Middle
 }
 
 /**
@@ -410,19 +431,23 @@ private fun LazyListScope.unsavedBand(
             }
         },
     ) { index ->
-        when (val row = state.unsaved[index]) {
-            is UnsavedRow.Draft -> PendingRow(
-                draft = row.summary,
-                currencyCode = state.currencyCode,
-                onOpen = onOpenDraft,
-                onEvent = onEvent,
-            )
+        // The gap the list no longer puts between rows (step F5): these are
+        // still separate cards, each in its own accent or hairline.
+        Box(Modifier.padding(bottom = LfTheme.space.inlineGap)) {
+            when (val row = state.unsaved[index]) {
+                is UnsavedRow.Draft -> PendingRow(
+                    draft = row.summary,
+                    currencyCode = state.currencyCode,
+                    onOpen = onOpenDraft,
+                    onEvent = onEvent,
+                )
 
-            is UnsavedRow.Candidate -> CandidateRow(
-                candidate = row.candidate,
-                currencyCode = state.currencyCode,
-                onReview = onReviewCandidate,
-            )
+                is UnsavedRow.Candidate -> CandidateRow(
+                    candidate = row.candidate,
+                    currencyCode = state.currencyCode,
+                    onReview = onReviewCandidate,
+                )
+            }
         }
     }
 }
@@ -571,9 +596,11 @@ internal fun UnsavedDetail(
     color: Color,
     onTextLayout: (TextLayoutResult) -> Unit = {},
 ) {
+    // Plex Mono, as a committed row's detail line is (step F5): a stamp is
+    // figures.
     Text(
         text = text,
-        style = LfTheme.typography.label,
+        style = LfTheme.type.figureLabel,
         color = color,
         maxLines = UNSAVED_DETAIL_MAX_LINES,
         overflow = TextOverflow.Ellipsis,

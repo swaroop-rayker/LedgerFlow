@@ -72,6 +72,12 @@ public object LfLayout {
     public val categoryTileSize: Dp = LfScale.Space40
 
     /**
+     * The grouped panel's corner as a size, for a panel drawn in slices
+     * (`lfGroupSlice`, step F5). Equal to `LfTheme.shapes.container`'s radius.
+     */
+    public val panelRadius: Dp = LfScale.Radius16
+
+    /**
      * How tall a scrolling list inside a dialog or sheet may get before it
      * scrolls: the pickers, the Analytics filter sheet and the budget editor.
      *

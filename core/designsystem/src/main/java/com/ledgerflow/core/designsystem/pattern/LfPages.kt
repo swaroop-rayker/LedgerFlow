@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfBottomSheet
@@ -326,15 +327,18 @@ private class PageHeader(
  * How far apart a page's items sit: `Dense` for a long list of transactions
  * (the Ledger), `Rows` for most lists, `Sections` for a page of cards or
  * groups (Home, Settings). One choice per page, so the gaps cannot drift
- * between screens that show the same kind of thing.
+ * between screens that show the same kind of thing. `None` for a list whose
+ * rows join into grouped panels (`lfGroupSlice`, step F5), where any gap would
+ * split a panel; its other items carry their own spacing.
  */
-public enum class LfPageSpacing { Dense, Rows, Sections }
+public enum class LfPageSpacing { Dense, Rows, Sections, None }
 
 @Composable
 internal fun LfPageSpacing.gap(): Dp = when (this) {
     LfPageSpacing.Dense -> LfTheme.space.inlineGap
     LfPageSpacing.Rows -> LfTheme.space.itemGap
     LfPageSpacing.Sections -> LfTheme.space.sectionGap
+    LfPageSpacing.None -> 0.dp
 }
 
 /**
