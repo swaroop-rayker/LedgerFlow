@@ -15,7 +15,6 @@
 # theme; 2 in 2 files.
 
 # --- Corners.
-core/ui/src/main/java/com/ledgerflow/core/ui/entry/LfEntryRow.kt shape 1 -- the empty swatch's ring is a circle; becomes LfIconTile in F3
 
 # --- Icons: one icon family through LfIcons in step F4.
 feature/budget/src/main/java/com/ledgerflow/feature/budget/notify/BudgetNotifications.kt icon 1 -- budget alert's stock warning icon (audit gap); app icon in F4
