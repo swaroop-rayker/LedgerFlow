@@ -1,3 +1,7 @@
+// Path data copied from Lucide: a long line is one shape, and splitting it
+// would make it no longer diffable against the source SVG.
+@file:Suppress("MaxLineLength")
+
 package com.ledgerflow.core.designsystem.icon
 
 /*
