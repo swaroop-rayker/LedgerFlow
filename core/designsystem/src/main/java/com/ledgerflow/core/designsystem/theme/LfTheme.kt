@@ -9,6 +9,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -116,8 +117,9 @@ private fun lfTextStyle(
     lineHeight: TextUnit,
     fontWeight: FontWeight = FontWeight.Normal,
     features: List<String> = emptyList(),
+    family: FontFamily = LfFontFamily,
 ): TextStyle = TextStyle(
-    fontFamily = LfFontFamily,
+    fontFamily = family,
     fontSize = fontSize,
     lineHeight = lineHeight,
     fontWeight = fontWeight,
@@ -149,8 +151,22 @@ public val LfDefaultTypography: LfTypography = LfTypography(
     bodyL = lfTextStyle(LfTypeScale.Size16, LfTypeScale.Line24),
     bodyM = lfTextStyle(LfTypeScale.Size14, LfTypeScale.Line20),
     label = lfTextStyle(LfTypeScale.Size12, LfTypeScale.Line16, FontWeight.Medium),
-    amountL = lfTextStyle(LfTypeScale.Size28, LfTypeScale.Line32, FontWeight.SemiBold, listOf(TABULAR_FIGURES)),
-    amountM = lfTextStyle(LfTypeScale.Size18, LfTypeScale.Line22, FontWeight.Medium, listOf(TABULAR_FIGURES)),
+    // IBM Plex Mono (ADR-0031): monospaced, so a column of amounts aligns on its
+    // own. `tnum` stays, so the figures hold if a style is ever set in Inter.
+    amountL = lfTextStyle(
+        LfTypeScale.Size28,
+        LfTypeScale.Line32,
+        FontWeight.SemiBold,
+        listOf(TABULAR_FIGURES),
+        LfFigureFontFamily,
+    ),
+    amountM = lfTextStyle(
+        LfTypeScale.Size18,
+        LfTypeScale.Line22,
+        FontWeight.Medium,
+        listOf(TABULAR_FIGURES),
+        LfFigureFontFamily,
+    ),
     mnemonicWord = lfTextStyle(
         LfTypeScale.Size16,
         LfTypeScale.Line22,

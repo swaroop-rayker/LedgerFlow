@@ -12,28 +12,38 @@ import org.junit.Test
  * Step B1 moved the theme onto primitive and semantic layers without changing
  * a single value (DESIGN_SYSTEM_PLAN §4.1, §7).
  *
- * The hex values below are what `LfColors.kt` held before B1, written out on
+ * The hex values below are Night Vault's (ADR-0031, step F2), written out on
  * purpose: if a role is ever re-pointed at a different primitive by mistake,
  * this fails, where a test comparing the roles with the aliases would not (both
- * would move together). They change only with a deliberate palette change
- * (step F2), and then this test changes in the same commit.
+ * would move together). They change only with a deliberate palette change, and
+ * then this test changes in the same commit. (Until F2 they were the values
+ * `LfColors.kt` held before B1.)
  */
 @Suppress("DEPRECATION") // The aliases are what this test pins to the roles.
 class LfTokenLayersTest {
 
     private val darkBeforeB1 = mapOf(
-        "surfaceBase" to 0xFF15171C, "surfaceRaised" to 0xFF1D2027, "surfaceOverlay" to 0xFF252932,
-        "outline" to 0xFF333846, "textPrimary" to 0xFFE8EAF0, "textSecondary" to 0xFF9AA1B4,
-        "textTertiary" to 0xFF7F8798, "accent" to 0xFF6E8BFF, "onAccent" to 0xFF0B1020,
-        "debit" to 0xFFFF7A85, "credit" to 0xFF5FD0A6, "warn" to 0xFFF2B457,
+        "surfaceBase" to 0xFF121316, "surfaceRaised" to 0xFF1A1B1F, "surfaceOverlay" to 0xFF222429,
+        "outline" to 0xFF2B2D33, "textPrimary" to 0xFFECE8E0, "textSecondary" to 0xFFA39F96,
+        "textTertiary" to 0xFF908C84, "accent" to 0xFFECE8E0, "onAccent" to 0xFF121316,
+        "debit" to 0xFFFF8A80, "credit" to 0xFF6FD6A8, "warn" to 0xFFF2B457,
     )
 
     private val lightBeforeB1 = mapOf(
-        "surfaceBase" to 0xFFF7F8FA, "surfaceRaised" to 0xFFFFFFFF, "surfaceOverlay" to 0xFFEFF1F5,
-        "outline" to 0xFFD8DCE5, "textPrimary" to 0xFF15171C, "textSecondary" to 0xFF525A6B,
-        "textTertiary" to 0xFF6B7285, "accent" to 0xFF3A5BD9, "onAccent" to 0xFFFFFFFF,
-        "debit" to 0xFFC2374A, "credit" to 0xFF1F7A5A, "warn" to 0xFF9A6410,
+        "surfaceBase" to 0xFFF4F3F0, "surfaceRaised" to 0xFFFFFFFF, "surfaceOverlay" to 0xFFEEECE8,
+        "outline" to 0xFFE3E0D9, "textPrimary" to 0xFF17181B, "textSecondary" to 0xFF55534D,
+        "textTertiary" to 0xFF6A675F, "accent" to 0xFF17181B, "onAccent" to 0xFFFFFFFF,
+        "debit" to 0xFFB3362F, "credit" to 0xFF1D7350, "warn" to 0xFF8F5B00,
     )
+
+    /** The two roles F2 gave values of their own (ADR-0031). */
+    @Test
+    fun nightVaultsOwnRolesKeepTheirValues() {
+        assertThat(LfDarkColors.border.strong).isEqualTo(Color(0xFF75716A))
+        assertThat(LfLightColors.border.strong).isEqualTo(Color(0xFF837F77))
+        assertThat(LfDarkColors.status.danger).isEqualTo(Color(0xFFF49AC1))
+        assertThat(LfLightColors.status.danger).isEqualTo(Color(0xFFA8336F))
+    }
 
     /** Each old name, read through its deprecated alias and through the role that replaces it. */
     private fun byOldName(c: LfColors): Map<String, Pair<Color, Color>> = mapOf(
@@ -67,13 +77,16 @@ class LfTokenLayersTest {
         }
     }
 
-    /** Roles new in B1 reuse today's values: what the app already draws for that job. */
+    /**
+     * Roles new in B1 reuse an existing value: what the app already drew for that
+     * job. Two have their own since F2, and those are pinned above; danger is
+     * now *required* to differ from money-out (ADR-0031).
+     */
     @Test
     fun newRolesReuseTodaysValues() {
         listOf(LfDarkColors, LfLightColors).forEach { c ->
             assertThat(c.text.disabled).isEqualTo(c.text.muted) // LfButton's disabled label
-            assertThat(c.border.strong).isEqualTo(c.text.muted) // A2's Material outline
-            assertThat(c.status.danger).isEqualTo(c.money.outgoing) // errors have been coral
+            assertThat(c.status.danger).isNotEqualTo(c.money.outgoing) // a problem is not an amount
             assertThat(c.status.success).isEqualTo(c.money.incoming)
             assertThat(c.chart.track).isEqualTo(c.surface.overlay) // bar, heatmap and budget tracks
             assertThat(c.chart.axisLabel).isEqualTo(c.text.muted) // the stacked chart's labels

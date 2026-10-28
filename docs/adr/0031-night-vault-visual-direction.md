@@ -78,20 +78,25 @@ values; the third to fifth rows for the sample-derived parts).
 |---|---|---|---|
 | `surface.canvas` | `#121316` | `#F4F3F0` | the page |
 | `surface.raised` | `#1A1B1F` | `#FFFFFF` | panels, cards, sheets |
-| `surface.overlay` | `#222429` | set in F2 | dialogs, the tonal button, icon buttons |
+| `surface.overlay` | `#222429` | `#EEECE8` | dialogs, the tonal button, icon buttons |
 | `text.primary` | `#ECE8E0` (bone) | `#17181B` | |
 | `text.secondary` | `#A39F96` | `#55534D` | |
 | `border.subtle` | `#2B2D33` | `#E3E0D9` | hairlines inside and around panels |
-| `border.strong` | `#3A3D44` | set in F2 | outlined controls |
+| `border.strong` | `#75716A` | `#837F77` | control edges; a switch's off thumb (see below) |
 | `action.primary` | bone `#ECE8E0`, graphite text | `#17181B`, white text | the filled button, switches, checks, selection |
 | `money.outgoing` | `#FF8A80` | `#B3362F` | money out, and nothing else |
 | `money.incoming` | `#6FD6A8` | `#1D7350` | money in, and nothing else |
 | `status.warning` | `#F2B457` | `#8F5B00` | attention: budgets, reminders |
-| `status.danger` | `#F49AC1` (pink) | set in F2 | errors and destructive actions; **never** money-out's coral |
+| `status.danger` | `#F49AC1` (pink) | `#A8336F` (magenta) | errors and destructive actions; **never** money-out's coral |
 
-Values marked "set in F2" are not on the canvas; F2 picks them inside the
-existing contrast gate (§9.6, `LfContrastTest` and E1's `NoticeContrastTest`)
-rather than by eye. A tinted fill (`*Subtle`, notices, icon tiles) is the
+Five values are not on the canvas and were chosen at F2 inside the existing
+contrast gate (§9.6, `ContrastTest`, E1's `NoticeContrastTest`,
+`Bug63_OffSwitchIsVisibleTest`) rather than by eye, with the owner's approval
+on 2026-10-28: the light overlay; `text.muted`, `#908C84` / `#6A675F`; the
+light danger; and `border.strong` in both themes. The canvas draws control
+edges at `#3A3D44`, about 1.6:1 against a panel, and the same role draws an
+off switch's thumb, which BUG63 requires at 3:1; the values above are the
+lightest that keep it. A tinted fill (`*Subtle`, notices, icon tiles) is the
 role's colour over the surface at `SUBTLE_TINT`, as today.
 
 **Category colours** keep the curated 16-swatch palette and its per-theme

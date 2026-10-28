@@ -14,41 +14,52 @@ import androidx.compose.ui.unit.sp
  * (`LfTheme.colors.money.outgoing`, `LfTheme.space.screenEdge`, …), and the
  * roles read these.
  *
- * A visual direction (Night Vault, step F2) is mostly a new set of primitives
- * plus new role mappings; nothing outside this package and the role builders
- * has to change for it.
- *
- * Step B1 moved today's values here unchanged: every golden is
- * byte-identical before and after.
+ * A visual direction is mostly a new set of primitives plus new role
+ * mappings; nothing outside this package and the role builders has to change
+ * for it. Step B1 moved the previous values here unchanged; step F2 replaced
+ * the palette with Night Vault's (ADR-0031).
  */
 
-/** Today's palette, both themes. Names give hue and depth, not a job. */
+/**
+ * Night Vault's palette, both themes (ADR-0031, design-system step F2). Names
+ * give hue and depth, not a job.
+ *
+ * Every value the canvas's style sheet draws is taken from it. Five it does not
+ * draw were chosen inside the contrast gate (`ContrastTest`,
+ * `NoticeContrastTest`, `Bug63_OffSwitchIsVisibleTest`), with the owner's
+ * approval on 2026-10-28: the light overlay, the faint text in both themes, the
+ * light pink, and the control edge in both themes. The canvas drew control
+ * edges at `#3A3D44`, about 1.6:1, which is too faint for an off switch's thumb
+ * (BUG63); the edge here is the lightest value that keeps 3:1.
+ */
 internal object LfPalette {
     // Dark theme (the default; SPEC §9.1).
-    val Graphite950: Color = Color(0xFF15171C)
-    val Graphite900: Color = Color(0xFF1D2027)
-    val Graphite850: Color = Color(0xFF252932)
-    val Graphite700: Color = Color(0xFF333846)
-    val Mist100: Color = Color(0xFFE8EAF0)
-    val Mist400: Color = Color(0xFF9AA1B4)
-    val Mist500: Color = Color(0xFF7F8798)
-    val Periwinkle400: Color = Color(0xFF6E8BFF)
-    val Navy975: Color = Color(0xFF0B1020)
-    val Coral400: Color = Color(0xFFFF7A85)
-    val Mint400: Color = Color(0xFF5FD0A6)
+    val Graphite950: Color = Color(0xFF121316)
+    val Graphite900: Color = Color(0xFF1A1B1F)
+    val Graphite850: Color = Color(0xFF222429)
+    val Graphite800: Color = Color(0xFF2B2D33)
+    val Stone500: Color = Color(0xFF75716A)
+    val Bone100: Color = Color(0xFFECE8E0)
+    val Bone400: Color = Color(0xFFA39F96)
+    val Bone500: Color = Color(0xFF908C84)
+    val Coral300: Color = Color(0xFFFF8A80)
+    val Mint300: Color = Color(0xFF6FD6A8)
     val Amber400: Color = Color(0xFFF2B457)
+    val Pink300: Color = Color(0xFFF49AC1)
 
     // Light theme.
-    val Paper50: Color = Color(0xFFF7F8FA)
+    val Paper50: Color = Color(0xFFF4F3F0)
     val White: Color = Color(0xFFFFFFFF)
-    val Paper100: Color = Color(0xFFEFF1F5)
-    val Paper300: Color = Color(0xFFD8DCE5)
-    val Slate600: Color = Color(0xFF525A6B)
-    val Slate500: Color = Color(0xFF6B7285)
-    val Indigo600: Color = Color(0xFF3A5BD9)
-    val Coral700: Color = Color(0xFFC2374A)
-    val Mint700: Color = Color(0xFF1F7A5A)
-    val Amber800: Color = Color(0xFF9A6410)
+    val Paper100: Color = Color(0xFFEEECE8)
+    val Paper300: Color = Color(0xFFE3E0D9)
+    val Stone600: Color = Color(0xFF837F77)
+    val Ink950: Color = Color(0xFF17181B)
+    val Ink600: Color = Color(0xFF55534D)
+    val Ink500: Color = Color(0xFF6A675F)
+    val Coral800: Color = Color(0xFFB3362F)
+    val Mint800: Color = Color(0xFF1D7350)
+    val Amber800: Color = Color(0xFF8F5B00)
+    val Magenta700: Color = Color(0xFFA8336F)
 
     // Both themes.
     val Black: Color = Color(0xFF000000)

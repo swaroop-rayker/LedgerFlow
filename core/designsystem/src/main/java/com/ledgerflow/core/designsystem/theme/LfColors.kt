@@ -163,10 +163,11 @@ public class LfChartColors internal constructor(
 )
 
 /**
- * The twelve colours each theme had before step B1: the only inputs the role
- * mapping reads, so every role is one of them or a blend of two
- * (DESIGN_SYSTEM_PLAN §4.2). One parameter per colour of that palette, hence
- * twelve.
+ * Each theme's fourteen colours: the only inputs the role mapping reads, so
+ * every role is one of them or a blend of two (DESIGN_SYSTEM_PLAN §4.2). The
+ * twelve the palette had since B1, plus the two Night Vault gave roles of their
+ * own at F2 (ADR-0031): the control edge, and danger, which had been
+ * money-out's coral.
  */
 @Suppress("LongParameterList")
 private class Palette(
@@ -174,6 +175,7 @@ private class Palette(
     val raised: Color,
     val overlay: Color,
     val hairline: Color,
+    val controlEdge: Color,
     val textPrimary: Color,
     val textSecondary: Color,
     val textMuted: Color,
@@ -182,6 +184,7 @@ private class Palette(
     val debit: Color,
     val credit: Color,
     val warn: Color,
+    val danger: Color,
 )
 
 private fun rolesFrom(p: Palette, isDark: Boolean): LfColors {
@@ -204,7 +207,7 @@ private fun rolesFrom(p: Palette, isDark: Boolean): LfColors {
             onAction = p.onAccent,
             onInverse = p.canvas,
         ),
-        border = LfBorderColors(subtle = p.hairline, strong = p.textMuted, focus = p.accent),
+        border = LfBorderColors(subtle = p.hairline, strong = p.controlEdge, focus = p.accent),
         action = LfActionColors(
             primary = p.accent,
             onPrimary = p.onAccent,
@@ -220,10 +223,10 @@ private fun rolesFrom(p: Palette, isDark: Boolean): LfColors {
         status = LfStatusColors(
             warning = p.warn,
             warningSubtle = subtle(p.warn),
-            // Today's values: errors have always been the coral. A direction
-            // gives danger its own colour (DESIGN_SYSTEM_PLAN step F2).
-            danger = p.debit,
-            dangerSubtle = subtle(p.debit),
+            // Pink, never money-out's coral, so a problem cannot be read as an
+            // amount (ADR-0031). It was the coral until F2.
+            danger = p.danger,
+            dangerSubtle = subtle(p.danger),
             success = p.credit,
             successSubtle = subtle(p.credit),
             info = p.accent,
@@ -240,27 +243,30 @@ private fun rolesFrom(p: Palette, isDark: Boolean): LfColors {
 private const val SUBTLE_TINT = 0.24f
 
 /**
- * Dark palette -- the default and primary theme.
+ * Dark palette -- the default and primary theme (Night Vault, ADR-0031).
  *
- * `text.muted` is `#7F8798`, not the `#6B7285` originally specified: that
- * measured 3.73:1 against the canvas, below the 4.5:1 that §9.6 mandates for
- * normal text, while being specified as a text colour. See [LfContrast] and the
- * test that enforces it.
+ * The primary action is bone on graphite: the brightest thing on the screen
+ * is what the user is being asked to do, and the money colours stay free to
+ * mean money. `text.muted` clears 4.5:1 on every surface; the previous
+ * palette's first `text.muted` measured 3.73:1 while specified as a text
+ * colour, which is why [LfContrast] and the test that enforces it exist.
  */
 public val LfDarkColors: LfColors = rolesFrom(
     Palette(
         canvas = LfPalette.Graphite950,
         raised = LfPalette.Graphite900,
         overlay = LfPalette.Graphite850,
-        hairline = LfPalette.Graphite700,
-        textPrimary = LfPalette.Mist100,
-        textSecondary = LfPalette.Mist400,
-        textMuted = LfPalette.Mist500,
-        accent = LfPalette.Periwinkle400,
-        onAccent = LfPalette.Navy975,
-        debit = LfPalette.Coral400,
-        credit = LfPalette.Mint400,
+        hairline = LfPalette.Graphite800,
+        controlEdge = LfPalette.Stone500,
+        textPrimary = LfPalette.Bone100,
+        textSecondary = LfPalette.Bone400,
+        textMuted = LfPalette.Bone500,
+        accent = LfPalette.Bone100,
+        onAccent = LfPalette.Graphite950,
+        debit = LfPalette.Coral300,
+        credit = LfPalette.Mint300,
         warn = LfPalette.Amber400,
+        danger = LfPalette.Pink300,
     ),
     isDark = true,
 )
@@ -276,14 +282,16 @@ public val LfLightColors: LfColors = rolesFrom(
         raised = LfPalette.White,
         overlay = LfPalette.Paper100,
         hairline = LfPalette.Paper300,
-        textPrimary = LfPalette.Graphite950,
-        textSecondary = LfPalette.Slate600,
-        textMuted = LfPalette.Slate500,
-        accent = LfPalette.Indigo600,
+        controlEdge = LfPalette.Stone600,
+        textPrimary = LfPalette.Ink950,
+        textSecondary = LfPalette.Ink600,
+        textMuted = LfPalette.Ink500,
+        accent = LfPalette.Ink950,
         onAccent = LfPalette.White,
-        debit = LfPalette.Coral700,
-        credit = LfPalette.Mint700,
+        debit = LfPalette.Coral800,
+        credit = LfPalette.Mint800,
         warn = LfPalette.Amber800,
+        danger = LfPalette.Magenta700,
     ),
     isDark = false,
 )

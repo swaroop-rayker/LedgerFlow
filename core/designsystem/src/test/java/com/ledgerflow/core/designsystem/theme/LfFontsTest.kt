@@ -2,6 +2,7 @@ package com.ledgerflow.core.designsystem.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import com.google.common.truth.Truth.assertThat
 import java.lang.reflect.Method
 import org.junit.Test
@@ -41,27 +42,48 @@ class LfFontsTest {
     private fun styleOf(method: Method, instance: Any): TextStyle =
         method.invoke(instance) as TextStyle
 
+    /**
+     * Every style is one of the two bundled families: amounts in Plex Mono
+     * (ADR-0031), everything else in Inter. Never `FontFamily.Default`.
+     */
     @Test
-    fun everyAppStyleUsesTheBundledFamily() {
+    fun everyAppStyleUsesABundledFamily() {
         val getters = styleGettersOf(LfTypography::class.java)
         // A guard on the guard: if reflection ever stops finding the styles,
         // every assertion below passes vacuously.
         assertThat(getters).isNotEmpty()
 
+        // By value, not by getter name: a data class also exposes `componentN()`.
+        val amounts = setOf(LfDefaultTypography.amountL, LfDefaultTypography.amountM)
         getters.forEach { getter ->
-            assertThat(styleOf(getter, LfDefaultTypography).fontFamily)
-                .isEqualTo(LfFontFamily)
+            val style = styleOf(getter, LfDefaultTypography)
+            val expected = if (style in amounts) LfFigureFontFamily else LfFontFamily
+            assertThat(style.fontFamily).isEqualTo(expected)
         }
     }
 
     @Test
     fun everyWeightTheTypeScaleAsksForIsRegistered() {
-        val used = styleGettersOf(LfTypography::class.java)
-            .mapNotNull { styleOf(it, LfDefaultTypography).fontWeight }
-            .toSet()
+        val styles = styleGettersOf(LfTypography::class.java).map { styleOf(it, LfDefaultTypography) }
+        val words = styles.filter { it.fontFamily == LfFontFamily }.mapNotNull { it.fontWeight }.toSet()
+        val figures = styles.filter { it.fontFamily == LfFigureFontFamily }.mapNotNull { it.fontWeight }.toSet()
 
-        assertThat(used).isNotEmpty()
-        assertThat(LfFontWeights).containsAtLeastElementsIn(used)
+        assertThat(words).isNotEmpty()
+        assertThat(figures).isNotEmpty()
+        assertThat(LfFontWeights).containsAtLeastElementsIn(words)
+        assertThat(LfFigureFontWeights).containsAtLeastElementsIn(figures)
+    }
+
+    /**
+     * "Bold text" adds about 300 to every weight. Plex Mono's heaviest master is
+     * Bold, so 800 and 900 must be registered (at the Bold file) or Compose
+     * synthesizes a fake Bold for every amount under that setting.
+     */
+    @Test
+    fun plexMono_answersTheBoldTextAdjustmentWithoutSynthesis() {
+        listOf(FontWeight.ExtraBold, FontWeight.Black).forEach {
+            assertThat(LfFigureFontWeights).contains(it)
+        }
     }
 
     @Test

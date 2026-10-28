@@ -1755,25 +1755,26 @@ BUG8(d) requires a verified snapshot before any migration runs. The policy is ri
 ### 9.1 Visual direction
 **Night Vault** (ADR-0031, owner 2026-10-25): dark and private, colour used as *information* rather than decoration, compact (`CLAUDE.md` §5's brief). **Dark is the default and primary theme** — graphite, not OLED black — with a light mirror. Shapes, sizes and components come from the owner's reference samples (`D:\LF_UI_UX_design_sample`, outside the repo); the samples' violet palette does not. The canvas is the visual record: https://claude.ai/artifact/BHYXqJ93MQQKV9CJErQJ7N.
 
-**Status:** the roles below exist in `LfTheme` (design-system steps B1–B3) and every screen reads them; the Night Vault *values* replace the previous palette at design-system step F2, where every golden changes once and is reviewed. Until then the build draws the previous values, which are in `LfPrimitives.kt` and this section's history.
+**Status:** applied at design-system step F2 (2026-10-28): the roles below exist in `LfTheme` (steps B1–B3), every screen reads them, and `LfPrimitives.kt` holds these values. The previous palette is in this section's history.
 
 **Colour roles** (`LfTheme.colors`):
 | Role | Dark (default) | Light | Use |
 |---|---|---|---|
 | `surface.canvas` | `#121316` | `#F4F3F0` | app background |
 | `surface.raised` | `#1A1B1F` | `#FFFFFF` | panels, cards, sheets |
-| `surface.overlay` | `#222429` | set in F2 | dialogs, the tonal button, icon buttons |
+| `surface.overlay` | `#222429` | `#EEECE8` | dialogs, the tonal button, icon buttons |
 | `text.primary` | `#ECE8E0` (bone) | `#17181B` | |
 | `text.secondary` | `#A39F96` | `#55534D` | |
+| `text.muted` | `#908C84` | `#6A675F` | the faintest text; ≥4.5:1 on every surface |
 | `border.subtle` | `#2B2D33` | `#E3E0D9` | hairlines inside and around panels |
-| `border.strong` | `#3A3D44` | set in F2 | outlined controls |
+| `border.strong` | `#75716A` | `#837F77` | control edges, and a switch's off thumb: ≥3:1 against its track (BUG63). The canvas's `#3A3D44` is about 1.6:1 |
 | `action.primary` | bone, graphite text | `#17181B`, white text | the filled button, switches, checks, selection |
 | `money.outgoing` | `#FF8A80` | `#B3362F` | money out, and nothing else |
 | `money.incoming` | `#6FD6A8` | `#1D7350` | money in, and nothing else |
 | `status.warning` | `#F2B457` | `#8F5B00` | attention: budgets, reminders |
-| `status.danger` | `#F49AC1` (pink) | set in F2 | errors and destructive actions — **never** money-out's coral, so a problem cannot be read as an amount |
+| `status.danger` | `#F49AC1` (pink) | `#A8336F` (magenta) | errors and destructive actions — **never** money-out's coral, so a problem cannot be read as an amount |
 
-A tinted fill (`*Subtle`: notices, icon tiles, the Inbox discard track) is the role's colour over the surface at `SUBTLE_TINT`. "Set in F2" values are chosen inside the contrast gate below, not by eye.
+A tinted fill (`*Subtle`: notices, icon tiles, the Inbox discard track) is the role's colour over the surface at `SUBTLE_TINT`. The five values the canvas does not draw (the light overlay, `text.muted` in both themes, the light danger, `border.strong` in both) were chosen inside the contrast gate below, not by eye (owner, 2026-10-28).
 
 **Contrast is a gate, not a guideline.** §9.6 mandates WCAG AA, which is **4.5:1 for normal text** and 3:1 for large text (≥18.66 px bold / ≥24 px regular) and for non-text marks. Every text-on-surface role pair is asserted by `LfContrastTest`, which computes the WCAG ratio from the token values; notice text on every tone fill, a field's error line, and each progress fill on its track by `NoticeContrastTest` (design-system E1). A palette edit that drops a pair below its threshold fails the build rather than shipping. (The previous palette's `textTertiary` once measured 3.73:1 against its background while specified as a text colour; that is the failure the gate exists for.)
 
@@ -1786,7 +1787,7 @@ Single variable font family (Inter or Manrope, bundled — no runtime download).
 
 Scale, as roles (`LfTheme.type`; the old names are deprecated aliases until design-system step G): `display 34/40` (was `displayL`) · `title 22/28` (`titleL`) · `heading 18/24` (`titleM`) · `body 16/24` (`bodyL`) · `bodySmall 14/20` (`bodyM`) · `label 12/16` · `amountHero 28/32` (`amountL`) · `amountRow 18/22` (`amountM`), plus `caption`, `amountSmall` and `mnemonic`.
 
-**Two families from F2 (ADR-0031).** Inter for names, sentences, labels and controls, as below. **IBM Plex Mono** for every amount and date and for Home's status line: monospaced, so figures align without depending on `tnum`. It is a second bundled file under the SIL Open Font License 1.1 — never downloaded (Law 6), its licence beside Inter's in `assets/licenses/`, its weights cut in XML as Inter's are, its size counted against §11's budget and stated in the F2 commit. Until F2 every style is Inter, with `tnum` on the amount styles. `mnemonic` stays Inter with `ss02` (below): changing the face a recovery word is copied from is its own decision.
+**Two families from F2 (ADR-0031).** Inter for names, sentences, labels and controls, as below. **IBM Plex Mono** for every amount and date and for Home's status line: monospaced, so figures align without depending on `tnum`. Four static files (`IBMPlexMono-{Regular,Medium,SemiBold,Bold}.ttf` from `google/fonts`, unmodified, 550 KB together) under the SIL Open Font License 1.1 — never downloaded (Law 6), the licence at `assets/licenses/IBMPlexMono-OFL.txt` beside Inter's. Static cuts are registered directly; there is no axis to mis-apply. Plex Mono has no master heavier than Bold, so Bold is registered again at 800 and 900: under "Bold text" the amounts all draw at Bold rather than at a synthesized weight, and the words, in Inter, keep their hierarchy. **Since F2 the amount styles (`amountHero`, `amountRow`, `amountSmall`) are Plex Mono;** dates and Home's status line move to it in F5, where screens choose their styles. `mnemonic` stays Inter with `ss02` (below): changing the face a recovery word is copied from is its own decision.
 
 **Settled: Inter.** `InterVariable.ttf` from the Inter 4.1 release, unmodified, at `core/designsystem/src/main/res/font/`, ~859 KB against §11's provisional 15 MB budget. SIL Open Font License 1.1. Manrope was the other candidate and is a fifth of the size; Inter was chosen for the finance-specific features it carries beyond `tnum` — `zero` and `case` — and for the larger glyph set. Neither candidate has Arabic, so AED's "د.إ" falls back to the system font either way.
 

@@ -111,6 +111,50 @@ public val LfFontFamily: FontFamily = FontFamily(
 )
 
 /**
+ * IBM Plex Mono's four static cuts (ADR-0031), each registered at the weight it
+ * draws, and Bold registered again at 800 and 900.
+ *
+ * Plex Mono ships no variable file and no cut heavier than Bold. The repeats
+ * are for the same accessibility adjustment as Inter's 700/800/900 (see
+ * [LfFontFamily]): with "Bold text" on, a 500 request arrives as 800, and with
+ * nothing registered there Compose would *synthesize* a heavier Bold. Pointing
+ * 800 and 900 at the real Bold keeps the glyphs the font's own. The cost of
+ * having no heavier master is that, under that setting, amounts all draw at
+ * Bold; the words around them, in Inter, keep their hierarchy.
+ */
+private val PlexMonoCuts: List<Pair<FontWeight, Int>> = listOf(
+    FontWeight.Normal to R.font.ibm_plex_mono_regular,
+    FontWeight.Medium to R.font.ibm_plex_mono_medium,
+    FontWeight.SemiBold to R.font.ibm_plex_mono_semibold,
+    FontWeight.Bold to R.font.ibm_plex_mono_bold,
+    FontWeight.ExtraBold to R.font.ibm_plex_mono_bold,
+    FontWeight.Black to R.font.ibm_plex_mono_bold,
+)
+
+/** The weights [LfFigureFontFamily] answers without synthesizing one. */
+public val LfFigureFontWeights: List<FontWeight> = PlexMonoCuts.map { it.first }
+
+/**
+ * IBM Plex Mono, bundled (SPEC.md §9.2, ADR-0031): the face for amounts, and
+ * from F5 for dates and Home's status line. Monospaced, so figures align
+ * without depending on `tnum`.
+ *
+ * Bundled like Inter and for the same reasons (Law 6). The four files are
+ * `IBMPlexMono-{Regular,Medium,SemiBold,Bold}.ttf` from `google/fonts`
+ * (`ofl/ibmplexmono`), unmodified, renamed only because resource names must be
+ * lower-case; about 550 KB together. Static cuts, so they are registered
+ * directly rather than through XML: there is no axis for a Compose `Font` to
+ * mis-apply. The licence is `assets/licenses/IBMPlexMono-OFL.txt`, in
+ * `assets/` for the reason Inter's is.
+ *
+ * It has ₹, €, £, ¥, `$` and the minus sign. Like Inter it has no Arabic, so
+ * AED's "د.إ" and Arabic-Indic digits fall back to the system font.
+ */
+public val LfFigureFontFamily: FontFamily = FontFamily(
+    PlexMonoCuts.map { (weight, resId) -> Font(resId = resId, weight = weight) },
+)
+
+/**
  * Material's own type scale, in Inter.
  *
  * Every `Lf*` component passes an explicit [LfTypography] style, so this reaches
