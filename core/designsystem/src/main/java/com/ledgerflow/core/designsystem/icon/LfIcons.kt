@@ -36,6 +36,18 @@ public object LfIcons {
     /** "Opens a page": `LfNavRow`'s trailing mark. Auto-mirrored, so it points onward in RTL. */
     public val Chevron: ImageVector by lazy { lucide("Chevron", LfLucide.ChevronRight, autoMirror = true) }
 
+    /** "Opens a choice": the filter bar's period pill (step F5). */
+    public val Expand: ImageVector by lazy { lucide("Expand", LfLucide.ChevronDown) }
+
+    /** Filters (Analytics' filter sheet, step F5). */
+    public val Filter: ImageVector by lazy { lucide("Filter", LfLucide.ListFilter) }
+
+    /** Profile's Organise row: categories, merchants, payment methods, budgets (step F5). */
+    public val Organise: ImageVector by lazy { lucide("Organise", LfLucide.Tag) }
+
+    /** Profile's Data row: backup, restore, export, the bin (step F5). */
+    public val Data: ImageVector by lazy { lucide("Data", LfLucide.Database) }
+
     public val Add: ImageVector by lazy { lucide("Add", LfLucide.Plus) }
     public val Close: ImageVector by lazy { lucide("Close", LfLucide.X) }
     public val Delete: ImageVector by lazy { lucide("Delete", LfLucide.Trash) }

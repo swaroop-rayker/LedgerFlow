@@ -9,8 +9,9 @@ package com.ledgerflow.core.designsystem.icon
  * line-icon family the Night Vault canvas drew in, 2 dp strokes with round
  * ends on a 24 dp grid.
  *
- * Copied, not depended on: 29 files from `lucide-icons/lucide` (`icons/<name>.svg`,
- * fetched 2026-10-28), converted to path data unchanged in shape -- `circle`,
+ * Copied, not depended on: 33 files from `lucide-icons/lucide` (`icons/<name>.svg`,
+ * fetched 2026-10-28; `list-filter`, `chevron-down`, `database` and `tag`
+ * 2026-10-29, step F5), converted to path data unchanged in shape -- `circle`,
  * `rect` and `polyline` written out as the equivalent paths. ISC licence, at
  * `assets/licenses/Lucide-ISC.txt`. A new icon is added here, from the same
  * source, so the family stays one.
@@ -72,6 +73,31 @@ internal object LfLucide {
     /** Lucide `chevron-right`. */
     val ChevronRight: List<String> = listOf(
         "m9 18 6-6-6-6",
+    )
+
+    /** Lucide `chevron-down`. */
+    val ChevronDown: List<String> = listOf(
+        "m6 9 6 6 6-6",
+    )
+
+    /** Lucide `list-filter`. */
+    val ListFilter: List<String> = listOf(
+        "M2 5h20",
+        "M6 12h12",
+        "M9 19h6",
+    )
+
+    /** Lucide `database`; its `ellipse` written out as the equivalent path. */
+    val Database: List<String> = listOf(
+        "M3 5a9 3 0 1 0 18 0a9 3 0 1 0 -18 0z",
+        "M3 5V19A9 3 0 0 0 21 19V5",
+        "M3 12A9 3 0 0 0 21 12",
+    )
+
+    /** Lucide `tag`. Its 0.5-radius dot is filled in the source; stroked 2 dp it draws the same dot. */
+    val Tag: List<String> = listOf(
+        "M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z",
+        "M7 7.5a0.5 0.5 0 1 0 1 0a0.5 0.5 0 1 0 -1 0z",
     )
 
     /** Lucide `settings`. */

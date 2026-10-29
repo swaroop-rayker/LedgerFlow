@@ -2,11 +2,13 @@ package com.ledgerflow.feature.settings
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfNavRow
+import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.pattern.LfPanel
 import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
@@ -39,13 +41,30 @@ public fun ProfileScreen(
         item(key = "rows", contentType = "panel") {
             LfPanel {
                 SettingsSections.filter { it.page in ProfilePages }.forEach { section ->
-                    LfNavRow(title = section.heading, onClick = { onPage(section.page) })
+                    LfNavRow(
+                        title = section.heading,
+                        onClick = { onPage(section.page) },
+                        icon = profileIcon(section.page),
+                    )
                     LfDivider()
                 }
-                LfNavRow(title = "Settings", onClick = onSettings)
+                LfNavRow(title = "Settings", onClick = onSettings, icon = LfIcons.Settings)
             }
         }
     }
+}
+
+/** The tile each Profile row draws (step F5, owner 2026-10-29). */
+private fun profileIcon(page: SettingsPage): ImageVector? = when (page) {
+    SettingsPage.Organise -> LfIcons.Organise
+    SettingsPage.Data -> LfIcons.Data
+    // Reached through the Settings index, which draws no tiles.
+    SettingsPage.Notifications,
+    SettingsPage.Security,
+    SettingsPage.Appearance,
+    SettingsPage.Region,
+    SettingsPage.Tools,
+    -> null
 }
 
 /** The pages Profile opens directly; the Settings index lists the rest. */

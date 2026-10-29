@@ -102,6 +102,39 @@ class AnalyticsRangeSelectionTest {
         assertThat(viewModel.state.value.showCustomSheet).isFalse()
     }
 
+    /** Step F5: a range chosen in the period sheet closes it, the current one included. */
+    @Test
+    fun choosingInThePeriodSheet_closesIt() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AnalyticsEvent.PeriodSheetShown(visible = true))
+        assertThat(viewModel.state.value.showPeriodSheet).isTrue()
+        viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.WEEK))
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.showPeriodSheet).isFalse()
+        assertThat(viewModel.state.value.range).isEqualTo(AnalyticsRange.WEEK)
+
+        // Re-choosing the range in force reloads nothing, and still closes.
+        viewModel.onEvent(AnalyticsEvent.PeriodSheetShown(visible = true))
+        viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.WEEK))
+        assertThat(viewModel.state.value.showPeriodSheet).isFalse()
+    }
+
+    /** Custom in the period sheet swaps it for the Custom sheet, never stacking the two. */
+    @Test
+    fun customInThePeriodSheet_opensTheCustomSheetInItsPlace() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AnalyticsEvent.PeriodSheetShown(visible = true))
+        viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.CUSTOM))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.showPeriodSheet).isFalse()
+        assertThat(viewModel.state.value.showCustomSheet).isTrue()
+    }
+
     /**
      * A typed period becomes the window (§5.6).
      *

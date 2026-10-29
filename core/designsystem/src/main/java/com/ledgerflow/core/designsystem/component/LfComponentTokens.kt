@@ -178,6 +178,30 @@ internal object LfSnackbarTokens {
         @Composable get() = if (LfTheme.colors.isDark) LfLightColors.action.primary else LfDarkColors.action.primary
 }
 
+/** `LfFilterBar`'s two pills (step F5): the overlay surface, as the link banner is. */
+internal object LfFilterBarTokens {
+    val height: Dp = LfLayout.minTouchTarget
+    val shape: Shape @Composable get() = LfTheme.shapes.full
+    val container: Color @Composable get() = LfTheme.colors.surface.overlay
+    val content: Color @Composable get() = LfTheme.colors.text.primary
+    /** The chip's text style: the pill replaced a row of chips and reads at their size. */
+    val labelStyle: TextStyle @Composable get() = LfChipTokens.textStyle
+    val icon: Dp = LfScale.Space16
+    val iconGap: Dp @Composable get() = LfTheme.space.inlineGap
+    val inset: Dp @Composable get() = LfTheme.space.rowInset
+    val gap: Dp @Composable get() = LfTheme.space.itemGap
+}
+
+/** `LfNavRow`'s icon tile (step F5, the reference samples). */
+internal object LfNavRowTokens {
+    val tileSize: Dp = LfLayout.categoryTileSize
+    val tileShape: Shape @Composable get() = LfTheme.shapes.tile
+    /** The overlay surface: a neutral tile, since a page has no colour of its own. */
+    val tileColor: Color @Composable get() = LfTheme.colors.surface.overlay
+    val glyphTint: Color @Composable get() = LfTheme.colors.text.primary
+    val minHeightWithIcon: Dp = LfScale.Space56
+}
+
 internal object LfIconButtonTokens {
     val tint: Color @Composable get() = LfTheme.colors.text.secondary
     val touchTarget: Dp = LfLayout.minTouchTarget

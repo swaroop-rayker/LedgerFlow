@@ -889,7 +889,7 @@ Supports both ledgers (segmented control DEBIT | CREDIT at the top). Supports mu
 
 ### 5.6 Analytics
 
-**Time windows:** Day, Week, Month, 3M, 6M, 1Y, 5Y, Custom range. Every window supports a **previous-period comparison** toggle.
+**Time windows:** Day, Week, Month, 3M, 6M, 1Y, 5Y, Custom range. Every window supports a **previous-period comparison** toggle. **Chosen from the filter bar** (design-system F5, owner 2026-10-29): a pill naming the window in force ("Month"; a custom one by its dates, "3 Aug – 19 Aug", with years when it crosses one) opens a sheet listing the windows in order, the current one marked; beside it, the filter control carries how many filters are on. It replaced a scrolling row of window chips and a separate "Filters" button, two bands of chrome above the charts, for one more tap to change the window.
 
 **Custom is a question, not a range** (BUG21). Tapping it opens a sheet that asks *how far back*, in **years, months and days, which combine** — "1 year 2 months" is one window. That is how people describe a period, and making them express it as two calendar dates is arithmetic the app should do. A **typed month is the calendar month**, unlike `AnalyticsRange.MONTH`'s fixed 30-day *bucket*: the divisor is fixed because grouping needs one, and the person typing "1 month" means the calendar. Inclusive of today, so "the last month" on 4 September is 5 August through 4 September — 31 days.
 
@@ -904,7 +904,7 @@ A live preview names the two dates the period resolves to before Apply is presse
 
 | View | Chart | Phase |
 |---|---|---|
-| Spend over time | Stacked bar (by category) / line (total) with period toggle; drag to pan, pinch to zoom — each gesture **re-queries** at the new resolution (ADR-0005), and the range chip becomes Custom because the window no longer matches a preset | P3 |
+| Spend over time | Stacked bar (by category) / line (total) with period toggle; drag to pan, pinch to zoom — each gesture **re-queries** at the new resolution (ADR-0005), and the window becomes Custom, named by its dates, because it no longer matches a preset | P3 |
 | Category breakdown | Donut + ranked list with % and Δ vs previous period | P3 |
 | Subcategory drill-down | Nested list, tap-to-expand. A squarified **treemap** is offered beside it as a toggle — secondary by design: it answers "which is biggest" at a glance and is worse than a list at everything else, so the list is unchanged under either graphic | P3 |
 | Merchant leaderboard | Horizontal bar, Top-N + "Other" | P3 |

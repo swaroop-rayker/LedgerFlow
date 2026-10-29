@@ -34,6 +34,7 @@ import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.feature.analytics.AnalyticsCustomRangeSheet
 import com.ledgerflow.feature.analytics.AnalyticsEvent
 import com.ledgerflow.feature.analytics.AnalyticsFilterSheet
+import com.ledgerflow.feature.analytics.AnalyticsPeriodSheet
 import com.ledgerflow.feature.analytics.AnalyticsRangePicker
 import com.ledgerflow.feature.analytics.AnalyticsScreen
 import com.ledgerflow.feature.analytics.AnalyticsUiState
@@ -258,6 +259,9 @@ private fun AnalyticsDialogs(state: AnalyticsUiState, onEvent: (AnalyticsEvent) 
     }
     if (state.showRangePicker) {
         AnalyticsRangePicker(onEvent = onEvent)
+    }
+    if (state.showPeriodSheet) {
+        AnalyticsPeriodSheet(state = state, onEvent = onEvent)
     }
 
 }

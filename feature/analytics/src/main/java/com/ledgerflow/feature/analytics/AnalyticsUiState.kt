@@ -50,6 +50,8 @@ public data class AnalyticsUiState(
     /** §5.6's composable filters. [AnalyticsFilters.None] is the fast path. */
     val filters: AnalyticsFilters = AnalyticsFilters.None,
     val showFilterSheet: Boolean = false,
+    /** The period choice the filter bar's pill opens (step F5). */
+    val showPeriodSheet: Boolean = false,
     /** Custom range being picked, or null. */
     val customFrom: Int? = null,
     val customTo: Int? = null,
@@ -165,6 +167,9 @@ public sealed interface AnalyticsEvent {
      * complexity budget.
      */
     public data class FilterSheetShown(val visible: Boolean) : Surface
+
+    /** The period sheet was opened or closed (step F5). See [FilterSheetShown]. */
+    public data class PeriodSheetShown(val visible: Boolean) : Surface
 
     /** The custom-range picker was opened or closed. See [FilterSheetShown]. */
     public data class RangePickerShown(val visible: Boolean) : Surface

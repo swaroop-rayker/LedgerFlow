@@ -5,15 +5,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -47,16 +44,16 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
-import com.ledgerflow.core.designsystem.component.LfChip
-import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
-import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.component.LfFilterBar
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.pattern.LfOptionsSheet
+import com.ledgerflow.core.designsystem.pattern.LfSheetOption
 import com.ledgerflow.core.designsystem.pattern.LfTabPage
-import com.ledgerflow.core.designsystem.pattern.lfFullBleed
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
@@ -92,29 +89,16 @@ public fun AnalyticsScreen(
         title = "Analytics",
         modifier = modifier,
         filters = {
-            RangeRow(selected = state.range, onEvent = onEvent)
-            LfActionRow(alignment = LfActionAlignment.Start) {
-                LfButton(
-                    // The count is on the control, so an active filter is
-                    // visible without opening the sheet -- a screen quietly
-                    // showing a subset is how someone concludes their data is
-                    // missing.
-                    text = if (state.filters.isEmpty) {
-                        "Filters"
-                    } else {
-                        "Filters (" + state.filters.activeCount + ")"
-                    },
-                    onClick = { onEvent(AnalyticsEvent.FilterSheetShown(visible = true)) },
-                    style = LfButtonStyle.Inline,
-                )
-                // **"Custom range" used to sit here and is gone.** Once the
-                // Custom *chip* opened the sheet (BUG21), the button was a
-                // second control for one action — and a duplicate on the one
-                // band of chrome above the scrolling content, which the design
-                // brief says the list pays for. The chip is also the better
-                // affordance: it shows when a custom range is active, which a
-                // button never could.
-            }
+            // One line for the period and the filters (step F5, owner
+            // 2026-10-29): it was a row of seven chips and a "Filters" button
+            // under it. The pill names the period in force, a custom one by
+            // its dates, so the window is never hidden behind the extra tap.
+            LfFilterBar(
+                period = periodPillLabel(state.range, state.customFrom, state.customTo),
+                onPeriod = { onEvent(AnalyticsEvent.PeriodSheetShown(visible = true)) },
+                activeFilters = if (state.filters.isEmpty) 0 else state.filters.activeCount,
+                onFilters = { onEvent(AnalyticsEvent.FilterSheetShown(visible = true)) },
+            )
         },
     ) {
         val snapshot = state.snapshot
@@ -632,29 +616,61 @@ private fun AnalyticsSnapshot.toMerchantBars(currency: String): List<LfBarDatum>
     }
 }
 
+/**
+ * The period sheet (step F5): every range in order, the scale the chip row
+ * was, and Custom last, which opens its own sheet (BUG21). Hosted by the
+ * route with the other Analytics surfaces.
+ */
 @Composable
-private fun RangeRow(selected: AnalyticsRange, onEvent: (AnalyticsEvent) -> Unit) {
-    // A horizontally scrolling row rather than a wrapping one: seven ranges in
-    // chronological order are a scale, and a scale that wraps mid-way reads as
-    // two groups.
-    // Full bleed: the chips scroll under the screen edge rather than stopping
-    // at it, and the content padding starts the first one on the edge.
-    LazyRow(
-        modifier = Modifier.fillMaxWidth().lfFullBleed(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        contentPadding = PaddingValues(
-            horizontal = LfTheme.space.screenEdge,
-        ),
-    ) {
-        items(AnalyticsRange.entries, key = { it.name }) { range ->
-            LfChip(
-                label = range.label,
-                style = if (range == selected) LfChipStyle.Selected else LfChipStyle.Assist,
+public fun AnalyticsPeriodSheet(state: AnalyticsUiState, onEvent: (AnalyticsEvent) -> Unit) {
+    LfOptionsSheet(
+        title = "Period",
+        options = AnalyticsRange.entries.map { range ->
+            LfSheetOption(
+                label = periodName(range),
+                // The one in force says so; a custom one by its dates.
+                value = when {
+                    range != state.range -> null
+                    range == AnalyticsRange.CUSTOM -> periodPillLabel(range, state.customFrom, state.customTo)
+                    else -> "Current"
+                },
                 onClick = { onEvent(AnalyticsEvent.RangeSelected(range)) },
             )
-        }
+        },
+        onDismiss = { onEvent(AnalyticsEvent.PeriodSheetShown(visible = false)) },
+    )
+}
+
+/** A range by name, in words: the chips' "3M" was a label for a tight row. */
+internal fun periodName(range: AnalyticsRange): String = when (range) {
+    AnalyticsRange.DAY -> "Day"
+    AnalyticsRange.WEEK -> "Week"
+    AnalyticsRange.MONTH -> "Month"
+    AnalyticsRange.THREE_MONTHS -> "3 months"
+    AnalyticsRange.SIX_MONTHS -> "6 months"
+    AnalyticsRange.YEAR -> "1 year"
+    AnalyticsRange.FIVE_YEARS -> "5 years"
+    AnalyticsRange.CUSTOM -> "Custom range"
+}
+
+/**
+ * What the filter bar's pill says: the range's name, or a custom window's two
+ * dates ("3 Aug – 19 Aug"; with years when it crosses one). A custom range
+ * with no dates yet reads as its name.
+ */
+internal fun periodPillLabel(range: AnalyticsRange, from: Int?, to: Int?): String {
+    if (range != AnalyticsRange.CUSTOM || from == null || to == null) return periodName(range)
+    val start = java.time.LocalDate.ofEpochDay(from.toLong())
+    val end = java.time.LocalDate.ofEpochDay(to.toLong())
+    return if (start.year == end.year) {
+        DisplayDates.dayMonth(start) + RANGE_DASH + DisplayDates.dayMonth(end)
+    } else {
+        DisplayDates.dayMonthYear(start) + RANGE_DASH + DisplayDates.dayMonthYear(end)
     }
 }
+
+/** An en dash between spaces, as a code point (CLAUDE.md 5). */
+private val RANGE_DASH: String = " " + Char(0x2013) + " "
 
 @Composable
 private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {

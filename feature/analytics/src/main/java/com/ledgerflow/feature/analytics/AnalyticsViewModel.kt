@@ -139,6 +139,9 @@ public class AnalyticsViewModel @Inject constructor(
                 is AnalyticsEvent.RangePickerShown ->
                     current.copy(showRangePicker = event.visible)
 
+                is AnalyticsEvent.PeriodSheetShown ->
+                    current.copy(showPeriodSheet = event.visible)
+
                 // Opening the date picker closes the sheet behind it: they are
                 // two answers to one question, and leaving the sheet stacked
                 // under the picker means cancelling lands back on a form the
@@ -189,6 +192,9 @@ public class AnalyticsViewModel @Inject constructor(
      * something — the same reason `showSurface` exists.
      */
     private fun selectRange(range: AnalyticsRange) {
+        // A choice made in the period sheet closes it, whichever way it goes
+        // below: Custom opens its own sheet in its place (step F5).
+        _state.update { it.copy(showPeriodSheet = false) }
         // **Custom is a question, not a range.** Selecting it cannot set a
         // window, because the dates are the user's to choose — so the chip
         // opens the Custom sheet instead. It did not, and the result was a
