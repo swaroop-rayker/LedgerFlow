@@ -36,6 +36,9 @@ public object LfIcons {
     /** "Opens a page": `LfNavRow`'s trailing mark. Auto-mirrored, so it points onward in RTL. */
     public val Chevron: ImageVector by lazy { lucide("Chevron", LfLucide.ChevronRight, autoMirror = true) }
 
+    /** A page's way back (step F5's top bar). Auto-mirrored, so it points back in RTL. */
+    public val Back: ImageVector by lazy { lucide("Back", LfLucide.ChevronLeft, autoMirror = true) }
+
     /** "Opens a choice": the filter bar's period pill (step F5). */
     public val Expand: ImageVector by lazy { lucide("Expand", LfLucide.ChevronDown) }
 

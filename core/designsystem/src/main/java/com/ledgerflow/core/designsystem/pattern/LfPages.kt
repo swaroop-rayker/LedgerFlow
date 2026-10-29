@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -22,16 +24,22 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfBottomSheet
+import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfTitleBlock
+import com.ledgerflow.core.designsystem.component.LfTopBarTokens
+import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /*
@@ -107,6 +115,7 @@ public fun LfDetailPage(
     spacing: LfPageSpacing = LfPageSpacing.Rows,
     pinHeader: Boolean = false,
     listState: LazyListState = rememberLazyListState(),
+    onBack: (() -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     LfScaffold(
@@ -115,7 +124,7 @@ public fun LfDetailPage(
         snackbarHostState = snackbarHostState,
     ) { padding ->
         PageList(
-            header = PageHeader(title, subtitle, actions, actionsAlignment, search, filters, notices),
+            header = PageHeader(title, subtitle, actions, actionsAlignment, search, filters, notices, onBack),
             statusContent = statusContent,
             spacing = spacing,
             pinHeader = pinHeader,
@@ -141,6 +150,7 @@ public fun LfSettingsPage(
     notices: (@Composable ColumnScope.() -> Unit)? = null,
     statusContent: (@Composable ColumnScope.() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
+    onBack: (() -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     LfDetailPage(
@@ -153,6 +163,7 @@ public fun LfSettingsPage(
         statusContent = statusContent,
         snackbarHostState = snackbarHostState,
         spacing = LfPageSpacing.Sections,
+        onBack = onBack,
         content = content,
     )
 }
@@ -310,16 +321,50 @@ private class PageHeader(
     val search: (@Composable () -> Unit)?,
     val filters: (@Composable () -> Unit)?,
     val notices: (@Composable ColumnScope.() -> Unit)?,
+    val onBack: (() -> Unit)? = null,
 ) {
     @Composable
     fun Draw() {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             actions?.let { LfActionRow(alignment = actionsAlignment) { it() } }
-            title?.let { LfTitleBlock(title = it, subtitle = subtitle) }
+            when {
+                title != null && onBack != null -> BackTitleBar(title, subtitle, onBack)
+                title != null -> LfTitleBlock(title = title, subtitle = subtitle)
+            }
             search?.invoke()
             filters?.invoke()
             notices?.let { Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) { it() } }
         }
+    }
+}
+
+/**
+ * The top bar of a page with a way back (step F5, the Night Vault canvas):
+ * a back arrow and the title on one line, the title at heading size. It
+ * replaced a "Back" button above a display-size title, about 48 dp above
+ * every Settings page (owner, 2026-10-29).
+ *
+ * The arrow's glyph sits on the screen edge, its 48 dp target reaching into
+ * the margin, so the title starts where the content below it does plus the
+ * arrow, rather than a whole target in.
+ */
+@Composable
+private fun BackTitleBar(title: String, subtitle: String?, onBack: () -> Unit) {
+    val tokens = LfTopBarTokens
+    Column(verticalArrangement = Arrangement.spacedBy(tokens.gap)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().offset(x = tokens.backOffset),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LfIconButton(icon = LfIcons.Back, contentDescription = "Back", onClick = onBack, tint = tokens.icon)
+            Text(
+                text = title,
+                style = tokens.titleStyle,
+                color = tokens.title,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
+        }
+        subtitle?.let { Text(text = it, style = tokens.subtitleStyle, color = tokens.subtitle) }
     }
 }
 

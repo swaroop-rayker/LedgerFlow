@@ -75,6 +75,11 @@ internal object LfLucide {
         "m9 18 6-6-6-6",
     )
 
+    /** Lucide `chevron-left`: `chevron-right` mirrored, which is how Lucide draws it. */
+    val ChevronLeft: List<String> = listOf(
+        "m15 18-6-6 6-6",
+    )
+
     /** Lucide `chevron-down`. */
     val ChevronDown: List<String> = listOf(
         "m6 9 6 6 6-6",

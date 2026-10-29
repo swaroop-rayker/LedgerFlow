@@ -258,6 +258,18 @@ internal object LfNavTokens {
     val fabContent: Color @Composable get() = LfTheme.colors.action.onPrimary
 }
 
+/** A page's back-arrow top bar (step F5). */
+internal object LfTopBarTokens {
+    val gap: Dp = LfScale.Space4
+    val titleStyle: TextStyle @Composable get() = LfTheme.type.heading
+    val title: Color @Composable get() = LfTheme.colors.text.primary
+    val subtitleStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
+    val subtitle: Color @Composable get() = LfTheme.colors.text.secondary
+    val icon: Color @Composable get() = LfTheme.colors.text.primary
+    /** Pulls the arrow's 48 dp target into the margin, so its glyph sits on the screen edge. */
+    val backOffset: Dp = -(LfIconButtonTokens.touchTarget - LfIconButtonTokens.glyph) / 2
+}
+
 internal object LfScreenTitleTokens {
     val paddingHorizontal: Dp @Composable get() = LfTheme.space.screenEdge
     val paddingVertical: Dp = LfScale.Space16

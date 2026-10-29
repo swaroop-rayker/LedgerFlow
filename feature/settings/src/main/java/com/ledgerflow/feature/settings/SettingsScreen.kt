@@ -2,7 +2,9 @@ package com.ledgerflow.feature.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,22 +13,24 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.component.LfButton
-import com.ledgerflow.core.designsystem.component.LfButtonStyle
-import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.pattern.LfPanel
 import com.ledgerflow.core.designsystem.pattern.LfSettingsPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
@@ -95,13 +99,15 @@ public fun SettingsSectionScreen(
     LfSettingsPage(
         title = section.heading,
         modifier = modifier,
-        actions = { LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline) },
+        onBack = onBack,
     ) {
-        // One item rather than one per row, so the rows keep the 8 dp between
-        // them they had under their heading on the old tab.
+        // One panel per page, with hairlines between its rows (step F5, owner
+        // 2026-10-29), as the index and Profile are: a card per row read as
+        // a stack of separate things.
         item(key = page.name, contentType = "section") {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                section.items.forEach { item ->
+            LfPanel {
+                section.items.forEachIndexed { index, item ->
+                    if (index > 0) LfDivider()
                     SettingsItemRow(item = item, state = state, onClick = links[item], onEvent = onEvent)
                 }
             }
@@ -455,25 +461,49 @@ internal fun captureSubtitle(state: SettingsUiState): String = when (state.captu
 
 @Composable
 private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
-    LfCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .clickable(onClick = onClick),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = title,
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
-            )
-            Text(
-                text = subtitle,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+    PanelRow(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            ) {
+                Text(
+                    text = title,
+                    style = LfTheme.typography.bodyL,
+                    color = LfTheme.colors.textPrimary,
+                )
+                Text(
+                    text = subtitle,
+                    style = LfTheme.typography.bodyM,
+                    color = LfTheme.colors.textSecondary,
+                )
+            }
+            // It opens a page, as the index's rows do (step F5). Decoration:
+            // the row's click already says so.
+            Icon(
+                imageVector = LfIcons.Chevron,
+                contentDescription = null,
+                tint = LfTheme.colors.text.muted,
+                modifier = Modifier.padding(start = LfTheme.space.itemGap),
             )
         }
     }
+}
+
+/**
+ * A row's frame inside the page's panel (step F5): the card's inset without
+ * the card, so the rows' text sits where it did and the panel is the one
+ * outline. Tappable only when it leads somewhere.
+ */
+@Composable
+private fun PanelRow(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(LfTheme.space.cardInset),
+    ) { content() }
 }
 
 /** One row: a way somewhere when [onClick] is given, otherwise a choice made in place. */
@@ -502,7 +532,7 @@ private fun SettingsItemRow(
  */
 @Composable
 private fun InfoRow(title: String, subtitle: String) {
-    LfCard(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)) {
+    PanelRow {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
             Text(text = title, style = LfTheme.typography.bodyL, color = LfTheme.colors.textPrimary)
             Text(text = subtitle, style = LfTheme.typography.bodyM, color = LfTheme.colors.textSecondary)
@@ -573,7 +603,7 @@ private fun OptionsDialog(
  */
 @Composable
 private fun ToggleRow(title: String, toggle: SettingsToggle, subtitle: String, onEvent: (SettingsEvent) -> Unit) {
-    LfCard(modifier = Modifier.fillMaxWidth()) {
+    PanelRow {
         LfSwitchRow(
             label = title,
             checked = toggle.checked,
@@ -586,7 +616,7 @@ private fun ToggleRow(title: String, toggle: SettingsToggle, subtitle: String, o
 }
 
 /**
- * A choice made in place (Appearance): the same card as [SettingsRow], so the
+ * A choice made in place (Appearance): the same frame as [SettingsRow], so the
  * screen keeps one shape, with the options between the title and the sentence
  * that says what the current one means. It applies on tap; there is nothing to
  * confirm, and the theme visibly changing is the confirmation.
@@ -601,7 +631,7 @@ private fun ChoiceRow(
     subtitle: String,
     onEvent: (SettingsEvent) -> Unit,
 ) {
-    LfCard(modifier = Modifier.fillMaxWidth()) {
+    PanelRow {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
             Text(
                 text = title,

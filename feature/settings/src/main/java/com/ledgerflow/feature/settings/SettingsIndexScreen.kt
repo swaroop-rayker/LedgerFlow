@@ -5,8 +5,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.component.LfButton
-import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfNavRow
 import com.ledgerflow.core.designsystem.pattern.LfPanel
@@ -35,7 +33,7 @@ public fun SettingsIndexScreen(
     LfSettingsPage(
         title = "Settings",
         modifier = modifier,
-        actions = { LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline) },
+        onBack = onBack,
     ) {
         item(key = "pages", contentType = "panel") {
             LfPanel {
