@@ -48,6 +48,8 @@ public fun LfSwitchRow(
      * as its neighbours. The default stays the compact form forms use.
      */
     prominent: Boolean = false,
+    /** The supporting line in Plex Mono, for an identifier (a package name, step F5). */
+    figureSupporting: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -75,10 +77,10 @@ public fun LfSwitchRow(
             if (supporting != null) {
                 Text(
                     text = supporting,
-                    style = if (prominent) {
-                        LfSwitchRowTokens.prominentSupportingStyle
-                    } else {
-                        LfSwitchRowTokens.supportingStyle
+                    style = when {
+                        figureSupporting -> LfSwitchRowTokens.figureSupportingStyle
+                        prominent -> LfSwitchRowTokens.prominentSupportingStyle
+                        else -> LfSwitchRowTokens.supportingStyle
                     },
                     color = LfSwitchRowTokens.supporting,
                 )

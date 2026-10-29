@@ -2,7 +2,7 @@ package com.ledgerflow.feature.settings.backup
 
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
@@ -16,8 +16,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * BUG76: Back up now is a full-screen page with no bottom bar, and it drew no
- * Back or Done -- the system gesture was the only way out. It has "Done" now,
- * which is off while a backup is being written.
+ * Back or Done -- the system gesture was the only way out. It had "Done", and
+ * since step F5 the back arrow beside its title, which is off while a backup
+ * is being written.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -39,12 +40,13 @@ class Bug76_BackUpNowHasAWayBackTest {
                 )
             }
         }
-        rule.onNodeWithText("Done").performClick()
+        rule.onNodeWithContentDescription("Back").performClick()
         assertThat(left).isEqualTo(1)
     }
 
     @Test
     fun done_waitsForABackupInProgress() {
+        var left = 0
         rule.setContent {
             LfTheme {
                 BackupNowScreen(
@@ -54,10 +56,11 @@ class Bug76_BackUpNowHasAWayBackTest {
                         isWorking = true,
                     ),
                     onEvent = {},
-                    onBack = {},
+                    onBack = { left++ },
                 )
             }
         }
-        rule.onNodeWithText("Done").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Back").assertIsNotEnabled().performClick()
+        assertThat(left).isEqualTo(0)
     }
 }

@@ -189,6 +189,9 @@ public fun LfFormPage(
     notices: (@Composable ColumnScope.() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
     spacing: LfPageSpacing = LfPageSpacing.Rows,
+    onBack: (() -> Unit)? = null,
+    /** False while leaving would interrupt work (Back up now while it writes). */
+    backEnabled: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val space = LfTheme.space
@@ -208,8 +211,17 @@ public fun LfFormPage(
             // Nothing at all when there is no header: an empty one would still
             // take a gap above the first field.
             if (title != null || actions != null || notices != null) {
-                PageHeader(title, subtitle, actions, actionsAlignment, search = null, filters = null, notices = notices)
-                    .Draw()
+                PageHeader(
+                    title,
+                    subtitle,
+                    actions,
+                    actionsAlignment,
+                    search = null,
+                    filters = null,
+                    notices = notices,
+                    onBack = onBack,
+                    backEnabled = backEnabled,
+                ).Draw()
             }
             content()
             Spacer(Modifier.height(space.listEnd))
@@ -322,13 +334,14 @@ private class PageHeader(
     val filters: (@Composable () -> Unit)?,
     val notices: (@Composable ColumnScope.() -> Unit)?,
     val onBack: (() -> Unit)? = null,
+    val backEnabled: Boolean = true,
 ) {
     @Composable
     fun Draw() {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             actions?.let { LfActionRow(alignment = actionsAlignment) { it() } }
             when {
-                title != null && onBack != null -> BackTitleBar(title, subtitle, onBack)
+                title != null && onBack != null -> BackTitleBar(title, subtitle, onBack, backEnabled)
                 title != null -> LfTitleBlock(title = title, subtitle = subtitle)
             }
             search?.invoke()
@@ -349,14 +362,21 @@ private class PageHeader(
  * arrow, rather than a whole target in.
  */
 @Composable
-private fun BackTitleBar(title: String, subtitle: String?, onBack: () -> Unit) {
+private fun BackTitleBar(title: String, subtitle: String?, onBack: () -> Unit, enabled: Boolean) {
     val tokens = LfTopBarTokens
     Column(verticalArrangement = Arrangement.spacedBy(tokens.gap)) {
         Row(
             modifier = Modifier.fillMaxWidth().offset(x = tokens.backOffset),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LfIconButton(icon = LfIcons.Back, contentDescription = "Back", onClick = onBack, tint = tokens.icon)
+            LfIconButton(
+                icon = LfIcons.Back,
+                contentDescription = "Back",
+                onClick = onBack,
+                tint = tokens.icon,
+                glyph = tokens.backGlyph,
+                enabled = enabled,
+            )
             Text(
                 text = title,
                 style = tokens.titleStyle,
@@ -454,7 +474,13 @@ private fun PageList(
             contentPadding = padding,
             verticalArrangement = Arrangement.spacedBy(gap),
         ) {
-            item(key = HEADER_KEY, contentType = HEADER_KEY) { header.Draw() }
+            item(key = HEADER_KEY, contentType = HEADER_KEY) {
+                // A list of one panel puts no gap between its items, so the
+                // header keeps the one it would have had (step F5).
+                Box(Modifier.padding(bottom = if (spacing == LfPageSpacing.None) space.itemGap else 0.dp)) {
+                    header.Draw()
+                }
+            }
             body()
         }
     }

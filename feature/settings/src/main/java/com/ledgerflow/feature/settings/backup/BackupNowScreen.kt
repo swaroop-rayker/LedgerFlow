@@ -63,17 +63,16 @@ public fun BackupNowScreen(
 
     KitFlow(state, onEvent)
 
-    // BUG76: a full-screen page with no on-screen way out. "Done" above the
-    // title, at the end (BUG17), as Export and Organise have it -- off while a
-    // backup is being written, so the screen is not left mid-write.
+    // BUG76: a full-screen page with no on-screen way out. Since step F5 the
+    // way out is the back arrow beside the title, as on the Profile and
+    // Settings pages it is reached from (owner, 2026-10-29) -- still off
+    // while a backup is being written, so the screen is not left mid-write.
     LfFormPage(
         title = "Back up now",
         actionBar = { SubmitBar(state, onEvent) },
         modifier = modifier,
-        actions = {
-            LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack, enabled = !state.isWorking)
-        },
-        actionsAlignment = LfActionAlignment.End,
+        onBack = onBack,
+        backEnabled = !state.isWorking,
         spacing = LfPageSpacing.Sections,
     ) {
         Explanation(state.nightlyBackupsEnabled)

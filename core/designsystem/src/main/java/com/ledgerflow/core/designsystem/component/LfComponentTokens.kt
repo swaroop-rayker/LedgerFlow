@@ -210,9 +210,12 @@ internal object LfIconButtonTokens {
     /** The ring a pressed icon draws: the touch target less 4 dp on each side. */
     val stateLayerInset: Dp = LfScale.Space4
     val glyph: Dp = LfScale.Space16
+    /** Material's disabled-content opacity, for an icon that cannot be pressed. */
+    const val disabledAlpha: Float = 0.38f
 }
 
 internal object LfSwitchRowTokens {
+    val figureSupportingStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
     val prominentGap: Dp = LfScale.Space4
     val title: Color @Composable get() = LfTheme.colors.text.primary
     val supporting: Color @Composable get() = LfTheme.colors.text.secondary
@@ -266,8 +269,10 @@ internal object LfTopBarTokens {
     val subtitleStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
     val subtitle: Color @Composable get() = LfTheme.colors.text.secondary
     val icon: Color @Composable get() = LfTheme.colors.text.primary
+    /** The arrow at the bar's icon size (owner, 2026-10-29): 16 dp read light beside a heading. */
+    val backGlyph: Dp = LfScale.Space24
     /** Pulls the arrow's 48 dp target into the margin, so its glyph sits on the screen edge. */
-    val backOffset: Dp = -(LfIconButtonTokens.touchTarget - LfIconButtonTokens.glyph) / 2
+    val backOffset: Dp = -(LfIconButtonTokens.touchTarget - backGlyph) / 2
 }
 
 internal object LfScreenTitleTokens {
