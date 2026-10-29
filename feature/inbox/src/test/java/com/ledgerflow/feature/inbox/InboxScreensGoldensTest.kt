@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.inbox
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.InboxFilter
@@ -48,13 +49,23 @@ open class InboxScreensGoldensTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun inbox(name: String, state: InboxUiState, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun inbox(
+        name: String,
+        state: InboxUiState,
+        fontScale: Float,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, direction) {
             LfTheme { InboxScreen(state = state, onEvent = {}, onReview = {}) }
         }
 
-    private fun review(name: String, state: ReviewUiState, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun review(
+        name: String,
+        state: ReviewUiState,
+        fontScale: Float,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, direction) {
             LfTheme { ReviewScreen(state = state, onEvent = {}, onDone = {}, onBack = {}) }
         }
 
@@ -166,6 +177,9 @@ open class InboxScreensGoldensTest {
     @Config(qualifiers = PHONE_2X)
     @Test fun queue_2x() = inbox("inbox-queue-2x", queue, 2f)
 
+    /** Step F5: the queue as one panel, and its filter row, read from the right. */
+    @Test fun queueRtl_1x() = inbox("inbox-queue-rtl-1x", queue, 1f, LayoutDirection.Rtl)
+
     @Test fun empty_1x() = inbox("inbox-empty-1x", InboxUiState(loading = false), 1f)
 
     @Config(qualifiers = PHONE_2X)
@@ -191,6 +205,9 @@ open class InboxScreensGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun reviewParsed_2x() = review("review-parsed-2x", parsed, 2f)
+
+    /** Step F5: the amount card's payee, tag and figure, read from the right. */
+    @Test fun reviewParsedRtl_1x() = review("review-parsed-rtl-1x", parsed, 1f, LayoutDirection.Rtl)
 
     @Test fun reviewUnparsed_1x() = review("review-unparsed-1x", unparsed, 1f)
 

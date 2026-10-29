@@ -342,6 +342,7 @@ private fun NavGraphBuilder.captureAndReviewDestinations(navController: NavHostC
             state = state,
             onEvent = viewModel::onEvent,
             onReview = { pendingId -> navController.navigate(Destination.InboxReview(pendingId)) },
+            onAddEntry = { navController.navigate(Destination.Entry()) },
         )
     }
     composable<Destination.InboxReview> {

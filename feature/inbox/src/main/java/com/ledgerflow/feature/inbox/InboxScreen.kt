@@ -1,7 +1,6 @@
 package com.ledgerflow.feature.inbox
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,16 +45,23 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
-import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
-import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.component.lfGroupPosition
+import com.ledgerflow.core.designsystem.component.lfGroupSlice
+import com.ledgerflow.core.designsystem.component.shape
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.pattern.lfFullBleed
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingTransaction
@@ -95,6 +103,7 @@ public fun InboxScreen(
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onAddEntry: () -> Unit = {},
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -139,14 +148,34 @@ public fun InboxScreen(
         // instead of a page with filters and nothing under them.
         statusContent = when {
             state.loading -> { { LfStateContent(state = LfContentState.Loading) {} } }
-            state.rows.isEmpty() -> { { LfEmptyState(title = state.emptyTitle(), body = state.emptyBody()) } }
+            state.rows.isEmpty() -> { { EmptyQueue(state, onAddEntry) } }
             else -> null
         },
         snackbarHostState = snackbarHostState,
         pinHeader = true,
+        // The rows join into one panel (step F5), so the list puts no gap
+        // between them.
+        spacing = LfPageSpacing.None,
     ) {
         candidateRows(state, onEvent, onReview)
     }
+}
+
+/**
+ * An empty filter. On Pending, the canvas's way forward (owner, 2026-10-29):
+ * the same Add entry the bar's + opens, for the payment no message announced.
+ */
+@Composable
+private fun EmptyQueue(state: InboxUiState, onAddEntry: () -> Unit) {
+    val pending = state.filter == InboxFilter.PENDING
+    LfEmptyState(
+        title = state.emptyTitle(),
+        body = state.emptyBody(),
+        // "Add an entry", not the canvas's "...yourself": that needed 288 dp
+        // at font scale 2.0 in a 200 dp slot (BUG9's guard caught it).
+        actionLabel = if (pending) "Add an entry" else null,
+        onAction = if (pending) onAddEntry else null,
+    )
 }
 
 /**
@@ -158,14 +187,17 @@ private fun LazyListScope.candidateRows(
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
-    items(
+    // One panel for the queue, its rows drawing their own slices (step F5),
+    // as the Ledger's days do: a list to scan, not a stack of cards.
+    itemsIndexed(
         items = state.rows,
-        key = { it.id },
+        key = { _, row -> row.id },
         // One row type, so the compiler can reuse every slot.
-        contentType = { "pending" },
-    ) { row ->
+        contentType = { _, _ -> "pending" },
+    ) { index, row ->
         SwipeableRow(
             row = row,
+            position = lfGroupPosition(index, state.rows.size),
             selectable = state.canErase,
             selected = row.id in state.selected,
             onEvent = onEvent,
@@ -179,7 +211,8 @@ private fun LazyListScope.candidateRows(
  *
  * Chips rather than a segmented control: the options do not fit a segmented
  * control's fixed track at font scale 2.0 without truncating, and truncating a
- * label is BUG9. In an [LfActionRow] so they wrap as whole chips instead.
+ * label is BUG9. On one scrolling line since step F5, so a chip that does not
+ * fit scrolls into view whole rather than wrapping the band.
  *
  * **Adaptive, because four chips were two too many** (owner). `Suppressed` is
  * empty unless a payment arrived twice, and `Failed` is empty by construction —
@@ -191,21 +224,32 @@ private fun LazyListScope.candidateRows(
  * would hide those rows on the day something finally writes one. See
  * [InboxUiState.visibleFilters].
  *
- * The count rides the label — `Discarded · 4` — the same shape the Ledger's
- * bands use, so "is there anything in there" is answered without a tap.
+ * The count follows the label in Plex Mono (`Discarded 4`, step F5), so "is
+ * there anything in there" is answered without a tap.
  */
 @Composable
 private fun FilterBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
-    LfActionRow(alignment = LfActionAlignment.Start) {
-        state.visibleFilters.forEach { filter ->
+    // **One line, scrolling** (step F5): three chips wrapped to two lines at
+    // phone width, a whole band charged to the queue. They scroll under the
+    // screen edge as Analytics' range chips did, so the last one visibly
+    // continues rather than ending at the margin.
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().lfFullBleed(),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+        contentPadding = PaddingValues(horizontal = LfTheme.space.screenEdge),
+    ) {
+        items(state.visibleFilters, key = { it.name }) { filter ->
             val count = state.counts[filter] ?: 0
             LfChip(
-                // No count on an empty chip: "Discarded · 0" is a label for a
-                // thing that is not there, and the only empty chips drawn are
-                // the two this row keeps on purpose.
-                label = if (count > 0) "${filter.label()} · $count" else filter.label(),
+                label = filter.label(),
                 style = if (filter == state.filter) LfChipStyle.Selected else LfChipStyle.Assist,
                 onClick = { onEvent(InboxEvent.FilterSelected(filter)) },
+                // No count on an empty chip: "Discarded 0" is a label for a
+                // thing that is not there, and the only empty chips drawn are
+                // the two this row keeps on purpose.
+                count = count.takeIf { it > 0 },
+                // Said whole, as the label once wrote it.
+                contentDescription = if (count > 0) "${filter.label()}, $count" else null,
             )
         }
     }
@@ -311,13 +355,14 @@ private fun EraseConfirmationDialog(
 @Composable
 private fun SwipeableRow(
     row: PendingTransaction,
+    position: LfGroupPosition,
     selectable: Boolean,
     selected: Boolean,
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
     if (row.status != PendingStatus.PENDING) {
-        PendingRow(row, selectable, selected, onEvent, onReview)
+        PendingRow(row, position, selectable, selected, onEvent, onReview)
         return
     }
 
@@ -345,7 +390,9 @@ private fun SwipeableRow(
                     .fillMaxSize()
                     // Discarding is a destructive action, not money, so the
                     // track takes the danger tint rather than the debit colour.
-                    .background(LfTheme.colors.status.dangerSubtle, LfTheme.shapes.row)
+                    // The slice's corners, so the track keeps the panel's
+                    // outline as the row slides off it.
+                    .background(LfTheme.colors.status.dangerSubtle, position.shape(LfLayout.panelRadius))
                     .padding(horizontal = LfTheme.spacing.md),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -357,7 +404,7 @@ private fun SwipeableRow(
             }
         },
     ) {
-        PendingRow(row, selectable, selected, onEvent, onReview)
+        PendingRow(row, position, selectable, selected, onEvent, onReview)
     }
 }
 
@@ -377,6 +424,7 @@ private fun SwipeableRow(
 @Composable
 private fun PendingRow(
     row: PendingTransaction,
+    position: LfGroupPosition,
     selectable: Boolean,
     selected: Boolean,
     onEvent: (InboxEvent) -> Unit,
@@ -385,8 +433,14 @@ private fun PendingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceBase, LfTheme.shapes.row)
-            .border(LfTheme.borders.hairline, LfTheme.colors.outline, LfTheme.shapes.row)
+            .lfGroupSlice(
+                position = position,
+                container = LfTheme.colors.surface.raised,
+                edge = LfTheme.colors.border.subtle,
+                edgeWidth = LfTheme.borders.hairline,
+                radius = LfLayout.panelRadius,
+                dividerInset = LfTheme.space.rowInset,
+            )
             .padding(
                 start = if (selectable) LfTheme.spacing.xs else LfTheme.spacing.md,
                 end = LfTheme.spacing.md,
@@ -474,6 +528,9 @@ private fun RowBody(
                 // useful of the three and the one still visible on the review
                 // screen.
                 text = row.detailLine(),
+                // Inter, not the entry rows' Plex Mono (step F5): this line is
+                // mostly words, and Plex's width cut "needs details" to "needs
+                // detai..." on a phone-width row, the one word that says why.
                 style = LfTheme.typography.label,
                 color = LfTheme.colors.textTertiary,
                 // Two lines, not one: at font scale 2.0 one line cut the stamp to

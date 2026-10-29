@@ -36,7 +36,7 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfActionRow
-import com.ledgerflow.core.designsystem.component.LfAmountField
+import com.ledgerflow.core.designsystem.component.LfAmountCard
 import com.ledgerflow.core.designsystem.component.LfAmountTone
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
@@ -160,7 +160,9 @@ private fun EntryFields(
 ) {
     LedgerSelector(state, onEvent)
 
-    LfAmountField(
+    // In the capture forms' head card (step F5), as Review's is. The book is
+    // the control above it, so the card carries no tag of its own.
+    LfAmountCard(
         value = state.amountText,
         onValueChange = { onEvent(EntryEvent.AmountChanged(it)) },
         currencyCode = state.currencyCode,

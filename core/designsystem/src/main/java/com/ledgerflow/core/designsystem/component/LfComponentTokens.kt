@@ -107,6 +107,8 @@ internal object LfChipTokens {
     val paddingVertical: Dp = LfScale.Space8
     val gap: Dp = LfScale.Space8
     val textStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
+    /** A chip's count (step F5): a figure, so Plex Mono. */
+    val countStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
     val supportingStyle: TextStyle @Composable get() = LfTheme.type.label
     val supporting: Color @Composable get() = LfTheme.colors.text.muted
 
@@ -335,6 +337,23 @@ internal object LfDividerTokens {
 
 internal object LfCategoryDotTokens {
     val size: Dp = LfLayout.categoryDotSize
+}
+
+/** `LfAmountCard` (step F5): the capture forms' head card. */
+internal object LfAmountCardTokens {
+    val gap: Dp = LfScale.Space8
+    val titleStyle: TextStyle @Composable get() = LfTheme.type.heading
+    val title: Color @Composable get() = LfTheme.colors.text.primary
+    val detailStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
+    val detail: Color @Composable get() = LfTheme.colors.text.muted
+    val debit: Color @Composable get() = LfTheme.colors.money.outgoing
+    val credit: Color @Composable get() = LfTheme.colors.money.incoming
+    val tagStyle: TextStyle @Composable get() = LfTheme.type.label
+    val tagShape: Shape @Composable get() = LfTheme.shapes.full
+    val tagBorder: Color @Composable get() = LfTheme.colors.border.subtle
+    val tagBorderWidth: Dp @Composable get() = LfTheme.borders.hairline
+    val tagInsetHorizontal: Dp = LfScale.Space8
+    val tagInsetVertical: Dp = LfScale.Space4
 }
 
 internal object LfAmountFieldTokens {

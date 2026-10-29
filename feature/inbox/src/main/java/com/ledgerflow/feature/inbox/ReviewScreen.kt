@@ -17,17 +17,19 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfAmountCard
+import com.ledgerflow.core.designsystem.component.LfAmountTone
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfContentState
+import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfFeedback
-import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfFormPage
@@ -99,9 +101,10 @@ public fun ReviewScreen(
         return
     }
 
+    // Where it came from moved into the amount card (step F5), beside the
+    // figure it explains.
     LfFormPage(
         title = "Review",
-        subtitle = state.provenanceLine(),
         actionBar = { ReviewActions(state, onEvent, onBack) },
         modifier = modifier,
     ) {
@@ -150,11 +153,23 @@ private fun ReviewFields(
 ) {
     state.capturedText?.let { CapturedMessage(it) }
 
-    LfTextField(
+    // The canvas's head card (step F5, owner 2026-10-29): the payee, the book
+    // as a word, the amount large in its book's colour, and the source. No
+    // tag and a neutral figure while the book is unread: colouring it would
+    // be the guess Law 2 forbids, made in pixels.
+    LfAmountCard(
         value = state.amountText,
         onValueChange = { onEvent(ReviewEvent.AmountChanged(it)) },
+        currencyCode = state.currencyCode,
         label = "Amount",
-        modifier = Modifier.fillMaxWidth(),
+        title = state.selectedMerchant,
+        tag = state.ledger?.label(),
+        tone = when (state.ledger) {
+            null -> LfAmountTone.Neutral
+            LedgerType.DEBIT -> LfAmountTone.Debit
+            LedgerType.CREDIT -> LfAmountTone.Credit
+        },
+        detail = state.provenanceLine(),
     )
 
     // Under the amount, because that is the order of the decision:
@@ -203,9 +218,11 @@ private fun CapturedMessage(text: String) {
                 color = LfTheme.colors.textTertiary,
             )
             SelectionContainer {
+                // Plex Mono, as the canvas draws it (step F5): the message
+                // verbatim, the source the fields are read from.
                 Text(
                     text = text,
-                    style = LfTheme.typography.bodyM,
+                    style = LfTheme.type.figureLabel,
                     color = LfTheme.colors.textSecondary,
                 )
             }

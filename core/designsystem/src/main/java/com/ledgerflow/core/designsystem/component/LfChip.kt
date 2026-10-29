@@ -31,6 +31,7 @@ public fun LfChip(
     style: LfChipStyle = LfChipStyle.Assist,
     contentDescription: String? = null,
     onClick: (() -> Unit)? = null,
+    count: Int? = null,
 ) {
     val tokens = LfChipTokens
     val shape = tokens.shape
@@ -99,6 +100,17 @@ public fun LfChip(
             maxLines = 1,
             softWrap = false,
         )
+        // A count after the label, in Plex Mono with the app's other figures
+        // (step F5): the Inbox's "Pending 3".
+        count?.let {
+            Text(
+                text = it.toString(),
+                style = tokens.countStyle,
+                color = palette.content,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
     }
 }
 

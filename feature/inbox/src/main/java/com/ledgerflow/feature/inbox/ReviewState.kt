@@ -48,6 +48,8 @@ public data class ReviewUiState(
      */
     val bookIsUnread: Boolean = false,
     val amountText: String = "",
+    /** The install's base currency, for the amount's symbol (step F5's amount card). */
+    val currencyCode: String = "INR",
     val occurredAt: Long = 0L,
     val noteText: String = "",
 

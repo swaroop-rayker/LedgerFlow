@@ -67,6 +67,7 @@ public fun LfAmountField(
     tone: LfAmountTone = LfAmountTone.Neutral,
     secondary: String? = null,
     focusRequester: FocusRequester? = null,
+    horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
 ) {
     val tokens = LfAmountFieldTokens
 
@@ -85,7 +86,7 @@ public fun LfAmountField(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) { contentDescription = description },
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = horizontalAlignment,
         verticalArrangement = Arrangement.spacedBy(tokens.gap),
     ) {
         label?.let {

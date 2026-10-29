@@ -1,5 +1,6 @@
 package com.ledgerflow.core.designsystem.component
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
@@ -8,6 +9,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 
@@ -107,3 +110,23 @@ private const val QUARTER_DEG = 90f
 
 /** Where a row sits in its group. */
 public enum class LfGroupPosition { Only, First, Middle, Last }
+
+/** Where item [index] of [size] sits, for a list that is one group (the Inbox, step F5). */
+public fun lfGroupPosition(index: Int, size: Int): LfGroupPosition = when {
+    size == 1 -> LfGroupPosition.Only
+    index == 0 -> LfGroupPosition.First
+    index == size - 1 -> LfGroupPosition.Last
+    else -> LfGroupPosition.Middle
+}
+
+/**
+ * The slice's own corners as a shape, for what is drawn under it: the Inbox's
+ * swipe track, which shows through as the row slides and must keep the
+ * panel's outline rather than a card's.
+ */
+public fun LfGroupPosition.shape(radius: Dp): Shape = when (this) {
+    LfGroupPosition.Only -> RoundedCornerShape(radius)
+    LfGroupPosition.First -> RoundedCornerShape(topStart = radius, topEnd = radius)
+    LfGroupPosition.Middle -> RectangleShape
+    LfGroupPosition.Last -> RoundedCornerShape(bottomStart = radius, bottomEnd = radius)
+}

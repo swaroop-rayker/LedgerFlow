@@ -490,6 +490,7 @@ public class ReviewViewModel @Inject constructor(
             ledger = book,
             bookIsUnread = book == null,
             amountText = extracted.amount?.let { MoneyFormat.plain(it.minor, currency) }.orEmpty(),
+            currencyCode = currency,
             // The message's own time when it stated one, the capture time
             // otherwise -- a fact about something that happened, rather than a
             // guessed date.
