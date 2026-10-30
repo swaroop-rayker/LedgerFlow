@@ -47,6 +47,12 @@ public data class AnalyticsUiState(
      * everything else. So it is a toggle, and it is off by default.
      */
     val treemapShown: Boolean = false,
+    /**
+     * Spend over time as a running total (the area chart, the default) or
+     * split by category (the stacked bars), step F6, owner 2026-10-30. The
+     * same buckets drawn two ways, so changing it issues no query.
+     */
+    val timeView: TimeView = TimeView.TOTAL,
     /** §5.6's composable filters. [AnalyticsFilters.None] is the fast path. */
     val filters: AnalyticsFilters = AnalyticsFilters.None,
     val showFilterSheet: Boolean = false,
@@ -147,6 +153,9 @@ public sealed interface AnalyticsEvent {
     public data class CustomRangePicked(val from: Int, val to: Int) : AnalyticsEvent
     public data object TreemapToggled : AnalyticsEvent
 
+    /** Spend over time's Total | By category (step F6). Presentational, no query. */
+    public data class TimeViewSelected(val view: TimeView) : AnalyticsEvent
+
     /**
      * The events that only open or close something, and re-query nothing.
      *
@@ -198,4 +207,13 @@ public sealed interface AnalyticsEvent {
 
     /** A filter's picker was opened, or closed by passing null. */
     public data class FilterFieldOpened(val field: AnalyticsFilterField?) : Surface
+}
+
+/** How Spend over time draws its buckets (step F6). */
+public enum class TimeView {
+    /** A running total over the window, as an area chart. */
+    TOTAL,
+
+    /** Each bucket split by category, as stacked bars. */
+    BY_CATEGORY,
 }

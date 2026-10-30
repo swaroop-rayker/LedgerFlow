@@ -22,6 +22,8 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
+import com.ledgerflow.core.designsystem.chart.LfAreaChart
+import com.ledgerflow.core.designsystem.chart.LfAreaPoint
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
@@ -37,6 +39,7 @@ import com.ledgerflow.core.designsystem.chart.LfMirroredColumn
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
 import com.ledgerflow.core.designsystem.chart.LfTreemap
 import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
+import com.ledgerflow.core.designsystem.chart.LfViewportGesture
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
@@ -48,6 +51,7 @@ import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfFilterBar
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -63,6 +67,8 @@ import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.DimensionTotal
 import com.ledgerflow.core.domain.analytics.ParserGap
 import com.ledgerflow.core.domain.analytics.RecurringMerchant
+import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.Money
 
 /**
  * Analytics — A1 through A5 (`SPEC.md` §5.6).
@@ -261,14 +267,36 @@ private fun LazyListScope.timeChartSection(
 ) {
     item(key = "over-time", contentType = "chart") {
         SectionCard(title = "Spend over time") {
-            LfStackedBarChart(
-                columns = snapshot.toColumns(),
-                formatAxisValue = { minor -> MoneyFormat.symbolised(minor, state.baseCurrency) },
-                // Drag to pan, pinch to zoom -- and neither moves anything held
-                // here. ADR-0005: the gesture moves the *window* and the next
-                // frame is a fresh query at the new resolution.
-                onViewportChange = { onEvent(AnalyticsEvent.ViewportMoved(it)) },
+            // Total | By category (step F6, owner 2026-10-30; SPEC 5.6's
+            // toggle). The same buckets either way, so switching is no query.
+            LfSegmentedControl(
+                options = listOf("Total", "By category"),
+                selectedIndex = state.timeView.ordinal,
+                onSelect = { onEvent(AnalyticsEvent.TimeViewSelected(TimeView.entries[it])) },
             )
+            val format = { minor: Long -> MoneyFormat.symbolised(minor, state.baseCurrency) }
+            // Drag to pan, pinch to zoom -- and neither moves anything held
+            // here. ADR-0005: the gesture moves the *window* and the next
+            // frame is a fresh query at the new resolution.
+            val onViewport = { gesture: LfViewportGesture -> onEvent(AnalyticsEvent.ViewportMoved(gesture)) }
+            when (state.timeView) {
+                TimeView.TOTAL -> LfAreaChart(
+                    points = snapshot.toRunningTotal(),
+                    // The book's own colour: one book per chart (Law 2).
+                    color = when (state.ledger) {
+                        LedgerType.DEBIT -> LfTheme.colors.money.outgoing
+                        LedgerType.CREDIT -> LfTheme.colors.money.incoming
+                    },
+                    formatValue = format,
+                    description = if (state.ledger == LedgerType.DEBIT) "Spending so far" else "Income so far",
+                    onViewportChange = onViewport,
+                )
+                TimeView.BY_CATEGORY -> LfStackedBarChart(
+                    columns = snapshot.toColumns(),
+                    formatAxisValue = format,
+                    onViewportChange = onViewport,
+                )
+            }
         }
     }
 }
@@ -1032,6 +1060,19 @@ private fun AnalyticsSnapshot.toColumns(): List<LfBarColumn> = timeBuckets.map {
             )
         },
     )
+}
+
+/**
+ * The window's running total, one point per bucket (step F6): what had been
+ * spent by the end of each. Added up with `Money`, never as bare minor units
+ * (Law 3); one book, the screen's (Law 2).
+ */
+internal fun AnalyticsSnapshot.toRunningTotal(): List<LfAreaPoint> {
+    var running = Money(0L)
+    return timeBuckets.map { bucket ->
+        running += bucket.amount
+        LfAreaPoint(label = shortDateLabel(bucket.startDate), value = running.minor)
+    }
 }
 
 /** `12 Aug` from a days-since-epoch value. */

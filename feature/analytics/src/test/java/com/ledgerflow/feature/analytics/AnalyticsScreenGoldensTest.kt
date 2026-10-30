@@ -220,6 +220,9 @@ open class AnalyticsScreenGoldensTest {
 
     @Test fun full_1x() = capture("analytics-full-1x", full, 1f)
 
+    /** Step F6: Spend over time split by category, the stacked bars the Total view replaced as the default. */
+    @Test fun byCategory_1x() = capture("analytics-by-category-1x", full.copy(timeView = TimeView.BY_CATEGORY), 1f)
+
     @Config(qualifiers = TALLEST)
     @Test fun full_2x() = capture("analytics-full-2x", full, 2f)
 
