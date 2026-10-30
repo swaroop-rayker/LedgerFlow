@@ -28,6 +28,7 @@ import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
+import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.component.lfGroupPosition
 import com.ledgerflow.core.designsystem.component.lfGroupSlice
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
@@ -77,6 +78,20 @@ public fun AllowlistScreen(
         onBack = back,
         // The rows join into one panel (step F5): no gap between them.
         spacing = LfPageSpacing.None,
+        // A search over the phone's apps, which can be hundreds (owner,
+        // 2026-10-30). Names and package names only, as the list shows.
+        search = if (state.picking) {
+            {
+                LfTextField(
+                    value = state.query,
+                    onValueChange = { onEvent(AllowlistEvent.QueryChanged(it)) },
+                    label = "Search apps",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        } else {
+            null
+        },
         notices = if (state.picking) {
             null
         } else {
@@ -108,7 +123,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.pickerItems(
     onEvent: (AllowlistEvent) -> Unit,
 ) {
     if (state.installed.isEmpty()) {
-        item(key = "reading", contentType = "note") { Note("Reading the apps on this phone.") }
+        item(key = "reading", contentType = "note") {
+            Note(
+                if (state.installedRead) {
+                    "No app matches " + OPEN_QUOTE + state.query.trim() + CLOSE_QUOTE + "."
+                } else {
+                    "Reading the apps on this phone."
+                },
+            )
+        }
     }
     itemsIndexed(items = state.installed, key = { _, app -> app.packageName }, contentType = { _, _ -> "installed" }) {
             index, app ->
@@ -275,3 +298,7 @@ private fun AllowlistPreview() {
         )
     }
 }
+
+/** Curly quotes, as code points (CLAUDE.md 5). */
+private val OPEN_QUOTE: Char = Char(0x201C)
+private val CLOSE_QUOTE: Char = Char(0x201D)

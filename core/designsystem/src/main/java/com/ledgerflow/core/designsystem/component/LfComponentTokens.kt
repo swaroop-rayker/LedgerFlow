@@ -134,6 +134,10 @@ internal object LfSegmentedTokens {
     val trackPadding: Dp = LfScale.Space4
     val gap: Dp = LfScale.Space4
     val segmentShape: Shape @Composable get() = LfTheme.shapes.full
+    /** A track whose options stack: the control's corners, not a pill four options tall. */
+    val stackedTrackShape: Shape @Composable get() = LfTheme.shapes.control
+    /** A stacked option: the tile's 12 dp, nesting inside the 16 dp track across its 4 dp padding. */
+    val stackedSegmentShape: Shape @Composable get() = LfTheme.shapes.tile
     val segmentMinHeight: Dp = LfLayout.minTouchTarget
     /** Below this per option the control stacks its options ([LfLayout.segmentMinWidth]). */
     val segmentMinWidth: Dp = LfLayout.segmentMinWidth

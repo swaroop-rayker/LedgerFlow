@@ -34,6 +34,9 @@ public sealed interface AllowlistEvent {
     public data object WarningConfirmed : AllowlistEvent
 
     public data object WarningDismissed : AllowlistEvent
+
+    /** The picker's search field changed (owner, 2026-10-30). */
+    public data class QueryChanged(val text: String) : AllowlistEvent
 }
 
 /** Settings > Notifications > Payment apps (SPEC §5.2, D-10; V2-PLAN §3.4). */
@@ -43,8 +46,15 @@ public data class AllowlistUiState(
     val isLoaded: Boolean = false,
     /** True while the installed-app list is shown in place of the allowlist. */
     val picking: Boolean = false,
-    /** Installed apps not already on the list; read when the picker opens. */
+    /**
+     * Installed apps not already on the list, read when the picker opens,
+     * narrowed to [query] by name or package name.
+     */
     val installed: List<InstalledApp> = emptyList(),
+    /** What the picker's search field holds; empty shows every app. */
+    val query: String = "",
+    /** True once the phone's apps have been read, so an empty [installed] means "no match". */
+    val installedRead: Boolean = false,
     /** The app awaiting the personal-messages warning, if any. */
     val confirming: InstalledApp? = null,
 )
@@ -58,19 +68,23 @@ public class AllowlistViewModel @Inject constructor(
     private val picking = MutableStateFlow(false)
     private val installed = MutableStateFlow<List<InstalledApp>>(emptyList())
     private val confirming = MutableStateFlow<InstalledApp?>(null)
+    private val query = MutableStateFlow("")
 
     public val state: StateFlow<AllowlistUiState> = combine(
         allowlist.observe(),
         picking,
         installed,
         confirming,
-    ) { apps, isPicking, phoneApps, pending ->
+        query,
+    ) { apps, isPicking, phoneApps, pending, text ->
         val listed = apps.map { it.packageName }.toSet()
         AllowlistUiState(
             apps = apps,
             isLoaded = true,
             picking = isPicking,
-            installed = phoneApps.filterNot { it.packageName in listed },
+            installed = phoneApps.filterNot { it.packageName in listed }.filter { it.matches(text) },
+            query = text,
+            installedRead = phoneApps.isNotEmpty(),
             confirming = pending,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AllowlistUiState())
@@ -87,7 +101,12 @@ public class AllowlistViewModel @Inject constructor(
                 viewModelScope.launch { installed.value = installedApps.launchable() }
             }
 
-            AllowlistEvent.PickerClosed -> picking.value = false
+            AllowlistEvent.PickerClosed -> {
+                picking.value = false
+                query.value = ""
+            }
+
+            is AllowlistEvent.QueryChanged -> query.value = event.text
 
             is AllowlistEvent.Picked ->
                 if (event.app.carriesPersonalMessages) confirming.value = event.app else add(event.app)
@@ -101,10 +120,17 @@ public class AllowlistViewModel @Inject constructor(
     private fun add(app: InstalledApp) {
         confirming.value = null
         picking.value = false
+        query.value = ""
         viewModelScope.launch { allowlist.add(app.packageName, app.label) }
     }
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
     }
+}
+
+/** The search matches an app by its name or its package name, ignoring case and outer spaces. */
+internal fun InstalledApp.matches(query: String): Boolean {
+    val text = query.trim()
+    return text.isEmpty() || label.contains(text, ignoreCase = true) || packageName.contains(text, ignoreCase = true)
 }
