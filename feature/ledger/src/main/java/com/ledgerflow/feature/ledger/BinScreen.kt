@@ -1,6 +1,5 @@
 package com.ledgerflow.feature.ledger
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,15 +33,18 @@ import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
-import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.component.lfGroupPosition
+import com.ledgerflow.core.designsystem.component.lfGroupSlice
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
@@ -77,13 +79,14 @@ public fun BinScreen(
     state.confirmation?.let { BinConfirmationDialog(it, onEvent) }
 
     // Pinned header, as before: the count in the subtitle is what the actions
-    // below act on. "Done" takes the action band above the title (BUG17).
+    // below act on. The way back is the arrow beside the title (step F5).
     LfDetailPage(
         title = "Deleted entries",
         subtitle = subtitleFor(state),
         modifier = modifier,
-        actions = { LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack) },
-        actionsAlignment = LfActionAlignment.End,
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
         notices = state.message?.let { message -> { BinMessage(message, onEvent) } },
         statusContent = when {
             // Still skeletons after 300 ms rather than a blank page (E3).
@@ -92,7 +95,9 @@ public fun BinScreen(
             else -> null
         },
         actionBar = if (state.entries.isNotEmpty()) { { BinActions(state, onEvent) } } else null,
-        spacing = LfPageSpacing.Dense,
+        // One panel for the bin (step F5): its rows draw their slices, so the
+        // list puts no gap between them.
+        spacing = LfPageSpacing.None,
         pinHeader = true,
     ) {
         binRows(state, onEvent)
@@ -132,6 +137,7 @@ private fun LazyListScope.binRows(state: BinUiState, onEvent: (BinEvent) -> Unit
         val entry = state.entries[index]
         BinRow(
             entry = entry,
+            position = lfGroupPosition(index, state.entries.size),
             selected = entry.selectionKey() in state.selected,
             enabled = !state.isWorking,
             onEvent = onEvent,
@@ -152,13 +158,13 @@ private fun LazyListScope.binRows(state: BinUiState, onEvent: (BinEvent) -> Unit
 @Composable
 private fun BinRow(
     entry: DeletedEntry,
+    position: LfGroupPosition,
     selected: Boolean,
     enabled: Boolean,
     onEvent: (BinEvent) -> Unit,
 ) {
     val spacing = LfTheme.spacing
     val colors = LfTheme.colors
-    val shape = LfTheme.shapes.row
 
     // displayCategoryName, not categoryName: an itemised entry files at line
     // grain and has none of its own (ADR-0018), so without the fallback a
@@ -179,12 +185,16 @@ private fun BinRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised, shape)
-            // A selected row's accent edge marks a state.
-            .border(
-                if (selected) LfTheme.borders.emphasis else LfTheme.borders.hairline,
-                if (selected) colors.accent else colors.outline,
-                shape,
+            // One slice of the bin's panel (step F5, owner 2026-10-30). A
+            // selected row is the overlay tone with its box ticked, where it
+            // was an accent outline round its own card: a panel has one edge.
+            .lfGroupSlice(
+                position = position,
+                container = if (selected) colors.surface.overlay else colors.surface.raised,
+                edge = colors.border.subtle,
+                edgeWidth = LfTheme.borders.hairline,
+                radius = LfLayout.panelRadius,
+                dividerInset = LfTheme.space.rowInset,
             )
             .toggleable(
                 value = selected,

@@ -66,8 +66,9 @@ public fun ExportScreen(
         title = "Export",
         actionBar = { ExportBar(state, onEvent) },
         modifier = modifier,
-        actions = { LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack) },
-        actionsAlignment = LfActionAlignment.End,
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
     ) {
         FileCard(state, suggestedFileName, onEvent)
         state.status.let { status -> StatusCard(status, onEvent) }

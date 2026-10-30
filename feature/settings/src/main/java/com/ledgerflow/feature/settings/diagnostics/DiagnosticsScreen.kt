@@ -81,7 +81,9 @@ public fun DiagnosticsScreen(
             "Counts only — no message text, no amounts.",
         actionBar = null,
         modifier = modifier,
-        actions = { LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline) },
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
     ) {
         LfSegmentedControl(
             options = WINDOWS.map(::windowLabel),

@@ -124,7 +124,9 @@ public fun OcrCaptureScreen(
         title = "Scan a receipt",
         actionBar = null,
         modifier = modifier,
-        actions = { LfButton(text = "Back", style = LfButtonStyle.Inline, onClick = onBack) },
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
     ) {
         CaptureContent(
             state = state,

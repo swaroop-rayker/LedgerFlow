@@ -42,6 +42,7 @@ import com.ledgerflow.core.designsystem.component.LfLinkBanner
 import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.BudgetWords
 import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
@@ -445,7 +446,7 @@ private fun BudgetsCard(
                     label = progress.categoryName,
                     formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
                     formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
-                    amounts = budgetLeft(progress.spent.minor, progress.budget.amount.minor, currency),
+                    amounts = BudgetWords.headroom(progress.spent, progress.budget.amount, currency),
                     fraction = progress.fraction,
                     projectedFraction = progress.projectedFraction,
                     color = LfCategoryPalette.colorForId(
@@ -535,19 +536,6 @@ private fun RecentSection(
                 }
             }
         }
-    }
-}
-
-/**
- * What is left of a budget, or how far over it is (step F5, the canvas's
- * "250 left of 5,000"): the headroom is what someone acts on.
- */
-internal fun budgetLeft(spentMinor: Long, budgetMinor: Long, currency: String): String {
-    val budget = MoneyFormat.symbolised(budgetMinor, currency)
-    return if (spentMinor <= budgetMinor) {
-        MoneyFormat.symbolised(budgetMinor - spentMinor, currency) + " left of " + budget
-    } else {
-        MoneyFormat.symbolised(spentMinor - budgetMinor, currency) + " over " + budget
     }
 }
 

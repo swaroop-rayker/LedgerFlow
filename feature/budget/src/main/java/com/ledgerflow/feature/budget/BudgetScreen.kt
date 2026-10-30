@@ -27,6 +27,7 @@ import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfFeedback
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.BudgetWords
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.pattern.LfConfirmSheet
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
@@ -73,8 +74,9 @@ public fun BudgetScreen(
     LfDetailPage(
         title = "Budgets",
         modifier = modifier,
-        actions = { LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack) },
-        actionsAlignment = LfActionAlignment.End,
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
         notices = {
             LfActionRow(alignment = LfActionAlignment.Start) {
                 LfButton(
@@ -133,6 +135,8 @@ private fun BudgetCard(
                 ),
                 fraction = progress.fraction,
                 projectedFraction = progress.projectedFraction,
+                // What is left, as Home says it (step F5, owner 2026-10-30).
+                amounts = BudgetWords.headroom(progress.spent, progress.budget.amount, currency),
                 color = LfCategoryPalette.colorForId(
                     progress.budget.categoryId,
                     progress.categoryColorArgb,

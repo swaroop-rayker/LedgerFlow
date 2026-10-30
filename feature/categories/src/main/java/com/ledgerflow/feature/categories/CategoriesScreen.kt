@@ -74,8 +74,9 @@ public fun CategoriesScreen(
         modifier = modifier,
         // A full-screen destination reached from Settings, so it carries its
         // own way out rather than relying on the gesture alone.
-        actions = { LfButton(text = "Done", style = LfButtonStyle.Text, onClick = onBack) },
-        actionsAlignment = LfActionAlignment.End,
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
         filters = {
             Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
                 LfSegmentedControl(
