@@ -70,70 +70,78 @@ public fun LfDonutChart(
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(modifier = Modifier.size(diameter)) {
-            // Round ends (step F6): each arc's caps reach past its ends by half
-            // the ring, so the gap between two slices comes out of the sweep
-            // as the 2 dp the eye sees plus a whole ring's width of caps.
-            val stroke = Stroke(width = thickness.toPx(), cap = StrokeCap.Round)
-            val inset = thickness.toPx() / 2f
-            val arcSize = androidx.compose.ui.geometry.Size(
-                width = size.width - thickness.toPx(),
-                height = size.height - thickness.toPx(),
-            )
-            val topLeft = Offset(inset, inset)
+        Canvas(modifier = Modifier.size(diameter)) { drawRing(slices, total, thickness, trackColor) }
+        centerText?.let { CentreTotal(it, diameter - thickness * 2) }
+        centerContent()
+    }
+}
 
+/** The track, then each slice (step F6); drawn, not composed. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRing(
+    slices: List<LfDonutSlice>,
+    total: Long,
+    thickness: Dp,
+    trackColor: Color,
+) {
+    // Round ends (step F6): each arc's caps reach past its ends by half
+    // the ring, so the gap between two slices comes out of the sweep
+    // as the 2 dp the eye sees plus a whole ring's width of caps.
+    val stroke = Stroke(width = thickness.toPx(), cap = StrokeCap.Round)
+    val inset = thickness.toPx() / 2f
+    val arcSize = androidx.compose.ui.geometry.Size(
+        width = size.width - thickness.toPx(),
+        height = size.height - thickness.toPx(),
+    )
+    val topLeft = Offset(inset, inset)
+
+    drawArc(
+        color = trackColor,
+        startAngle = 0f,
+        sweepAngle = FULL_CIRCLE,
+        useCenter = false,
+        topLeft = topLeft,
+        size = arcSize,
+        style = stroke,
+    )
+
+    if (total <= 0L) return
+
+    val radius = arcSize.width / 2f
+    val gapDegrees = ((SLICE_GAP.toPx() + thickness.toPx()) / radius) * DEGREES_PER_RADIAN
+    val drawn = slices.count { it.value > 0L }
+    var start = START_ANGLE
+    slices.forEach { slice ->
+        if (slice.value <= 0L) return@forEach
+        val sweep = FULL_CIRCLE * (slice.value.toFloat() / total.toFloat())
+        val shown = if (drawn == 1) FULL_CIRCLE else sweep - gapDegrees
+        if (shown > 0f) {
             drawArc(
-                color = trackColor,
-                startAngle = 0f,
-                sweepAngle = FULL_CIRCLE,
+                color = slice.color,
+                startAngle = start,
+                // A gap between arcs keeps two similar hues legible as
+                // two slices. It comes out of the sweep rather than
+                // being drawn over the top, so the ring stays a ring; a
+                // lone slice is the whole ring, with no gap to close.
+                sweepAngle = shown,
                 useCenter = false,
                 topLeft = topLeft,
                 size = arcSize,
                 style = stroke,
             )
-
-            if (total <= 0L) return@Canvas
-
-            val radius = arcSize.width / 2f
-            val gapDegrees = ((SLICE_GAP.toPx() + thickness.toPx()) / radius) * DEGREES_PER_RADIAN
-            val drawn = slices.count { it.value > 0L }
-            var start = START_ANGLE
-            slices.forEach { slice ->
-                if (slice.value <= 0L) return@forEach
-                val sweep = FULL_CIRCLE * (slice.value.toFloat() / total.toFloat())
-                val shown = if (drawn == 1) FULL_CIRCLE else sweep - gapDegrees
-                if (shown > 0f) {
-                    drawArc(
-                        color = slice.color,
-                        startAngle = start,
-                        // A gap between arcs keeps two similar hues legible as
-                        // two slices. It comes out of the sweep rather than
-                        // being drawn over the top, so the ring stays a ring; a
-                        // lone slice is the whole ring, with no gap to close.
-                        sweepAngle = shown,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = stroke,
-                    )
-                } else {
-                    // A slice narrower than the gap is a dot, never nothing:
-                    // a category with spend must not vanish from the ring.
-                    val middle = Math.toRadians((start + sweep / 2f).toDouble())
-                    drawCircle(
-                        color = slice.color,
-                        radius = thickness.toPx() / 2f,
-                        center = center + Offset(
-                            (radius * kotlin.math.cos(middle)).toFloat(),
-                            (radius * kotlin.math.sin(middle)).toFloat(),
-                        ),
-                    )
-                }
-                start += sweep
-            }
+        } else {
+            // A slice narrower than the gap is a dot, never nothing:
+            // a category with spend must not vanish from the ring.
+            val middle = Math.toRadians((start + sweep / 2f).toDouble())
+            drawCircle(
+                color = slice.color,
+                radius = thickness.toPx() / 2f,
+                center = center + Offset(
+                    (radius * kotlin.math.cos(middle)).toFloat(),
+                    (radius * kotlin.math.sin(middle)).toFloat(),
+                ),
+            )
         }
-        centerText?.let { CentreTotal(it, diameter - thickness * 2) }
-        centerContent()
+        start += sweep
     }
 }
 

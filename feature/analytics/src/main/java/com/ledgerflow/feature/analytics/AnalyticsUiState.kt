@@ -153,8 +153,11 @@ public sealed interface AnalyticsEvent {
     public data class CustomRangePicked(val from: Int, val to: Int) : AnalyticsEvent
     public data object TreemapToggled : AnalyticsEvent
 
-    /** Spend over time's Total | By category (step F6). Presentational, no query. */
-    public data class TimeViewSelected(val view: TimeView) : AnalyticsEvent
+    /**
+     * Spend over time's Total | By category (step F6). Presentational, no
+     * query, so it is a [Surface]: it changes what is shown, never what is read.
+     */
+    public data class TimeViewSelected(val view: TimeView) : Surface
 
     /**
      * The events that only open or close something, and re-query nothing.

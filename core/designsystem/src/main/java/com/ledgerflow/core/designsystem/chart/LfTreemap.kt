@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -89,38 +90,47 @@ public fun LfTreemap(
     ) {
         layout.forEach { tile ->
             val datum = byId[tile.id] ?: return@forEach
-            val topLeft = Offset(tile.x * size.width, tile.y * size.height)
-            val tileSize = Size(tile.width * size.width, tile.height * size.height)
-
-            // Inset by the gutter on its top and start, so the page shows
-            // through between tiles without a stroke eating a neighbour's area
-            // (the one thing a treemap must not misrepresent), and rounded at
-            // the tile's corner (step F6).
-            drawRoundRect(
-                color = datum.color,
-                topLeft = Offset(topLeft.x + GUTTER_PX, topLeft.y + GUTTER_PX),
-                size = Size(
-                    (tileSize.width - GUTTER_PX).coerceAtLeast(0f),
-                    (tileSize.height - GUTTER_PX).coerceAtLeast(0f),
-                ),
-                // The tile's corner, scaled down on a small tile so it stays a
-                // tile and does not become a pill.
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
-                    minOf(corner.toPx(), minOf(tileSize.width, tileSize.height) * SMALL_TILE_CORNER),
-                ),
-            )
-
-            drawTileLabel(
-                label = datum.label,
-                topLeft = topLeft,
-                size = tileSize,
-                measurer = measurer,
-                style = labelStyle.copy(
-                    color = readableOn(datum.color, gutter, text),
-                ),
-            )
+            drawTile(tile, datum, corner, measurer, labelStyle.copy(color = readableOn(datum.color, gutter, text)))
         }
     }
+}
+
+/** One tile and its label (step F6: rounded, inset by the gutter). */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTile(
+    tile: LfTreemapTile,
+    datum: LfTreemapDatum,
+    corner: Dp,
+    measurer: TextMeasurer,
+    style: TextStyle,
+) {
+    val topLeft = Offset(tile.x * size.width, tile.y * size.height)
+    val tileSize = Size(tile.width * size.width, tile.height * size.height)
+
+    // Inset by the gutter on its top and start, so the page shows
+    // through between tiles without a stroke eating a neighbour's area
+    // (the one thing a treemap must not misrepresent), and rounded at
+    // the tile's corner (step F6).
+    drawRoundRect(
+        color = datum.color,
+        topLeft = Offset(topLeft.x + GUTTER_PX, topLeft.y + GUTTER_PX),
+        size = Size(
+            (tileSize.width - GUTTER_PX).coerceAtLeast(0f),
+            (tileSize.height - GUTTER_PX).coerceAtLeast(0f),
+        ),
+        // The tile's corner, scaled down on a small tile so it stays a
+        // tile and does not become a pill.
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+            minOf(corner.toPx(), minOf(tileSize.width, tileSize.height) * SMALL_TILE_CORNER),
+        ),
+    )
+
+    drawTileLabel(
+        label = datum.label,
+        topLeft = topLeft,
+        size = tileSize,
+        measurer = measurer,
+        style = style,
+    )
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTileLabel(

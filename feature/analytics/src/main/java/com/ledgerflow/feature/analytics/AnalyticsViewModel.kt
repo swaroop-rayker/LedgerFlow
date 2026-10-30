@@ -102,9 +102,6 @@ public class AnalyticsViewModel @Inject constructor(
                 _state.update { it.copy(treemapShown = !it.treemapShown) }
             }
 
-            // Presentational too: the same buckets, drawn as a total or split.
-            is AnalyticsEvent.TimeViewSelected -> _state.update { it.copy(timeView = event.view) }
-
             is AnalyticsEvent.CategoryExpanded -> {
                 // Purely presentational: the subcategories are already in the
                 // snapshot, so expanding one is not a query.
@@ -151,6 +148,9 @@ public class AnalyticsViewModel @Inject constructor(
                 // user has already moved past.
                 is AnalyticsEvent.CustomSheetShown ->
                     current.copy(showCustomSheet = event.visible)
+
+                // The same buckets, drawn as a total or split (step F6).
+                is AnalyticsEvent.TimeViewSelected -> current.copy(timeView = event.view)
             }
         }
     }

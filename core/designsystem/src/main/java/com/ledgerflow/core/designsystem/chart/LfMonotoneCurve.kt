@@ -33,7 +33,7 @@ internal object LfMonotoneCurve {
         /** The curve's height at [t] in 0..1 along the segment. */
         fun yAt(t: Float): Float {
             val u = 1f - t
-            return u * u * u * y0 + 3f * u * u * t * c1y + 3f * u * t * t * c2y + t * t * t * y1
+            return u * u * u * y0 + BERNSTEIN * u * u * t * c1y + BERNSTEIN * u * t * t * c2y + t * t * t * y1
         }
     }
 
@@ -92,6 +92,8 @@ internal object LfMonotoneCurve {
         return m
     }
 
+    /** The cubic Bernstein basis's middle coefficient. */
+    private const val BERNSTEIN = 3f
     private const val THIRD = 3f
     private const val RADIUS = 3f
     private const val LIMIT = RADIUS * RADIUS
