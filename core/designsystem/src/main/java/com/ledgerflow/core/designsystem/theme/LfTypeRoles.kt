@@ -44,6 +44,12 @@ public class LfTypeRoles internal constructor(
     public val amountSmall: TextStyle,
     /** A recovery word: disambiguated glyphs, so a word copied off the screen is copied right. */
     public val mnemonic: TextStyle,
+    /**
+     * A recovery word's position, at [mnemonic]'s size in IBM Plex Mono (step
+     * F5): a number, in the numbers' face. The word itself stays Inter, whose
+     * disambiguation set is the reason [mnemonic] exists.
+     */
+    public val mnemonicIndex: TextStyle,
 )
 
 /** The roles over a type scale; [LfTypography] caches one per direction. */
@@ -60,4 +66,5 @@ internal fun LfTypography.toRoles(): LfTypeRoles = LfTypeRoles(
     amountRow = amountM,
     amountSmall = amountM,
     mnemonic = mnemonicWord,
+    mnemonicIndex = mnemonicWord.copy(fontFamily = LfFigureFontFamily),
 )

@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -26,6 +27,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
@@ -417,34 +420,86 @@ private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEven
                 )
             }
         } else {
-            Column(
+            // Two columns, read across (step F5, owner 2026-10-29): twelve rows
+            // fit the screen where twenty-four made the user scroll mid-copy.
+            // Each word is still its own node, said as "Word N: …", so a
+            // screen reader reads 1, 2, 3 in order, and every node keeps
+            // phraseSecret() (SPEC 9.6).
+            PhraseGrid(
                 modifier = Modifier.phraseSecret(),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+                columnGap = LfTheme.spacing.sm,
+                rowGap = LfTheme.spacing.xs,
             ) {
-                state.mnemonic.forEachIndexed { index, word ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .phraseSecret()
-                            .semantics { contentDescription = "Word ${index + 1}: $word" },
-                        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-                    ) {
-                        Text(
-                            text = "${index + 1}".padStart(2, ' '),
-                            style = LfTheme.typography.mnemonicWord,
-                            color = LfTheme.colors.textTertiary,
-                        )
-                        Text(
-                            text = word,
-                            style = LfTheme.typography.mnemonicWord,
-                            color = LfTheme.colors.textPrimary,
-                        )
-                    }
-                }
+                state.mnemonic.forEachIndexed { index, word -> PhraseWord(position = index + 1, word = word) }
             }
         }
     }
 }
+
+/** One word of the phrase and its position; the number in Plex Mono, the word in Inter. */
+@Composable
+private fun PhraseWord(position: Int, word: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .phraseSecret()
+            .semantics { contentDescription = "Word $position: $word" },
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+    ) {
+        Text(
+            text = "$position".padStart(2, ' '),
+            style = LfTheme.type.mnemonicIndex,
+            color = LfTheme.colors.textTertiary,
+        )
+        Text(
+            text = word,
+            style = LfTheme.typography.mnemonicWord,
+            color = LfTheme.colors.textPrimary,
+            // A recovery word is never broken across lines; the grid gives
+            // it a column it fits whole.
+            softWrap = false,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The phrase's words in two columns, read across -- **only while every word
+ * fits its column whole**, one column otherwise. At font scale 2.0 two
+ * columns broke "abandon" into "aband / on" (caught by the first 2x golden),
+ * and a recovery word split across lines can be copied down as half a word.
+ * So the layout measures the widest word before choosing, and a word is
+ * never given less than its own width.
+ */
+@Composable
+private fun PhraseGrid(
+    columnGap: Dp,
+    rowGap: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(content = content, modifier = modifier.fillMaxWidth()) { words, constraints ->
+        val width = constraints.maxWidth
+        val gap = columnGap.roundToPx()
+        val between = rowGap.roundToPx()
+        val widest = words.maxOfOrNull { it.maxIntrinsicWidth(Constraints.Infinity) } ?: 0
+        val columns = if (widest * PHRASE_COLUMNS + gap * (PHRASE_COLUMNS - 1) <= width) PHRASE_COLUMNS else 1
+        val cell = (width - gap * (columns - 1)) / columns
+        val placed = words.map { it.measure(Constraints(minWidth = cell, maxWidth = cell)) }
+        val rows = placed.chunked(columns)
+        val heights = rows.map { row -> row.maxOf { it.height } }
+        val height = heights.sum() + between * (rows.size - 1).coerceAtLeast(0)
+        layout(width, height) {
+            var y = 0
+            rows.forEachIndexed { r, row ->
+                row.forEachIndexed { c, word -> word.placeRelative(c * (cell + gap), y) }
+                y += heights[r] + between
+            }
+        }
+    }
+}
+
+/** The phrase display's columns, when the words fit (step F5): pairs, read across. */
+private const val PHRASE_COLUMNS = 2
 
 @Composable
 private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEvent) -> Unit) {

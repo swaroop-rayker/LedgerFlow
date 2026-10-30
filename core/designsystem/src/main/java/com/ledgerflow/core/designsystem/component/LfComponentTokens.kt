@@ -109,7 +109,11 @@ internal object LfChipTokens {
     val textStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
     /** A chip's count (step F5): a figure, so Plex Mono. */
     val countStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
-    val supportingStyle: TextStyle @Composable get() = LfTheme.type.label
+    /**
+     * The chip's leading text. Its one use is a recovery word's position
+     * ("1 abandon"), so Plex Mono, the numbers' face (step F5).
+     */
+    val supportingStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
     val supporting: Color @Composable get() = LfTheme.colors.text.muted
 
     val assistContainer: Color @Composable get() = LfTheme.colors.surface.overlay

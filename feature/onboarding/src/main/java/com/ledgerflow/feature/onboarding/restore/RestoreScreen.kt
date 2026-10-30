@@ -99,19 +99,11 @@ public fun RestoreScreen(
         title = if (resuming) "Finish restoring" else "Restore a backup",
         actionBar = { SubmitBar(state, onEvent, onSubmit = closeKeyboard) },
         modifier = modifier,
-        // The action takes its own band above the heading (BUG17).
-        actions = if (leave != null && !state.isDone) {
-            {
-                LfButton(
-                    text = "Back",
-                    onClick = leave,
-                    enabled = !state.isWorking,
-                    style = LfButtonStyle.Inline,
-                )
-            }
-        } else {
-            null
-        },
+        // The back arrow beside the heading (step F5, owner 2026-10-29), as on
+        // the Settings pages; off while a restore runs, and absent once it is
+        // done or when there is nowhere to go back to.
+        onBack = if (leave != null && !state.isDone) leave else null,
+        backEnabled = !state.isWorking,
     ) {
         RestoreBody(state, resuming, onEvent)
     }
