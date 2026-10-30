@@ -120,6 +120,7 @@ public fun ReviewScreen(
  * BUG73: an approval closed Review without a word, where the Inbox row's own
  * Approve says "Added to your ledger." It says which book now, posted so the
  * line survives this screen closing and shows over the Inbox it returns to.
+ * A discard says "Discarded" (BUG78).
  */
 @Composable
 private fun ReviewFeedback(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit, onDone: () -> Unit) {
@@ -132,11 +133,16 @@ private fun ReviewFeedback(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit,
     }
     LaunchedEffect(state.finished) {
         if (state.finished) {
-            feedback.post(approvedMessage(state.ledger))
+            // BUG78: a discard finishes Review too, and said "Added to
+            // Expenses" while this read `finished` alone.
+            feedback.post(if (state.discarded) DISCARDED_MESSAGE else approvedMessage(state.ledger))
             onDone()
         }
     }
 }
+
+/** What a discard says (BUG78): the word the Inbox's own discard uses, and nothing about the ledger. */
+internal const val DISCARDED_MESSAGE: String = "Discarded"
 
 /** What an approval says (BUG73). */
 internal fun approvedMessage(ledger: LedgerType?): String = when (ledger) {

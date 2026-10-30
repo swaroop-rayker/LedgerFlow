@@ -99,6 +99,11 @@ public data class ReviewUiState(
     val message: String? = null,
     /** Set when the entry is committed or the candidate discarded; the screen closes. */
     val finished: Boolean = false,
+    /**
+     * Which of the two closed it (BUG78): a discard said "Added to Expenses",
+     * because the closing message read [finished] alone.
+     */
+    val discarded: Boolean = false,
 ) {
     public val selectedCategory: String?
         get() = categoryId?.let { id -> categories.firstOrNull { it.id == id }?.name }

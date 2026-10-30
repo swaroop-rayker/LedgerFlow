@@ -257,7 +257,7 @@ public class ReviewViewModel @Inject constructor(
             ReviewEvent.Approve -> approve()
             ReviewEvent.Discard -> viewModelScope.launch {
                 discardPending(pendingId)
-                _state.update { it.copy(finished = true) }
+                _state.update { it.copy(finished = true, discarded = true) }
             }
 
             ReviewEvent.MessageShown -> _state.update { it.copy(message = null) }
