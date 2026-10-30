@@ -124,11 +124,8 @@ private fun DrawScope.drawBar(
 ) {
     if (valueMinor <= 0L || peak <= 0L) return
     val barHeight = (valueMinor.toFloat() / peak.toFloat()) * halfHeight
-    drawRect(
-        color = color,
-        topLeft = Offset(left, if (up) midY - barHeight else midY),
-        size = Size(width, barHeight),
-    )
+    // Rounded at the free end, away from the zero line (step F6).
+    drawTopRounded(color, Offset(left, if (up) midY - barHeight else midY), Size(width, barHeight), up = up)
 }
 
 @Suppress("LongParameterList")

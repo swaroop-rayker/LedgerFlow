@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -72,17 +73,23 @@ internal fun ProgressTrack(
             .clip(RoundedCornerShape(height / 2))
             .background(track),
     ) {
-        FractionalFill(fraction = fraction.coerceIn(0f, 1f), color = fill)
+        FractionalFill(
+            fraction = fraction.coerceIn(0f, 1f),
+            color = fill,
+            shape = RoundedCornerShape(height / 2),
+        )
         overlay()
     }
 }
 
 @Composable
-private fun FractionalFill(fraction: Float, color: Color) {
+private fun FractionalFill(fraction: Float, color: Color, shape: Shape) {
+    // Fully rounded at its free end too (step F6): a bar is a pill, not a
+    // pill with a square-cut stripe in it.
     Layout(
         content = {},
         modifier = Modifier
-            .background(color)
+            .background(color, shape)
             .clearAndSetSemantics { },
     ) { _, constraints ->
         val width = (constraints.maxWidth * fraction).toInt().coerceIn(0, constraints.maxWidth)

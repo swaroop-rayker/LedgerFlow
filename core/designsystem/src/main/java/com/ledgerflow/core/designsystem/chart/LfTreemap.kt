@@ -56,6 +56,7 @@ public fun LfTreemap(
     val labelStyle = LfChartTokens.labelStyle
     val gutter = LfChartTokens.gutter
     val text = LfChartTokens.text
+    val corner = LfChartTokens.cellRadius
 
     val layout = remember(tiles) {
         LfTreemapLayout.layout(tiles.map { it.id to it.value })
@@ -91,19 +92,22 @@ public fun LfTreemap(
             val topLeft = Offset(tile.x * size.width, tile.y * size.height)
             val tileSize = Size(tile.width * size.width, tile.height * size.height)
 
-            drawRect(color = datum.color, topLeft = topLeft, size = tileSize)
-            // A hairline gutter in the surface colour rather than a stroke:
-            // strokes straddle the edge and would eat into the neighbour's
-            // area, which is the one thing a treemap must not misrepresent.
-            drawRect(
-                color = gutter,
-                topLeft = topLeft,
-                size = Size(tileSize.width, GUTTER_PX),
-            )
-            drawRect(
-                color = gutter,
-                topLeft = topLeft,
-                size = Size(GUTTER_PX, tileSize.height),
+            // Inset by the gutter on its top and start, so the page shows
+            // through between tiles without a stroke eating a neighbour's area
+            // (the one thing a treemap must not misrepresent), and rounded at
+            // the tile's corner (step F6).
+            drawRoundRect(
+                color = datum.color,
+                topLeft = Offset(topLeft.x + GUTTER_PX, topLeft.y + GUTTER_PX),
+                size = Size(
+                    (tileSize.width - GUTTER_PX).coerceAtLeast(0f),
+                    (tileSize.height - GUTTER_PX).coerceAtLeast(0f),
+                ),
+                // The tile's corner, scaled down on a small tile so it stays a
+                // tile and does not become a pill.
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                    minOf(corner.toPx(), minOf(tileSize.width, tileSize.height) * SMALL_TILE_CORNER),
+                ),
             )
 
             drawTileLabel(
@@ -156,6 +160,9 @@ private fun readableOn(background: Color, a: Color, b: Color): Color {
 }
 
 private const val GUTTER_PX = 2f
+
+/** A small tile's corner as a share of its shorter side. */
+private const val SMALL_TILE_CORNER = 0.2f
 private const val LABEL_PADDING_PX = 6f
 private const val DESCRIBED_TILES = 3
 

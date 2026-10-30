@@ -126,6 +126,8 @@ open class LfChartScreenshotTest {
                 LfDonutSlice("c", "Transport", 12_000L, Color(0xFF82C9A0)),
                 LfDonutSlice("d", "Sundries", 200L, Color(0xFFC39BD3)),
             ),
+            // Step F6: the total in the middle, in Plex Mono.
+            centerText = "₹1,572.00",
         )
     }
 

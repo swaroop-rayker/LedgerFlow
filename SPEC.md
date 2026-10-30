@@ -904,7 +904,7 @@ A live preview names the two dates the period resolves to before Apply is presse
 
 | View | Chart | Phase |
 |---|---|---|
-| Spend over time | Stacked bar (by category) / line (total) with period toggle; drag to pan, pinch to zoom — each gesture **re-queries** at the new resolution (ADR-0005), and the window becomes Custom, named by its dates, because it no longer matches a preset | P3 |
+| Spend over time | **Total**, the default: the window's running total as an area chart, a monotone curve that never passes its points (`LfAreaChart`, design-system F6); **By category**: stacked bars. A toggle between them, no query; drag to pan, pinch to zoom — each gesture **re-queries** at the new resolution (ADR-0005), and the window becomes Custom, named by its dates, because it no longer matches a preset | P3 |
 | Category breakdown | Donut + ranked list with % and Δ vs previous period | P3 |
 | Subcategory drill-down | Nested list, tap-to-expand. A squarified **treemap** is offered beside it as a toggle — secondary by design: it answers "which is biggest" at a glance and is worse than a list at everything else, so the list is unchanged under either graphic | P3 |
 | Merchant leaderboard | Horizontal bar, Top-N + "Other" | P3 |

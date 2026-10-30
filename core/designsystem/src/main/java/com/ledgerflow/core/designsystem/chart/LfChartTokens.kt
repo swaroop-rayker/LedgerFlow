@@ -5,9 +5,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
-import com.ledgerflow.core.designsystem.theme.LfLegacySmallCorner
+import androidx.compose.ui.unit.TextUnit
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.designsystem.theme.primitive.LfScale
+import com.ledgerflow.core.designsystem.theme.primitive.LfTypeScale
 
 /*
  * Chart tokens (DESIGN_SYSTEM_PLAN §4.1, step B2): what the `Lf*` Canvas
@@ -28,12 +29,18 @@ internal object LfChartTokens {
     val wideGap: Dp = LfScale.Space8
     /** Keeps an ellipsised label from running into the amount after it. */
     val figureInset: Dp = LfScale.Space16
-    /** Heatmap cells and leaderboard bars; Night Vault's tile radius in F6. */
-    val cellShape: Shape = LfLegacySmallCorner
+    /** Heatmap cells, treemap tiles and leaderboard bars: the tile's 12 dp (step F6). */
+    val cellShape: Shape @Composable get() = LfTheme.shapes.tile
+    /** The same corner as a size, for a chart that draws its tiles (the treemap). */
+    val cellRadius: Dp = LfScale.Radius12
 
     val labelStyle: TextStyle @Composable get() = LfTheme.type.label
     val textStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
     val amountStyle: TextStyle @Composable get() = LfTheme.type.amountRow
+    /** The donut's centre total: Plex Mono at an amount's size, stepping down to fit. */
+    val donutTotalStyle: TextStyle @Composable get() = LfTheme.type.amountRow
+    val donutTotalMin: TextUnit = LfTypeScale.Size6
+    val donutTotalStep: TextUnit = LfTypeScale.Step05
     /** A figure on a chart (the area chart's value pill): Plex Mono, label-sized. */
     val figureStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
     val text: Color @Composable get() = LfTheme.colors.text.primary

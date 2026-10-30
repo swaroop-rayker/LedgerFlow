@@ -31,7 +31,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.core.designsystem.chart.LfBudgetBar
-import com.ledgerflow.core.designsystem.chart.LfCategoryPalette
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
@@ -449,10 +448,8 @@ private fun BudgetsCard(
                     amounts = BudgetWords.headroom(progress.spent, progress.budget.amount, currency),
                     fraction = progress.fraction,
                     projectedFraction = progress.projectedFraction,
-                    color = LfCategoryPalette.colorForId(
-                        progress.budget.categoryId,
-                        progress.categoryColorArgb,
-                    ),
+                    // A budget is a plan, not money moving: the primary action's tone, amber
+                    // once over (step F6, owner 2026-10-30), never its category's colour.
                 )
             }
         }

@@ -135,10 +135,11 @@ public fun LfHorizontalBarChart(
  */
 @Composable
 private fun FractionalFill(fraction: Float, color: Color) {
+    // Rounded at its free end, the track's corner (step F6).
     Layout(
         content = {},
         modifier = Modifier
-            .background(color)
+            .background(color, LfChartTokens.cellShape)
             .clearAndSetSemantics { },
     ) { _, constraints ->
         val width = (constraints.maxWidth * fraction).toInt().coerceIn(0, constraints.maxWidth)

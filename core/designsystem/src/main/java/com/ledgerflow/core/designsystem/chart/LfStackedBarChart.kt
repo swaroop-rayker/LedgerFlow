@@ -196,17 +196,44 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawColumns(
         )
 
         var bottom = plot.height
-        column.segments.forEach { segment ->
-            if (segment.value <= 0L) return@forEach
+        val drawn = column.segments.filter { it.value > 0L }
+        drawn.forEachIndexed { position, segment ->
             val segmentHeight = LfAxisTicks.fractionOf(segment.value, axisMax) * plot.height
             bottom -= segmentHeight
-            drawRect(
-                color = segment.color,
-                topLeft = Offset(left, bottom),
-                size = Size(barWidth, segmentHeight),
-            )
+            // The top of the stack is rounded, its free end (step F6); the
+            // joins between categories stay square.
+            if (position == drawn.lastIndex) {
+                drawTopRounded(segment.color, Offset(left, bottom), Size(barWidth, segmentHeight))
+            } else {
+                drawRect(
+                    color = segment.color,
+                    topLeft = Offset(left, bottom),
+                    size = Size(barWidth, segmentHeight),
+                )
+            }
         }
     }
+}
+
+/**
+ * A bar rounded at its free end only (step F6): the corner is half the bar's
+ * width, capped by its height, so a thin day reads as a bar, not a dot.
+ */
+internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTopRounded(
+    color: Color,
+    topLeft: Offset,
+    size: Size,
+    up: Boolean = true,
+) {
+    val r = minOf(size.width / 2f, size.height)
+    val corner = androidx.compose.ui.geometry.CornerRadius(r)
+    val rect = androidx.compose.ui.geometry.Rect(topLeft, size)
+    val shape = if (up) {
+        androidx.compose.ui.geometry.RoundRect(rect, topLeft = corner, topRight = corner)
+    } else {
+        androidx.compose.ui.geometry.RoundRect(rect, bottomLeft = corner, bottomRight = corner)
+    }
+    drawPath(androidx.compose.ui.graphics.Path().apply { addRoundRect(shape) }, color)
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid(

@@ -17,7 +17,6 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.chart.LfBudgetBar
-import com.ledgerflow.core.designsystem.chart.LfCategoryPalette
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -137,10 +136,8 @@ private fun BudgetCard(
                 projectedFraction = progress.projectedFraction,
                 // What is left, as Home says it (step F5, owner 2026-10-30).
                 amounts = BudgetWords.headroom(progress.spent, progress.budget.amount, currency),
-                color = LfCategoryPalette.colorForId(
-                    progress.budget.categoryId,
-                    progress.categoryColorArgb,
-                ),
+                // A budget is a plan, not money moving: the primary action's tone, amber
+                // once over (step F6, owner 2026-10-30), never its category's colour.
             )
 
             Text(

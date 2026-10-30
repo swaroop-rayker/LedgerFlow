@@ -507,10 +507,8 @@ private fun BudgetRow(progress: BudgetProgress, currency: String) {
         formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
         fraction = progress.fraction,
         projectedFraction = progress.projectedFraction,
-        color = LfCategoryPalette.colorForId(
-            progress.budget.categoryId,
-            progress.categoryColorArgb,
-        ),
+        // A budget is a plan, not money moving: the primary action's tone, amber
+        // once over (step F6, owner 2026-10-30), never its category's colour.
     )
     if (progress.onCourseToOverrun) {
         Text(
@@ -921,7 +919,12 @@ private fun DonutWithList(
     // graphic orients and the list is what the user came to read -- measured on
     // device at 132dp it filled a third of the card for a single category, so
     // it is 104dp now.
-    LfDonutChart(slices = slices)
+    LfDonutChart(
+        slices = slices,
+        // The ring's total in its middle, Plex Mono (step F6), added up with
+        // Money (Law 3).
+        centerText = MoneyFormat.symbolised(Money.sum(totals.map { it.amount }).minor, currency),
+    )
 
     CategoryList(totals, currency, expandedId, subcategories, onExpand)
 }
