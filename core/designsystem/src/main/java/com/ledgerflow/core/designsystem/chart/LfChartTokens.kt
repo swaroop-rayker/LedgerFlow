@@ -34,6 +34,8 @@ internal object LfChartTokens {
     val labelStyle: TextStyle @Composable get() = LfTheme.type.label
     val textStyle: TextStyle @Composable get() = LfTheme.type.bodySmall
     val amountStyle: TextStyle @Composable get() = LfTheme.type.amountRow
+    /** A figure on a chart (the area chart's value pill): Plex Mono, label-sized. */
+    val figureStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
     val text: Color @Composable get() = LfTheme.colors.text.primary
     val secondaryText: Color @Composable get() = LfTheme.colors.text.secondary
     val axisLabel: Color @Composable get() = LfTheme.colors.chart.axisLabel
@@ -56,4 +58,8 @@ internal object LfChartTokens {
     val outgoing: Color @Composable get() = LfTheme.colors.money.outgoing
     val incoming: Color @Composable get() = LfTheme.colors.money.incoming
     val overBudget: Color @Composable get() = LfTheme.colors.status.warning
+    /** The area chart's value pill (step F6). */
+    val pill: Color @Composable get() = LfTheme.colors.surface.overlay
+    /** The ring round a marked point: the card the chart sits on. */
+    val ringBehind: Color @Composable get() = LfTheme.colors.surface.raised
 }

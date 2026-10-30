@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.ledgerflow.core.designsystem.chart.LfAreaChart
+import com.ledgerflow.core.designsystem.chart.LfAreaPoint
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
@@ -124,6 +126,37 @@ open class LfChartScreenshotTest {
                 LfDonutSlice("c", "Transport", 12_000L, Color(0xFF82C9A0)),
                 LfDonutSlice("d", "Sundries", 200L, Color(0xFFC39BD3)),
             ),
+        )
+    }
+
+    // ── F6: the area chart (running total) ─────────────────────────────────
+
+    @Test
+    fun area_1x() = capture("chart-area-1x", 1.0f) { Area() }
+
+    @Test
+    fun area_2x() = capture("chart-area-2x", 2.0f) { Area() }
+
+    /**
+     * A running total with flat days and one big jump: the shape a plain
+     * spline would draw falling, then overshooting. Here it only rises, and
+     * the last point carries its pill.
+     */
+    @Composable
+    private fun Area() {
+        val daily = listOf(
+            0L, 300_00L, 0L, 0L, 1_240_50L, 0L, 24_000_00L, 0L,
+            60_00L, 0L, 0L, 2_100_00L, 0L, 349_00L, 0L,
+        )
+        var running = 0L
+        LfAreaChart(
+            points = daily.mapIndexed { index, amount ->
+                running += amount
+                LfAreaPoint(label = "${index + 1} Oct", value = running)
+            },
+            color = Color(0xFFFF8A80),
+            formatValue = { minor -> "₹" + (minor / 100) },
+            description = "Spending so far",
         )
     }
 

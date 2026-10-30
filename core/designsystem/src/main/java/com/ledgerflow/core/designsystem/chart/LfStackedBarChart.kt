@@ -333,7 +333,7 @@ public sealed interface LfViewportGesture {
  * A gesture smaller than [MIN_PAN_FRACTION] is ignored: a stray touch while
  * scrolling the page should not silently move the window the user is reading.
  */
-private fun Modifier.viewportGestures(
+internal fun Modifier.viewportGestures(
     onViewportChange: (LfViewportGesture) -> Unit,
 ): Modifier = this
     .pointerInput(onViewportChange) {
