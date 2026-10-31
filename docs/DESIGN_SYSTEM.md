@@ -134,6 +134,11 @@ somewhere else takes `onBack`: the back arrow and the title on one line.
   for actions inside a row), `LfIconButton`, `LfChip` (with a Plex `count`),
   `LfSegmentedControl` (a pill row, or a card when it stacks — BUG79/80),
   `LfTextField`, `LfAmountField`, `LfAmountCard` (a capture form's head).
+- **Text to read.** `LfProse` draws shipped text (What's new, Help, the
+  policy) from `ProseMarkdown`'s small Markdown subset; `lfProseItems` for a
+  page long enough to be lazy; the `Secondary` tone for an answer under its
+  question. `LfExpandableRow` is that question: stateless, it says whether
+  it is open.
 - **Amounts.** `LfMaskedAmount` for a read-only figure that can be hidden
   (Hide amounts on Home); a figure inside a sentence uses `AmountMask` for the
   same dots. A block of hidden figures is the tap that shows them
