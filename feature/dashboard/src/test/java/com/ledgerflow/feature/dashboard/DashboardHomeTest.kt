@@ -78,6 +78,8 @@ class DashboardHomeTest {
     @Test
     fun hideAmounts_followsTheSetting_andARevealLastsUntilHomeStops() = runTest(dispatcher) {
         val vm = viewModel()
+        // Before the setting is read, nothing is shown: the figures may land first.
+        assertThat(vm.state.value.amountsHidden).isTrue()
         advanceUntilIdle()
         assertThat(vm.state.value.amountsHidden).isFalse()
 

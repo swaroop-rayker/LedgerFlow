@@ -20,7 +20,7 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 · Allowlist editor | Merged, PR #11 (`5c4ce8a`, 2026-10-25): §3.4; SPEC §9.3, §5.2, §16 Q4 |
 | V2-3 · App lock + screenshot block | Merged, PR #12 (`0cc93ea`, 2026-10-25): §3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned |
 | Night Vault redesign | Merged, PR #13 (`a5bc471`, 2026-10-31), squashed from `redesign/design-system`: `DESIGN_SYSTEM_PLAN.md` steps A–G plus the compact Organise layout; ADR-0031; `docs/DESIGN_SYSTEM.md` is the guide. Profile is the fourth tab and every Settings section is its own page (D7, amended). The new Organise screen has not been checked on the phone |
-| V2-3 · Hide amounts + Data permissions | Next (§3.5; `DESIGN_SYSTEM_PLAN.md` §5.6: `LfMaskedAmount`, an `LfSettingsPage` under Security & privacy) |
+| V2-3 · Hide amounts + Data permissions | Built on `claude/v2-3-hide-amounts` (§3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended). Not yet merged |
 | V2-3 · About | After that (§3.8; `LfProse`, `LfExpandableRow`). The licences generator is a dependency for the owner to approve first; the public contact email is still the owner's |
 | LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
 
@@ -262,8 +262,14 @@ listing each permission the app holds, why, and a deep link to revoke it.
 **Built (V2-3, 2026-10-24): app lock and screenshot block.** Platform prompt
 only (no `androidx.biometric`), on cold start and after Lock after
 (Immediately / 1 / 5 / 15 minutes); a screen overlay that touches no key.
-SPEC §7.6 has the detail. Hide amounts and the data-permissions page are the
-next PR.
+SPEC §7.6 has the detail.
+
+**Built (V2-3, 2026-10-31): Hide amounts on Home and Data permissions.** Home
+draws every amount as the same four dots until a tap shows them all; leaving
+Home hides them again. Data permissions lists what the installed package
+actually holds, read from Android, with a link to Android's page for each one
+the user can turn off. SPEC §9.3 has the detail. Hide amounts' key sits outside
+the vault as ADR-0030's second named exception, pending the owner's word.
 
 **PIN (owner, 2026-10-25).** The Security page offers a choice: the phone's
 own lock (today's default) or a LedgerFlow PIN, as in the reference samples.

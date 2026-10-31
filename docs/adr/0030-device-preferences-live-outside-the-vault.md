@@ -101,6 +101,21 @@ a day number; and not carrying it in a `.lfbk` costs at most one repeated
 warning after a restore. It is listed by name so it stays an exception rather
 than a precedent: the next proposal that fails test 2 reopens this ADR.
 
+### Second named exception: hiding amounts on Home (V2-3, 2026-10-31)
+
+| Key | File | Why it is here |
+|---|---|---|
+| `security_hide_amounts` | `security` | On/off. Home draws its amounts as a mask until tapped (V2-PLAN §3.5). |
+
+This is that next proposal, and it **fails test 2** the same way: Home's
+figures come from the vault, so nothing needs the switch before unlock. It
+passes test 1 (a boolean) and test 3 in the sense that matters: who might be
+looking over the user's shoulder is a fact about this phone, like the
+screenshot block beside it, and a `.lfbk` restored onto a new phone should not
+decide it. It sits in the `security` file with the other Security & privacy
+switches. **Built this way pending the owner's decision**; the alternative is
+a key in the vault's `app_meta`, which would travel with a backup.
+
 The base currency is **not** here: it lives in the vault (`app_meta`) because
 every stored amount is in it, and it fails test 3 — it must travel with the
 data it labels.
