@@ -1,7 +1,8 @@
 # Plan — LedgerFlow v2 (for general users)
 
-Status: **V2-1 and V2-2 merged (2026-10-22).** Written 2026-09-30 from
-the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
+Status: **V2-1, V2-2 and five of V2-3's seven PRs merged (2026-10-25);
+the Night Vault redesign merged (2026-10-31).** Written 2026-09-30 from the
+owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 
 | Item | State |
 |---|---|
@@ -13,11 +14,15 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-2 Settings | Merged, PR #5 (`d40f5cd`, 2026-10-22): D7 (a), §3 below; SPEC §9.3. Device suites on `d40f5cd` (SM-S721B, 2026-10-23): `:core:database` 105/105 (migration chain v1→v12, backup round-trip, older-schema restores) and `:core:data` 402/402 (restore, nightly and manual backup, purge). CI skips its instrumented job behind the known receipt-corpus red. Its RTL check found BUG61, fixed separately in PR #6 |
 | BUG61 RTL text | Merged, PR #6 (`dd25dd9`, 2026-10-24) |
 | V2-3 decisions | Owner, 2026-10-24: seven PRs in order Appearance → Currency & region → Notifications (budget-alerts row + overspending) → Allowlist editor → App lock + screenshot block → Hide amounts + Data permissions → About. Lock on the platform `BiometricPrompt` (no `androidx.biometric`); preferences outside the vault under ADR-0030 |
-| V2-3 · Appearance | PR #8, `claude/v2-3-appearance` (§3.2; SPEC §9.3, §9.5; ADR-0030). Not yet merged |
-| V2-3 · Currency & region | PR #9, stacked on #8 (§3.3; SPEC §9.3, §16 Q26 closed; BUG62). Not yet merged |
-| V2-3 · Notifications | PR #10, stacked on #9 (§3.4: budget-alerts row, overspending alerts; SPEC §9.3, §5.7). Not yet merged |
-| V2-3 · Allowlist editor | PR #11, stacked on #10 (§3.4; SPEC §9.3, §5.2, §16 Q4). Not yet merged |
-| V2-3 · App lock + screenshot block | Built on `claude/v2-3-app-lock`, stacked on the allowlist editor (§3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned). Not yet merged |
+| V2-3 · Appearance | Merged, PR #8 (`9c9b523`, 2026-10-25): §3.2; SPEC §9.3, §9.5; ADR-0030 |
+| V2-3 · Currency & region | Merged, PR #9 (`582e730`, 2026-10-25): §3.3; SPEC §9.3, §16 Q26 closed; BUG62 |
+| V2-3 · Notifications | Merged, PR #10 (`9a570d0`, 2026-10-25): §3.4, budget-alerts row and overspending alerts; SPEC §9.3, §5.7 |
+| V2-3 · Allowlist editor | Merged, PR #11 (`5c4ce8a`, 2026-10-25): §3.4; SPEC §9.3, §5.2, §16 Q4 |
+| V2-3 · App lock + screenshot block | Merged, PR #12 (`0cc93ea`, 2026-10-25): §3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned |
+| Night Vault redesign | Merged, PR #13 (`a5bc471`, 2026-10-31), squashed from `redesign/design-system`: `DESIGN_SYSTEM_PLAN.md` steps A–G plus the compact Organise layout; ADR-0031; `docs/DESIGN_SYSTEM.md` is the guide. Profile is the fourth tab and every Settings section is its own page (D7, amended). The new Organise screen has not been checked on the phone |
+| V2-3 · Hide amounts + Data permissions | Next (§3.5; `DESIGN_SYSTEM_PLAN.md` §5.6: `LfMaskedAmount`, an `LfSettingsPage` under Security & privacy) |
+| V2-3 · About | After that (§3.8; `LfProse`, `LfExpandableRow`). The licences generator is a dependency for the owner to approve first; the public contact email is still the owner's |
+| LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -473,7 +478,7 @@ a merchant's category. Either would be its own owner decision.
 | V2-0 | Owner decisions D1–D8; ADRs for the network (D1), FX (D2) and D5, at the next free numbers | owner; D6 settled 2026-10-20 |
 | V2-1 | BUG-A transitions, BUG-B ghost entries + copy, BUG-C Home v1 | D6; ghost-message evidence; Home card list |
 | V2-2 | Settings destination and restructure (moves only, no new features) | D7 |
-| V2-3 | Appearance, Currency & region, Notifications, App lock, About | D4 |
+| V2-3 | Appearance, Currency & region, Notifications, Allowlist editor, App lock + screenshot block (all merged); Hide amounts + Data permissions, About | D4 |
 | V2-4 | Data & sync: Drive, Import (CSV/XLSX), Restore entry | D1, D8; P5 XLSX |
 | V2-5 | Receipts management | D5 |
 | V2-6 | Merchant categories (schema v13): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; owner to confirm §5.2's seed list |
