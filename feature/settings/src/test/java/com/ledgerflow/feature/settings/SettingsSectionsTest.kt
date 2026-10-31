@@ -59,6 +59,11 @@ class SettingsSectionsTest {
         SettingsItem.LockAfter to "event ${SettingsEvent.LockAfterRequested}",
         SettingsItem.DataPermissions to "data permissions",
         SettingsItem.Diagnostics to "diagnostics",
+        SettingsItem.WhatsNew to "about ${AboutLink.WhatsNew}",
+        SettingsItem.Help to "about ${AboutLink.Help}",
+        SettingsItem.ReportBug to "about ${AboutLink.ReportBug}",
+        SettingsItem.PrivacyPolicy to "about ${AboutLink.PrivacyPolicy}",
+        SettingsItem.Terms to "about ${AboutLink.Terms}",
     )
 
     @Test
@@ -97,6 +102,15 @@ class SettingsSectionsTest {
                 SettingsItem.DateOrder,
             ),
             "Tools" to listOf(SettingsItem.Diagnostics),
+            // V2-3 (V2-PLAN §3.8): last, the version first.
+            "About" to listOf(
+                SettingsItem.AppVersion,
+                SettingsItem.WhatsNew,
+                SettingsItem.Help,
+                SettingsItem.ReportBug,
+                SettingsItem.PrivacyPolicy,
+                SettingsItem.Terms,
+            ),
         ).inOrder()
     }
 
@@ -120,7 +134,7 @@ class SettingsSectionsTest {
             SettingsItem.StartScreen,
             SettingsItem.NumberGrouping,
         )
-        val facts = listOf(SettingsItem.BaseCurrency)
+        val facts = listOf(SettingsItem.BaseCurrency, SettingsItem.AppVersion)
         val switches = SettingsItem.entries.filter { toggleFor(it, state) != null }
         assertThat(switches)
             .containsExactly(SettingsItem.AppLock, SettingsItem.BlockScreenshots, SettingsItem.HideAmounts)
@@ -173,6 +187,7 @@ class SettingsSectionsTest {
                     onBudgetAlerts = { opened += "budget alerts" },
                     onPaymentApps = { opened += "payment apps" },
                     onDataPermissions = { opened += "data permissions" },
+                    onAbout = { opened += "about $it" },
                     onEvent = { event -> opened += "event $event" },
                 )
             }
@@ -214,6 +229,7 @@ class SettingsSectionsTest {
                     onBudgetAlerts = {},
                     onPaymentApps = {},
                     onDataPermissions = {},
+                    onAbout = {},
                     onEvent = {},
                 )
             }

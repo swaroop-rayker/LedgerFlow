@@ -70,6 +70,7 @@ public fun SettingsSectionScreen(
     onBudgetAlerts: () -> Unit,
     onPaymentApps: () -> Unit,
     onDataPermissions: () -> Unit,
+    onAbout: (AboutLink) -> Unit,
     onEvent: (SettingsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -96,6 +97,11 @@ public fun SettingsSectionScreen(
         SettingsItem.LockAfter to { onEvent(SettingsEvent.LockAfterRequested) },
         SettingsItem.DataPermissions to onDataPermissions,
         SettingsItem.Diagnostics to onDiagnostics,
+        SettingsItem.WhatsNew to { onAbout(AboutLink.WhatsNew) },
+        SettingsItem.Help to { onAbout(AboutLink.Help) },
+        SettingsItem.ReportBug to { onAbout(AboutLink.ReportBug) },
+        SettingsItem.PrivacyPolicy to { onAbout(AboutLink.PrivacyPolicy) },
+        SettingsItem.Terms to { onAbout(AboutLink.Terms) },
     )
     val section = SettingsSections.single { it.page == page }
 
@@ -124,7 +130,10 @@ public fun SettingsSectionScreen(
  * Public because the shell's route names one: `Destination.SettingsSection`
  * carries [name], and the shell reads it back with [settingsPageNamed].
  */
-public enum class SettingsPage { Notifications, Organise, Data, Security, Appearance, Region, Tools }
+public enum class SettingsPage { Notifications, Organise, Data, Security, Appearance, Region, Tools, About }
+
+/** Where an About row leads (V2-PLAN §3.8). The shell owns the destinations. */
+public enum class AboutLink { WhatsNew, Help, ReportBug, PrivacyPolicy, Terms }
 
 /** The page a route's argument names, or null for a name no page has. */
 public fun settingsPageNamed(name: String): SettingsPage? = SettingsPage.entries.firstOrNull { it.name == name }
@@ -159,6 +168,14 @@ internal enum class SettingsItem {
     DataPermissions,
 
     Diagnostics,
+
+    // About (V2-3, V2-PLAN §3.8): the version as a fact, then ways out.
+    AppVersion,
+    WhatsNew,
+    Help,
+    ReportBug,
+    PrivacyPolicy,
+    Terms,
 }
 
 /** One page: its name and its rows, in drawing order. */
@@ -236,6 +253,20 @@ internal val SettingsSections: List<SettingsSection> = listOf(
         listOf(SettingsItem.BaseCurrency, SettingsItem.NumberGrouping, SettingsItem.DateOrder),
     ),
     SettingsSection(SettingsPage.Tools, "Tools", listOf(SettingsItem.Diagnostics)),
+    // Last, after Tools (DESIGN_SYSTEM_PLAN Q8): read once, rarely revisited.
+    // The version first, as a fact; help before the legal pages.
+    SettingsSection(
+        SettingsPage.About,
+        "About",
+        listOf(
+            SettingsItem.AppVersion,
+            SettingsItem.WhatsNew,
+            SettingsItem.Help,
+            SettingsItem.ReportBug,
+            SettingsItem.PrivacyPolicy,
+            SettingsItem.Terms,
+        ),
+    ),
 )
 
 /**
@@ -272,6 +303,12 @@ internal val SettingsItem.title: String
         SettingsItem.HideAmounts -> "Hide amounts on Home"
         SettingsItem.DataPermissions -> "Data permissions"
         SettingsItem.Diagnostics -> "Diagnostics"
+        SettingsItem.AppVersion -> "Version"
+        SettingsItem.WhatsNew -> "What's new"
+        SettingsItem.Help -> "Help & FAQ"
+        SettingsItem.ReportBug -> "Report a bug"
+        SettingsItem.PrivacyPolicy -> "Privacy policy"
+        SettingsItem.Terms -> "Terms"
     }
 
 /**
@@ -315,6 +352,12 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.NumberGrouping to { groupingSubtitle(it) },
     SettingsItem.DateOrder to { dateOrderSubtitle(it.region.dateOrder) },
     SettingsItem.Diagnostics to { "How automatic capture is working" },
+    SettingsItem.AppVersion to { appVersionSubtitle(it) },
+    SettingsItem.WhatsNew to { "What changed in this version" },
+    SettingsItem.Help to { "Answers to common questions, offline" },
+    SettingsItem.ReportBug to { "Describe a problem. You see everything before it's sent." },
+    SettingsItem.PrivacyPolicy to { "What stays on your phone, and the little that doesn't" },
+    SettingsItem.Terms to { "The terms for using LedgerFlow" },
 )
 
 /**
@@ -693,6 +736,7 @@ private fun SettingsPreview() {
             onBudgetAlerts = {},
             onPaymentApps = {},
             onDataPermissions = {},
+            onAbout = {},
             onEvent = {},
         )
     }
@@ -719,6 +763,7 @@ private fun SettingsEmptyBinPreview() {
             onBudgetAlerts = {},
             onPaymentApps = {},
             onDataPermissions = {},
+            onAbout = {},
             onEvent = {},
         )
     }

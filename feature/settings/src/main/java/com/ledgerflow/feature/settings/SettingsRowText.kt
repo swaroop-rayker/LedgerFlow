@@ -14,6 +14,8 @@ import com.ledgerflow.core.model.CurrencyDisplay
 import com.ledgerflow.core.model.CurrencyExponent
 import com.ledgerflow.core.model.DateOrder
 import com.ledgerflow.core.model.NumberGrouping
+import com.ledgerflow.feature.settings.about.editionLabel
+import com.ledgerflow.feature.settings.about.versionLabel
 import java.time.LocalDate
 
 /*
@@ -51,6 +53,12 @@ internal fun toggleFor(item: SettingsItem, state: SettingsUiState): SettingsTogg
     SettingsItem.DateOrder,
     SettingsItem.LockAfter,
     SettingsItem.Diagnostics,
+    SettingsItem.AppVersion,
+    SettingsItem.WhatsNew,
+    SettingsItem.Help,
+    SettingsItem.ReportBug,
+    SettingsItem.PrivacyPolicy,
+    SettingsItem.Terms,
     -> null
 }
 
@@ -93,6 +101,12 @@ internal fun hideAmountsSubtitle(on: Boolean): String =
     } else {
         "Show dots in place of amounts on Home until you tap them."
     }
+
+/** The Version row (About): "0.1.1 (2) · Google Play build"; empty until read. */
+internal fun appVersionSubtitle(state: SettingsUiState): String =
+    state.appInfo?.let { versionLabel(it) + " " + Char(MIDDLE_DOT) + " " + editionLabel(it) } ?: "LedgerFlow"
+
+private const val MIDDLE_DOT = 0x00B7
 
 /** The picker's options for [LockTimeout]. */
 internal val LockTimeout.label: String
@@ -234,6 +248,12 @@ internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoi
     SettingsItem.DeletedEntries,
     SettingsItem.Receipts,
     SettingsItem.Diagnostics,
+    SettingsItem.AppVersion,
+    SettingsItem.WhatsNew,
+    SettingsItem.Help,
+    SettingsItem.ReportBug,
+    SettingsItem.PrivacyPolicy,
+    SettingsItem.Terms,
     -> null
 }
 

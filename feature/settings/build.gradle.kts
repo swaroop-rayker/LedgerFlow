@@ -26,6 +26,40 @@ android {
     }
 }
 
+/**
+ * Settings > About > Privacy policy shows `docs/play/privacy-policy.md` itself
+ * (V2-3): copied into the assets at build time, so the policy on the phone and
+ * the one the stores link to are one file and cannot drift apart.
+ * `PrivacyPolicyIsTheDocsFileTest` holds it.
+ */
+abstract class BundleAboutDocuments : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val documents: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val about = outputDir.get().asFile.resolve("about")
+        about.deleteRecursively()
+        about.mkdirs()
+        documents.forEach { it.copyTo(about.resolve(it.name), overwrite = true) }
+    }
+}
+
+val bundleAboutDocuments = tasks.register<BundleAboutDocuments>("bundleAboutDocuments") {
+    documents.from(rootProject.layout.projectDirectory.file("docs/play/privacy-policy.md"))
+    outputDir.set(layout.buildDirectory.dir("generated/aboutDocuments"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(bundleAboutDocuments, BundleAboutDocuments::outputDir)
+    }
+}
+
 dependencies {
     // The shared fakes -- a validator and a backup repository -- for the
     // "Back up now" ViewModel's tests.

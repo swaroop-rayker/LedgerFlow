@@ -64,6 +64,7 @@ private fun profileIcon(page: SettingsPage): ImageVector? = when (page) {
     SettingsPage.Appearance,
     SettingsPage.Region,
     SettingsPage.Tools,
+    SettingsPage.About,
     -> null
 }
 

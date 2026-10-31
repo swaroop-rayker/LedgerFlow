@@ -3,6 +3,8 @@ package com.ledgerflow.feature.settings
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.about.AppInfo
+import com.ledgerflow.core.domain.about.AppInfoReader
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.analytics.BudgetAlertChannel
 import com.ledgerflow.core.domain.appearance.AnimationPreference
@@ -194,6 +196,9 @@ public data class SettingsUiState(
 
     /** Hide amounts on Home (V2-PLAN §3.5), kept in the vault. */
     val hideAmounts: Boolean = false,
+
+    /** This install's version and edition, for About; null until read. */
+    val appInfo: AppInfo? = null,
 )
 
 @HiltViewModel
@@ -206,7 +211,10 @@ public class SettingsViewModel @Inject constructor(
     private val budgetAlertChannel: BudgetAlertChannel,
     allowlist: PackageAllowlistRepository,
     private val hideAmounts: HideAmountsSetting,
+    appInfoReader: AppInfoReader,
 ) : ViewModel() {
+
+    private val appInfo = MutableStateFlow(appInfoReader.read())
 
     private val appearanceStore = device.appearance
     private val phoneMotion = device.phoneMotion
@@ -287,6 +295,7 @@ public class SettingsViewModel @Inject constructor(
         .combine(hasScreenLock) { state, secure -> state.copy(hasScreenLock = secure) }
         .combine(choosingLockAfter) { state, choosing -> state.copy(choosingLockAfter = choosing) }
         .combine(hideAmounts.enabled.onStart { emit(false) }) { state, hide -> state.copy(hideAmounts = hide) }
+        .combine(appInfo) { state, info -> state.copy(appInfo = info) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
     init {
