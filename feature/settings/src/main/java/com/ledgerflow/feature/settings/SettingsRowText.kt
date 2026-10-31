@@ -59,6 +59,7 @@ internal fun toggleFor(item: SettingsItem, state: SettingsUiState): SettingsTogg
     SettingsItem.ReportBug,
     SettingsItem.PrivacyPolicy,
     SettingsItem.Terms,
+    SettingsItem.Licences,
     -> null
 }
 
@@ -254,6 +255,7 @@ internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoi
     SettingsItem.ReportBug,
     SettingsItem.PrivacyPolicy,
     SettingsItem.Terms,
+    SettingsItem.Licences,
     -> null
 }
 

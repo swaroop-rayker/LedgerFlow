@@ -64,6 +64,7 @@ class SettingsSectionsTest {
         SettingsItem.ReportBug to "about ${AboutLink.ReportBug}",
         SettingsItem.PrivacyPolicy to "about ${AboutLink.PrivacyPolicy}",
         SettingsItem.Terms to "about ${AboutLink.Terms}",
+        SettingsItem.Licences to "about ${AboutLink.Licences}",
     )
 
     @Test
@@ -110,6 +111,7 @@ class SettingsSectionsTest {
                 SettingsItem.ReportBug,
                 SettingsItem.PrivacyPolicy,
                 SettingsItem.Terms,
+                SettingsItem.Licences,
             ),
         ).inOrder()
     }

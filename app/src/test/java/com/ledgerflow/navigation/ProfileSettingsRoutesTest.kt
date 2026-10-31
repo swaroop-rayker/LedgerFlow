@@ -89,6 +89,7 @@ class ProfileSettingsRoutesTest {
                 "Report a bug" to Destination.ReportBug,
                 "Privacy policy" to Destination.AboutDocument("PrivacyPolicy"),
                 "Terms" to Destination.AboutDocument("Terms"),
+                "Open-source licences" to Destination.Licences,
             ),
         )
         val reached = mutableListOf<Destination>()

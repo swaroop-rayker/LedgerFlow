@@ -7,7 +7,7 @@ Built from the navigation graph (`app/.../navigation/LedgerFlowShell.kt`), the
 pre-app routing in `MainActivity.kt`, and every `LfDialog`, `ModalBottomSheet`,
 `DatePickerDialog`, `LfEmptyState` and notification builder in the source.
 
-**81 entries:** 36 full screens · 1 bottom sheet · 30 dialogs and pickers ·
+**83 entries:** 38 full screens · 1 bottom sheet · 30 dialogs and pickers ·
 10 empty, error and banner states · 4 system notifications. (2026-10-31: the
 last two V2-3 PRs add Data permissions, Home's hidden-amounts mode, and About
 with its three pages.)
@@ -80,6 +80,8 @@ missing or doesn't match what the code says · **Thin** = placeholder-level UI �
 | What's new · Privacy policy · Terms (V2-3) | `feature/settings/src/main/java/com/ledgerflow/feature/settings/about/AboutScreens.kt:38` | Bundled text, one page each; the policy is the docs file | About's rows | **OK.** Terms are a draft for the owner |
 | Help & FAQ (V2-3) | `feature/settings/src/main/java/com/ledgerflow/feature/settings/about/AboutScreens.kt:49` | Questions that open to their answers, offline | About "Help & FAQ" | **OK** |
 | Report a bug (V2-3) | `feature/settings/src/main/java/com/ledgerflow/feature/settings/about/AboutScreens.kt:74` | Write what happened, see every line sent with it, share through Android's chooser | About "Report a bug" | **OK.** The app sends nothing itself |
+| Open-source licences (V2-3) | `feature/settings/src/main/java/com/ledgerflow/feature/settings/about/LicencesScreens.kt:35` | Every library, font and icon set the app ships, with version and licence (ADR-0032) | About "Open-source licences" | **OK** |
+| One component's licences (V2-3) | `feature/settings/src/main/java/com/ledgerflow/feature/settings/about/LicencesScreens.kt:93` | Its licences by name, where their terms are, and the text when bundled | A row of Open-source licences | **OK** |
 | Organise | `feature/categories/src/main/java/com/ledgerflow/feature/categories/CategoriesScreen.kt:59` | Categories, Merchants and Payment methods tabs: add, rename, hide, merge, erase, restore | Settings "Categories & merchants" | **Note.** The row name and screen title ("Organise") don't match |
 | Name prompt (dialog) | `feature/categories/src/main/java/com/ledgerflow/feature/categories/TaxonomyDialogHost.kt:48` | New or rename a category, subcategory or merchant | Add / Rename in Organise | **OK** |
 | Hide "…"? (dialog) | `feature/categories/src/main/java/com/ledgerflow/feature/categories/TaxonomyDialogHost.kt:104` | Confirm hiding an item | Hide in Organise | **OK** |

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AGP 9 shrinks resources it cannot see used; the licences list is read by
+     name at run time (Settings > About, ADR-0032), so keep it. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/aboutlibraries" />

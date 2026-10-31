@@ -1,6 +1,6 @@
 # ADR-0032 — The open-source licences list is generated at build time
 
-- **Status:** Accepted (owner, 2026-10-31); not yet applied — the plugin could not be downloaded on the dev box (Norton TLS interception)
+- **Status:** Accepted (owner, 2026-10-31); applied the same day
 - **Date:** 2026-10-31
 - **Deciders:** Swaroop (owner), lead engineer
 - **Supersedes / Superseded by:** —
@@ -46,6 +46,15 @@ size, maintenance and the reason the platform is not enough.
 The bundled fonts (Inter, IBM Plex Mono: OFL) and icons (Lucide: ISC) are not
 Gradle artifacts; their licences are already in `assets/licenses/` and join
 the list from there.
+
+**As applied (2026-10-31).** Offline, the plugin writes names and URLs but no
+licence texts: 158 libraries under six licences, 143 of them Apache 2.0. The
+two standard texts the list uses, Apache 2.0 (from apache.org) and BSD
+3-Clause (from SPDX), are bundled in `:feature:settings`'s assets and shown in
+full; the others (the Android SDK licence, ML Kit's terms, SQLCipher's, a BSD
+notice in CameraX) are shown by name and URL. The plugin gives a licence the
+URL of the first library it met with it (Apache 2.0 arrived with OpenCV's), so
+the app names Apache's canonical address itself.
 
 ## Consequences
 

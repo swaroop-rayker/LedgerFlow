@@ -21,6 +21,10 @@ import com.ledgerflow.feature.settings.about.AboutDocumentScreen
 import com.ledgerflow.feature.settings.about.AboutDocumentViewModel
 import com.ledgerflow.feature.settings.about.HelpScreen
 import com.ledgerflow.feature.settings.about.HelpViewModel
+import com.ledgerflow.feature.settings.about.LicenceScreen
+import com.ledgerflow.feature.settings.about.LicenceViewModel
+import com.ledgerflow.feature.settings.about.LicencesScreen
+import com.ledgerflow.feature.settings.about.LicencesViewModel
 import com.ledgerflow.feature.settings.about.ReportBugScreen
 import com.ledgerflow.feature.settings.about.ReportBugViewModel
 import com.ledgerflow.feature.settings.about.aboutDocumentNamed
@@ -159,6 +163,22 @@ internal fun NavGraphBuilder.aboutDestinations(navController: NavHostController)
             onBack = navController::popBackStack,
         )
     }
+    composable<Destination.Licences> {
+        val viewModel: LicencesViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        LicencesScreen(
+            state = state,
+            onOpen = { id -> navController.navigate(Destination.Licence(id)) },
+            onBack = navController::popBackStack,
+        )
+    }
+    composable<Destination.Licence> { entry ->
+        val id = entry.toRoute<Destination.Licence>().component
+        val viewModel: LicenceViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        LaunchedEffect(id) { viewModel.load(id) }
+        state?.let { LicenceScreen(state = it, onBack = navController::popBackStack) }
+    }
 }
 
 /** Where each About row leads. */
@@ -168,6 +188,7 @@ internal fun aboutRouteFor(link: AboutLink): Destination = when (link) {
     AboutLink.ReportBug -> Destination.ReportBug
     AboutLink.PrivacyPolicy -> Destination.AboutDocument(AboutDocument.PrivacyPolicy.name)
     AboutLink.Terms -> Destination.AboutDocument(AboutDocument.Terms.name)
+    AboutLink.Licences -> Destination.Licences
 }
 
 /** The route that opens [page]; `settingsPageNamed` reads it back. */

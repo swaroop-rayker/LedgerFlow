@@ -616,7 +616,7 @@ Tools, About, Help. The V2-7 tools sit on the Tools page.
 | §3.8 | What's new · Privacy policy · Terms | `LfDetailPage` holding text | L | `LfProse` (headings, paragraphs, lists). **Built, V2-3** |
 | §3.8 | Help & FAQ | `LfDetailPage` | E (no match) | `LfExpandableRow`. **Built, V2-3** |
 | §3.8 | Report a bug (review before sending) | `LfFormPage` | S | **Built, V2-3** (Android's share sheet) |
-| §3.8 | Open-source licences → one licence | `LfDetailPage` list → `LfProse` | L | |
+| §3.8 | Open-source licences → one licence | `LfDetailPage` list → `LfProse` | L | **Built, V2-3** (ADR-0032) |
 | §5.1 | Merchant categories (Organise tab) | today's Organise tab + `TaxonomyCard` | L, E, X, S | |
 | §5.2 | Merchants: Uncategorised (n) filter, multi-select, Set category | Organise tab + `LfChip` filter + selection bar | E, S | selection bar shared with Inbox and Bin |
 | §5.3 | Merchant picker, browse by kind | today's picker dialog + `LfSectionHeader` groups | E | |

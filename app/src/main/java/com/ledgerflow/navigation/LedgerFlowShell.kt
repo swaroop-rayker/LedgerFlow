@@ -572,6 +572,8 @@ private val Destination.label: String
         is Destination.AboutDocument -> "About"
         Destination.Help -> "Help"
         Destination.ReportBug -> "Report a bug"
+        Destination.Licences -> "Licences"
+        is Destination.Licence -> "Licence"
         is Destination.InboxReview -> "Review"
         Destination.ScanReceipt -> "Scan"
         Destination.NotificationAccess -> "Notifications"

@@ -36,12 +36,19 @@ public class AboutTexts @Inject constructor(
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) {
     public suspend fun document(document: AboutDocument): List<ProseBlock> =
-        withoutTitle(ProseMarkdown.parse(read(document.asset)))
+        withoutTitle(ProseMarkdown.parse(read("$FOLDER/${document.asset}")))
 
-    public suspend fun help(): List<HelpItem> = helpItems(ProseMarkdown.parse(read(HELP)))
+    public suspend fun help(): List<HelpItem> = helpItems(ProseMarkdown.parse(read("$FOLDER/$HELP")))
 
-    private suspend fun read(asset: String): String = withContext(io) {
-        context.assets.open("$FOLDER/$asset").bufferedReader().use { it.readText() }
+    /** A licence's text, as written: not ours to mark up (`ProseMarkdown.plain`). */
+    public suspend fun licence(asset: String): List<ProseBlock> = ProseMarkdown.plain(read(asset))
+
+    /** The licences list: the generated one (ADR-0032) plus the bundled fonts and icons. */
+    public suspend fun licences(source: LicenceListSource): List<LicensedComponent> =
+        withContext(io) { LicenceCatalogue.all(source.json()) }
+
+    private suspend fun read(path: String): String = withContext(io) {
+        context.assets.open(path).bufferedReader().use { it.readText() }
     }
 
     private companion object {

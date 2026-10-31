@@ -42,6 +42,54 @@ public class AboutDocumentViewModel @Inject constructor(
     }
 }
 
+/** Open-source licences: every component, by name; null until read. */
+@Immutable
+public data class LicencesUiState(val components: List<LicensedComponent>? = null)
+
+@HiltViewModel
+public class LicencesViewModel @Inject constructor(
+    texts: AboutTexts,
+    source: LicenceListSource,
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(LicencesUiState())
+    public val state: StateFlow<LicencesUiState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch { _state.value = LicencesUiState(texts.licences(source)) }
+    }
+}
+
+/** One component's licences, each with its bundled text when there is one. */
+@Immutable
+public data class LicenceUiState(
+    val component: LicensedComponent,
+    val texts: Map<String, List<ProseBlock>> = emptyMap(),
+)
+
+@HiltViewModel
+public class LicenceViewModel @Inject constructor(
+    private val texts: AboutTexts,
+    private val source: LicenceListSource,
+) : ViewModel() {
+
+    private val _state = MutableStateFlow<LicenceUiState?>(null)
+    public val state: StateFlow<LicenceUiState?> = _state.asStateFlow()
+
+    /** Finds [componentId] and reads its licence texts; the route calls it with its argument. */
+    public fun load(componentId: String) {
+        if (_state.value?.component?.id == componentId) return
+        viewModelScope.launch {
+            val component = texts.licences(source).firstOrNull { it.id == componentId } ?: return@launch
+            _state.value = LicenceUiState(component)
+            val bodies = component.licences.mapNotNull { licence ->
+                licence.asset?.let { licence.id to texts.licence(it) }
+            }.toMap()
+            _state.update { it?.copy(texts = bodies) }
+        }
+    }
+}
+
 /** Help & FAQ: the questions, and which are open. */
 @Immutable
 public data class HelpUiState(val items: List<HelpItem>? = null, val open: Set<Int> = emptySet())

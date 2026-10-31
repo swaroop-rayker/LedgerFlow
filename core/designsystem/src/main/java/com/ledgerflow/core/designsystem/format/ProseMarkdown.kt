@@ -64,6 +64,19 @@ public object ProseMarkdown {
         return blocks
     }
 
+    /**
+     * Text that is not ours to mark up (a licence): one paragraph per run of
+     * non-blank lines, nothing else read into it, so a `*` in a legal text
+     * stays a `*`.
+     */
+    public fun plain(text: String): List<ProseBlock> =
+        text.lines()
+            .joinToString("\n")
+            .split(BLANK_LINES)
+            .map { block -> block.lines().joinToString(" ") { it.trim() }.trim() }
+            .filter { it.isNotEmpty() }
+            .map { ProseBlock.Paragraph(listOf(ProseSpan(it))) }
+
     /** `**bold**` and `` `code` `` inside one block's text. */
     internal fun inline(text: String): List<ProseSpan> {
         val spans = mutableListOf<ProseSpan>()
@@ -90,6 +103,7 @@ public object ProseMarkdown {
         return spans
     }
 
+    private val BLANK_LINES = Regex("""\n\s*\n""")
     private val HEADING = Regex("^(#{1,3})\\s+(.+)$")
     private val BULLET = Regex("^[-*]\\s+(.+)$")
     private const val CONTINUATION = "  "

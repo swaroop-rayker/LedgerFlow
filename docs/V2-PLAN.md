@@ -21,7 +21,7 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 · App lock + screenshot block | Merged, PR #12 (`0cc93ea`, 2026-10-25): §3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned |
 | Night Vault redesign | Merged, PR #13 (`a5bc471`, 2026-10-31), squashed from `redesign/design-system`: `DESIGN_SYSTEM_PLAN.md` steps A–G plus the compact Organise layout; ADR-0031; `docs/DESIGN_SYSTEM.md` is the guide. Profile is the fourth tab and every Settings section is its own page (D7, amended). The new Organise screen has not been checked on the phone |
 | V2-3 · Hide amounts + Data permissions | Built on `claude/v2-3-hide-amounts` (§3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended). Not yet merged |
-| V2-3 · About | Built on `claude/v2-3-about`, stacked on #15 (§3.8; SPEC §9.3, §9.4). Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. The licences page waits on the plugin's download (Norton TLS); the public contact email is still the owner's. Not yet merged |
+| V2-3 · About | Built on `claude/v2-3-about`, stacked on #15 (§3.8; SPEC §9.3, §9.4). Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. The public contact email is still the owner's. Not yet merged |
 | LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is

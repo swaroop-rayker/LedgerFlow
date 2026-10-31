@@ -102,6 +102,7 @@ public fun SettingsSectionScreen(
         SettingsItem.ReportBug to { onAbout(AboutLink.ReportBug) },
         SettingsItem.PrivacyPolicy to { onAbout(AboutLink.PrivacyPolicy) },
         SettingsItem.Terms to { onAbout(AboutLink.Terms) },
+        SettingsItem.Licences to { onAbout(AboutLink.Licences) },
     )
     val section = SettingsSections.single { it.page == page }
 
@@ -133,7 +134,7 @@ public fun SettingsSectionScreen(
 public enum class SettingsPage { Notifications, Organise, Data, Security, Appearance, Region, Tools, About }
 
 /** Where an About row leads (V2-PLAN §3.8). The shell owns the destinations. */
-public enum class AboutLink { WhatsNew, Help, ReportBug, PrivacyPolicy, Terms }
+public enum class AboutLink { WhatsNew, Help, ReportBug, PrivacyPolicy, Terms, Licences }
 
 /** The page a route's argument names, or null for a name no page has. */
 public fun settingsPageNamed(name: String): SettingsPage? = SettingsPage.entries.firstOrNull { it.name == name }
@@ -176,6 +177,7 @@ internal enum class SettingsItem {
     ReportBug,
     PrivacyPolicy,
     Terms,
+    Licences,
 }
 
 /** One page: its name and its rows, in drawing order. */
@@ -265,6 +267,7 @@ internal val SettingsSections: List<SettingsSection> = listOf(
             SettingsItem.ReportBug,
             SettingsItem.PrivacyPolicy,
             SettingsItem.Terms,
+            SettingsItem.Licences,
         ),
     ),
 )
@@ -309,6 +312,7 @@ internal val SettingsItem.title: String
         SettingsItem.ReportBug -> "Report a bug"
         SettingsItem.PrivacyPolicy -> "Privacy policy"
         SettingsItem.Terms -> "Terms"
+        SettingsItem.Licences -> "Open-source licences"
     }
 
 /**
@@ -358,6 +362,7 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.ReportBug to { "Describe a problem. You see everything before it's sent." },
     SettingsItem.PrivacyPolicy to { "What stays on your phone, and the little that doesn't" },
     SettingsItem.Terms to { "The terms for using LedgerFlow" },
+    SettingsItem.Licences to { "The libraries, fonts and icons LedgerFlow is built with" },
 )
 
 /**
