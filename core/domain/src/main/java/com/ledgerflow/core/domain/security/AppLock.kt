@@ -16,6 +16,12 @@ public data class SecurityPreferences(
     val appLock: Boolean = false,
     val lockAfter: LockTimeout = LockTimeout.FIVE_MINUTES,
     val blockScreenshots: Boolean = false,
+    /**
+     * Home draws every amount as a mask until the user taps one (V2-PLAN
+     * §3.5). A glance from beside the user, not a lock: the figures are one
+     * tap away, and every other screen shows them as before.
+     */
+    val hideAmounts: Boolean = false,
 )
 
 /** How long the app may be away before it locks again (owner: 1 / 5 / 15 minutes, or at once). */
@@ -50,6 +56,8 @@ public interface SecurityStore {
     public suspend fun setLockAfter(timeout: LockTimeout)
 
     public suspend fun setBlockScreenshots(enabled: Boolean)
+
+    public suspend fun setHideAmounts(enabled: Boolean)
 }
 
 /**

@@ -122,6 +122,20 @@ open class DashboardScreenGoldensTest {
     @Test fun monthRtl_2x() = capture("home-month-rtl-2x", HomeFixtures.populated, 2f, LayoutDirection.Rtl)
 
     /**
+     * The same month with Hide amounts on (V2-PLAN §3.5): every figure a mask
+     * of one length, the bars and the words as they were. RTL because the
+     * mask carries a currency symbol and a sign that must keep their order.
+     */
+    private val hidden = HomeFixtures.populated.copy(hideAmounts = true)
+
+    @Test fun monthHidden_1x() = capture("home-month-hidden-1x", hidden, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun monthHidden_2x() = capture("home-month-hidden-2x", hidden, 2f)
+
+    @Test fun monthHiddenRtl_1x() = capture("home-month-hidden-rtl-1x", hidden, 1f, LayoutDirection.Rtl)
+
+    /**
      * The frame before the figures land: the books have answered, the summary
      * has not. The month card is at its full height with placeholders, so
      * nothing below it moves when the numbers arrive.

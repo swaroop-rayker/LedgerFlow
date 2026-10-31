@@ -27,6 +27,7 @@ import com.ledgerflow.core.testing.diagnostics.FakeCrashReportRepository
 import com.ledgerflow.core.testing.inbox.FakePendingRepository
 import com.ledgerflow.core.testing.ingest.FakeCaptureGapStore
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
+import com.ledgerflow.core.testing.security.FakeSecurityStore
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,7 @@ class DashboardHomeTest {
     private val dispatcher = StandardTestDispatcher()
     private val ledger = FakeLedgerRepository()
     private val analytics = FakeAnalyticsRepository()
+    private val security = FakeSecurityStore()
     private var now = millisOn(2026, 10, 16)
 
     @Before
@@ -67,6 +69,32 @@ class DashboardHomeTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    /**
+     * Hide amounts on Home (V2-PLAN §3.5): the setting hides, a tap shows, and
+     * Home stopping hides again. The setting itself is never changed by a tap.
+     */
+    @Test
+    fun hideAmounts_followsTheSetting_andARevealLastsUntilHomeStops() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        assertThat(vm.state.value.amountsHidden).isFalse()
+
+        security.setHideAmounts(true)
+        advanceUntilIdle()
+        assertThat(vm.state.value.amountsHidden).isTrue()
+
+        vm.revealAmounts()
+        assertThat(vm.state.value.amountsHidden).isFalse()
+        assertThat(security.preferences.value.hideAmounts).isTrue()
+
+        vm.hideAmountsAgain()
+        assertThat(vm.state.value.amountsHidden).isTrue()
+
+        security.setHideAmounts(false)
+        advanceUntilIdle()
+        assertThat(vm.state.value.amountsHidden).isFalse()
     }
 
     @Test
@@ -305,6 +333,7 @@ class DashboardHomeTest {
                 summary,
                 ledger,
                 clock,
+                security,
             ),
         )
     }

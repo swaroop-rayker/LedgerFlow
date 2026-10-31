@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -28,6 +29,8 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.core.designsystem.chart.LfBudgetBar
@@ -38,9 +41,12 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfLinkBanner
+import com.ledgerflow.core.designsystem.component.LfMaskedAmount
 import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.lfRevealAmounts
+import com.ledgerflow.core.designsystem.format.AmountMask
 import com.ledgerflow.core.designsystem.format.BudgetWords
 import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.format.MoneyFormat
@@ -99,6 +105,11 @@ public fun DashboardRoute(
         onPauseOrDispose { }
     }
 
+    // Hide amounts (V2-PLAN §3.5): a reveal lasts while Home is in front.
+    // Stopping covers both ways out -- another screen, or the app going to the
+    // background -- so nothing stays shown under the app lock or in Recents.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.hideAmountsAgain() }
+
     // "Fully drawn" is Home with its figures, not the first frame of banners
     // (docs/PERF-120HZ-PLAN.md §6), so startup is measured to a real Home.
     // The summary arrives even for an empty or unopenable vault (an empty
@@ -112,6 +123,7 @@ public fun DashboardRoute(
         onAcknowledgeCaptureGap = viewModel::acknowledgeCaptureGap,
         onSaveCrashReports = { saveReport.launch(viewModel.crashReportFileName()) },
         onDismissCrashReports = viewModel::dismissCrashReports,
+        onRevealAmounts = viewModel::revealAmounts,
         onOpenInbox = onOpenInbox,
         onOpenBudgets = onOpenBudgets,
         onOpenAnalytics = onOpenAnalytics,
@@ -146,6 +158,7 @@ public fun DashboardScreen(
     onAcknowledgeCaptureGap: () -> Unit = {},
     onSaveCrashReports: () -> Unit = {},
     onDismissCrashReports: () -> Unit = {},
+    onRevealAmounts: () -> Unit = {},
     onOpenInbox: () -> Unit = {},
     onOpenBudgets: () -> Unit = {},
     onOpenAnalytics: () -> Unit = {},
@@ -211,6 +224,7 @@ public fun DashboardScreen(
 
         homeBody(
             state = state,
+            onRevealAmounts = onRevealAmounts,
             onOpenInbox = onOpenInbox,
             onOpenBudgets = onOpenBudgets,
             onOpenAnalytics = onOpenAnalytics,
@@ -226,6 +240,7 @@ public fun DashboardScreen(
  */
 private fun LazyListScope.homeBody(
     state: DashboardUiState,
+    onRevealAmounts: () -> Unit,
     onOpenInbox: () -> Unit,
     onOpenBudgets: () -> Unit,
     onOpenAnalytics: () -> Unit,
@@ -255,6 +270,8 @@ private fun LazyListScope.homeBody(
             MonthCard(
                 summary = state.summary,
                 currency = state.baseCurrency,
+                hidden = state.amountsHidden,
+                onReveal = onRevealAmounts,
             )
         }
         item(key = "analytics", contentType = "banner") {
@@ -264,6 +281,7 @@ private fun LazyListScope.homeBody(
             spendingCards(
                 state = state,
                 summary = summary,
+                onRevealAmounts = onRevealAmounts,
                 onOpenBudgets = onOpenBudgets,
                 onOpenAnalytics = onOpenAnalytics,
             )
@@ -275,6 +293,8 @@ private fun LazyListScope.homeBody(
             RecentSection(
                 title = "Recent spending",
                 rows = rows,
+                hidden = state.amountsHidden,
+                onReveal = onRevealAmounts,
                 onSeeAll = { onOpenLedger(LedgerType.DEBIT) },
             )
         }
@@ -284,6 +304,8 @@ private fun LazyListScope.homeBody(
             RecentSection(
                 title = "Recent income",
                 rows = rows,
+                hidden = state.amountsHidden,
+                onReveal = onRevealAmounts,
                 onSeeAll = { onOpenLedger(LedgerType.CREDIT) },
             )
         }
@@ -294,6 +316,7 @@ private fun LazyListScope.homeBody(
 private fun LazyListScope.spendingCards(
     state: DashboardUiState,
     summary: HomeSummary,
+    onRevealAmounts: () -> Unit,
     onOpenBudgets: () -> Unit,
     onOpenAnalytics: () -> Unit,
 ) {
@@ -302,6 +325,8 @@ private fun LazyListScope.spendingCards(
             BudgetsCard(
                 budgets = summary.budgets,
                 currency = state.baseCurrency,
+                hidden = state.amountsHidden,
+                onReveal = onRevealAmounts,
                 onOpenBudgets = onOpenBudgets,
             )
         }
@@ -311,6 +336,8 @@ private fun LazyListScope.spendingCards(
             RunwayCard(
                 summary = summary,
                 currency = state.baseCurrency,
+                hidden = state.amountsHidden,
+                onReveal = onRevealAmounts,
             )
         }
     }
@@ -336,13 +363,22 @@ private fun LazyListScope.spendingCards(
  *
  * Drawn with placeholders before [summary] arrives, at the same height, so
  * nothing below it moves when the figures land.
+ *
+ * [hidden] (Hide amounts, V2-PLAN §3.5): every figure is a mask and the whole
+ * card is the tap that shows them.
  */
 @Composable
-private fun MonthCard(summary: HomeSummary?, currency: String, modifier: Modifier = Modifier) {
+private fun MonthCard(
+    summary: HomeSummary?,
+    currency: String,
+    hidden: Boolean,
+    onReveal: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = LfTheme.colors
     val period = summary?.let { periodLabel(it.window.from, it.window.to) }
     val previousPeriod = summary?.let { periodLabel(it.previousWindow.from, it.previousWindow.to) }
-    LfCard(modifier = modifier) {
+    LfCard(modifier = modifier.lfRevealAmounts(hidden = hidden, onReveal = onReveal)) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             Text(
                 text = period?.let { "This month, $it" } ?: "This month",
@@ -355,6 +391,7 @@ private fun MonthCard(summary: HomeSummary?, currency: String, modifier: Modifie
                 previousPeriod = previousPeriod,
                 currency = currency,
                 color = colors.money.outgoing,
+                hidden = hidden,
             )
             BookFigure(
                 label = "Received",
@@ -362,12 +399,20 @@ private fun MonthCard(summary: HomeSummary?, currency: String, modifier: Modifie
                 previousPeriod = previousPeriod,
                 currency = currency,
                 color = colors.money.incoming,
+                hidden = hidden,
             )
             Text(
-                text = summary?.let { "Spent today: " + MoneyFormat.symbolised(it.spentToday.minor, currency) }
+                text = summary?.let { "Spent today: " + figure(it.spentToday.minor, currency, hidden) }
                     ?: PLACEHOLDER_LINE,
                 style = LfTheme.type.label,
                 color = colors.text.secondary,
+                // The figure sits inside the sentence, so a hidden one is said
+                // in words rather than as the dots.
+                modifier = if (hidden && summary != null) {
+                    Modifier.clearAndSetSemantics { contentDescription = "Spent today, " + AmountMask.SPOKEN }
+                } else {
+                    Modifier
+                },
             )
         }
     }
@@ -389,13 +434,18 @@ private fun BookFigure(
     previousPeriod: String?,
     currency: String,
     color: Color,
+    hidden: Boolean,
 ) {
     val comparison = if (book != null && previousPeriod != null) {
-        comparisonSentence(book.total.minor, book.previousTotal.minor, currency, previousPeriod)
+        comparisonSentence(book.total.minor, book.previousTotal.minor, currency, previousPeriod, hidden = hidden)
     } else {
         PLACEHOLDER_LINE
     }
-    val spoken = if (book != null && previousPeriod != null) {
+    val spoken = if (book != null && hidden) {
+        // Without the comparison: "amount hidden more than 1-16 Sep" says
+        // nothing a listener can use.
+        "$label this month, " + AmountMask.SPOKEN
+    } else if (book != null && previousPeriod != null) {
         "$label this month, " + MoneyFormat.spoken(book.total.minor, currency) + ". " +
             comparisonSentence(book.total.minor, book.previousTotal.minor, currency, previousPeriod, spoken = true)
     } else {
@@ -407,12 +457,14 @@ private fun BookFigure(
                 Text(text = label, style = LfTheme.type.body, color = LfTheme.colors.text.primary)
             },
             trailing = {
-                Text(
-                    text = book?.let { MoneyFormat.symbolised(it.total.minor, currency) } ?: PLACEHOLDER_AMOUNT,
+                // The column above speaks for the whole figure.
+                LfMaskedAmount(
+                    amount = book?.let { MoneyFormat.symbolised(it.total.minor, currency) } ?: PLACEHOLDER_AMOUNT,
+                    hidden = hidden && book != null,
+                    currencyCode = currency,
+                    spoken = "",
                     style = LfTheme.type.amountRow,
                     color = color,
-                    maxLines = 1,
-                    softWrap = false,
                 )
             },
         )
@@ -434,26 +486,52 @@ private fun BookFigure(
 private fun BudgetsCard(
     budgets: List<BudgetProgress>,
     currency: String,
+    hidden: Boolean,
+    onReveal: () -> Unit,
     onOpenBudgets: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LfCard(modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             SectionHeading(title = "Budgets", action = "All budgets", onAction = onOpenBudgets)
-            budgets.forEach { progress ->
-                LfBudgetBar(
-                    label = progress.categoryName,
-                    formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
-                    formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
-                    amounts = BudgetWords.headroom(progress.spent, progress.budget.amount, currency),
-                    fraction = progress.fraction,
-                    projectedFraction = progress.projectedFraction,
-                    // A budget is a plan, not money moving: the primary action's tone, amber
-                    // once over (step F6, owner 2026-10-30), never its category's colour.
-                )
+            // The bars are the tap, not the card: "All budgets" stays a way to
+            // Budgets whether or not the figures are hidden.
+            Column(
+                modifier = Modifier.lfRevealAmounts(hidden = hidden, onReveal = onReveal),
+                verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+            ) {
+                budgets.forEach { progress -> HomeBudgetBar(progress = progress, currency = currency, hidden = hidden) }
             }
         }
     }
+}
+
+/**
+ * One budget on Home. Hidden, both figures are masks and the bar stays: it is
+ * a proportion, not an amount, and the reason the card is there.
+ */
+@Composable
+private fun HomeBudgetBar(progress: BudgetProgress, currency: String, hidden: Boolean) {
+    val over = progress.spent > progress.budget.amount
+    LfBudgetBar(
+        label = progress.categoryName,
+        formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
+        formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
+        amounts = if (hidden) {
+            BudgetWords.headroomHidden(over = over, currencyCode = currency)
+        } else {
+            BudgetWords.headroom(progress.spent, progress.budget.amount, currency)
+        },
+        contentDescription = if (hidden) {
+            progress.categoryName + (if (over) ", over budget, " else ", ") + "amounts hidden"
+        } else {
+            null
+        },
+        fraction = progress.fraction,
+        projectedFraction = progress.projectedFraction,
+        // A budget is a plan, not money moving: the primary action's tone, amber
+        // once over (step F6, owner 2026-10-30), never its category's colour.
+    )
 }
 
 /**
@@ -464,15 +542,22 @@ private fun BudgetsCard(
 private fun RunwayCard(
     summary: HomeSummary,
     currency: String,
+    hidden: Boolean,
+    onReveal: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LfCard(modifier = modifier) {
+    LfCard(modifier = modifier.lfRevealAmounts(hidden = hidden, onReveal = onReveal)) {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
+            val through = " expected by " + dayLabel(summary.runwayThrough)
             Text(
-                text = MoneyFormat.symbolised(summary.runwayTotal.minor, currency) +
-                    " expected by " + dayLabel(summary.runwayThrough),
+                text = figure(summary.runwayTotal.minor, currency, hidden) + through,
                 style = LfTheme.type.body,
                 color = LfTheme.colors.text.primary,
+                modifier = if (hidden) {
+                    Modifier.clearAndSetSemantics { contentDescription = AmountMask.SPOKEN + through }
+                } else {
+                    Modifier
+                },
             )
             // Analytics is the banner above it now (F5): one way there per screen.
             Text(
@@ -518,18 +603,29 @@ private fun CoverageCard(coverage: CaptureCoverage, onOpenAnalytics: () -> Unit,
 private fun RecentSection(
     title: String,
     rows: List<LedgerListItem>,
+    hidden: Boolean,
+    onReveal: () -> Unit,
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         SectionHeading(title = title, action = "See all", onAction = onSeeAll)
         // F5: one panel with hairlines between the rows, the samples' grouped
-        // list, rather than a bordered card per row.
-        LfPanel {
+        // list, rather than a bordered card per row. Hidden, the panel is the
+        // tap that shows the amounts; "See all" above stays a way to the Ledger.
+        // Each row is its own announcement (`LfEntryRow` merges itself), so
+        // the panel's tap needs a name of its own (§9.6).
+        LfPanel(
+            modifier = Modifier
+                .lfRevealAmounts(hidden = hidden, onReveal = onReveal)
+                .then(
+                    if (hidden) Modifier.semantics { contentDescription = "$title, " + AmountMask.SPOKEN } else Modifier,
+                ),
+        ) {
             rows.forEachIndexed { index, row ->
                 key(row.id) {
                     if (index > 0) LfDivider()
-                    LfEntryRow(item = row, withDate = true, grouped = true)
+                    LfEntryRow(item = row, withDate = true, grouped = true, amountHidden = hidden)
                 }
             }
         }
@@ -618,20 +714,28 @@ internal fun comparisonSentence(
     currency: String,
     period: String,
     spoken: Boolean = false,
+    hidden: Boolean = false,
 ): String {
     val delta = current - previous
     // Spoken, the amount is words ("5,310.00 rupees"): screen readers skip the
     // ₹ glyph often enough that §9.6 asks for it everywhere TalkBack reads one.
     // Found on LF Bench's Home, where the figure was spoken and its comparison
     // was not.
-    fun amount(minor: Long) =
-        if (spoken) MoneyFormat.spoken(minor, currency) else MoneyFormat.symbolised(minor, currency)
+    fun amount(minor: Long) = when {
+        hidden -> AmountMask.symbolised(currency)
+        spoken -> MoneyFormat.spoken(minor, currency)
+        else -> MoneyFormat.symbolised(minor, currency)
+    }
     return when {
         delta > 0 -> amount(delta) + " more than " + period
         delta < 0 -> amount(-delta) + " less than " + period
         else -> "Same as $period"
     }
 }
+
+/** An amount inside a sentence on Home: the figure, or the mask while amounts are hidden. */
+private fun figure(minor: Long, currency: String, hidden: Boolean): String =
+    if (hidden) AmountMask.symbolised(currency) else MoneyFormat.symbolised(minor, currency)
 
 /** `1–16 Oct`, or `1 Nov` for a one-day window. Both ends are in one month. */
 internal fun periodLabel(from: Int, to: Int): String {

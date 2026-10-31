@@ -53,6 +53,8 @@ internal class SecurityDataStore @Inject constructor(
 
     override suspend fun setBlockScreenshots(enabled: Boolean) = edit { it[BLOCK_SCREENSHOTS] = enabled }
 
+    override suspend fun setHideAmounts(enabled: Boolean) = edit { it[HIDE_AMOUNTS] = enabled }
+
     private suspend fun edit(block: suspend (MutablePreferences) -> Unit) {
         try {
             context.securityDataStore.edit(block)
@@ -66,6 +68,7 @@ internal class SecurityDataStore @Inject constructor(
         internal val APP_LOCK = booleanPreferencesKey("security_app_lock")
         internal val LOCK_AFTER = stringPreferencesKey("security_lock_after")
         internal val BLOCK_SCREENSHOTS = booleanPreferencesKey("security_block_screenshots")
+        internal val HIDE_AMOUNTS = booleanPreferencesKey("security_hide_amounts")
     }
 }
 
@@ -75,5 +78,6 @@ internal fun Preferences.toSecurity(): SecurityPreferences {
         appLock = this[SecurityDataStore.APP_LOCK] ?: defaults.appLock,
         lockAfter = parseOr(this[SecurityDataStore.LOCK_AFTER], defaults.lockAfter),
         blockScreenshots = this[SecurityDataStore.BLOCK_SCREENSHOTS] ?: defaults.blockScreenshots,
+        hideAmounts = this[SecurityDataStore.HIDE_AMOUNTS] ?: defaults.hideAmounts,
     )
 }

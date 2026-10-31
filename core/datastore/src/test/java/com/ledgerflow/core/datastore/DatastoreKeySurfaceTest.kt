@@ -64,6 +64,7 @@ class DatastoreKeySurfaceTest {
         "security_app_lock",
         "security_lock_after",
         "security_block_screenshots",
+        "security_hide_amounts",
     )
 
     private val moduleSources: List<File> by lazy {

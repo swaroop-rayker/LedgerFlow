@@ -11,7 +11,7 @@ import org.junit.Test
 class SecurityPreferencesParseTest {
 
     @Test
-    fun anEmptyFile_isLockOff_screenshotsAllowed() {
+    fun anEmptyFile_isLockOff_screenshotsAllowed_amountsShown() {
         assertThat(emptyPreferences().toSecurity()).isEqualTo(SecurityPreferences())
     }
 
@@ -21,8 +21,16 @@ class SecurityPreferencesParseTest {
             SecurityDataStore.APP_LOCK to true,
             SecurityDataStore.LOCK_AFTER to "ONE_MINUTE",
             SecurityDataStore.BLOCK_SCREENSHOTS to true,
+            SecurityDataStore.HIDE_AMOUNTS to true,
         )
-        assertThat(prefs.toSecurity()).isEqualTo(SecurityPreferences(true, LockTimeout.ONE_MINUTE, true))
+        assertThat(prefs.toSecurity()).isEqualTo(
+            SecurityPreferences(
+                appLock = true,
+                lockAfter = LockTimeout.ONE_MINUTE,
+                blockScreenshots = true,
+                hideAmounts = true,
+            ),
+        )
     }
 
     @Test
