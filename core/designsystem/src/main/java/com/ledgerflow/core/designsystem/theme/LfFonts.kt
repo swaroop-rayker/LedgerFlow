@@ -157,11 +157,11 @@ public val LfFigureFontFamily: FontFamily = FontFamily(
 /**
  * Material's own type scale, in Inter.
  *
- * Every `Lf*` component passes an explicit [LfTypography] style, so this reaches
+ * Every `Lf*` component passes an explicit `LfTheme.type` style, so this reaches
  * only text a Material component renders on its own account — a `Snackbar`
- * message, an `AlertDialog` that skips our slots. Without it those come out in
- * the platform default while the rest of the screen is Inter: latent today (no
- * screen passes a `snackbarHostState` yet) and shipped the first time one does.
+ * message (the window's one snackbar, `LfFeedback`, and the Inbox's Undo), an
+ * `AlertDialog` that skips our slots. Without it those come out in the
+ * platform default while the rest of the screen is Inter.
  *
  * Sizes are Material's, deliberately. This is a floor under stray widgets, not a
  * second type scale competing with §9.2's.
