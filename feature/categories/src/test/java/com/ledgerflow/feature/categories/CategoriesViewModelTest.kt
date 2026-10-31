@@ -654,6 +654,80 @@ class CategoriesViewModelTest {
         scope.cancel()
     }
 
+    // ── A row's actions sheet (option A, 2026-10-31) ─────────────────────────
+
+    @Test
+    fun tappingARow_opensItsActionsAndWritesNothing() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+        val row = TaxonomyRow.Category("2", "Groceries", isChild = true)
+
+        vm.onEvent(CategoriesEvent.RowActionsOpened(row))
+        vm.settle()
+
+        assertThat(vm.state.value.dialog).isEqualTo(TaxonomyDialog.RowActions(row))
+        assertThat(categories.renamed).isEmpty()
+        assertThat(categories.deleted).isEmpty()
+        scope.cancel()
+    }
+
+    /** An action that asks something replaces the sheet with its own question. */
+    @Test
+    fun hidingFromTheSheet_asksTheSameQuestionTheInlineButtonDid() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.RowActionsOpened(TaxonomyRow.Category("2", "Groceries", isChild = true)))
+
+        vm.onEvent(CategoriesEvent.DeleteCategory("2", "Groceries", isChild = true))
+        vm.settle()
+
+        assertThat(vm.state.value.dialog)
+            .isEqualTo(TaxonomyDialog.ConfirmDelete(DeleteTarget.Subcategory, "2", "Groceries"))
+        assertThat(categories.deleted).isEmpty()
+        scope.cancel()
+    }
+
+    /** One that asks nothing closes the sheet: it must not stay open over a changed row. */
+    @Test
+    fun restoringFromTheSheet_closesItAndRestores() = runTest(dispatcher) {
+        merchants.hidden.value = listOf(hidden("m1", "Amazon"))
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.onEvent(CategoriesEvent.RowActionsOpened(TaxonomyRow.Hidden("m1", "Amazon")))
+
+        vm.onEvent(CategoriesEvent.RestoreHidden("m1", "Amazon"))
+        vm.settle()
+
+        assertThat(merchants.restored).containsExactly("m1")
+        assertThat(vm.state.value.dialog).isNull()
+        scope.cancel()
+    }
+
+    @Test
+    fun makingDefaultFromTheSheet_closesIt() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.PaymentMethods))
+        vm.onEvent(CategoriesEvent.RowActionsOpened(TaxonomyRow.PaymentMethod("p2", "HDFC", isDefault = false)))
+
+        vm.onEvent(CategoriesEvent.SetDefaultPaymentMethod("p2"))
+        vm.settle()
+
+        assertThat(paymentMethods.defaulted).containsExactly("p2")
+        assertThat(vm.state.value.dialog).isNull()
+        scope.cancel()
+    }
+
+    @Test
+    fun dismissingTheSheet_doesNothing() = runTest(dispatcher) {
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.RowActionsOpened(TaxonomyRow.Merchant("m1", "Zepto")))
+
+        vm.onEvent(CategoriesEvent.DialogDismissed)
+        vm.settle()
+
+        assertThat(vm.state.value.dialog).isNull()
+        assertThat(merchants.restored).isEmpty()
+        scope.cancel()
+    }
+
     private fun hidden(id: String, name: String) = HiddenTaxonomy(id, name, hiddenAt = 1_000L)
 }
 

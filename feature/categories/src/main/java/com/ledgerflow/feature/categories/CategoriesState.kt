@@ -149,6 +149,34 @@ public sealed interface TaxonomyDialog {
         val type: PaymentMethodType = PaymentMethodType.UPI,
         val last4: String = "",
     ) : TaxonomyDialog
+
+    /**
+     * A row's actions, in a sheet opened by tapping the row (owner's option A,
+     * 2026-10-31).
+     *
+     * State rather than a `remember` for the same reason as every other case
+     * here: a rotation with the sheet open keeps it open. Choosing an action
+     * sends the event the row's inline button used to, and the view model
+     * closes the sheet before acting on it, so what each action does is
+     * unchanged.
+     */
+    public data class RowActions(val row: TaxonomyRow) : TaxonomyDialog
+}
+
+/**
+ * The row a [TaxonomyDialog.RowActions] sheet is about: just enough to build
+ * its actions and the events they send.
+ */
+public sealed interface TaxonomyRow {
+    public val name: String
+
+    /** [isChild]: a subcategory, which cannot hold subcategories of its own. */
+    public data class Category(val id: String, override val name: String, val isChild: Boolean) : TaxonomyRow
+    public data class Merchant(val id: String, override val name: String) : TaxonomyRow
+    public data class PaymentMethod(val id: String, override val name: String, val isDefault: Boolean) : TaxonomyRow
+
+    /** A row under the Hidden header, in whichever section is showing. */
+    public data class Hidden(val id: String, override val name: String) : TaxonomyRow
 }
 
 /** What a [TaxonomyDialog.ConfirmDelete] is about to remove. */
@@ -188,6 +216,9 @@ public sealed interface CategoriesEvent {
     public data object AddPaymentMethod : CategoriesEvent
     public data class SetDefaultPaymentMethod(val id: String) : CategoriesEvent
     public data class DeletePaymentMethod(val id: String, val name: String) : CategoriesEvent
+
+    /** A row was tapped: show its actions. */
+    public data class RowActionsOpened(val row: TaxonomyRow) : CategoriesEvent
 
     /** Open or close the hidden section of whichever tab is showing. */
     public data object HiddenToggled : CategoriesEvent

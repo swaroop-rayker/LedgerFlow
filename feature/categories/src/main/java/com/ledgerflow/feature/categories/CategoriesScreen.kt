@@ -1,46 +1,43 @@
 package com.ledgerflow.feature.categories
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.component.LfActionAlignment
-import com.ledgerflow.core.designsystem.component.LfActionRow
+import androidx.compose.ui.unit.Dp
 import com.ledgerflow.core.designsystem.component.LfButton
-import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfCategoryDot
+import com.ledgerflow.core.designsystem.component.LfDivider
+import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
-import com.ledgerflow.core.designsystem.component.LfCategoryDot
-import com.ledgerflow.core.designsystem.component.LfEmptyState
-import com.ledgerflow.core.designsystem.component.LfScaffold
-import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.lfGroupPosition
+import com.ledgerflow.core.designsystem.component.lfGroupSlice
+import com.ledgerflow.core.designsystem.component.shape
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.pattern.LfPanel
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
@@ -56,6 +53,12 @@ import java.time.format.DateTimeFormatter
  * Category, merchant and payment-method management (SPEC.md §5.5).
  *
  * Stateless: state in, one event lambda out (CLAUDE.md §5).
+ *
+ * **Rows in panels, actions in a sheet** (owner's option A, 2026-10-31). Every
+ * row is one line of name, in a panel with hairlines, and tapping it opens its
+ * actions ([TaxonomyDialog.RowActions]). The rows used to be a card each with
+ * Rename / Add sub / Hide beneath the name, and subcategories nested cards on a
+ * rail: the golden's three-category tree took 392 px at 1x, and takes 197 now.
  */
 @Composable
 public fun CategoriesScreen(
@@ -105,6 +108,10 @@ public fun CategoriesScreen(
             null
         },
         actionBar = { AddBar(state, onEvent) },
+        // No gap between items: a merchant list is one panel drawn a slice per
+        // row, and slices only meet when nothing sits between them. The
+        // category panels and the hidden header space themselves.
+        spacing = LfPageSpacing.None,
         pinHeader = true,
     ) {
         when (state.section) {
@@ -204,10 +211,9 @@ private fun MessageBanner(message: String, onEvent: (CategoriesEvent) -> Unit) {
 // caused the complaint. See [sectionIsEmpty].
 private fun LazyListScope.categoryItems(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
     state.tree.forEach { branch ->
-        // Keyed per branch rather than per row: the connector rail has to
-        // measure against the height of the children it spans, so a branch
-        // is one item. Stable keys and a contentType still apply (CLAUDE.md
-        // §5) -- without them every edit recomposes the whole list.
+        // Keyed per branch rather than per row: a branch is one panel, and a
+        // panel is one container. Stable keys and a contentType still apply
+        // (CLAUDE.md §5) -- without them every edit recomposes the whole list.
         item(key = branch.parent.id, contentType = "branch") {
             CategoryBranch(branch, onEvent)
         }
@@ -216,55 +222,30 @@ private fun LazyListScope.categoryItems(state: CategoriesUiState, onEvent: (Cate
 }
 
 /**
- * One category and its subcategories, joined by a connector rail.
+ * One category and its subcategories: one panel, a row each, hairlines between.
  *
- * **Compact by design.** The first version gave every row a card with 16dp
- * padding, a divider, and a row of 112dp-minimum outlined buttons — about
- * 140dp per category, so three categories filled a phone screen and the tree
- * structure was invisible under the chrome. The actions now sit on the name's
- * own line as text buttons, which drops a row to roughly its touch-target
- * height and lets the indentation do the work of showing what belongs to what.
- *
- * The rail is a hairline in `outline` with a short stub into each child, so the
- * hierarchy reads at a glance rather than being inferred from indentation
- * alone. Colours are unchanged — this is layout and weight, not palette.
+ * Subcategories are indented so their swatch sits under the parent's name, and
+ * their hairline starts there too, so the indent alone says what belongs to
+ * what. That replaces the connector rail, which needed nested cards to read
+ * against and a whole branch measured at intrinsic height to draw.
  */
 @Composable
 private fun CategoryBranch(branch: CategoryTree, onEvent: (CategoriesEvent) -> Unit) {
-    val space = LfTheme.space
-
-    Column(modifier = Modifier.padding(bottom = space.rowInsetVertical)) {
+    val childInset = childRowInset()
+    LfPanel(modifier = Modifier.padding(bottom = LfTheme.space.itemGap)) {
         CategoryRow(branch.parent, isChild = false, onEvent = onEvent)
-
-        if (branch.children.isEmpty()) return@Column
-
-        // IntrinsicSize.Min so the rail can fill the exact height of the
-        // children beside it; without it `fillMaxHeight` has nothing to
-        // measure against and the line collapses.
-        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            Box(
-                modifier = Modifier
-                    .padding(start = space.rowInset)
-                    .width(LfTheme.borders.hairline)
-                    .fillMaxHeight()
-                    .background(LfTheme.colors.border.subtle),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                branch.children.forEach { child ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .width(space.rowInset)
-                                .height(LfTheme.borders.hairline)
-                                .background(LfTheme.colors.border.subtle),
-                        )
-                        CategoryRow(child, isChild = true, onEvent = onEvent)
-                    }
-                }
-            }
+        branch.children.forEach { child ->
+            // Inset at the end as well, as `lfGroupSlice` draws the merchant
+            // and hidden panels' hairlines: one panel shape on the screen.
+            LfDivider(modifier = Modifier.padding(start = childInset, end = LfTheme.space.rowInset))
+            CategoryRow(child, isChild = true, onEvent = onEvent)
         }
     }
 }
+
+/** Where a subcategory's swatch starts: under its parent's name. */
+@Composable
+private fun childRowInset(): Dp = LfTheme.space.rowInset + LfLayout.categoryDotSize + LfTheme.space.itemGap
 
 @Composable
 private fun CategoryRow(
@@ -272,178 +253,129 @@ private fun CategoryRow(
     isChild: Boolean,
     onEvent: (CategoriesEvent) -> Unit,
 ) {
-    val space = LfTheme.space
-
-    TaxonomyCard(modifier = Modifier.padding(vertical = space.inlineGap)) {
-        // Name on its own line, actions beneath — the shape in the sketch.
-        //
-        // The first attempt put the name *inside* the action `FlowRow`, which
-        // made it compete with the buttons for line space: "Food & Dining" plus
-        // three labels does not fit, so the row wrapped in the middle of the
-        // actions and the card ended up taller than the one it replaced. The
-        // name is a heading, not a control; it gets its own line.
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(space.itemGap),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            LfCategoryDot(name = category.name, colorArgb = category.colorArgb)
-            Text(
-                text = category.name,
-                style = if (isChild) LfTheme.type.bodySmall else LfTheme.type.body,
-                color = LfTheme.colors.text.primary,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        // Still a FlowRow (BUG9): at font scale 2.0 three labels do not fit one
-        // line, and whole controls wrap rather than words breaking.
-        LfActionRow(alignment = LfActionAlignment.End) {
-            LfButton(
-                text = "Rename",
-                style = LfButtonStyle.Inline,
-                onClick = { onEvent(CategoriesEvent.RenameCategory(category.id, category.name)) },
-            )
-            if (!isChild) {
-                LfButton(
-                    text = "Add sub",
-                    style = LfButtonStyle.Inline,
-                    onClick = { onEvent(CategoriesEvent.AddCategory(category.id, category.name)) },
-                )
-            }
-            LfButton(
-                // "Hide", like the other two sections. The three said Delete,
-                // Hide and Remove for one operation, and only "Hide" was ever
-                // accurate: all three set `deleted_at` and leave the row
-                // labelling past entries. With ADR-0016 there is a way back, so
-                // the honest word is also now the reassuring one -- and "Erase"
-                // is free to mean the thing that really does destroy.
-                text = "Hide",
-                style = LfButtonStyle.Inline,
-                onClick = {
-                    onEvent(CategoriesEvent.DeleteCategory(category.id, category.name, isChild))
-                },
-            )
-        }
-    }
+    OrganiseRow(
+        title = category.name,
+        titleStyle = if (isChild) LfTheme.type.bodySmall else LfTheme.type.body,
+        startInset = if (isChild) childRowInset() else LfTheme.space.rowInset,
+        leading = { LfCategoryDot(name = category.name, colorArgb = category.colorArgb) },
+        onClick = {
+            onEvent(CategoriesEvent.RowActionsOpened(TaxonomyRow.Category(category.id, category.name, isChild)))
+        },
+    )
 }
 
 /**
- * The one card shape this screen uses, for all three sections.
+ * The one row this screen draws, in all three sections and under Hidden.
  *
- * Categories got this treatment first and merchants and payment methods kept
- * `LfCard` with `Outlined` buttons, which made a single screen read as two
- * designs: a tall card with a divider and pill buttons next to a compact
- * bordered row with text actions. The heavier shape also spent roughly twice
- * the vertical space per item on lists whose whole job is letting you scan what
- * you have -- three merchants filled the screen.
+ * One line of name, with a second, muted one only where there is a fact to
+ * read (a payment method's type, when something was hidden). No buttons: the
+ * row itself opens its actions, which is what keeps it at a touch target's
+ * height. A row that only presents one thing should cost about two lines
+ * (`CLAUDE.md` §5), and this costs one.
  *
- * Hairline border rather than elevation: on a surface this small elevation
- * reads as a shadow smear instead of depth, and the border is what keeps the
- * category tree's nesting rail legible against the card edge.
+ * TalkBack reads it as a button whose action is "show actions", so the tap is
+ * announced before it is made rather than discovered.
  */
 @Composable
-private fun TaxonomyCard(
+private fun OrganiseRow(
+    title: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
+    detail: String? = null,
+    titleStyle: TextStyle = LfTheme.type.body,
+    startInset: Dp = LfTheme.space.rowInset,
+    position: LfGroupPosition? = null,
+    leading: (@Composable () -> Unit)? = null,
 ) {
     val space = LfTheme.space
-    val shape = LfTheme.shapes.row
-    Column(
+    // A lazy row draws its own slice of one panel (`lfGroupSlice`): merchants,
+    // payment methods and hidden rows cannot share a parent the way a category
+    // branch's rows do. Clipped to the slice's corners so a tap's ripple keeps
+    // the panel's outline.
+    val slice = position?.let {
+        Modifier
+            .clip(it.shape(LfLayout.panelRadius))
+            .lfGroupSlice(
+                position = it,
+                container = LfTheme.colors.surface.raised,
+                edge = LfTheme.colors.border.subtle,
+                edgeWidth = LfTheme.borders.hairline,
+                radius = LfLayout.panelRadius,
+                dividerInset = space.rowInset,
+            )
+    } ?: Modifier
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surface.raised, shape)
-            .border(LfTheme.borders.hairline, LfTheme.colors.border.subtle, shape)
-            .padding(horizontal = space.rowInset, vertical = space.rowInsetVertical),
-        content = content,
-    )
+            .then(slice)
+            .heightIn(min = LfLayout.minTouchTarget)
+            .clickable(onClickLabel = SHOW_ACTIONS, role = Role.Button, onClick = onClick)
+            .padding(
+                start = startInset,
+                end = space.rowInset,
+                top = space.rowInsetVertical,
+                bottom = space.rowInsetVertical,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(space.itemGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        leading?.invoke()
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = titleStyle, color = LfTheme.colors.text.primary)
+            detail?.let {
+                Text(text = it, style = LfTheme.type.label, color = LfTheme.colors.text.muted)
+            }
+        }
+    }
 }
 
 private fun LazyListScope.merchantItems(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
     val merchants = state.merchants
     items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
-        MerchantCard(merchants[index], onEvent)
+        MerchantRow(merchants[index], lfGroupPosition(index, merchants.size), onEvent)
     }
     hiddenSection(state, onEvent)
 }
 
 @Composable
-private fun MerchantCard(merchant: Merchant, onEvent: (CategoriesEvent) -> Unit) {
+private fun MerchantRow(merchant: Merchant, position: LfGroupPosition, onEvent: (CategoriesEvent) -> Unit) {
     val name = merchant.canonicalName
-    TaxonomyCard {
-        // Name on its own line, actions beneath -- a category row's shape. The
-        // three labels share one line only because they are `Inline`: as
-        // `Outlined` pills, Rename + Merge + Hide overflowed the card width and
-        // the third dropped to a row of its own.
-        Text(
-            text = name,
-            style = LfTheme.type.body,
-            color = LfTheme.colors.text.primary,
-        )
-        LfActionRow(alignment = LfActionAlignment.End) {
-            LfButton(
-                text = "Rename",
-                style = LfButtonStyle.Inline,
-                onClick = { onEvent(CategoriesEvent.RenameMerchant(merchant.id, name)) },
-            )
-            LfButton(
-                text = "Merge",
-                style = LfButtonStyle.Inline,
-                onClick = { onEvent(CategoriesEvent.StartMergeMerchant(merchant.id, name)) },
-            )
-            LfButton(
-                text = "Hide",
-                style = LfButtonStyle.Inline,
-                onClick = { onEvent(CategoriesEvent.DeleteMerchant(merchant.id, name)) },
-            )
-        }
-    }
+    OrganiseRow(
+        title = name,
+        position = position,
+        onClick = { onEvent(CategoriesEvent.RowActionsOpened(TaxonomyRow.Merchant(merchant.id, name))) },
+    )
 }
 
 private fun LazyListScope.paymentMethodItems(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
     val methods = state.paymentMethods
     items(methods.size, key = { methods[it].id }, contentType = { "method" }) { index ->
-        PaymentMethodCard(methods[index], onEvent)
+        PaymentMethodRow(methods[index], lfGroupPosition(index, methods.size), onEvent)
     }
     hiddenSection(state, onEvent)
 }
 
 @Composable
-private fun PaymentMethodCard(method: PaymentMethod, onEvent: (CategoriesEvent) -> Unit) {
-    TaxonomyCard {
-        Text(
-            text = buildString {
-                append(method.label)
-                method.last4?.let { append(" ····$it") }
-                if (method.isDefault) append("  · default")
-            },
-            style = LfTheme.type.body,
-            color = LfTheme.colors.text.primary,
-        )
+private fun PaymentMethodRow(method: PaymentMethod, position: LfGroupPosition, onEvent: (CategoriesEvent) -> Unit) {
+    OrganiseRow(
+        title = buildString {
+            append(method.label)
+            method.last4?.let { append(" ····$it") }
+            if (method.isDefault) append("  · default")
+        },
         // The type keeps its own line rather than joining the one above: label,
         // last-4, default and type is four facts abreast with no hierarchy, and
         // the label is the one being scanned for.
-        Text(
-            text = method.type.name.lowercase().replace('_', ' '),
-            style = LfTheme.type.label,
-            color = LfTheme.colors.text.muted,
-        )
-        LfActionRow(alignment = LfActionAlignment.End) {
-            if (!method.isDefault) {
-                LfButton(
-                    text = "Make default",
-                    style = LfButtonStyle.Inline,
-                    onClick = { onEvent(CategoriesEvent.SetDefaultPaymentMethod(method.id)) },
-                )
-            }
-            LfButton(
-                text = "Hide",
-                style = LfButtonStyle.Inline,
-                onClick = {
-                    onEvent(CategoriesEvent.DeletePaymentMethod(method.id, method.label))
-                },
+        detail = method.type.name.lowercase().replace('_', ' '),
+        position = position,
+        onClick = {
+            onEvent(
+                CategoriesEvent.RowActionsOpened(
+                    TaxonomyRow.PaymentMethod(method.id, method.label, method.isDefault),
+                ),
             )
-        }
-    }
+        },
+    )
 }
 
 /**
@@ -477,7 +409,7 @@ private fun LazyListScope.hiddenSection(
         key = { "hidden-" + hidden[it].id },
         contentType = { "hidden" },
     ) { index ->
-        HiddenCard(hidden[index], onEvent)
+        HiddenRow(hidden[index], lfGroupPosition(index, hidden.size), onEvent)
     }
 }
 
@@ -489,6 +421,9 @@ private fun LazyListScope.hiddenSection(
  * screen whose primary action is the pinned Add bar. The glyph is the
  * affordance, and it is on the leading edge so it mirrors in RTL with the text
  * rather than drifting away from it.
+ *
+ * A full touch target tall: it sits directly against the rows above and below
+ * it, with no list gap between, so a shorter one would share their touch area.
  */
 @Composable
 private fun HiddenHeader(count: Int, expanded: Boolean, onEvent: (CategoriesEvent) -> Unit) {
@@ -496,6 +431,7 @@ private fun HiddenHeader(count: Int, expanded: Boolean, onEvent: (CategoriesEven
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = LfLayout.minTouchTarget)
             .clickable { onEvent(CategoriesEvent.HiddenToggled) }
             .padding(vertical = space.rowInsetVertical),
         horizontalArrangement = Arrangement.spacedBy(space.inlineGap),
@@ -516,47 +452,24 @@ private fun HiddenHeader(count: Int, expanded: Boolean, onEvent: (CategoriesEven
 }
 
 /**
- * One hidden row: what it was, when it went, and the two ways out.
+ * One hidden row: what it was and when it went. Its sheet holds the two ways
+ * out, Restore before Erase.
  *
- * The same [TaxonomyCard] the live rows use -- one shape per screen. Nothing
+ * The same row and panel the live rows use -- one shape per screen. Nothing
  * else marks it as hidden, because it does not need to: it is under a header
- * that says so, and giving hidden rows their own treatment would put two card
- * designs on one screen to restate a fact the section already carries.
- *
- * `Restore` sits before `Erase` in reading order, so the recoverable action is
- * the one a thumb reaches first and the destructive one is furthest from the
- * gesture that opened the section.
+ * that says so.
  */
 @Composable
-private fun HiddenCard(item: HiddenTaxonomy, onEvent: (CategoriesEvent) -> Unit) {
-    TaxonomyCard {
-        Text(
-            text = item.name,
-            style = LfTheme.type.body,
-            color = LfTheme.colors.text.primary,
-        )
+private fun HiddenRow(item: HiddenTaxonomy, position: LfGroupPosition, onEvent: (CategoriesEvent) -> Unit) {
+    OrganiseRow(
+        title = item.name,
         // One line for both facts. They are short, and stacking "Hidden 19 Aug"
         // above "with 2 subcategories" would make a hidden row taller than the
         // live row it is a copy of.
-        Text(
-            text = listOfNotNull("Hidden ${hiddenStamp(item.hiddenAt)}", item.detail)
-                .joinToString(" · "),
-            style = LfTheme.type.label,
-            color = LfTheme.colors.text.muted,
-        )
-        LfActionRow(alignment = LfActionAlignment.End) {
-            LfButton(
-                text = "Restore",
-                style = LfButtonStyle.Inline,
-                onClick = { onEvent(CategoriesEvent.RestoreHidden(item.id, item.name)) },
-            )
-            LfButton(
-                text = "Erase",
-                style = LfButtonStyle.Inline,
-                onClick = { onEvent(CategoriesEvent.EraseHidden(item.id, item.name)) },
-            )
-        }
-    }
+        detail = listOfNotNull("Hidden ${hiddenStamp(item.hiddenAt)}", item.detail).joinToString(" · "),
+        position = position,
+        onClick = { onEvent(CategoriesEvent.RowActionsOpened(TaxonomyRow.Hidden(item.id, item.name))) },
+    )
 }
 
 /**
@@ -590,6 +503,9 @@ private fun hiddenStamp(millis: Long): String {
     }
 }
 private const val HIDDEN_HEADER_KEY = "hidden-header"
+
+/** What TalkBack says a row's tap does: "double-tap to show actions". */
+private const val SHOW_ACTIONS = "show actions"
 
 /** A tappable row inside a picker dialog. */
 @Composable
@@ -646,10 +562,9 @@ private fun CategoriesPreview() {
  * The hidden section, open (ADR-0016).
  *
  * Its own preview rather than a flag on the others, because the rows it adds are
- * the ones most likely to break at scale: a name, a stamp and a detail on one
- * line, above two actions. `@PreviewFontScale` is the point of it -- at 2.0 the
- * `LfActionRow` has to wrap Restore and Erase as whole controls rather than
- * breaking a label (BUG9), and the detail line has to wrap rather than clip.
+ * the ones most likely to break at scale: a name above a stamp and a detail on
+ * one line. `@PreviewFontScale` is the point of it -- at 2.0 the detail line has
+ * to wrap rather than clip.
  */
 @PreviewScreenSizes
 @PreviewFontScale
@@ -709,4 +624,3 @@ private fun PaymentMethodsPreview() {
         )
     }
 }
-

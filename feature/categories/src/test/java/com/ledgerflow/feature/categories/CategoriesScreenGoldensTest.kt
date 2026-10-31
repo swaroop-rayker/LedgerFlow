@@ -1,7 +1,14 @@
 package com.ledgerflow.feature.categories
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import com.github.takahirom.roborazzi.captureScreenRoboImage
+import com.ledgerflow.core.testing.screenshot.GOLDEN_DIR
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
+import org.robolectric.RuntimeEnvironment
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
@@ -37,8 +44,13 @@ open class CategoriesScreenGoldensTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun capture(name: String, state: CategoriesUiState, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun capture(
+        name: String,
+        state: CategoriesUiState,
+        fontScale: Float,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, direction) {
             LfTheme { CategoriesScreen(state = state, onEvent = {}, onBack = {}) }
         }
 
@@ -110,6 +122,51 @@ open class CategoriesScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun payment_2x() = capture("organise-payment-2x", payment, 2f)
+
+    /** Subcategories indent from the start, so in RTL they step in from the right. */
+    @Test fun categoriesRtl_1x() = capture("organise-categories-rtl-1x", categories, 1f, LayoutDirection.Rtl)
+
+    @Test fun merchantsRtl_1x() = capture("organise-merchants-rtl-1x", merchants, 1f, LayoutDirection.Rtl)
+
+    /** A category's actions: the sheet the row opens (option A, 2026-10-31). */
+    @Test fun categorySheet_1x() = withSheet("organise-category-sheet-1x", categorySheet, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun categorySheet_2x() = withSheet("organise-category-sheet-2x", categorySheet, 2f)
+
+    /** A subcategory's: no "Add subcategory", and Hide is still there. */
+    @Test fun subcategorySheet_1x() = withSheet("organise-subcategory-sheet-1x", subcategorySheet, 1f)
+
+    private val categorySheet by lazy {
+        categories.copy(
+            dialog = TaxonomyDialog.RowActions(TaxonomyRow.Category("1", "Food & Dining", isChild = false)),
+        )
+    }
+
+    private val subcategorySheet by lazy {
+        categories.copy(dialog = TaxonomyDialog.RowActions(TaxonomyRow.Category("2", "Groceries", isChild = true)))
+    }
+
+    /**
+     * A sheet is its own window: it ignores [captureScreenGolden]'s density
+     * override and is not under its one root, so the font scale goes through
+     * the configuration and the whole screen is captured (as the Budgets
+     * delete sheet's goldens do).
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    private fun withSheet(name: String, state: CategoriesUiState, fontScale: Float) {
+        if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale)
+        rule.setContent {
+            GoldenTheme.Provide {
+                LfTheme { CategoriesScreen(state = state, onEvent = {}, onBack = {}) }
+            }
+        }
+        rule.waitForIdle()
+        captureScreenRoboImage(
+            "$GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
+    }
 
     private companion object {
         const val HIDDEN_AT = 1_755_000_000_000L
