@@ -217,11 +217,13 @@ public fun LfEntryRow(
  * same at either width. `LfEntryRowLayoutTest` holds this to the old nesting,
  * pixel for pixel to within anti-aliasing.
  *
- * **RTL mirrors as the old Rows did, and only as far as they did.** The Rows
- * mirrored the swatch, the column and the button, and the title is placed from
- * the start edge. [LfAdaptiveRow] places with `place`, not `placeRelative`, so
- * its detail and amount kept their left and right in RTL; that is reproduced
- * rather than changed here, so this commit moves no pixel.
+ * **RTL mirrors as the old nesting does.** The swatch, the column and the
+ * button mirror, the title is placed from the start edge, and since BUG81 the
+ * detail and amount mirror too: the detail at the start edge, the amount at
+ * the end, as [LfAdaptiveRow] now places them. Until then both kept their
+ * left and right in RTL, reproduced here from the old nesting.
+ * `LfEntryRowLayoutTest` still holds the two to the same pixels in both
+ * directions.
  */
 private fun MeasureScope.entryRowLayout(
     measurables: List<Measurable>,
@@ -247,9 +249,9 @@ private fun MeasureScope.entryRowLayout(
 
     return layout(width, height) {
         val rtl = layoutDirection == LayoutDirection.Rtl
-        // Positions are worked out left-to-right and mirrored by hand, because
-        // the detail and amount must *not* mirror (see above), so neither
-        // `place` nor `placeRelative` is right for every child.
+        // Positions are worked out left-to-right and mirrored by hand: the
+        // text column's children are placed inside the mirrored column, so one
+        // `placeRelative` over the whole row would mirror them twice.
         fun mirrored(x: Int, w: Int): Int = if (rtl) width - x - w else x
 
         val contentTop = Alignment.CenterVertically.align(contentHeight, height)
@@ -260,12 +262,14 @@ private fun MeasureScope.entryRowLayout(
         title.place(titleX, contentTop)
 
         val detailTop = contentTop + title.height
-        val amountX = textLeft + textWidth - amount.width
+        // The detail at the column's start edge and the amount at its end (BUG81).
+        val detailX = if (rtl) textLeft + textWidth - detail.width else textLeft
+        val amountX = if (rtl) textLeft else textLeft + textWidth - amount.width
         if (stacked) {
-            detail.place(textLeft, detailTop)
+            detail.place(detailX, detailTop)
             amount.place(amountX, detailTop + detail.height + gapPx)
         } else {
-            detail.place(textLeft, detailTop + (figuresHeight - detail.height) / 2)
+            detail.place(detailX, detailTop + (figuresHeight - detail.height) / 2)
             amount.place(amountX, detailTop + (figuresHeight - amount.height) / 2)
         }
 

@@ -25,9 +25,15 @@ import androidx.compose.ui.unit.Constraints
  *
  * [trailing] goes first because its width is the one worth respecting: an
  * amount broken mid-number is unreadable in a way a wrapped name is not. It
- * stays right-aligned when stacked, in the optical column it holds on every
+ * stays at the end edge when stacked, in the optical column it holds on every
  * other row. Each child is measured once — a plain [Layout], not a
  * `SubcomposeLayout`.
+ *
+ * **Placed relative to the layout direction (BUG81).** Until 2026-10-31 both
+ * children were placed with `place`, so under a right-to-left language the
+ * name stayed on the left and the amount on the right while the rest of the
+ * screen mirrored: Home's "Spent" beside its figure, every Ledger and Inbox
+ * row's date beside its amount. `Bug81_AdaptiveRowMirrorsInRtlTest` holds it.
  */
 @Composable
 public fun LfAdaptiveRow(
@@ -57,14 +63,17 @@ public fun LfAdaptiveRow(
         if (stacked) {
             val height = leadingPlaceable.height + gapPx + trailingPlaceable.height
             layout(width, height) {
-                leadingPlaceable.place(0, 0)
-                trailingPlaceable.place(x = width - trailingPlaceable.width, y = leadingPlaceable.height + gapPx)
+                leadingPlaceable.placeRelative(0, 0)
+                trailingPlaceable.placeRelative(
+                    x = width - trailingPlaceable.width,
+                    y = leadingPlaceable.height + gapPx,
+                )
             }
         } else {
             val height = maxOf(leadingPlaceable.height, trailingPlaceable.height)
             layout(width, height) {
-                leadingPlaceable.place(0, (height - leadingPlaceable.height) / 2)
-                trailingPlaceable.place(
+                leadingPlaceable.placeRelative(0, (height - leadingPlaceable.height) / 2)
+                trailingPlaceable.placeRelative(
                     x = width - trailingPlaceable.width,
                     y = (height - trailingPlaceable.height) / 2,
                 )
