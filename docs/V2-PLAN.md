@@ -28,7 +28,9 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
 FX ADR (D2) take the next free numbers when they are written, not 0029/0030.
 ADR-0030 is now V2-3's device preferences (2026-10-24), and ADR-0031 the
-design-system's visual direction (Night Vault, 2026-10-28), so D1 and D2 start at 0032.
+design-system's visual direction (Night Vault, 2026-10-28), and ADR-0032 the
+licences list generated at build time (V2-3 About, 2026-10-31), so D1, D2 and
+the LedgerFlow PIN take the next free numbers, 0033 and up.
 Schema v12 is BUG58's, so merchant categories (§5.5) become v13 and V2-7's
 tables v14 and later.
 
