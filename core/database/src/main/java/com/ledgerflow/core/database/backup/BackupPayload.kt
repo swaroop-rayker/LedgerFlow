@@ -96,6 +96,13 @@ public data class BackupPayload(
     // user's shopping and one that has to be retaught. Cheap: one short row per
     // distinct (merchant, item).
     val itemCategoryMemory: List<ItemCategoryMemoryRow> = emptyList(),
+
+    // -- Schema v13 -- merchant categories (V2-PLAN 5) -----------------------
+    //
+    // User intent, like `budget`: which kinds of place the user keeps and what
+    // they called them. Defaulted to empty for the reason every block above is;
+    // a v12 backup restores with none, and the launch seed fills the defaults.
+    val merchantCategories: List<MerchantCategoryRow> = emptyList(),
 ) {
     /** Total rows, for the post-restore equality assertion and diagnostics. */
     public val rowCount: Int
@@ -105,7 +112,7 @@ public data class BackupPayload(
             categoryGroupMembers.size + smsRaw.size + notificationsRaw.size +
             packageAllowlist.size + senderAllowlist.size + parserRules.size +
             pendingTransactions.size + budgets.size +
-            attachments.size + itemCategoryMemory.size
+            attachments.size + itemCategoryMemory.size + merchantCategories.size
 }
 
 /**
@@ -173,6 +180,25 @@ public data class MerchantRow(
     val normalizedKey: String,
     val defaultCategoryId: String?,
     val logoRef: String?,
+    val deletedAt: Long,
+    /**
+     * v13 (V2-PLAN 5). The merchant's category, or null for Uncategorised.
+     *
+     * Defaults to null -- what `MIGRATION_12_13` writes -- so every older
+     * `.lfbk` decodes, and its merchants restore Uncategorised exactly as a
+     * migrated older database has them (CLAUDE.md 5, Room).
+     */
+    val merchantCategoryId: String? = null,
+)
+
+/** v13: a kind of place a merchant is (V2-PLAN 5). */
+@Serializable
+public data class MerchantCategoryRow(
+    val id: String,
+    val name: String,
+    val colorArgb: Int,
+    val sortOrder: Int,
+    val isSystem: Boolean,
     val deletedAt: Long,
 )
 

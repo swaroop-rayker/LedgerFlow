@@ -75,6 +75,13 @@ public data class AppMetaEntity(
          * unlock, and so a backup carries it (owner, 2026-10-31).
          */
         public const val KEY_HIDE_AMOUNTS_ON_HOME: String = "hideAmountsOnHome"
+
+        /**
+         * When the starter merchant categories were written (V2-PLAN §5.2,
+         * v13), epoch millis. Present means "this vault was seeded": a user
+         * who deletes them all is not refilled on the next launch.
+         */
+        public const val KEY_MERCHANT_CATEGORIES_SEEDED: String = "merchantCategoriesSeeded"
     }
 }
 
@@ -137,9 +144,51 @@ public data class CategoryEntity(
     val deletedAt: Long = 0L,
 )
 
+/**
+ * A kind of place a merchant is (V2-PLAN §5, schema v13): flat, one list for
+ * both books, soft-deleted like [CategoryEntity] with the same `deleted_at`
+ * sentinel, so the unique index holds among live rows and a hidden "Fuel" does
+ * not block a new one.
+ */
+@Entity(
+    tableName = "merchant_category",
+    indices = [
+        Index(
+            value = ["name", "deleted_at"],
+            unique = true,
+            name = "index_merchant_category_unique_live_name",
+        ),
+    ],
+)
+public data class MerchantCategoryEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "id")
+    val id: String,
+
+    @ColumnInfo(name = "name", collate = ColumnInfo.NOCASE)
+    val name: String,
+
+    @ColumnInfo(name = "color_argb")
+    val colorArgb: Int,
+
+    @ColumnInfo(name = "sort_order")
+    val sortOrder: Int,
+
+    @ColumnInfo(name = "is_system", defaultValue = "0")
+    val isSystem: Boolean = false,
+
+    /** 0 means live; otherwise the soft-delete timestamp in epoch millis. */
+    @ColumnInfo(name = "deleted_at", defaultValue = "0")
+    val deletedAt: Long = 0L,
+)
+
 @Entity(
     tableName = "merchant",
-    indices = [Index(value = ["normalized_key"], unique = true)],
+    indices = [
+        Index(value = ["normalized_key"], unique = true),
+        // The Uncategorised filter and the Analytics join read by it (v13).
+        Index(value = ["merchant_category_id"]),
+    ],
 )
 public data class MerchantEntity(
     @PrimaryKey
@@ -160,6 +209,14 @@ public data class MerchantEntity(
 
     @ColumnInfo(name = "deleted_at", defaultValue = "0")
     val deletedAt: Long = 0L,
+
+    /**
+     * A [MerchantCategoryEntity], or null for Uncategorised (v13). Not a Room
+     * @ForeignKey, like `default_category_id`: a merchant category is hidden by
+     * soft delete and deleted through a reassignment, never by a cascade.
+     */
+    @ColumnInfo(name = "merchant_category_id")
+    val merchantCategoryId: String? = null,
 )
 
 @Entity(

@@ -135,6 +135,21 @@ class OlderSchemaBackupRestoresTest {
         assertWithMessage("budget.alertPeriodStart").that(budget.alertPeriodStart).isEqualTo(0)
     }
 
+    /**
+     * v13 (V2-6): a v12 backup carries no merchant categories and its merchants
+     * no category. They restore Uncategorised, exactly as `MIGRATION_12_13`
+     * leaves a migrated v12 database; the launch seed fills the defaults after.
+     */
+    @Test
+    fun aV12Backup_restores_withEveryMerchantUncategorised() {
+        assertThat(restore(V12, schemaVersion = 12)).isInstanceOf(RestoreResult.Success::class.java)
+
+        val payload = restored()
+        assertThat(payload.merchants.single().merchantCategoryId).isNull()
+        assertThat(payload.merchantCategories).isEmpty()
+        assertThat(payload.merchantAliases.single().merchantId).isEqualTo("m-zepto")
+    }
+
     private companion object {
         /** The six tables v1 had, in v1's row shapes (unchanged since). */
         const val CORE = """
@@ -187,5 +202,9 @@ class OlderSchemaBackupRestoresTest {
             "budgets": [{"id": "b-1", "categoryId": "cat-groceries", "subcategoryId": null,
                 "period": "MONTHLY", "amountMinor": 500000, "startDate": 20300,
                 "rolloverEnabled": false, "alertThresholds": "80,100", "deletedAt": null}]}"""
+
+        /** v12 = v9's rows as v12 wrote them: no `merchantCategories`, no `merchantCategoryId`. */
+        val V12 = """{"schemaVersion": 12, "createdAt": 1755000000000, $CORE, $V7_ADDITIONS,
+            "budgets": [], "attachments": [], "itemCategoryMemory": []}"""
     }
 }

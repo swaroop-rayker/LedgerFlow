@@ -1265,7 +1265,20 @@ category_group(id TEXT PK, name TEXT NOT NULL, color_argb INTEGER, ledger_scope 
 category_group_member(group_id TEXT, category_id TEXT, PRIMARY KEY(group_id, category_id))
 
 merchant(id TEXT PK, canonical_name TEXT NOT NULL, normalized_key TEXT NOT NULL UNIQUE,
-         default_category_id TEXT NULL, logo_ref TEXT NULL, deleted_at INTEGER NULL)
+         default_category_id TEXT NULL, logo_ref TEXT NULL,
+         deleted_at INTEGER NOT NULL DEFAULT 0,       -- 0 = live (the sentinel, as category's)
+         merchant_category_id TEXT NULL)               -- v13; NULL = Uncategorised. Indexed.
+
+-- Lands in schema v13 (V2-6, docs/V2-PLAN.md §5) -- what kind of place a
+-- merchant is, separate from what an entry's money was for. Flat, one list
+-- for both books, soft-deleted like category; no FK from merchant (hidden by
+-- soft delete, deleted through a reassignment). Only the Merchants section
+-- writes merchant.merchant_category_id (MerchantCategorySingleWriterTest).
+-- The twelve defaults are seeded once per vault at launch, recorded as
+-- app_meta.merchantCategoriesSeeded, so deleting them all does not refill them.
+merchant_category(id TEXT PK, name TEXT NOT NULL COLLATE NOCASE, color_argb INTEGER NOT NULL,
+                  sort_order INTEGER NOT NULL, is_system INTEGER NOT NULL DEFAULT 0,
+                  deleted_at INTEGER NOT NULL DEFAULT 0, UNIQUE(name, deleted_at))
 merchant_alias(id TEXT PK, merchant_id TEXT NOT NULL, alias TEXT NOT NULL,
                normalized_alias TEXT NOT NULL, UNIQUE(normalized_alias))
 
@@ -1735,6 +1748,7 @@ the phrase the user has just replaced.
 | **BUG78** — discarding in Review said "Added to Expenses" | Found 2026-10-30 by the owner on the device: discarding a candidate in Review (an Inbox item, or a to-review row under the Ledger's Unsaved) showed "Added to Expenses", or "Added to your ledger." for an unread book. BUG73's fix (design-system E4) posts the closing message when Review finishes, and Approve and Discard both finish it; the message read only that it had. | Review's state records which closed it (`discarded`), and a discard says "Discarded", the word the Inbox's own discard uses, and nothing about the ledger. | `Bug78_DiscardDoesNotSayAddedTest` (a discard says "Discarded", for a known book and an unread one), red before the fix; `Bug14_ReviewSurvivesBackPressTest` now also holds that the view model marks a discard |
 | **BUG79** — a stacked segmented control drew a capsule | Found 2026-10-30 by the owner on the device (Settings > Security & privacy > Lock after). When `LfSegmentedControl` stacks its options (Lock after, Date order, and every one at font scale 2.0: Organise, Export, Diagnostics, Appearance, Currency & region), its track kept the one-row pill's fully round corners, and a track four options tall drew a capsule with ends half its width across. No golden had shown the dialogs. | Stacked, the track takes the control's 16 dp corners and each option the tile's 12, so they nest across the 4 dp padding; one row stays pill inside pill. | `Bug79_StackedSegmentsAreACardTest`; goldens `settings-lock-after-*` (new) and the 2x goldens of the five screens above, reviewed |
 | **BUG80** — Lock after's options were cut off at font scale 1.0 | Found 2026-10-30 by Lock after's first golden, written for BUG79. In the dialog's 312 dp the four options stayed on one row and "Immediately" and "15 minutes" were clipped (BUG9): the control chose a row from a fixed 72 dp per option, not from its labels. | It also measures its widest label as it will be drawn, and stacks when that would not fit; the gaps between options are now counted too. | `Bug80_SegmentLabelsNeverClipTest` (a label is drawn at least its own width), red before the fix at 312 dp |
+| **BUG82** — merging two merchants left Analytics naming the folded one until the night | Found 2026-10-31 planning V2-6. A merge moved every entry to the surviving merchant but did not re-sum `daily_rollup`, which is keyed by merchant too, so until the nightly reconciliation Analytics showed the folded merchant's spending under its old name (and, from V2-6, under its old merchant category). | The merge re-sums each book over the dates the moved entries span, inside the merge's own transaction. `DefaultMerchantRepository` joins `RollupSingleWriterTest`'s permitted writers. | `Bug82_MergeRefreshesTheSummariesTest` (`:core:data`, device): after a merge every summary in both books names the survivor and the totals are unchanged; red without the fix (a summary still named the folded merchant) |
 
 ### 8.1 Pre-migration snapshot — operating design
 

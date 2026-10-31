@@ -23,6 +23,7 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 · Hide amounts + Data permissions | Built on `claude/v2-3-hide-amounts` (§3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended). Not yet merged |
 | V2-3 · About | Built on `claude/v2-3-about`, stacked on #15 (§3.8; SPEC §9.3, §9.4). Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. The public contact email is still the owner's. Not yet merged |
 | LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
+| V2-6 · Merchant categories | Owner, 2026-10-31: four PRs (§5.5's note). PR 1, schema v13 and the data layer with BUG82, built on `claude/v2-6-schema`, stacked on #17. Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -462,6 +463,19 @@ Merchants section's Uncategorised filter; semantics per donut segment.
 **Not planned:** budgets per merchant category, and any automatic suggestion of
 a merchant's category. Either would be its own owner decision.
 
+**V2-6 in four PRs (owner, 2026-10-31):** 1 the schema and data layer, 2
+Organise, 3 the merchant picker, 4 Analytics. Owner's choices: the categories
+are managed from a row at the top of Organise > Merchants, not a fourth tab;
+the defaults are seeded once per vault at launch, not by the migration; the
+A1 lens is left out.
+
+**PR 1 built (2026-10-31).** `merchant_category` has `category`'s actual shape
+(no `created_at`/`updated_at`, which `category` does not have either) plus
+`is_system`; `merchant.merchant_category_id` is a plain indexed column, no
+foreign key, like `default_category_id`. The migration is the first to rebuild
+a table others point at, and refuses to run with foreign keys on.
+BUG82, found on the way: a merge did not re-sum the daily summaries.
+
 ---
 
 ## 6. Recommended additions (owner picks)
@@ -497,7 +511,7 @@ a merchant's category. Either would be its own owner decision.
 | V2-3 | Appearance, Currency & region, Notifications, Allowlist editor, App lock + screenshot block (all merged); Hide amounts + Data permissions, About | D4 |
 | V2-4 | Data & sync: Drive, Import (CSV/XLSX), Restore entry | D1, D8; P5 XLSX |
 | V2-5 | Receipts management | D5 |
-| V2-6 | Merchant categories (schema v13): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; owner to confirm §5.2's seed list |
+| V2-6 | Merchant categories (schema v13): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; seed list confirmed 2026-10-31 |
 | V2-7 | More: recurring, goals, debts, utilities (schema v14+) | D2 for converter |
 | V2-8 | Recommended additions the owner picks; Play listing for v2 | owner |
 

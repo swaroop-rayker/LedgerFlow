@@ -6,7 +6,9 @@ import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
 import com.ledgerflow.core.domain.usecase.SeedIngestAllowlistsUseCase
+import com.ledgerflow.core.domain.usecase.SeedMerchantCategoriesUseCase
 import com.ledgerflow.core.domain.usecase.SeedParserRulesUseCase
+import com.ledgerflow.core.testing.taxonomy.FakeMerchantCategoryRepository
 import com.ledgerflow.core.testing.ingest.FakeRawIngestRepository
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.VaultState
@@ -65,6 +67,7 @@ class AppViewModelTest {
         purgeAbandonedDrafts = PurgeAbandonedDraftsUseCase(drafts),
         seedIngestAllowlists = SeedIngestAllowlistsUseCase(ingest),
         seedParserRules = SeedParserRulesUseCase(ingest),
+        seedMerchantCategories = SeedMerchantCategoriesUseCase(merchantCategories),
         // A lambda, not a fake: what matters here is routing, and the only
         // thing to say about the trigger is that asking for a pass is not
         // routing. `parsePassesRequested` is asserted by the one test that
@@ -75,6 +78,8 @@ class AppViewModelTest {
     )
 
     private var parsePassesRequested = 0
+
+    private val merchantCategories = FakeMerchantCategoryRepository()
 
     /**
      * `route` is a `stateIn` over a `scan`, so it starts at [AppRoute.Loading]
