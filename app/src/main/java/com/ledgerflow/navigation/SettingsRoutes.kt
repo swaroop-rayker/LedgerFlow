@@ -124,6 +124,7 @@ internal fun SettingsSectionRoute(
         onNotificationAccess = { navigate(Destination.NotificationAccess) },
         onDiagnostics = { navigate(Destination.Diagnostics) },
         onPaymentApps = { navigate(Destination.PaymentApps) },
+        onDataPermissions = { navigate(Destination.DataPermissions) },
         onBudgetAlerts = onBudgetAlerts,
         onEvent = onEvent,
     )

@@ -114,6 +114,10 @@ public sealed interface Destination {
     @Serializable
     public data object PaymentApps : Destination
 
+    /** What the app may use, why, and the way to Android's settings (V2-3, V2-PLAN §3.5), from Security & privacy. */
+    @Serializable
+    public data object DataPermissions : Destination
+
     /**
      * Receipt capture (§5.3), reached from the centre action's dial.
      *

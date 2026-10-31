@@ -81,6 +81,7 @@ class ProfileSettingsRoutesTest {
                 "Export" to Destination.Export,
                 "Deleted entries" to Destination.DeletedEntries,
             ),
+            SettingsPage.Security to listOf("Data permissions" to Destination.DataPermissions),
             SettingsPage.Tools to listOf("Diagnostics" to Destination.Diagnostics),
         )
         val reached = mutableListOf<Destination>()

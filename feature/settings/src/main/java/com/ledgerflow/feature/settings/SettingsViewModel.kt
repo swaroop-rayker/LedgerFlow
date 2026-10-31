@@ -77,6 +77,8 @@ public sealed interface SettingsEvent {
     public data object LockAfterDismissed : SecurityEvent
 
     public data class BlockScreenshotsToggled(val enabled: Boolean) : SecurityEvent
+
+    public data class HideAmountsToggled(val enabled: Boolean) : SecurityEvent
 }
 
 /**
@@ -363,6 +365,8 @@ public class SettingsViewModel @Inject constructor(
             }
             is SettingsEvent.BlockScreenshotsToggled ->
                 viewModelScope.launch { securityStore.setBlockScreenshots(event.enabled) }
+            is SettingsEvent.HideAmountsToggled ->
+                viewModelScope.launch { securityStore.setHideAmounts(event.enabled) }
         }
     }
 

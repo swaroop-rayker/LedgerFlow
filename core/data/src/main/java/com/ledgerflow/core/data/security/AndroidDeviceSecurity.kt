@@ -2,6 +2,7 @@ package com.ledgerflow.core.data.security
 
 import android.app.KeyguardManager
 import android.content.Context
+import com.ledgerflow.core.domain.security.AppPermissions
 import com.ledgerflow.core.domain.security.DeviceSecurity
 import dagger.Binds
 import dagger.Module
@@ -19,11 +20,14 @@ internal class AndroidDeviceSecurity @Inject constructor(
         context.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true
 }
 
-/** Settings > Security & privacy's one platform reader (V2-PLAN §3.5). */
+/** Settings > Security & privacy's platform readers (V2-PLAN §3.5). */
 @Module
 @InstallIn(SingletonComponent::class)
 internal interface SecurityModule {
 
     @Binds
     fun deviceSecurity(impl: AndroidDeviceSecurity): DeviceSecurity
+
+    @Binds
+    fun appPermissions(impl: AndroidAppPermissions): AppPermissions
 }

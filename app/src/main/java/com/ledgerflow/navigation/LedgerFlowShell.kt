@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -67,6 +68,9 @@ import com.ledgerflow.feature.settings.backup.BackupNowViewModel
 import com.ledgerflow.feature.settings.diagnostics.DiagnosticsEvent
 import com.ledgerflow.feature.settings.diagnostics.DiagnosticsScreen
 import com.ledgerflow.feature.settings.diagnostics.DiagnosticsViewModel
+import com.ledgerflow.feature.settings.permissions.DataPermissionsScreen
+import com.ledgerflow.feature.settings.permissions.DataPermissionsViewModel
+import com.ledgerflow.feature.settings.permissions.openPermissionSettings
 
 /**
  * The unlocked app: bottom bar, centre action, nav graph (SPEC.md §9.3).
@@ -404,6 +408,22 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         val state by viewModel.state.collectAsStateWithLifecycle()
         AllowlistScreen(state = state, onEvent = viewModel::onEvent, onBack = navController::popBackStack)
     }
+    composable<Destination.DataPermissions> {
+        val viewModel: DataPermissionsViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        val context = LocalContext.current
+        // The user changes these in Android's settings: the rows say what is
+        // true when they come back.
+        LifecycleResumeEffect(Unit) {
+            viewModel.refresh()
+            onPauseOrDispose { }
+        }
+        DataPermissionsScreen(
+            state = state,
+            onOpen = { kind -> openPermissionSettings(context, kind) },
+            onBack = navController::popBackStack,
+        )
+    }
     composable<Destination.Diagnostics> {
         val viewModel: DiagnosticsViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -566,6 +586,7 @@ private val Destination.label: String
         is Destination.Inbox -> "Inbox"
         Destination.Diagnostics -> "Diagnostics"
         Destination.PaymentApps -> "Payment apps"
+        Destination.DataPermissions -> "Data permissions"
         is Destination.InboxReview -> "Review"
         Destination.ScanReceipt -> "Scan"
         Destination.NotificationAccess -> "Notifications"
