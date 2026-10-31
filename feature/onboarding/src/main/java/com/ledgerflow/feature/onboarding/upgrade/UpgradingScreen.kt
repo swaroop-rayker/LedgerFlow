@@ -77,8 +77,8 @@ public fun UpgradeBlockedScreen(
         LfCard {
             Text(
                 text = copy.detail,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }

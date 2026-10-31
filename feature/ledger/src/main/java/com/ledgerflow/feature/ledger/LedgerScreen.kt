@@ -166,8 +166,8 @@ private fun MessageBanner(message: String, onEvent: (LedgerEvent) -> Unit) {
     ) {
         Text(
             text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.warn,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.status.warning,
             modifier = Modifier.weight(1f),
         )
         LfButton(
@@ -363,20 +363,20 @@ private fun CandidateRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceRaised, LfTheme.shapes.row)
-            .border(LfTheme.borders.hairline, LfTheme.colors.outline, LfTheme.shapes.row)
+            .background(LfTheme.colors.surface.raised, LfTheme.shapes.row)
+            .border(LfTheme.borders.hairline, LfTheme.colors.border.subtle, LfTheme.shapes.row)
             .clickable { onReview(candidate.id) }
             .clearAndSetSemantics {
                 contentDescription = "$TO_REVIEW_MARKER, $amount, $title, $stamp. " +
                     "Opens the review screen."
             }
             .padding(
-                start = LfTheme.spacing.md,
-                end = LfTheme.spacing.md,
-                top = LfTheme.spacing.sm,
-                bottom = LfTheme.spacing.sm,
+                start = LfTheme.space.rowInset,
+                end = LfTheme.space.rowInset,
+                top = LfTheme.space.rowInsetVertical,
+                bottom = LfTheme.space.rowInsetVertical,
             ),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // The draft row's shape (BUG47): title across the top, then the detail
@@ -386,19 +386,19 @@ private fun CandidateRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
             )
             EntryRowBody(
                 // The marker is what stops two rows that look alike opening
                 // different screens with no warning. It rides the line the
                 // stamp is already on, so it costs no height.
-                leading = { UnsavedDetail(text = detail, color = LfTheme.colors.textTertiary) },
+                leading = { UnsavedDetail(text = detail, color = LfTheme.colors.text.muted) },
                 trailing = {
                     Text(
                         text = amount,
-                        style = LfTheme.typography.amountM,
-                        color = LfTheme.colors.textSecondary,
+                        style = LfTheme.type.amountRow,
+                        color = LfTheme.colors.text.secondary,
                         maxLines = 1,
                     )
                 },
@@ -467,12 +467,12 @@ private fun LedgerUiState.showsNothing(entryCount: Int): Boolean =
 private fun BandLabel(text: String) {
     Text(
         text = text,
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceBase)
-            .padding(top = LfTheme.spacing.sm, bottom = LfTheme.spacing.xs),
+            .background(LfTheme.colors.surface.canvas)
+            .padding(top = LfTheme.space.rowInsetVertical, bottom = LfTheme.space.inlineGap),
     )
 }
 
@@ -495,7 +495,7 @@ private fun PendingRow(
     onOpen: (String) -> Unit,
     onEvent: (LedgerEvent) -> Unit,
 ) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val colors = LfTheme.colors
     val shape = LfTheme.shapes.row
 
@@ -520,10 +520,10 @@ private fun PendingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised, shape)
-            .border(LfTheme.borders.emphasis, colors.accent, shape)
-            .padding(start = spacing.md, end = spacing.xs, top = spacing.sm, bottom = spacing.sm),
-        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            .background(colors.surface.raised, shape)
+            .border(LfTheme.borders.emphasis, colors.action.primary, shape)
+            .padding(start = space.rowInset, end = space.inlineGap, top = space.rowInsetVertical, bottom = space.rowInsetVertical),
+        horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
@@ -534,14 +534,14 @@ private fun PendingRow(
                     contentDescription =
                         "$DRAFT_MARKER, $amount, $title, $stamp. Opens to finish it."
                 },
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(space.itemGap),
             verticalAlignment = Alignment.Top,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = LfTheme.typography.bodyL,
-                    color = colors.textPrimary,
+                    style = LfTheme.type.body,
+                    color = colors.text.primary,
                 )
                 EntryRowBody(
                     leading = { PendingStatus(detail) },
@@ -576,7 +576,7 @@ private fun PendingRow(
  */
 @Composable
 private fun PendingStatus(stamp: String) {
-    UnsavedDetail(text = stamp, color = LfTheme.colors.accent)
+    UnsavedDetail(text = stamp, color = LfTheme.colors.action.primary)
 }
 
 /** A draft's detail line: when it is dated, then the marker. */
@@ -620,8 +620,8 @@ internal fun UnsavedDetail(
 private fun PendingAmount(amount: String) {
     Text(
         text = amount,
-        style = LfTheme.typography.amountM,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.amountRow,
+        color = LfTheme.colors.text.secondary,
         textAlign = LfTextAlign.end,
     )
 }

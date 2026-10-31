@@ -175,45 +175,6 @@ public val LfDefaultTypography: LfTypography = LfTypography(
     ),
 )
 
-/**
- * The old spacing scale, radii and layout constants. **Everything here is
- * deprecated** and removed in step G.
- *
- * The six steps gave way to the roles in `LfTheme.space` (step B1): a step says
- * how big, a role says what for, and only the role can be retuned by a visual
- * direction without moving the wrong gaps. In step B3 the radii moved to
- * `LfTheme.shapes` and the layout constants to [LfLayout], with the same values.
- */
-@Immutable
-public data class LfSpacing(
-    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, itemGap, inlineGap, rowInset, ...")
-    val xs: Dp = LfScale.Space4,
-    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, itemGap, inlineGap, rowInset, ...")
-    val sm: Dp = LfScale.Space8,
-    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, itemGap, inlineGap, rowInset, ...")
-    val md: Dp = LfScale.Space16,
-    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, itemGap, inlineGap, rowInset, ...")
-    val lg: Dp = LfScale.Space24,
-    @Deprecated("Use a role from LfTheme.space: screenEdge, sectionGap, listEnd, ...")
-    val xl: Dp = LfScale.Space32,
-    @Deprecated("Use a role from LfTheme.space, or LfLayout.minTouchTarget for a touch target")
-    val xxl: Dp = LfScale.Space48,
-    @Deprecated("Moved to LfLayout", ReplaceWith("LfLayout.minTouchTarget"))
-    val minTouchTarget: Dp = LfLayout.minTouchTarget,
-    @Deprecated("Moved to LfLayout", ReplaceWith("LfLayout.actionMinWidth"))
-    val actionMinWidth: Dp = LfLayout.actionMinWidth,
-    @Deprecated("Moved to LfLayout", ReplaceWith("LfLayout.segmentMinWidth"))
-    val segmentMinWidth: Dp = LfLayout.segmentMinWidth,
-    @Deprecated("Moved to LfLayout", ReplaceWith("LfLayout.peekCardWidth"))
-    val peekCardWidth: Dp = LfLayout.peekCardWidth,
-    @Deprecated("Use a shape from LfTheme.shapes: control, row, container, dialog, full")
-    val cornerSmall: Dp = LfScale.Radius8,
-    @Deprecated("Use LfTheme.shapes.container or LfTheme.shapes.control")
-    val cornerMedium: Dp = LfScale.Radius16,
-    @Deprecated("Use LfTheme.shapes.row or LfTheme.shapes.dialog")
-    val cornerLarge: Dp = LfScale.Radius24,
-)
-
 /** Motion durations (SPEC.md §9.5). Already roles by job; the values come from the primitive scale. */
 @Immutable
 public data class LfMotion(
@@ -232,8 +193,6 @@ public data class LfMotion(
 
 public val LocalLfTypography: androidx.compose.runtime.ProvidableCompositionLocal<LfTypography> =
     staticCompositionLocalOf { LfDefaultTypography }
-public val LocalLfSpacing: androidx.compose.runtime.ProvidableCompositionLocal<LfSpacing> =
-    staticCompositionLocalOf { LfSpacing() }
 public val LocalLfMotion: androidx.compose.runtime.ProvidableCompositionLocal<LfMotion> =
     staticCompositionLocalOf { LfMotion() }
 
@@ -260,7 +219,6 @@ public fun LfTheme(
     CompositionLocalProvider(
         LocalLfColors provides colors,
         LocalLfTypography provides LfDefaultTypography,
-        LocalLfSpacing provides LfSpacing(),
         LocalLfSpaceRoles provides LfDefaultSpaceRoles,
         LocalLfBorderRoles provides LfDefaultBorderRoles,
         LocalLfShapeRoles provides LfDefaultShapeRoles,
@@ -307,20 +265,6 @@ public object LfTheme {
     /** Corner shapes by job. Layout constants, which no style changes, are in [LfLayout]. */
     public val shapes: LfShapeRoles
         @Composable get() = LocalLfShapeRoles.current
-
-    /** Aligned to the current layout direction's leading edge (BUG61). */
-    @Deprecated(
-        "Use LfTheme.type: displayL -> display, titleL -> title, titleM -> heading, bodyL -> body, " +
-            "bodyM -> bodySmall, label -> label, amountL -> amountHero, amountM -> amountRow, " +
-            "mnemonicWord -> mnemonic (DESIGN_SYSTEM_PLAN §4.2)",
-    )
-    public val typography: LfTypography
-        @Composable get() = LocalLfTypography.current.alignedTo(LocalLayoutDirection.current)
-
-    /** The old spacing scale, radii and layout constants, all deprecated: see [LfSpacing]. */
-    @Deprecated("Use LfTheme.space for gaps, LfTheme.shapes for corners and LfLayout for layout constants")
-    public val spacing: LfSpacing
-        @Composable get() = LocalLfSpacing.current
 
     public val motion: LfMotion
         @Composable get() = LocalLfMotion.current

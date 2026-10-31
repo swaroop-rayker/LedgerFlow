@@ -217,11 +217,11 @@ private fun ReviewFields(
 @Composable
 private fun CapturedMessage(text: String) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Message",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.muted,
             )
             SelectionContainer {
                 // Plex Mono, as the canvas draws it (step F5): the message
@@ -229,7 +229,7 @@ private fun CapturedMessage(text: String) {
                 Text(
                     text = text,
                     style = LfTheme.type.figureLabel,
-                    color = LfTheme.colors.textSecondary,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
         }

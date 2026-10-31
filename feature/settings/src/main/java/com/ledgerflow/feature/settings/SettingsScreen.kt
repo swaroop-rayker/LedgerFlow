@@ -32,6 +32,7 @@ import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.pattern.LfPanel
 import com.ledgerflow.core.designsystem.pattern.LfSettingsPage
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
@@ -465,17 +466,17 @@ private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
             ) {
                 Text(
                     text = title,
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.body,
+                    color = LfTheme.colors.text.primary,
                 )
                 Text(
                     text = subtitle,
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
             // It opens a page, as the index's rows do (step F5). Decoration:
@@ -500,7 +501,7 @@ private fun PanelRow(onClick: (() -> Unit)? = null, content: @Composable () -> U
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
+            .defaultMinSize(minHeight = LfLayout.minTouchTarget)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(LfTheme.space.cardInset),
     ) { content() }
@@ -533,9 +534,9 @@ private fun SettingsItemRow(
 @Composable
 private fun InfoRow(title: String, subtitle: String) {
     PanelRow {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(text = title, style = LfTheme.typography.bodyL, color = LfTheme.colors.textPrimary)
-            Text(text = subtitle, style = LfTheme.typography.bodyM, color = LfTheme.colors.textSecondary)
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
+            Text(text = title, style = LfTheme.type.body, color = LfTheme.colors.text.primary)
+            Text(text = subtitle, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.secondary)
         }
     }
 }
@@ -609,7 +610,7 @@ private fun ToggleRow(title: String, toggle: SettingsToggle, subtitle: String, o
             checked = toggle.checked,
             onCheckedChange = { onEvent(toggle.eventFor(it)) },
             supporting = subtitle,
-            modifier = Modifier.defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget),
+            modifier = Modifier.defaultMinSize(minHeight = LfLayout.minTouchTarget),
             prominent = true,
         )
     }
@@ -632,11 +633,11 @@ private fun ChoiceRow(
     onEvent: (SettingsEvent) -> Unit,
 ) {
     PanelRow {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = title,
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
             )
             LfSegmentedControl(
                 options = choice.options,
@@ -645,8 +646,8 @@ private fun ChoiceRow(
             )
             Text(
                 text = subtitle,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }

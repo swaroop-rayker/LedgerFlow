@@ -61,8 +61,8 @@ open class LfPhraseScannerScreenshotTest {
                         Column(
                             modifier = Modifier
                                 .width(NARROW.dp)
-                                .background(LfTheme.colors.surfaceBase)
-                                .padding(LfTheme.spacing.sm),
+                                .background(LfTheme.colors.surface.canvas)
+                                .padding(LfTheme.space.itemGap),
                         ) {
                             ScannerControls(granted = granted, onDismiss = {})
                         }

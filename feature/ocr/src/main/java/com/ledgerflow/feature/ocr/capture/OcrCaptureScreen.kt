@@ -156,7 +156,7 @@ private fun CaptureContent(
     onGallery: () -> Unit,
     onDocument: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
         Viewfinder(state = state, onEvent = onEvent)
 
         state.result?.let {
@@ -200,12 +200,12 @@ private fun Viewfinder(state: OcrCaptureUiState, onEvent: (OcrCaptureEvent) -> U
     }
 
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             when (state.cameraPermission) {
                 CameraPermission.Unknown -> Text(
                     text = "Checking the camera…",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
 
                 CameraPermission.Denied -> CameraRefused()
@@ -235,8 +235,8 @@ private fun CameraRefused() {
     val context = LocalContext.current
     Text(
         text = "No camera access. You can still import a photo or a PDF below.",
-        style = LfTheme.typography.bodyM,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.bodySmall,
+        color = LfTheme.colors.text.secondary,
     )
     LfActionRow(alignment = LfActionAlignment.End) {
         LfButton(
@@ -274,7 +274,7 @@ private fun CameraPane(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = LfTheme.spacing.xs),
+            .padding(vertical = LfTheme.space.inlineGap),
         contentAlignment = Alignment.Center,
     ) {
         surfaceRequest?.let { request ->
@@ -329,8 +329,8 @@ private fun CameraPane(
             )
         } ?: Text(
             text = "Starting the camera…",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 
@@ -381,8 +381,8 @@ private fun CameraPane(
 private fun CaptureHint() {
     Text(
         text = "Fill the guide. Hold the phone square to the bill.",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
     )
 }
 
@@ -412,18 +412,18 @@ private fun ResultCard(
     onEvent: (OcrCaptureEvent) -> Unit,
 ) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = summary.merchant
                     ?: "${summary.elementCount} text runs · ${summary.sourceLabel}",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
             )
             summary.dateText?.let {
                 Text(
                     text = it,
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
             Text(
@@ -443,8 +443,8 @@ private fun ResultCard(
                     // "after" state to render.
                     if (!saved) append(" · nothing saved yet")
                 },
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
             )
 
             if (summary.isBill) {
@@ -452,8 +452,8 @@ private fun ResultCard(
             } else {
                 Text(
                     text = summary.rawPreview,
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
 
@@ -491,19 +491,19 @@ private fun ResultCard(
 private fun ExtractedItemLine(item: ExtractedItemRow) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
         verticalAlignment = Alignment.Top,
     ) {
         Text(
             text = item.name,
             modifier = Modifier.weight(1f),
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.primary,
         )
         Text(
             text = item.amountText,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -513,8 +513,8 @@ private fun SavedCard(message: String) {
     LfCard {
         Text(
             text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -524,8 +524,8 @@ private fun FailureCard(message: String) {
     LfCard {
         Text(
             text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.warn,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.status.warning,
         )
     }
 }
@@ -533,11 +533,11 @@ private fun FailureCard(message: String) {
 @Composable
 private fun ImportRow(enabled: Boolean, onGallery: () -> Unit, onDocument: () -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Or import one",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
                 maxLines = 1,
                 softWrap = false,
             )

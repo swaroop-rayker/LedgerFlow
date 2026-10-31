@@ -216,7 +216,7 @@ internal fun keptLabel(kept: KeptCopy): String = when (kept.source) {
 @Composable
 private fun ReadingCard(reading: ReadQualityReport, basis: String?) {
     DiagnosticsCard(heading = "How well messages are read") {
-        LfHorizontalBarChart(data = readingBars(reading, LfTheme.colors.accent))
+        LfHorizontalBarChart(data = readingBars(reading, LfTheme.colors.action.primary))
         BodyText(
             "How sure the matching rule was: high is 0.8 or more, low is under 0.5, " +
                 "and not recognised means no rule matched.",
@@ -225,8 +225,8 @@ private fun ReadingCard(reading: ReadQualityReport, basis: String?) {
         if (reading.weakestSenders.isNotEmpty()) {
             Text(
                 text = "Read worst",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
                 modifier = Modifier.semantics { heading() },
             )
             reading.weakestSenders.forEach { sender ->
@@ -372,11 +372,11 @@ internal fun rollupRepairs(rollup: RollupHealth): Pair<String, Boolean>? {
 @Composable
 private fun DiagnosticsCard(heading: String, content: @Composable () -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = heading,
-                style = LfTheme.typography.titleM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.heading,
+                color = LfTheme.colors.text.primary,
                 modifier = Modifier.semantics { heading() },
             )
             content()
@@ -388,15 +388,15 @@ private fun DiagnosticsCard(heading: String, content: @Composable () -> Unit) {
 private fun BodyText(text: String, primary: Boolean = false) {
     Text(
         text = text,
-        style = LfTheme.typography.bodyM,
-        color = if (primary) LfTheme.colors.textPrimary else LfTheme.colors.textSecondary,
+        style = LfTheme.type.bodySmall,
+        color = if (primary) LfTheme.colors.text.primary else LfTheme.colors.text.secondary,
     )
 }
 
 /** In words and in the warning colour — never colour alone (§9.6). */
 @Composable
 private fun WarningText(text: String) {
-    Text(text = text, style = LfTheme.typography.bodyM, color = LfTheme.colors.warn)
+    Text(text = text, style = LfTheme.type.bodySmall, color = LfTheme.colors.status.warning)
 }
 
 /** Label and a short figure on one line; the label wraps, the figure never does. */
@@ -405,16 +405,16 @@ private fun CountRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
             modifier = Modifier
                 .weight(1f)
-                .padding(end = LfTheme.spacing.sm),
+                .padding(end = LfTheme.space.itemGap),
         )
         Text(
             text = value,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             softWrap = false,
         )
@@ -425,8 +425,8 @@ private fun CountRow(label: String, value: String) {
 @Composable
 private fun StackedRow(label: String, value: String) {
     Column {
-        Text(text = label, style = LfTheme.typography.bodyM, color = LfTheme.colors.textSecondary)
-        Text(text = value, style = LfTheme.typography.bodyM, color = LfTheme.colors.textPrimary)
+        Text(text = label, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.secondary)
+        Text(text = value, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.primary)
     }
 }
 

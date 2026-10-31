@@ -201,8 +201,8 @@ private fun LazyListScope.chartSections(
                     // nothing in it. The mirror stays -- an empty half *is* the
                     // information -- but the caption now says so.
                     text = snapshot.bothBooksCaption(),
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
                 LfMirroredBarChart(
                     columns = snapshot.toMirroredColumns(),
@@ -382,8 +382,8 @@ private fun LazyListScope.dailyAndCommitmentSections(
             SectionCard(title = "Usually typed by hand") {
                 Text(
                     text = "Capture is missing these. Each one is a rule worth adding.",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
                 snapshot.parserGaps.forEach { gap ->
                     ParserGapRow(gap = gap, currency = state.baseCurrency)
@@ -406,9 +406,9 @@ private fun ParserGapRow(gap: ParserGap, currency: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = LfTheme.spacing.xs),
+            .padding(vertical = LfTheme.space.inlineGap),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         // The amount never truncates (BUG9), and since P5 step 4 the name does
         // not either: it drops the amount below it instead of being squeezed.
@@ -418,23 +418,23 @@ private fun ParserGapRow(gap: ParserGap, currency: String) {
                 Column {
                     Text(
                         text = gap.name,
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textPrimary,
+                        style = LfTheme.type.bodySmall,
+                        color = LfTheme.colors.text.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = "${gap.manualCount} of ${gap.totalCount} typed by hand",
-                        style = LfTheme.typography.label,
-                        color = LfTheme.colors.textSecondary,
+                        style = LfTheme.type.label,
+                        color = LfTheme.colors.text.secondary,
                     )
                 }
             },
             trailing = {
                 Text(
                     text = MoneyFormat.symbolised(gap.manualAmount.minor, currency),
-                    style = LfTheme.typography.amountM,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.amountRow,
+                    color = LfTheme.colors.text.primary,
                     maxLines = 1,
                     softWrap = false,
                 )
@@ -462,25 +462,25 @@ private fun CaptureCoverageSection(coverage: CaptureCoverage, currency: String) 
     val colors = LfTheme.colors
     Text(
         text = "${coverage.automaticPercentByValue}% captured automatically",
-        style = LfTheme.typography.titleM,
-        color = colors.textPrimary,
+        style = LfTheme.type.heading,
+        color = colors.text.primary,
     )
     Text(
         // The count sentence, which is the half a percentage of money hides.
         text = "${coverage.automatic.count} of ${coverage.totalCount} " +
             (if (coverage.totalCount == 1) "entry" else "entries") +
             " (${coverage.automaticPercentByCount}%)",
-        style = LfTheme.typography.label,
-        color = colors.textSecondary,
+        style = LfTheme.type.label,
+        color = colors.text.secondary,
     )
     LfHorizontalBarChart(
         data = buildList {
-            add(coverage.bar("Automatic", coverage.automatic, currency, colors.accent))
-            add(coverage.bar("By hand", coverage.manual, currency, colors.textTertiary))
+            add(coverage.bar("Automatic", coverage.automatic, currency, colors.action.primary))
+            add(coverage.bar("By hand", coverage.manual, currency, colors.text.muted))
             // Imported is a real third answer and is hidden when it is zero: a
             // permanent empty row would imply the user should be importing.
             if (coverage.imported.count > 0) {
-                add(coverage.bar("Imported", coverage.imported, currency, colors.textTertiary))
+                add(coverage.bar("Imported", coverage.imported, currency, colors.text.muted))
             }
         },
     )
@@ -518,8 +518,8 @@ private fun BudgetRow(progress: BudgetProgress, currency: String) {
             text = "At this pace, " +
                 MoneyFormat.symbolised(progress.projectedSpend.minor, currency) +
                 " by period end",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.warn,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.status.warning,
         )
     }
 }
@@ -528,15 +528,15 @@ private fun BudgetRow(progress: BudgetProgress, currency: String) {
 private fun RunwaySummary(snapshot: AnalyticsSnapshot, currency: String) {
     Text(
         text = MoneyFormat.symbolised(snapshot.runwayTotal.minor, currency),
-        style = LfTheme.typography.amountM,
-        color = LfTheme.colors.textPrimary,
+        style = LfTheme.type.amountRow,
+        color = LfTheme.colors.text.primary,
         maxLines = 1,
         softWrap = false,
     )
     Text(
         text = runwayCountLabel(snapshot.runway.size),
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
     )
     snapshot.runway.forEach { merchant ->
         RecurringRow(merchant = merchant, currency = currency)
@@ -556,9 +556,9 @@ private fun RecurringRow(merchant: RecurringMerchant, currency: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = LfTheme.spacing.xs),
+            .padding(vertical = LfTheme.space.inlineGap),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         LfAdaptiveRow(
             modifier = Modifier.weight(1f),
@@ -566,8 +566,8 @@ private fun RecurringRow(merchant: RecurringMerchant, currency: String) {
             trailing = {
                 Text(
                     text = MoneyFormat.symbolised(merchant.typicalAmount.minor, currency),
-                    style = LfTheme.typography.amountM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.amountRow,
+                    color = LfTheme.colors.text.secondary,
                     maxLines = 1,
                     softWrap = false,
                 )
@@ -582,8 +582,8 @@ private fun RecurringName(merchant: RecurringMerchant) {
     Column {
         Text(
             text = merchant.name,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -591,8 +591,8 @@ private fun RecurringName(merchant: RecurringMerchant) {
         // to "about every" -- the number was the part that went.
         Text(
             text = "about every ${merchant.intervalDays} days",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
         )
     }
 }
@@ -630,7 +630,7 @@ private fun AnalyticsSnapshot.toHeatmapDays(currency: String): List<LfHeatmapDay
 
 @Composable
 private fun AnalyticsSnapshot.toMerchantBars(currency: String): List<LfBarDatum> {
-    val accent = LfTheme.colors.accent
+    val accent = LfTheme.colors.action.primary
     return merchants.take(TOP_MERCHANTS).map { total ->
         LfBarDatum(
             id = total.id,
@@ -703,8 +703,8 @@ private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {
     SectionCard(title = null) {
         Text(
             text = MoneyFormat.symbolised(snapshot.total.minor, currency),
-            style = LfTheme.typography.amountL,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.amountHero,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             softWrap = false,
         )
@@ -718,8 +718,8 @@ private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {
             } else {
                 "${snapshot.transactionCount} transactions"
             },
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -729,7 +729,7 @@ private fun SectionCard(title: String?, content: @Composable () -> Unit) {
     LfCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             if (title != null) {
                 // Wraps, never ellipsises: at font scale 2.0 "By payment method"
                 // and "Usually typed by hand" were cut to "By payment meth..."
@@ -737,8 +737,8 @@ private fun SectionCard(title: String?, content: @Composable () -> Unit) {
                 // rule is only that it breaks between words, which these do.
                 Text(
                     text = title,
-                    style = LfTheme.typography.titleM,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.heading,
+                    color = LfTheme.colors.text.primary,
                 )
             }
             content()
@@ -764,11 +764,11 @@ private fun BookTotals(snapshot: AnalyticsSnapshot, currency: String) {
     // lose digits (P5 step 4's goldens). Still two figures, never a third.
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.blockGap),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
     ) {
-        BookTotal("In", inTotal, currency, LfTheme.colors.credit)
-        BookTotal("Out", outTotal, currency, LfTheme.colors.debit)
+        BookTotal("In", inTotal, currency, LfTheme.colors.money.incoming)
+        BookTotal("Out", outTotal, currency, LfTheme.colors.money.outgoing)
     }
 }
 
@@ -783,15 +783,15 @@ private fun BookTotal(
     Column(modifier = modifier) {
         Text(
             text = label,
-            style = LfTheme.typography.label,
+            style = LfTheme.type.label,
             color = color,
             maxLines = 1,
             softWrap = false,
         )
         Text(
             text = MoneyFormat.symbolised(minor, currency),
-            style = LfTheme.typography.amountM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.amountRow,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             softWrap = false,
         )
@@ -909,7 +909,7 @@ private fun DonutWithList(
                     id = "other",
                     label = "Other",
                     value = otherTotal,
-                    color = LfTheme.colors.textTertiary,
+                    color = LfTheme.colors.text.muted,
                 ),
             )
         }
@@ -938,7 +938,7 @@ private fun CategoryList(
     subcategories: Map<String, List<DimensionTotal>>,
     onExpand: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         totals.forEach { total ->
             DimensionRow(
                 total = total,
@@ -974,12 +974,12 @@ private fun DimensionRow(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(
-                start = if (indented) LfTheme.spacing.lg else 0.dp,
-                top = LfTheme.spacing.xs,
-                bottom = LfTheme.spacing.xs,
+                start = if (indented) LfTheme.space.screenEdge else 0.dp,
+                top = LfTheme.space.inlineGap,
+                bottom = LfTheme.space.inlineGap,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         // Name beside the amount, or above it when both will not fit: at font
         // scale 2.0 the weighted name was squeezed to "Groc..." (P5 step 4).
@@ -990,13 +990,13 @@ private fun DimensionRow(
             leading = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
                 ) {
                     LfCategoryDot(name = total.name, colorArgb = color.toArgb())
                     Text(
                         text = total.name,
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textPrimary,
+                        style = LfTheme.type.bodySmall,
+                        color = LfTheme.colors.text.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1012,8 +1012,8 @@ private fun DeltaAndAmount(total: DimensionTotal, currency: String) {
     Column(horizontalAlignment = Alignment.End) {
         Text(
             text = MoneyFormat.symbolised(total.amount.minor, currency),
-            style = LfTheme.typography.amountM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.amountRow,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             softWrap = false,
         )
@@ -1027,8 +1027,8 @@ private fun DeltaAndAmount(total: DimensionTotal, currency: String) {
                 // actually moved.
                 text = (if (delta >= 0) "+" else "-") +
                     MoneyFormat.symbolised(kotlin.math.abs(delta), currency),
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.muted,
                 maxLines = 1,
                 softWrap = false,
             )

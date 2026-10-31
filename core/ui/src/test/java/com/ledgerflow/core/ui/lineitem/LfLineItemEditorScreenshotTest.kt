@@ -89,8 +89,8 @@ open class LfLineItemEditorScreenshotTest {
                         Column(
                             modifier = Modifier
                                 .width(NARROW_EDITOR.dp)
-                                .background(LfTheme.colors.surfaceBase)
-                                .padding(LfTheme.spacing.md),
+                                .background(LfTheme.colors.surface.canvas)
+                                .padding(LfTheme.space.cardInset),
                         ) {
                             LfLineItemEditor(state = state, onEvent = {})
                         }

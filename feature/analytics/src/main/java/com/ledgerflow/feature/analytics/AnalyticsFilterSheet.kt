@@ -141,9 +141,9 @@ private fun FilterForm(
 private fun SearchField(filters: AnalyticsFilters, onEvent: (AnalyticsEvent) -> Unit) {
     Text(
         text = "Search",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
-        modifier = Modifier.padding(top = LfTheme.spacing.sm),
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
+        modifier = Modifier.padding(top = LfTheme.space.rowInsetVertical),
     )
     LfTextField(
         value = filters.query,
@@ -331,8 +331,8 @@ public fun AnalyticsCustomRangeSheet(
         onDismiss = { onEvent(AnalyticsEvent.CustomSheetShown(visible = false)) },
         dismissText = "Cancel",
         detail = {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
                     PeriodUnit.entries.forEach { unit ->
                         LfTextField(
                             value = state.valueFor(unit),
@@ -350,16 +350,16 @@ public fun AnalyticsCustomRangeSheet(
                     text = window?.let { "${dateLabel(it.from)} to ${dateLabel(it.to)}" +
                         " · ${it.spanDays} days" }
                         ?: "Enter a number in at least one field.",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
 
                 if (window != null && window.spanDays == AnalyticsWindow.MAX_SPAN_DAYS) {
                     Text(
                         // Says so rather than shrinking the answer quietly.
                         text = "Capped at five years, the longest range this screen reports.",
-                        style = LfTheme.typography.label,
-                        color = LfTheme.colors.warn,
+                        style = LfTheme.type.label,
+                        color = LfTheme.colors.status.warning,
                     )
                 }
 
@@ -451,12 +451,12 @@ private fun RangeHeadline(state: DateRangePickerState) {
             end == null -> pickedDateLabel(start) + " to…"
             else -> pickedDateLabel(start) + " to " + pickedDateLabel(end)
         },
-        style = LfTheme.typography.titleM,
-        color = LfTheme.colors.textPrimary,
+        style = LfTheme.type.heading,
+        color = LfTheme.colors.text.primary,
         modifier = Modifier.padding(
-            start = LfTheme.spacing.lg,
-            end = LfTheme.spacing.lg,
-            bottom = LfTheme.spacing.sm,
+            start = LfTheme.space.screenEdge,
+            end = LfTheme.space.screenEdge,
+            bottom = LfTheme.space.rowInsetVertical,
         ),
     )
 }

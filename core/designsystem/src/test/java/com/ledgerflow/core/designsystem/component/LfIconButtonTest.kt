@@ -42,14 +42,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.testing.screenshot.inkDifferences
-import kotlin.math.roundToInt
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.roundToInt
 
 /**
  * **The one-node icon button draws its glyph where the three nodes did**
@@ -144,14 +145,14 @@ class LfIconButtonTest {
 /** `LfIconButton`'s painter overload before PERF-120HZ-PLAN §2.3. Kept as the reference. */
 @Composable
 private fun MaterialIconButton(icon: Painter) {
-    val spacing = LfTheme.spacing
-    Box(modifier = Modifier.size(spacing.minTouchTarget), contentAlignment = Alignment.Center) {
+    val space = LfTheme.space
+    Box(modifier = Modifier.size(LfLayout.minTouchTarget), contentAlignment = Alignment.Center) {
         IconButton(
             onClick = {},
             modifier = Modifier.clip(CircleShape),
-            colors = IconButtonDefaults.iconButtonColors(contentColor = LfTheme.colors.textSecondary),
+            colors = IconButtonDefaults.iconButtonColors(contentColor = LfTheme.colors.text.secondary),
         ) {
-            Icon(painter = icon, contentDescription = "Delete", modifier = Modifier.size(spacing.md))
+            Icon(painter = icon, contentDescription = "Delete", modifier = Modifier.size(LfIconButtonTokens.glyph))
         }
     }
 }

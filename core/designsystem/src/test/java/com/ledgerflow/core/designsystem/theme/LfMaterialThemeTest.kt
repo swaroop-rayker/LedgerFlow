@@ -74,13 +74,13 @@ class LfMaterialThemeTest {
     @Test
     fun theTokensThatCarryMeaningAreWhereMaterialLooksForThem() {
         listOf(LfDarkColors to LfDarkColorScheme, LfLightColors to LfLightColorScheme).forEach { (tokens, scheme) ->
-            assertThat(scheme.primary).isEqualTo(tokens.accent)
-            assertThat(scheme.background).isEqualTo(tokens.surfaceBase)
-            assertThat(scheme.surface).isEqualTo(tokens.surfaceRaised)
-            assertThat(scheme.onSurface).isEqualTo(tokens.textPrimary)
-            assertThat(scheme.outlineVariant).isEqualTo(tokens.outline)
+            assertThat(scheme.primary).isEqualTo(tokens.action.primary)
+            assertThat(scheme.background).isEqualTo(tokens.surface.canvas)
+            assertThat(scheme.surface).isEqualTo(tokens.surface.raised)
+            assertThat(scheme.onSurface).isEqualTo(tokens.text.primary)
+            assertThat(scheme.outlineVariant).isEqualTo(tokens.border.subtle)
             // Date pickers draw on surfaceContainerHigh: the same surface LfDialog uses.
-            assertThat(scheme.surfaceContainerHigh).isEqualTo(tokens.surfaceOverlay)
+            assertThat(scheme.surfaceContainerHigh).isEqualTo(tokens.surface.overlay)
         }
     }
 

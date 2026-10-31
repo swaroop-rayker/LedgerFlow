@@ -109,8 +109,8 @@ private fun Reassurance() {
         Text(
             text = "Your data is still here and still encrypted. These 24 words unlock " +
                 "it. Nothing is deleted by getting this wrong.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -120,8 +120,8 @@ private fun Reassurance() {
 private fun ScanMessage(message: String) {
     Text(
         text = "$message Type the words instead.",
-        style = LfTheme.typography.bodyM,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.bodySmall,
+        color = LfTheme.colors.text.secondary,
         textAlign = LfTextAlign.start,
     )
 }
@@ -130,7 +130,7 @@ private fun ScanMessage(message: String) {
 private fun FailureMessage(failure: RecoveryFailure) {
     Text(
         text = failure.message(),
-        style = LfTheme.typography.bodyM,
+        style = LfTheme.type.bodySmall,
         // A form's error line, in the problem colour rather than money-out's
         // (E2). Not a notice: the pinned Unlock is the retry, and a notice
         // would need a second one.

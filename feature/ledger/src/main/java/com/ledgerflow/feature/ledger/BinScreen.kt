@@ -163,7 +163,7 @@ private fun BinRow(
     enabled: Boolean,
     onEvent: (BinEvent) -> Unit,
 ) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val colors = LfTheme.colors
 
     // displayCategoryName, not categoryName: an itemised entry files at line
@@ -202,21 +202,21 @@ private fun BinRow(
                 role = Role.Checkbox,
                 onValueChange = { onEvent(BinEvent.Toggled(entry.selectionKey())) },
             )
-            .padding(start = spacing.sm, end = spacing.md, top = spacing.sm, bottom = spacing.sm)
+            .padding(start = space.itemGap, end = space.rowInset, top = space.rowInsetVertical, bottom = space.rowInsetVertical)
             // One announcement for the row. The checkbox inside it would
             // otherwise be a second, unlabelled node, and TalkBack would read
             // the state twice without ever saying what it belonged to.
             .clearAndSetSemantics {
                 contentDescription = entry.spokenAs(title, stamp, selected)
             },
-        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(
             checked = selected,
             onCheckedChange = null,
             enabled = enabled,
-            colors = CheckboxDefaults.colors(checkedColor = colors.accent),
+            colors = CheckboxDefaults.colors(checkedColor = colors.action.primary),
         )
 
         BinSwatch(entry)
@@ -224,8 +224,8 @@ private fun BinRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = LfTheme.typography.bodyL,
-                color = colors.textPrimary,
+                style = LfTheme.type.body,
+                color = colors.text.primary,
             )
             EntryRowBody(
                 leading = { BinStamp(stamp) },
@@ -240,8 +240,8 @@ private fun BinRow(
 private fun BinStamp(stamp: String) {
     Text(
         text = stamp,
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textTertiary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.muted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
@@ -261,8 +261,8 @@ private fun BinAmount(entry: DeletedEntry) {
     val colors = LfTheme.colors
     Text(
         text = MoneyFormat.directional(entry.amount.minor, entry.currency, entry.ledger),
-        style = LfTheme.typography.amountM,
-        color = if (entry.ledger == LedgerType.DEBIT) colors.debit else colors.credit,
+        style = LfTheme.type.amountRow,
+        color = if (entry.ledger == LedgerType.DEBIT) colors.money.outgoing else colors.money.incoming,
         textAlign = LfTextAlign.end,
     )
 }
@@ -271,7 +271,7 @@ private fun BinAmount(entry: DeletedEntry) {
 @Composable
 private fun BinSwatch(entry: DeletedEntry) {
     val namingLine = with(LocalDensity.current) {
-        LfTheme.typography.bodyL.lineHeight.toDp()
+        LfTheme.type.body.lineHeight.toDp()
     }
     Box(modifier = Modifier.height(namingLine), contentAlignment = Alignment.Center) {
         // The display variants, as the title above uses (ADR-0018).
@@ -283,7 +283,7 @@ private fun BinSwatch(entry: DeletedEntry) {
             Box(
                 modifier = Modifier
                     .size(LfLayout.categoryDotSize)
-                    .border(LfTheme.borders.hairline, LfTheme.colors.outline, LfTheme.shapes.full),
+                    .border(LfTheme.borders.hairline, LfTheme.colors.border.subtle, LfTheme.shapes.full),
             )
         }
     }

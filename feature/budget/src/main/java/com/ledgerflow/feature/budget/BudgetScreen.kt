@@ -124,7 +124,7 @@ private fun BudgetCard(
     onDelete: () -> Unit,
 ) {
     LfCard(modifier = Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             LfBudgetBar(
                 label = progress.categoryName,
                 formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
@@ -142,11 +142,11 @@ private fun BudgetCard(
 
             Text(
                 text = periodSummary(progress),
-                style = LfTheme.typography.label,
+                style = LfTheme.type.label,
                 color = if (progress.onCourseToOverrun) {
-                    LfTheme.colors.warn
+                    LfTheme.colors.status.warning
                 } else {
-                    LfTheme.colors.textTertiary
+                    LfTheme.colors.text.muted
                 },
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

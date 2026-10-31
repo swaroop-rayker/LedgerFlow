@@ -56,6 +56,7 @@ import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.ui.lineitem.LfLineItemEditor
@@ -216,7 +217,7 @@ private fun LedgerSelector(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
         options = listOf("Expense", "Income"),
         selectedIndex = state.ledger.ordinal,
         onSelect = { onEvent(EntryEvent.LedgerSelected(LedgerType.entries[it])) },
-        modifier = Modifier.padding(top = LfTheme.spacing.md),
+        modifier = Modifier.padding(top = LfTheme.space.cardInset),
     )
 }
 
@@ -230,11 +231,11 @@ private fun LedgerSelector(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 @Composable
 private fun ResumeNotice(onEvent: (EntryEvent) -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             Text(
                 text = "Picked up where you left off",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
             LfDivider()
             LfActionRow {
@@ -259,8 +260,8 @@ private fun ResumeNotice(onEvent: (EntryEvent) -> Unit) {
 private fun ComboChips(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         state.combos.forEachIndexed { index, combo ->
             LfChip(
@@ -300,9 +301,9 @@ private fun ComboChips(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
 
-    Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+    Column(verticalArrangement = Arrangement.spacedBy(space.itemGap)) {
         // FlowRow, not Row. At font scale 2.0 "Start another" does not fit
         // beside the count, and `softWrap = false` turns that into a clipped
         // "Start anoth" -- BUG9's documented residual case. The remedy is the
@@ -310,8 +311,8 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
         // the whole control onto the next line, never the word.
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+            verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
         ) {
             Text(
                 modifier = Modifier.align(Alignment.CenterVertically),
@@ -320,8 +321,8 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
                 } else {
                     "Unsaved · ${state.unsaved.size}"
                 },
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
                 maxLines = 1,
                 softWrap = false,
             )
@@ -341,7 +342,7 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         ) {
             items(items = state.unsaved, key = { it.id }, contentType = { "draft" }) { draft ->
                 DraftCard(draft, onEvent)
@@ -352,30 +353,30 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 
 @Composable
 private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val colors = LfTheme.colors
     val shape = LfTheme.shapes.container
 
     Box(
         modifier = Modifier
-            .width(spacing.peekCardWidth)
+            .width(LfLayout.peekCardWidth)
             .clip(shape)
-            .background(colors.surfaceRaised)
-            .border(LfTheme.borders.hairline, colors.outline, shape)
+            .background(colors.surface.raised)
+            .border(LfTheme.borders.hairline, colors.border.subtle, shape)
             // The whole card opens it. A card whose only tap target is a small
             // button inside it is a card people tap and nothing happens.
             .clickable { onEvent(EntryEvent.DraftOpened(draft.id)) }
-            .padding(start = spacing.md, end = spacing.xs, bottom = spacing.md),
+            .padding(start = space.rowInset, end = space.inlineGap, bottom = space.cardInset),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(space.inlineGap)) {
             DraftCardHeader(draft, onEvent)
             Text(
                 text = MoneyFormat.symbolised(draft.amountMinor, draft.currencyCode),
-                style = LfTheme.typography.amountM,
-                color = colors.textPrimary,
+                style = LfTheme.type.amountRow,
+                color = colors.text.primary,
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier.padding(end = spacing.sm),
+                modifier = Modifier.padding(end = space.itemGap),
             )
             // What it is filed as gets its own line above the note. Folding
             // both onto one `maxLines = 1` line meant the merchant and category
@@ -384,23 +385,23 @@ private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
             draft.filedAs?.let {
                 Text(
                     text = it,
-                    style = LfTheme.typography.bodyM,
-                    color = colors.textPrimary,
+                    style = LfTheme.type.bodySmall,
+                    color = colors.text.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = spacing.sm),
+                    modifier = Modifier.padding(end = space.itemGap),
                 )
             }
             Text(
                 text = draft.subtitle() ?: "No details yet",
-                style = LfTheme.typography.label,
-                color = colors.textSecondary,
+                style = LfTheme.type.label,
+                color = colors.text.secondary,
                 // A note is content, not a control label, so BUG9's no-ellipsis
                 // rule does not apply: a truncated note is still readable, and
                 // the card opens to the whole thing.
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(end = spacing.sm),
+                modifier = Modifier.padding(end = space.itemGap),
             )
         }
     }
@@ -416,8 +417,8 @@ private fun DraftCardHeader(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit
     ) {
         Text(
             text = draft.age,
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
             maxLines = 1,
             softWrap = false,
         )

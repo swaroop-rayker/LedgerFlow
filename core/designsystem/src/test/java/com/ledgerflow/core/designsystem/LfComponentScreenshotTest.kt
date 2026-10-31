@@ -102,9 +102,9 @@ open class LfComponentScreenshotTest {
                         Column(
                             modifier = Modifier
                                 .width(NARROW_CARD.dp)
-                                .background(LfTheme.colors.surfaceBase)
-                                .padding(LfTheme.spacing.md),
-                            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                                .background(LfTheme.colors.surface.canvas)
+                                .padding(LfTheme.space.cardInset),
+                            verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
                             content = { content() },
                         )
                     }
@@ -121,11 +121,11 @@ open class LfComponentScreenshotTest {
     @Composable
     private fun ThreeActionCard() {
         LfCard {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
                 Text(
                     text = "Groceries",
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.body,
+                    color = LfTheme.colors.text.primary,
                 )
                 LfActionRow(alignment = LfActionAlignment.End) {
                     LfButton("Rename", {}, style = LfButtonStyle.Inline)
@@ -213,17 +213,17 @@ open class LfComponentScreenshotTest {
     @Composable
     private fun ProseCard() {
         LfCard(modifier = Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
                 Text(
                     text = "Notification capture",
-                    style = LfTheme.typography.titleM,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.heading,
+                    color = LfTheme.colors.text.primary,
                 )
                 Text(
                     text = "Most UPI payments never send an SMS, so they are not " +
                         "reaching your Inbox at all.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
         }

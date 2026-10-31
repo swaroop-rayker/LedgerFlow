@@ -74,7 +74,7 @@ private fun TextPromptDialog(
         onConfirm = { onEvent(CategoriesEvent.DialogConfirmed) },
         onDismiss = { onEvent(CategoriesEvent.DialogDismissed) },
         detail = {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
                 LfTextField(
                     value = dialog.value,
                     onValueChange = { onEvent(CategoriesEvent.DialogTextChanged(it)) },
@@ -218,8 +218,8 @@ private fun ReassignBeforeEraseDialog(
                     Text(
                         text = "There is nowhere else to move them yet. Add another " +
                             "$noun first.",
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textSecondary,
+                        style = LfTheme.type.bodySmall,
+                        color = LfTheme.colors.text.secondary,
                     )
                 }
                 dialog.candidates.forEach { choice ->
@@ -301,8 +301,8 @@ private fun MergeDialog(
                 if (dialog.candidates.isEmpty()) {
                     Text(
                         text = "There is nothing else to merge into yet.",
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textSecondary,
+                        style = LfTheme.type.bodySmall,
+                        color = LfTheme.colors.text.secondary,
                     )
                 }
                 dialog.candidates.forEach { choice ->
@@ -335,7 +335,7 @@ private fun PaymentMethodDialog(
                 modifier = Modifier
                     .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
             ) {
                 LfTextField(
                     value = dialog.label,
@@ -359,8 +359,8 @@ private fun PaymentMethodDialog(
                 )
                 Text(
                     text = "Type",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
                 PaymentMethodType.entries.forEach { type ->
                     ChoiceRow(
@@ -384,7 +384,9 @@ private fun PaymentMethodDialog(
  */
 @Composable
 private fun ErrorText(message: String) {
-    Text(text = message, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
+    // An error is a status, not money out (as E2 settled for every other
+    // error line): pink, where the old `debit` alias made it coral.
+    Text(text = message, style = LfTheme.type.bodySmall, color = LfTheme.colors.status.danger)
 }
 
 

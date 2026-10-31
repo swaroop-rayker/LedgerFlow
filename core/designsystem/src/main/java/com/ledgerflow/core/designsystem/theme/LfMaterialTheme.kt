@@ -27,7 +27,7 @@ import androidx.compose.ui.graphics.lerp
  *   Material draws control edges with `outline` (a switch's thumb and border, a
  *   text field) and decorative dividers with `outlineVariant`. `border.subtle`
  *   is the hairline, so it maps to the latter; the former gets
- *   [LfColors.textTertiary], which is what makes an off switch visible.
+ *   `LfColors.text.muted`, which is what makes an off switch visible.
  * - **`surfaceTint` is transparent.** Material tints a raised surface with the
  *   primary colour; LedgerFlow separates surfaces with hairlines, not tints
  *   (`CLAUDE.md` §5).

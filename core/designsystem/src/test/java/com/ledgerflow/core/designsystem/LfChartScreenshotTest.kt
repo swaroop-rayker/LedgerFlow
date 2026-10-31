@@ -87,9 +87,9 @@ open class LfChartScreenshotTest {
                         Column(
                             modifier = Modifier
                                 .width(NARROW_CHART.dp)
-                                .background(LfTheme.colors.surfaceBase)
-                                .padding(LfTheme.spacing.md),
-                            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                                .background(LfTheme.colors.surface.canvas)
+                                .padding(LfTheme.space.cardInset),
+                            verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
                             content = { content() },
                         )
                     }
@@ -255,7 +255,7 @@ open class LfChartScreenshotTest {
      */
     @Composable
     private fun Budgets() {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
             LfBudgetBar(
                 label = "Groceries",
                 formattedSpent = "₹4,200",

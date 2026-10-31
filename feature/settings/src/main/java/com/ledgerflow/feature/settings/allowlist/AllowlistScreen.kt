@@ -147,7 +147,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.pickerItems(
 @Composable
 private fun AllowlistRow(app: AllowlistedApp, position: LfGroupPosition, onEvent: (AllowlistEvent) -> Unit) {
     PanelSlice(position) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             LfSwitchRow(
                 label = app.label ?: app.packageName,
                 checked = app.enabled,
@@ -157,7 +157,7 @@ private fun AllowlistRow(app: AllowlistedApp, position: LfGroupPosition, onEvent
                 figureSupporting = true,
                 // A full 48 dp, so the Remove under it cannot share its tap
                 // area (§9.6; caught by the golden's touch-target check).
-                modifier = Modifier.defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget),
+                modifier = Modifier.defaultMinSize(minHeight = LfLayout.minTouchTarget),
             )
             if (!app.builtIn) {
                 LfActionRow(alignment = LfActionAlignment.End) {
@@ -177,15 +177,15 @@ private fun InstalledRow(app: InstalledApp, position: LfGroupPosition, onPick: (
     PanelSlice(
         position = position,
         modifier = Modifier
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
+            .defaultMinSize(minHeight = LfLayout.minTouchTarget)
             .clickable(onClick = onPick),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(text = app.label, style = LfTheme.typography.bodyL, color = LfTheme.colors.textPrimary)
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
+            Text(text = app.label, style = LfTheme.type.body, color = LfTheme.colors.text.primary)
             Text(
                 text = installedSupporting(app),
                 style = LfTheme.type.figureLabel,
-                color = LfTheme.colors.textSecondary,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
@@ -221,8 +221,8 @@ private fun PanelSlice(
 private fun Note(text: String) {
     Text(
         text = text,
-        style = LfTheme.typography.bodyM,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.bodySmall,
+        color = LfTheme.colors.text.secondary,
     )
 }
 

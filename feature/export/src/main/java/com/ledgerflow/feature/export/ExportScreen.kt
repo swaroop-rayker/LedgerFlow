@@ -97,7 +97,7 @@ public fun ExportScreen(
 @Composable
 private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (ExportEvent) -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             // The format is chosen on the card that describes it, so the
             // description under the control always answers for the selection.
             LfSegmentedControl(
@@ -107,8 +107,8 @@ private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (
             )
             Text(
                 text = state.format.description,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
             // `Start`, not the default `Center`: these are facts sitting under a
             // heading, not controls the eye has to find, and centring would
@@ -123,8 +123,8 @@ private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (
             }
             Text(
                 text = breakBeforeDate(suggestedFileName),
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.muted,
             )
         }
     }
@@ -151,19 +151,19 @@ private fun StatusCard(status: ExportStatus, onEvent: (ExportEvent) -> Unit) {
         ExportStatus.Idle, ExportStatus.Working -> Unit
 
         is ExportStatus.Done -> LfCard {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
                 Text(
                     text = "Exported",
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.credit,
+                    style = LfTheme.type.body,
+                    color = LfTheme.colors.money.incoming,
                 )
                 Text(
                     // The counts are the receipt. "Done" alone gives the user no
                     // way to tell a real export from one that wrote empty files.
                     text = "${status.rowCount} ${rowNoun(status.rowCount)} across " +
                         "${status.fileCount} ${status.format.containerNoun}.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
                 LfButton(
                     text = "OK",

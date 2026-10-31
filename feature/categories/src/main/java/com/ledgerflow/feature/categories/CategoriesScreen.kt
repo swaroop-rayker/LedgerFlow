@@ -78,7 +78,7 @@ public fun CategoriesScreen(
         // every page reached from Profile.
         onBack = onBack,
         filters = {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
                 LfSegmentedControl(
                     options = TaxonomySection.entries.map { it.label },
                     selectedIndex = state.section.ordinal,
@@ -231,9 +231,9 @@ private fun LazyListScope.categoryItems(state: CategoriesUiState, onEvent: (Cate
  */
 @Composable
 private fun CategoryBranch(branch: CategoryTree, onEvent: (CategoriesEvent) -> Unit) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
 
-    Column(modifier = Modifier.padding(bottom = spacing.sm)) {
+    Column(modifier = Modifier.padding(bottom = space.rowInsetVertical)) {
         CategoryRow(branch.parent, isChild = false, onEvent = onEvent)
 
         if (branch.children.isEmpty()) return@Column
@@ -244,19 +244,19 @@ private fun CategoryBranch(branch: CategoryTree, onEvent: (CategoriesEvent) -> U
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             Box(
                 modifier = Modifier
-                    .padding(start = spacing.md)
+                    .padding(start = space.rowInset)
                     .width(LfTheme.borders.hairline)
                     .fillMaxHeight()
-                    .background(LfTheme.colors.outline),
+                    .background(LfTheme.colors.border.subtle),
             )
             Column(modifier = Modifier.weight(1f)) {
                 branch.children.forEach { child ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .width(spacing.md)
+                                .width(space.rowInset)
                                 .height(LfTheme.borders.hairline)
-                                .background(LfTheme.colors.outline),
+                                .background(LfTheme.colors.border.subtle),
                         )
                         CategoryRow(child, isChild = true, onEvent = onEvent)
                     }
@@ -272,9 +272,9 @@ private fun CategoryRow(
     isChild: Boolean,
     onEvent: (CategoriesEvent) -> Unit,
 ) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
 
-    TaxonomyCard(modifier = Modifier.padding(vertical = spacing.xs)) {
+    TaxonomyCard(modifier = Modifier.padding(vertical = space.inlineGap)) {
         // Name on its own line, actions beneath — the shape in the sketch.
         //
         // The first attempt put the name *inside* the action `FlowRow`, which
@@ -283,14 +283,14 @@ private fun CategoryRow(
         // actions and the card ended up taller than the one it replaced. The
         // name is a heading, not a control; it gets its own line.
         Row(
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(space.itemGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LfCategoryDot(name = category.name, colorArgb = category.colorArgb)
             Text(
                 text = category.name,
-                style = if (isChild) LfTheme.typography.bodyM else LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = if (isChild) LfTheme.type.bodySmall else LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -346,14 +346,14 @@ private fun TaxonomyCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val shape = LfTheme.shapes.row
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceRaised, shape)
-            .border(LfTheme.borders.hairline, LfTheme.colors.outline, shape)
-            .padding(horizontal = spacing.md, vertical = spacing.sm),
+            .background(LfTheme.colors.surface.raised, shape)
+            .border(LfTheme.borders.hairline, LfTheme.colors.border.subtle, shape)
+            .padding(horizontal = space.rowInset, vertical = space.rowInsetVertical),
         content = content,
     )
 }
@@ -376,8 +376,8 @@ private fun MerchantCard(merchant: Merchant, onEvent: (CategoriesEvent) -> Unit)
         // the third dropped to a row of its own.
         Text(
             text = name,
-            style = LfTheme.typography.bodyL,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.body,
+            color = LfTheme.colors.text.primary,
         )
         LfActionRow(alignment = LfActionAlignment.End) {
             LfButton(
@@ -416,16 +416,16 @@ private fun PaymentMethodCard(method: PaymentMethod, onEvent: (CategoriesEvent) 
                 method.last4?.let { append(" ····$it") }
                 if (method.isDefault) append("  · default")
             },
-            style = LfTheme.typography.bodyL,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.body,
+            color = LfTheme.colors.text.primary,
         )
         // The type keeps its own line rather than joining the one above: label,
         // last-4, default and type is four facts abreast with no hierarchy, and
         // the label is the one being scanned for.
         Text(
             text = method.type.name.lowercase().replace('_', ' '),
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
         )
         LfActionRow(alignment = LfActionAlignment.End) {
             if (!method.isDefault) {
@@ -492,24 +492,24 @@ private fun LazyListScope.hiddenSection(
  */
 @Composable
 private fun HiddenHeader(count: Int, expanded: Boolean, onEvent: (CategoriesEvent) -> Unit) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onEvent(CategoriesEvent.HiddenToggled) }
-            .padding(vertical = spacing.sm),
-        horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+            .padding(vertical = space.rowInsetVertical),
+        horizontalArrangement = Arrangement.spacedBy(space.inlineGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = if (expanded) "\u25be" else "\u25b8",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
         )
         Text(
             text = "Hidden ($count)",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
             maxLines = 1,
         )
     }
@@ -532,8 +532,8 @@ private fun HiddenCard(item: HiddenTaxonomy, onEvent: (CategoriesEvent) -> Unit)
     TaxonomyCard {
         Text(
             text = item.name,
-            style = LfTheme.typography.bodyL,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.body,
+            color = LfTheme.colors.text.primary,
         )
         // One line for both facts. They are short, and stacking "Hidden 19 Aug"
         // above "with 2 subcategories" would make a hidden row taller than the
@@ -541,8 +541,8 @@ private fun HiddenCard(item: HiddenTaxonomy, onEvent: (CategoriesEvent) -> Unit)
         Text(
             text = listOfNotNull("Hidden ${hiddenStamp(item.hiddenAt)}", item.detail)
                 .joinToString(" · "),
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
         )
         LfActionRow(alignment = LfActionAlignment.End) {
             LfButton(
@@ -596,12 +596,12 @@ private const val HIDDEN_HEADER_KEY = "hidden-header"
 internal fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         text = if (selected) "● $label" else "○ $label",
-        style = LfTheme.typography.bodyM,
-        color = if (selected) LfTheme.colors.accent else LfTheme.colors.textPrimary,
+        style = LfTheme.type.bodySmall,
+        color = if (selected) LfTheme.colors.action.primary else LfTheme.colors.text.primary,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = LfTheme.spacing.sm),
+            .padding(vertical = LfTheme.space.rowInsetVertical),
     )
 }
 

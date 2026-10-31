@@ -96,8 +96,8 @@ public fun BackupNowScreen(
         state.scanMessage?.let {
             Text(
                 text = "$it Type the words instead.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
@@ -110,12 +110,12 @@ public fun BackupNowScreen(
 @Composable
 private fun Explanation(nightlyBackupsEnabled: Boolean) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Your 24 words seal the backup. They're checked, used once and forgotten — " +
                     "never sent, and saved only if you ask for a new Recovery Kit afterwards.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
             // Said before the words are typed, because enrolment is a
             // consequence of typing them (ADR-0027): a user who does not want
@@ -129,8 +129,8 @@ private fun Explanation(nightlyBackupsEnabled: Boolean) {
                         "by itself — and still can't open a backup, because it keeps only the " +
                         "locking half of the key."
                 },
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
@@ -165,12 +165,12 @@ private fun FailedNightlyLine(at: Long) {
 private fun FolderPrompt(onEvent: (BackupNowEvent) -> Unit) {
     val launch = rememberFolderPicker(onEvent)
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             Text(
                 text = "Choose where backups go — ideally a cloud drive, so they survive losing " +
                     "the phone.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
             LfButton(
                 text = "Choose folder",
@@ -196,17 +196,17 @@ private fun FolderLine(
 ) {
     val launch = rememberFolderPicker(onEvent)
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Backups go to $name.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
             if (changed) {
                 Text(
                     text = "Earlier backups stay in the previous folder.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
             LfActionRow(alignment = LfActionAlignment.Start) {
@@ -230,12 +230,12 @@ private fun FolderLine(
 @Composable
 private fun KitOffer(isWorking: Boolean, onEvent: (BackupNowEvent) -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Save a new Recovery Kit? It's a PDF with your 24 words and a QR code you " +
                     "can scan instead of typing them.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
             LfActionRow(alignment = LfActionAlignment.Start) {
                 LfButton(
@@ -277,7 +277,7 @@ private fun OutcomeLine(text: String, success: Boolean) {
     if (success) {
         LfNotice(tone = LfNoticeTone.Success, title = text)
     } else {
-        Text(text = text, style = LfTheme.typography.bodyM, color = LfTheme.colors.status.danger)
+        Text(text = text, style = LfTheme.type.bodySmall, color = LfTheme.colors.status.danger)
     }
 }
 

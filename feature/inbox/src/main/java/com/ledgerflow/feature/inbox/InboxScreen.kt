@@ -393,13 +393,13 @@ private fun SwipeableRow(
                     // The slice's corners, so the track keeps the panel's
                     // outline as the row slides off it.
                     .background(LfTheme.colors.status.dangerSubtle, position.shape(LfLayout.panelRadius))
-                    .padding(horizontal = LfTheme.spacing.md),
+                    .padding(horizontal = LfTheme.space.rowInset),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Text(
                     text = "Discard",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
         },
@@ -442,10 +442,10 @@ private fun PendingRow(
                 dividerInset = LfTheme.space.rowInset,
             )
             .padding(
-                start = if (selectable) LfTheme.spacing.xs else LfTheme.spacing.md,
-                end = LfTheme.spacing.md,
-                top = LfTheme.spacing.sm,
-                bottom = LfTheme.spacing.sm,
+                start = if (selectable) LfTheme.space.inlineGap else LfTheme.space.rowInset,
+                end = LfTheme.space.rowInset,
+                top = LfTheme.space.rowInsetVertical,
+                bottom = LfTheme.space.rowInsetVertical,
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -458,7 +458,7 @@ private fun PendingRow(
             Checkbox(
                 checked = selected,
                 onCheckedChange = { onEvent(InboxEvent.SelectionToggled(row.id)) },
-                colors = CheckboxDefaults.colors(checkedColor = LfTheme.colors.accent),
+                colors = CheckboxDefaults.colors(checkedColor = LfTheme.colors.action.primary),
                 modifier = Modifier.semantics {
                     contentDescription = if (selected) {
                         "Selected, ${row.title()}"
@@ -473,7 +473,7 @@ private fun PendingRow(
             modifier = Modifier
                 .weight(1f)
                 .clickable { onReview(row.id) },
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
         ) {
             RowBody(row, onEvent, onReview)
         }
@@ -501,8 +501,8 @@ private fun RowBody(
         leading = {
             Text(
                 text = row.title(),
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -510,7 +510,7 @@ private fun RowBody(
         trailing = {
             Text(
                 text = row.amountLabel(),
-                style = LfTheme.typography.amountM,
+                style = LfTheme.type.amountRow,
                 color = row.amountColor(),
                 maxLines = 1,
                 softWrap = false,
@@ -531,13 +531,13 @@ private fun RowBody(
                 // Inter, not the entry rows' Plex Mono (step F5): this line is
                 // mostly words, and Plex's width cut "needs details" to "needs
                 // detai..." on a phone-width row, the one word that says why.
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.muted,
                 // Two lines, not one: at font scale 2.0 one line cut the stamp to
                 // "19 Aug, 9:..." -- the hour went before the account number did.
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(end = LfTheme.spacing.sm),
+                modifier = Modifier.padding(end = LfTheme.space.itemGap),
             )
         },
         actions = { RowActions(row, onEvent, onReview) },
@@ -697,11 +697,11 @@ private fun PendingTransaction.amountLabel(): String {
 
 @Composable
 private fun PendingTransaction.amountColor() = when (effective.direction) {
-    ExtractedDirection.DEBIT -> LfTheme.colors.debit
-    ExtractedDirection.CREDIT -> LfTheme.colors.credit
+    ExtractedDirection.DEBIT -> LfTheme.colors.money.outgoing
+    ExtractedDirection.CREDIT -> LfTheme.colors.money.incoming
     // An unread direction is not a book, and colouring it as one would assert
     // something the parser did not find.
-    ExtractedDirection.UNKNOWN -> LfTheme.colors.textSecondary
+    ExtractedDirection.UNKNOWN -> LfTheme.colors.text.secondary
 }
 
 /**

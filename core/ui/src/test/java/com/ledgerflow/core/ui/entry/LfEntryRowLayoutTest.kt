@@ -222,7 +222,7 @@ class LfEntryRowLayoutTest {
 @Suppress("LongMethod")
 @Composable
 private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: Painter?) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val colors = LfTheme.colors
     // The one deliberate departure from verbatim: the corner reads the role, as
     // the real row does, so D3 moving `row` to 16 dp is not mistaken for a
@@ -236,20 +236,20 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised, shape)
-            .border(1.dp, colors.outline, shape)
+            .background(colors.surface.raised, shape)
+            .border(1.dp, colors.border.subtle, shape)
             .padding(
-                start = spacing.md,
-                end = if (deleteIcon != null) spacing.xs else spacing.md,
-                top = spacing.sm,
-                bottom = spacing.sm,
+                start = space.rowInset,
+                end = if (deleteIcon != null) space.inlineGap else space.rowInset,
+                top = space.rowInsetVertical,
+                bottom = space.rowInsetVertical,
             ),
-        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(space.itemGap),
             verticalAlignment = Alignment.Top,
         ) {
             // F3's second departure: the swatch slot is the 40 dp tile, top-aligned,
@@ -262,18 +262,18 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
                 modifier = if (categoryName != null && categoryColor != null) {
                     tile.lfCategoryTile(name = categoryName, colorArgb = categoryColor)
                 } else {
-                    tile.border(1.dp, LfTheme.colors.outline, LfTheme.shapes.tile)
+                    tile.border(1.dp, LfTheme.colors.border.subtle, LfTheme.shapes.tile)
                 },
             )
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = LfTheme.typography.bodyL, color = colors.textPrimary)
+                Text(text = title, style = LfTheme.type.body, color = colors.text.primary)
                 LfAdaptiveRow(
                     leading = {
                         Text(
                             text = detail,
                             // F5's departure: the detail is in Plex Mono, as the row draws it.
                             style = LfTheme.type.figureLabel,
-                            color = LfTheme.colors.textTertiary,
+                            color = LfTheme.colors.text.muted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -281,8 +281,8 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
                     trailing = {
                         Text(
                             text = MoneyFormat.directional(item.amount.minor, item.currency, item.ledger),
-                            style = LfTheme.typography.amountM,
-                            color = if (item.ledger == LedgerType.DEBIT) colors.debit else colors.credit,
+                            style = LfTheme.type.amountRow,
+                            color = if (item.ledger == LedgerType.DEBIT) colors.money.outgoing else colors.money.incoming,
                             // The one change to the old composition: the screen's
                             // end, as the real row aligns it since BUG61, where
                             // `TextAlign.End` now means the paragraph's end.

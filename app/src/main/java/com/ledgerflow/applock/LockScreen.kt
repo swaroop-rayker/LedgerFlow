@@ -35,20 +35,20 @@ internal fun LockScreen(onUnlock: () -> Unit, onLeave: () -> Unit) {
         modifier = Modifier.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(LfTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md, Alignment.CenterVertically),
+            modifier = Modifier.fillMaxSize().padding(padding).padding(LfTheme.space.screenEdge),
+            verticalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 text = "LedgerFlow is locked",
-                style = LfTheme.typography.titleM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.heading,
+                color = LfTheme.colors.text.primary,
                 modifier = Modifier.semantics { heading() },
             )
             Text(
                 text = "Unlock with your phone's fingerprint, face or screen lock.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
                 // Centred in both directions; Center is not the Start/End pair
                 // BUG61 routes through LfTextAlign.
                 textAlign = TextAlign.Center,

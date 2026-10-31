@@ -60,8 +60,8 @@ open class LfMaterialInheritanceScreenshotTest {
                     Column(
                         modifier = Modifier
                             .width(width.dp)
-                            .background(LfTheme.colors.surfaceBase)
-                            .padding(LfTheme.spacing.md),
+                            .background(LfTheme.colors.surface.canvas)
+                            .padding(LfTheme.space.cardInset),
                     ) { content() }
                 }
             }
@@ -81,14 +81,14 @@ open class LfMaterialInheritanceScreenshotTest {
     @Test
     fun selectionControls() = capture("material-selection-controls", CONTROLS_WIDTH) {
         Column(
-            modifier = Modifier.background(LfTheme.colors.surfaceRaised).padding(LfTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            modifier = Modifier.background(LfTheme.colors.surface.raised).padding(LfTheme.space.itemGap),
+            verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
                 Switch(checked = false, onCheckedChange = null)
                 Switch(checked = true, onCheckedChange = null)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
                 Checkbox(checked = false, onCheckedChange = null)
                 Checkbox(checked = true, onCheckedChange = null)
                 RadioButton(selected = false, onClick = null)

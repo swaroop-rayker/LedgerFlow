@@ -114,7 +114,7 @@ private fun EditorForm(
             .fillMaxWidth()
             .heightIn(max = LfLayout.dialogListMax)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         // **Only the category pair is fixed** (Q20). It is what the budget *is*
         // -- the repository enforces one live budget per category/subcategory
@@ -165,8 +165,8 @@ private fun EditorForm(
         if (editor.error != null) {
             Text(
                 text = editor.error,
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.warn,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.status.warning,
             )
         }
     }
@@ -243,8 +243,8 @@ private fun BudgetPickers(
 private fun StartDateRow(startDate: Int, onClick: () -> Unit) {
     Text(
         text = "Starts",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
     )
     LfActionRow(alignment = LfActionAlignment.Start) {
         LfButton(
@@ -298,8 +298,8 @@ private const val MILLIS_PER_DAY = 86_400_000L
 private fun PeriodPicker(selected: BudgetPeriod, onPick: (BudgetPeriod) -> Unit) {
     Text(
         text = "Period",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
     )
     // Four chips, which do fit on a phone -- `LfActionRow` so they wrap as
     // whole controls at font scale 2.0 rather than clipping (BUG9).

@@ -343,31 +343,31 @@ private fun MonthCard(summary: HomeSummary?, currency: String, modifier: Modifie
     val period = summary?.let { periodLabel(it.window.from, it.window.to) }
     val previousPeriod = summary?.let { periodLabel(it.previousWindow.from, it.previousWindow.to) }
     LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             Text(
                 text = period?.let { "This month, $it" } ?: "This month",
-                style = LfTheme.typography.label,
-                color = colors.textSecondary,
+                style = LfTheme.type.label,
+                color = colors.text.secondary,
             )
             BookFigure(
                 label = "Spent",
                 book = summary?.spending,
                 previousPeriod = previousPeriod,
                 currency = currency,
-                color = colors.debit,
+                color = colors.money.outgoing,
             )
             BookFigure(
                 label = "Received",
                 book = summary?.income,
                 previousPeriod = previousPeriod,
                 currency = currency,
-                color = colors.credit,
+                color = colors.money.incoming,
             )
             Text(
                 text = summary?.let { "Spent today: " + MoneyFormat.symbolised(it.spentToday.minor, currency) }
                     ?: PLACEHOLDER_LINE,
-                style = LfTheme.typography.label,
-                color = colors.textSecondary,
+                style = LfTheme.type.label,
+                color = colors.text.secondary,
             )
         }
     }
@@ -404,12 +404,12 @@ private fun BookFigure(
     Column(modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }) {
         LfAdaptiveRow(
             leading = {
-                Text(text = label, style = LfTheme.typography.bodyL, color = LfTheme.colors.textPrimary)
+                Text(text = label, style = LfTheme.type.body, color = LfTheme.colors.text.primary)
             },
             trailing = {
                 Text(
                     text = book?.let { MoneyFormat.symbolised(it.total.minor, currency) } ?: PLACEHOLDER_AMOUNT,
-                    style = LfTheme.typography.amountM,
+                    style = LfTheme.type.amountRow,
                     color = color,
                     maxLines = 1,
                     softWrap = false,
@@ -418,8 +418,8 @@ private fun BookFigure(
         )
         Text(
             text = comparison,
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
             textAlign = LfTextAlign.end,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -438,7 +438,7 @@ private fun BudgetsCard(
     modifier: Modifier = Modifier,
 ) {
     LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             SectionHeading(title = "Budgets", action = "All budgets", onAction = onOpenBudgets)
             budgets.forEach { progress ->
                 LfBudgetBar(
@@ -467,18 +467,18 @@ private fun RunwayCard(
     modifier: Modifier = Modifier,
 ) {
     LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = MoneyFormat.symbolised(summary.runwayTotal.minor, currency) +
                     " expected by " + dayLabel(summary.runwayThrough),
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
             )
             // Analytics is the banner above it now (F5): one way there per screen.
             Text(
                 text = runwayDetail(summary.runway.map { it.name }),
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
@@ -488,18 +488,18 @@ private fun RunwayCard(
 @Composable
 private fun CoverageCard(coverage: CaptureCoverage, onOpenAnalytics: () -> Unit, modifier: Modifier = Modifier) {
     LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "${coverage.automaticPercentByValue}% of this month's spending was captured automatically",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
             LineWithAction(action = "Details", onAction = onOpenAnalytics) {
                 Text(
                     text = "${coverage.automatic.count} of ${coverage.totalCount} " +
                         if (coverage.totalCount == 1) "entry" else "entries",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
         }
@@ -521,7 +521,7 @@ private fun RecentSection(
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         SectionHeading(title = title, action = "See all", onAction = onSeeAll)
         // F5: one panel with hairlines between the rows, the samples' grouped
         // list, rather than a bordered card per row.
@@ -587,7 +587,7 @@ private val STATUS_SEPARATOR: String = " " + Char(0x00B7) + " "
 @Composable
 private fun SectionHeading(title: String, action: String, onAction: () -> Unit) {
     LineWithAction(action = action, onAction = onAction) {
-        Text(text = title, style = LfTheme.typography.label, color = LfTheme.colors.textSecondary)
+        Text(text = title, style = LfTheme.type.label, color = LfTheme.colors.text.secondary)
     }
 }
 

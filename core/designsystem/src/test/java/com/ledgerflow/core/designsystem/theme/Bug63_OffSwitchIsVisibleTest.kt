@@ -45,7 +45,7 @@ class Bug63_OffSwitchIsVisibleTest {
             .isAtLeast(LfContrast.AA_LARGE)
         // LfSwitchRow sits on an LfCard, which is surfaceRaised.
         assertWithMessage("$theme: the switch's edge against the row")
-            .that(LfContrast.ratio(scheme.outline, tokens.surfaceRaised))
+            .that(LfContrast.ratio(scheme.outline, tokens.surface.raised))
             .isAtLeast(LfContrast.AA_LARGE)
     }
 

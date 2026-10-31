@@ -40,6 +40,7 @@ import com.ledgerflow.core.designsystem.format.bidiIsolated
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfConfirmSheet
 import com.ledgerflow.core.designsystem.pattern.LfFlowStep
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
@@ -345,11 +346,11 @@ private fun SetupFailedNotice(onEvent: (OnboardingEvent) -> Unit) {
  */
 @Composable
 private fun RestoreLink(onRestoreRequested: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         Text(
             text = "Moving from another phone? You'll need a backup and its 24 words.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
         LfButton(
             text = "Restore from a backup",
@@ -371,14 +372,14 @@ private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent
                         // A full-size target (BUG43): the radio has no onClick, so
                         // it brings no 48 dp minimum, and this row is a choice the
                         // user cannot change later (CLAUDE.md §0).
-                        .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
+                        .defaultMinSize(minHeight = LfLayout.minTouchTarget)
                         .selectable(
                             selected = selected,
                             onClick = { onEvent(OnboardingEvent.CurrencySelected(currency.code)) },
                         )
-                        .padding(vertical = LfTheme.spacing.sm),
+                        .padding(vertical = LfTheme.space.rowInsetVertical),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
                 ) {
                     // The row owns the selection semantics; the radio must not
                     // announce itself separately or TalkBack reads it twice.
@@ -391,8 +392,8 @@ private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent
                         // Isolated: the dirham's Arabic symbol would otherwise make
                         // this line right-to-left and put the name first (BUG61).
                         text = "${bidiIsolated(currency.symbol)}  ${currency.displayName}",
-                        style = LfTheme.typography.bodyL,
-                        color = LfTheme.colors.textPrimary,
+                        style = LfTheme.type.body,
+                        color = LfTheme.colors.text.primary,
                     )
                 }
             }
@@ -406,12 +407,12 @@ private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEven
         if (!state.phraseRevealed) {
             // Hidden until deliberately revealed: the phrase should not be
             // sitting on screen while the user is still working out what it is.
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
                 Text(
                     text = "Hidden until you're ready. Make sure nobody is looking over " +
                         "your shoulder.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
                 LfButton(
                     text = "Reveal phrase",
@@ -427,8 +428,8 @@ private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEven
             // phraseSecret() (SPEC 9.6).
             PhraseGrid(
                 modifier = Modifier.phraseSecret(),
-                columnGap = LfTheme.spacing.sm,
-                rowGap = LfTheme.spacing.xs,
+                columnGap = LfTheme.space.itemGap,
+                rowGap = LfTheme.space.inlineGap,
             ) {
                 state.mnemonic.forEachIndexed { index, word -> PhraseWord(position = index + 1, word = word) }
             }
@@ -443,17 +444,17 @@ private fun PhraseWord(position: Int, word: String, modifier: Modifier = Modifie
         modifier = modifier
             .phraseSecret()
             .semantics { contentDescription = "Word $position: $word" },
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         Text(
             text = "$position".padStart(2, ' '),
             style = LfTheme.type.mnemonicIndex,
-            color = LfTheme.colors.textTertiary,
+            color = LfTheme.colors.text.muted,
         )
         Text(
             text = word,
-            style = LfTheme.typography.mnemonicWord,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.mnemonic,
+            color = LfTheme.colors.text.primary,
             // A recovery word is never broken across lines; the grid gives
             // it a column it fits whole.
             softWrap = false,
@@ -519,7 +520,7 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
         Text(
             text = "That didn't match. Check your written copy — we've picked three " +
                 "different words to try again.",
-            style = LfTheme.typography.bodyM,
+            style = LfTheme.type.bodySmall,
             // The field error's colour, not money-out's (E2).
             color = LfTheme.colors.status.danger,
         )

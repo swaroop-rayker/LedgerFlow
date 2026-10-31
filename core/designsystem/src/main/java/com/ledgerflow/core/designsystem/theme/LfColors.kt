@@ -40,46 +40,7 @@ public class LfColors internal constructor(
     public val status: LfStatusColors,
     public val chart: LfChartColors,
     public val isDark: Boolean,
-) {
-    @Deprecated("Use surface.canvas (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("surface.canvas"))
-    public val surfaceBase: Color get() = surface.canvas
-
-    @Deprecated("Use surface.raised (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("surface.raised"))
-    public val surfaceRaised: Color get() = surface.raised
-
-    @Deprecated("Use surface.overlay (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("surface.overlay"))
-    public val surfaceOverlay: Color get() = surface.overlay
-
-    @Deprecated("Use border.subtle (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("border.subtle"))
-    public val outline: Color get() = border.subtle
-
-    @Deprecated("Use text.primary (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("text.primary"))
-    public val textPrimary: Color get() = text.primary
-
-    @Deprecated("Use text.secondary (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("text.secondary"))
-    public val textSecondary: Color get() = text.secondary
-
-    @Deprecated("Use text.muted (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("text.muted"))
-    public val textTertiary: Color get() = text.muted
-
-    @Deprecated("Use action.primary (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("action.primary"))
-    public val accent: Color get() = action.primary
-
-    @Deprecated("Use action.onPrimary (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("action.onPrimary"))
-    public val onAccent: Color get() = action.onPrimary
-
-    @Deprecated(
-        "Use money.outgoing for an amount, status.danger for a destructive action (DESIGN_SYSTEM_PLAN §4.2)",
-        ReplaceWith("money.outgoing"),
-    )
-    public val debit: Color get() = money.outgoing
-
-    @Deprecated("Use money.incoming (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("money.incoming"))
-    public val credit: Color get() = money.incoming
-
-    @Deprecated("Use status.warning (DESIGN_SYSTEM_PLAN §4.2)", ReplaceWith("status.warning"))
-    public val warn: Color get() = status.warning
-}
+)
 
 /** What things sit on. [canvas] is the page; [raised] cards and rows; [overlay] dialogs, sheets, menus. */
 @Immutable

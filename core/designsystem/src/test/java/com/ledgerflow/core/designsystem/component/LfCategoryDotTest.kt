@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertWithMessage
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.testing.screenshot.inkDifferences
 import kotlin.math.roundToInt
@@ -157,7 +158,7 @@ class LfCategoryDotTest {
 /** `LfCategoryDot` before PERF-120HZ-PLAN §2.2. Kept as the reference; do not tidy. */
 @Composable
 private fun ComposedCategoryDot(name: String, colorArgb: Int) {
-    val diameter = LfTheme.spacing.lg
+    val diameter = LfLayout.categoryDotSize
     val initialSize = with(LocalDensity.current) { (diameter * 0.5f).toSp() }
     Box(
         modifier = Modifier.size(diameter).background(Color(colorArgb), CircleShape),
@@ -165,7 +166,7 @@ private fun ComposedCategoryDot(name: String, colorArgb: Int) {
     ) {
         Text(
             text = name.firstOrNull()?.uppercase().orEmpty(),
-            style = LfTheme.typography.label.copy(fontSize = initialSize, lineHeight = TextUnit.Unspecified),
+            style = LfTheme.type.label.copy(fontSize = initialSize, lineHeight = TextUnit.Unspecified),
             color = LfCategoryInk,
         )
     }

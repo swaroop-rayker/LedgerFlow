@@ -40,17 +40,6 @@ internal val LfDefaultShapeRoles: LfShapeRoles = LfShapeRoles(
     tile = RoundedCornerShape(LfScale.Radius12),
 )
 
-/**
- * The 8 dp corner the charts' cells still use.
- *
- * Not a role: Night Vault has no 8 dp shape. Fields, chips, segments, the
- * snackbar and Material's two small slots left it at step F3 (`control`, and
- * `full` for chips and segments). The heatmap's cells keep it until F6 restyles
- * the charts: at their size the 12 dp tile radius would turn a square into a
- * dot.
- */
-internal val LfLegacySmallCorner: CornerBasedShape = RoundedCornerShape(LfScale.Radius8)
-
 private const val FULLY_ROUND_PERCENT = 50
 
 public val LocalLfShapeRoles: androidx.compose.runtime.ProvidableCompositionLocal<LfShapeRoles> =

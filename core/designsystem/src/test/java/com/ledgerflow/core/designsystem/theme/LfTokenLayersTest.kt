@@ -45,20 +45,23 @@ class LfTokenLayersTest {
         assertThat(LfLightColors.status.danger).isEqualTo(Color(0xFFA8336F))
     }
 
-    /** Each old name, read through its deprecated alias and through the role that replaces it. */
-    private fun byOldName(c: LfColors): Map<String, Pair<Color, Color>> = mapOf(
-        "surfaceBase" to (c.surfaceBase to c.surface.canvas),
-        "surfaceRaised" to (c.surfaceRaised to c.surface.raised),
-        "surfaceOverlay" to (c.surfaceOverlay to c.surface.overlay),
-        "outline" to (c.outline to c.border.subtle),
-        "textPrimary" to (c.textPrimary to c.text.primary),
-        "textSecondary" to (c.textSecondary to c.text.secondary),
-        "textTertiary" to (c.textTertiary to c.text.muted),
-        "accent" to (c.accent to c.action.primary),
-        "onAccent" to (c.onAccent to c.action.onPrimary),
-        "debit" to (c.debit to c.money.outgoing),
-        "credit" to (c.credit to c.money.incoming),
-        "warn" to (c.warn to c.status.warning),
+    /**
+     * Each colour by its pre-B1 name, read through the role that replaced it.
+     * Step G removed the aliases themselves; the values they pinned stay pinned.
+     */
+    private fun byOldName(c: LfColors): Map<String, Color> = mapOf(
+        "surfaceBase" to c.surface.canvas,
+        "surfaceRaised" to c.surface.raised,
+        "surfaceOverlay" to c.surface.overlay,
+        "outline" to c.border.subtle,
+        "textPrimary" to c.text.primary,
+        "textSecondary" to c.text.secondary,
+        "textTertiary" to c.text.muted,
+        "accent" to c.action.primary,
+        "onAccent" to c.action.onPrimary,
+        "debit" to c.money.outgoing,
+        "credit" to c.money.incoming,
+        "warn" to c.status.warning,
     )
 
     @Test
@@ -70,11 +73,7 @@ class LfTokenLayersTest {
     private fun assertKeepsValues(colors: LfColors, before: Map<String, Long>) {
         val now = byOldName(colors)
         assertThat(now.keys).containsExactlyElementsIn(before.keys)
-        before.forEach { (name, argb) ->
-            val (alias, role) = now.getValue(name)
-            assertThat(alias).isEqualTo(Color(argb))
-            assertThat(role).isEqualTo(Color(argb))
-        }
+        before.forEach { (name, argb) -> assertThat(now.getValue(name)).isEqualTo(Color(argb)) }
     }
 
     /**
@@ -128,59 +127,47 @@ class LfTokenLayersTest {
     }
 
     @Test
-    fun spacingAndMotionKeepTheirValues() {
-        val s = LfSpacing()
-        assertThat(listOf(s.xs, s.sm, s.md, s.lg, s.xl, s.xxl))
-            .containsExactly(4.dp, 8.dp, 16.dp, 24.dp, 32.dp, 48.dp)
-            .inOrder()
-        assertThat(listOf(s.cornerSmall, s.cornerMedium, s.cornerLarge)).containsExactly(8.dp, 16.dp, 24.dp).inOrder()
-        assertThat(listOf(s.minTouchTarget, s.actionMinWidth, s.segmentMinWidth, s.peekCardWidth))
-            .containsExactly(48.dp, 112.dp, 72.dp, 172.dp)
-            .inOrder()
+    fun motionKeepsItsValues() {
         val m = LfMotion()
         assertThat(listOf(m.micro, m.standard, m.emphasized, m.fadeOut)).containsExactly(120, 240, 400, 60).inOrder()
         assertThat(m.axisSlide).isEqualTo(30.dp)
     }
 
+    /** The roles are steps of the one scale; step G removed the old names for the steps. */
     @Test
     fun spaceRolesAreStepsOfTheSameScale() {
         val r = LfDefaultSpaceRoles
-        val s = LfSpacing()
-        assertThat(r.screenEdge).isEqualTo(s.lg)
-        assertThat(r.sectionGap).isEqualTo(s.md)
-        assertThat(r.itemGap).isEqualTo(s.sm)
-        assertThat(r.inlineGap).isEqualTo(s.xs)
-        assertThat(r.cardInset).isEqualTo(s.md) // LfCard's padding
-        assertThat(r.rowInset).isEqualTo(s.md) // LfEntryRow's start inset
-        assertThat(r.rowInsetVertical).isEqualTo(s.sm)
-        assertThat(r.blockGap).isEqualTo(s.lg) // LfPhraseEntry's gap between blocks
+        assertThat(r.screenEdge).isEqualTo(24.dp)
+        assertThat(r.sectionGap).isEqualTo(16.dp)
+        assertThat(r.itemGap).isEqualTo(8.dp)
+        assertThat(r.inlineGap).isEqualTo(4.dp)
+        assertThat(r.cardInset).isEqualTo(16.dp) // LfCard's padding
+        assertThat(r.rowInset).isEqualTo(16.dp) // LfEntryRow's start inset
+        assertThat(r.rowInsetVertical).isEqualTo(8.dp)
+        assertThat(r.blockGap).isEqualTo(24.dp) // LfPhraseEntry's gap between blocks
+        assertThat(r.listEnd).isEqualTo(32.dp)
         assertThat(LfDefaultBorderRoles.hairline).isEqualTo(1.dp)
     }
 
-    /**
-     * Step B3: each shape role is the radius its users had, so nothing on screen
-     * moved. Step D3 then set `row` to 16 dp (owner, 2026-10-26).
-     */
+    /** Night Vault's radii (F3, ADR-0031): 16 for containers, rows and controls, 24 for dialogs, 12 for tiles. */
     @Test
-    fun shapeRolesKeepTodaysRadii() {
+    fun shapeRolesKeepTheirRadii() {
         val r = LfDefaultShapeRoles
-        val s = LfSpacing()
-        assertThat(r.container).isEqualTo(RoundedCornerShape(s.cornerMedium)) // LfCard
-        assertThat(r.row).isEqualTo(RoundedCornerShape(s.cornerMedium)) // every standalone row, D3
-        assertThat(r.control).isEqualTo(RoundedCornerShape(s.cornerMedium)) // LfButton
-        assertThat(r.dialog).isEqualTo(RoundedCornerShape(s.cornerLarge)) // LfDialog
+        assertThat(r.container).isEqualTo(RoundedCornerShape(16.dp)) // LfCard
+        assertThat(r.row).isEqualTo(RoundedCornerShape(16.dp)) // every standalone row, D3
+        assertThat(r.control).isEqualTo(RoundedCornerShape(16.dp)) // LfButton
+        assertThat(r.dialog).isEqualTo(RoundedCornerShape(24.dp)) // LfDialog
+        assertThat(r.tile).isEqualTo(RoundedCornerShape(12.dp)) // category tiles, chart cells (F6)
         assertThat(r.full).isEqualTo(CircleShape) // LfFab
-        assertThat(LfLegacySmallCorner).isEqualTo(RoundedCornerShape(s.cornerSmall)) // fields, chips
     }
 
     @Test
-    fun layoutConstantsMovedUnchanged() {
-        val s = LfSpacing()
-        assertThat(LfLayout.minTouchTarget).isEqualTo(s.minTouchTarget)
-        assertThat(LfLayout.actionMinWidth).isEqualTo(s.actionMinWidth)
-        assertThat(LfLayout.segmentMinWidth).isEqualTo(s.segmentMinWidth)
-        assertThat(LfLayout.peekCardWidth).isEqualTo(s.peekCardWidth)
-        assertThat(LfLayout.categoryDotSize).isEqualTo(s.lg)
+    fun layoutConstantsKeepTheirValues() {
+        assertThat(LfLayout.minTouchTarget).isEqualTo(48.dp)
+        assertThat(LfLayout.actionMinWidth).isEqualTo(112.dp)
+        assertThat(LfLayout.segmentMinWidth).isEqualTo(72.dp)
+        assertThat(LfLayout.peekCardWidth).isEqualTo(172.dp)
+        assertThat(LfLayout.categoryDotSize).isEqualTo(24.dp)
         assertThat(LfLayout.dialogListMax).isEqualTo(320.dp) // D3: one of five values
     }
 }
