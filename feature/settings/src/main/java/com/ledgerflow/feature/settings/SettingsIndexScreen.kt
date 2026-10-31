@@ -76,6 +76,7 @@ internal fun indexValueFor(page: SettingsPage, state: SettingsUiState): String? 
     SettingsPage.Security -> if (state.security.appLock) "Phone's lock" else "Off"
     SettingsPage.Appearance -> state.appearance.theme.label
     SettingsPage.Region -> state.baseCurrency
+    SettingsPage.About -> state.appInfo?.versionName
     SettingsPage.Organise,
     SettingsPage.Data,
     SettingsPage.Tools,

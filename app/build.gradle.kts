@@ -11,6 +11,21 @@ plugins {
     id("ledgerflow.android.hilt")
     // Type-safe Navigation Compose routes are @Serializable (SPEC.md §9.3).
     alias(libs.plugins.kotlin.serialization)
+    // Settings > About > Open-source licences (V2-3, ADR-0032): collects every
+    // shipped library and its licence into res/raw/aboutlibraries.json at
+    // build time. No runtime library; the app reads the JSON itself.
+    alias(libs.plugins.aboutlibraries.android)
+}
+
+aboutLibraries {
+    // Never reach the network from the build to fetch licence texts or
+    // funding: the list is what the POMs say, and the build stays the same
+    // offline and on CI.
+    offlineMode = true
+    export {
+        // Who wrote a library and how to fund it are not shown; leave them out.
+        excludeFields.addAll("developers", "funding", "organization", "scm")
+    }
 }
 
 /**

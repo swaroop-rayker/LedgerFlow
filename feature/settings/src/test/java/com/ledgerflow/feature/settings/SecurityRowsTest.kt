@@ -52,6 +52,7 @@ class SecurityRowsTest {
                     onBudgetAlerts = {},
                     onPaymentApps = {},
                     onDataPermissions = {},
+                    onAbout = {},
                     onEvent = { events += it },
                 )
             }
@@ -135,6 +136,7 @@ class SecurityRowsTest {
                     onBudgetAlerts = {},
                     onPaymentApps = {},
                     onDataPermissions = { opened++ },
+                    onAbout = {},
                     onEvent = { events += it },
                 )
             }

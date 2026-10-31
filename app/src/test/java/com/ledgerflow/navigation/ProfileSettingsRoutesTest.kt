@@ -83,6 +83,14 @@ class ProfileSettingsRoutesTest {
             ),
             SettingsPage.Security to listOf("Data permissions" to Destination.DataPermissions),
             SettingsPage.Tools to listOf("Diagnostics" to Destination.Diagnostics),
+            SettingsPage.About to listOf(
+                "What's new" to Destination.AboutDocument("WhatsNew"),
+                "Help & FAQ" to Destination.Help,
+                "Report a bug" to Destination.ReportBug,
+                "Privacy policy" to Destination.AboutDocument("PrivacyPolicy"),
+                "Terms" to Destination.AboutDocument("Terms"),
+                "Open-source licences" to Destination.Licences,
+            ),
         )
         val reached = mutableListOf<Destination>()
         var alerts = 0
