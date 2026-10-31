@@ -522,7 +522,12 @@ private fun PendingRow(
             .fillMaxWidth()
             .background(colors.surface.raised, shape)
             .border(LfTheme.borders.emphasis, colors.action.primary, shape)
-            .padding(start = space.rowInset, end = space.inlineGap, top = space.rowInsetVertical, bottom = space.rowInsetVertical),
+            .padding(
+                start = space.rowInset,
+                end = space.inlineGap,
+                top = space.rowInsetVertical,
+                bottom = space.rowInsetVertical,
+            ),
         horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {

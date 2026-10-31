@@ -282,7 +282,11 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
                         Text(
                             text = MoneyFormat.directional(item.amount.minor, item.currency, item.ledger),
                             style = LfTheme.type.amountRow,
-                            color = if (item.ledger == LedgerType.DEBIT) colors.money.outgoing else colors.money.incoming,
+                            color = if (item.ledger == LedgerType.DEBIT) {
+                                colors.money.outgoing
+                            } else {
+                                colors.money.incoming
+                            },
                             // The one change to the old composition: the screen's
                             // end, as the real row aligns it since BUG61, where
                             // `TextAlign.End` now means the paragraph's end.

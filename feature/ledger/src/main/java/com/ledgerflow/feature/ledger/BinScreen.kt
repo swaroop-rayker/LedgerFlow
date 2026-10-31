@@ -202,7 +202,12 @@ private fun BinRow(
                 role = Role.Checkbox,
                 onValueChange = { onEvent(BinEvent.Toggled(entry.selectionKey())) },
             )
-            .padding(start = space.itemGap, end = space.rowInset, top = space.rowInsetVertical, bottom = space.rowInsetVertical)
+            .padding(
+                start = space.itemGap,
+                end = space.rowInset,
+                top = space.rowInsetVertical,
+                bottom = space.rowInsetVertical,
+            )
             // One announcement for the row. The checkbox inside it would
             // otherwise be a second, unlabelled node, and TalkBack would read
             // the state twice without ever saying what it belonged to.
