@@ -32,7 +32,7 @@ internal fun toggleFor(item: SettingsItem, state: SettingsUiState): SettingsTogg
     SettingsItem.AppLock -> SettingsToggle(state.security.appLock) { SettingsEvent.AppLockToggled(it) }
     SettingsItem.BlockScreenshots ->
         SettingsToggle(state.security.blockScreenshots) { SettingsEvent.BlockScreenshotsToggled(it) }
-    SettingsItem.HideAmounts -> SettingsToggle(state.security.hideAmounts) { SettingsEvent.HideAmountsToggled(it) }
+    SettingsItem.HideAmounts -> SettingsToggle(state.hideAmounts) { SettingsEvent.HideAmountsToggled(it) }
     SettingsItem.DataPermissions,
     SettingsItem.NotificationCapture,
     SettingsItem.PaymentApps,

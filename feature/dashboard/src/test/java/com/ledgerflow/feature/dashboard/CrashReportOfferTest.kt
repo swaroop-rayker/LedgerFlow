@@ -25,7 +25,7 @@ import com.ledgerflow.core.testing.diagnostics.FakeCrashReportRepository
 import com.ledgerflow.core.testing.inbox.FakePendingRepository
 import com.ledgerflow.core.testing.ingest.FakeCaptureGapStore
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
-import com.ledgerflow.core.testing.security.FakeSecurityStore
+import com.ledgerflow.core.testing.security.FakeHideAmountsSetting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -91,7 +91,7 @@ class CrashReportOfferTest {
                 GetHomeSummaryUseCase(FakeAnalyticsRepository()),
                 FakeLedgerRepository(),
                 clock,
-                FakeSecurityStore(),
+                FakeHideAmountsSetting(),
             ),
         )
     }

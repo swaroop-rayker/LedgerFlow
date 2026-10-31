@@ -268,8 +268,8 @@ SPEC §7.6 has the detail.
 draws every amount as the same four dots until a tap shows them all; leaving
 Home hides them again. Data permissions lists what the installed package
 actually holds, read from Android, with a link to Android's page for each one
-the user can turn off. SPEC §9.3 has the detail. Hide amounts' key sits outside
-the vault as ADR-0030's second named exception, pending the owner's word.
+the user can turn off. SPEC §9.3 has the detail. The switch lives in the vault
+(`app_meta`, owner 2026-10-31), so a backup carries it.
 
 **PIN (owner, 2026-10-25).** The Security page offers a choice: the phone's
 own lock (today's default) or a LedgerFlow PIN, as in the reference samples.

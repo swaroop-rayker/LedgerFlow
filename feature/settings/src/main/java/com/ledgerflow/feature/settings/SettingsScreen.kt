@@ -304,7 +304,7 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.AppLock to { appLockSubtitle(it) },
     SettingsItem.LockAfter to { lockAfterSubtitle(it.security) },
     SettingsItem.BlockScreenshots to { blockScreenshotsSubtitle(it.security.blockScreenshots) },
-    SettingsItem.HideAmounts to { hideAmountsSubtitle(it.security.hideAmounts) },
+    SettingsItem.HideAmounts to { hideAmountsSubtitle(it.hideAmounts) },
     SettingsItem.DataPermissions to { "What LedgerFlow may use, why, and where to turn it off" },
     SettingsItem.Theme to { themeSubtitle(it.appearance.theme) },
     SettingsItem.Animations to { animationsSubtitle(it) },

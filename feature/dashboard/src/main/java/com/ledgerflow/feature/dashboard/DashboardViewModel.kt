@@ -122,7 +122,7 @@ public class DashboardViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
-            home.security.preferences.collect { prefs -> _state.update { it.copy(hideAmounts = prefs.hideAmounts) } }
+            home.hideAmounts.enabled.collect { hide -> _state.update { it.copy(hideAmounts = hide) } }
         }
         viewModelScope.launch {
             summaryRequests

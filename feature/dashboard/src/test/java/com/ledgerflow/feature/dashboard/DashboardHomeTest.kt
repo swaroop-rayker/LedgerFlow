@@ -27,7 +27,7 @@ import com.ledgerflow.core.testing.diagnostics.FakeCrashReportRepository
 import com.ledgerflow.core.testing.inbox.FakePendingRepository
 import com.ledgerflow.core.testing.ingest.FakeCaptureGapStore
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
-import com.ledgerflow.core.testing.security.FakeSecurityStore
+import com.ledgerflow.core.testing.security.FakeHideAmountsSetting
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +56,7 @@ class DashboardHomeTest {
     private val dispatcher = StandardTestDispatcher()
     private val ledger = FakeLedgerRepository()
     private val analytics = FakeAnalyticsRepository()
-    private val security = FakeSecurityStore()
+    private val hideAmounts = FakeHideAmountsSetting(initial = null)
     private var now = millisOn(2026, 10, 16)
 
     @Before
@@ -78,23 +78,26 @@ class DashboardHomeTest {
     @Test
     fun hideAmounts_followsTheSetting_andARevealLastsUntilHomeStops() = runTest(dispatcher) {
         val vm = viewModel()
-        // Before the setting is read, nothing is shown: the figures may land first.
+        advanceUntilIdle()
+        // The vault has not answered: nothing is shown, as figures may land first.
         assertThat(vm.state.value.amountsHidden).isTrue()
+
+        hideAmounts.set(false)
         advanceUntilIdle()
         assertThat(vm.state.value.amountsHidden).isFalse()
 
-        security.setHideAmounts(true)
+        hideAmounts.set(true)
         advanceUntilIdle()
         assertThat(vm.state.value.amountsHidden).isTrue()
 
         vm.revealAmounts()
         assertThat(vm.state.value.amountsHidden).isFalse()
-        assertThat(security.preferences.value.hideAmounts).isTrue()
+        assertThat(hideAmounts.vault.value).isTrue()
 
         vm.hideAmountsAgain()
         assertThat(vm.state.value.amountsHidden).isTrue()
 
-        security.setHideAmounts(false)
+        hideAmounts.set(false)
         advanceUntilIdle()
         assertThat(vm.state.value.amountsHidden).isFalse()
     }
@@ -335,7 +338,7 @@ class DashboardHomeTest {
                 summary,
                 ledger,
                 clock,
-                security,
+                hideAmounts,
             ),
         )
     }

@@ -78,8 +78,8 @@ public data class DashboardUiState(
 
     /**
      * Settings > Security & privacy > Hide amounts on Home (V2-PLAN §3.5).
-     * Null until the setting has been read: the figures come from the vault
-     * and the setting from its own file, and either can land first.
+     * Null until the setting has been read: it and the figures are separate
+     * reads of the vault, and either can land first.
      */
     val hideAmounts: Boolean? = null,
 

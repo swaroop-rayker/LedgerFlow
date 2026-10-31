@@ -2,7 +2,7 @@ package com.ledgerflow.feature.dashboard
 
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.domain.ledger.LedgerRepository
-import com.ledgerflow.core.domain.security.SecurityStore
+import com.ledgerflow.core.domain.security.HideAmountsSetting
 import com.ledgerflow.core.domain.usecase.GetHomeSummaryUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import javax.inject.Inject
@@ -19,6 +19,6 @@ public class HomeReads @Inject constructor(
     internal val getHomeSummary: GetHomeSummaryUseCase,
     internal val ledger: LedgerRepository,
     internal val clock: Clock,
-    /** Hide amounts on Home (V2-PLAN §3.5), outside the vault (ADR-0030). */
-    internal val security: SecurityStore,
+    /** Hide amounts on Home (V2-PLAN §3.5), kept in the vault. */
+    internal val hideAmounts: HideAmountsSetting,
 )
