@@ -115,7 +115,8 @@ open class DataPermissionsScreenTest {
     fun theSentence_leadsWithTheState_thenTheReason() {
         val byKind = smsFull.associateBy { it.kind }
 
-        assertThat(byKind.getValue(PermissionKind.CAMERA).sentence).isEqualTo("Not allowed. Scans receipts and recovery QR codes, on this phone.")
+        assertThat(byKind.getValue(PermissionKind.CAMERA).sentence)
+            .isEqualTo("Not allowed. Scans receipts and recovery QR codes, on this phone.")
         assertThat(byKind.getValue(PermissionKind.NOTIFICATION_ACCESS).sentence).startsWith("Allowed. ")
         // The heading says "Granted when installed"; the row only says why.
         assertThat(byKind.getValue(PermissionKind.INTERNET).sentence).endsWith("LedgerFlow does not use it.")

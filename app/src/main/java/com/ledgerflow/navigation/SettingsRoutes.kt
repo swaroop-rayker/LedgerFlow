@@ -20,6 +20,9 @@ import com.ledgerflow.feature.settings.SettingsPage
 import com.ledgerflow.feature.settings.SettingsSectionScreen
 import com.ledgerflow.feature.settings.SettingsUiState
 import com.ledgerflow.feature.settings.SettingsViewModel
+import com.ledgerflow.feature.settings.permissions.DataPermissionsScreen
+import com.ledgerflow.feature.settings.permissions.DataPermissionsViewModel
+import com.ledgerflow.feature.settings.permissions.openPermissionSettings
 import com.ledgerflow.feature.settings.settingsPageNamed
 
 /**
@@ -89,6 +92,29 @@ internal fun NavGraphBuilder.profileAndSettingsDestinations(navController: NavHo
                 runCatching { context.startActivity(intent) }
             },
             onEvent = viewModel::onEvent,
+        )
+    }
+}
+
+/**
+ * The pages Security & privacy opens (V2-3): Data permissions. Its rows open
+ * Android's own settings, so the page is re-read on every resume.
+ */
+internal fun NavGraphBuilder.securityDestinations(navController: NavHostController) {
+    composable<Destination.DataPermissions> {
+        val viewModel: DataPermissionsViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        val context = LocalContext.current
+        // The user changes these in Android's settings: the rows say what is
+        // true when they come back.
+        LifecycleResumeEffect(Unit) {
+            viewModel.refresh()
+            onPauseOrDispose { }
+        }
+        DataPermissionsScreen(
+            state = state,
+            onOpen = { kind -> openPermissionSettings(context, kind) },
+            onBack = navController::popBackStack,
         )
     }
 }

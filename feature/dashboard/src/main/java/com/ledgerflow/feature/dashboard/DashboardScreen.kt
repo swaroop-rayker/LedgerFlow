@@ -288,6 +288,15 @@ private fun LazyListScope.homeBody(
         }
     }
 
+    recentSections(state = state, onRevealAmounts = onRevealAmounts, onOpenLedger = onOpenLedger)
+}
+
+/** Each book's newest entries, as two separate lists (Law 2). */
+private fun LazyListScope.recentSections(
+    state: DashboardUiState,
+    onRevealAmounts: () -> Unit,
+    onOpenLedger: (LedgerType) -> Unit,
+) {
     state.recentSpending?.takeIf { state.showsRecentSpending }?.let { rows ->
         item(key = "recent-spending", contentType = "recent") {
             RecentSection(
@@ -618,9 +627,7 @@ private fun RecentSection(
         LfPanel(
             modifier = Modifier
                 .lfRevealAmounts(hidden = hidden, onReveal = onReveal)
-                .then(
-                    if (hidden) Modifier.semantics { contentDescription = "$title, " + AmountMask.SPOKEN } else Modifier,
-                ),
+                .then(if (hidden) Modifier.semantics { contentDescription = "$title, $HIDDEN" } else Modifier),
         ) {
             rows.forEachIndexed { index, row ->
                 key(row.id) {
@@ -732,6 +739,9 @@ internal fun comparisonSentence(
         else -> "Same as $period"
     }
 }
+
+/** "amount hidden", for the descriptions that wrap a hidden figure. */
+private const val HIDDEN: String = AmountMask.SPOKEN
 
 /** An amount inside a sentence on Home: the figure, or the mask while amounts are hidden. */
 private fun figure(minor: Long, currency: String, hidden: Boolean): String =
