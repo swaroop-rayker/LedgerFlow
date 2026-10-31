@@ -8,12 +8,9 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -24,7 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.designsystem.component.ProgressTrack
 
 /**
  * Budget progress (`SPEC.md` §5.6 A7, §5.7).
@@ -53,22 +50,25 @@ public fun LfBudgetBar(
     fraction: Float,
     projectedFraction: Float,
     modifier: Modifier = Modifier,
-    color: Color = LfTheme.colors.accent,
+    color: Color = LfChartTokens.series,
     height: Dp = DefaultBarHeight,
     contentDescription: String? = null,
+    amounts: String? = null,
 ) {
-    val colors = LfTheme.colors
+    val tokens = LfChartTokens
     val over = fraction > 1f
-    val fill = if (over) colors.warn else color
+    val fill = if (over) tokens.overBudget else color
 
-    val spoken = contentDescription
-        ?: "$label, $formattedSpent of $formattedBudget"
+    // [amounts] replaces "spent of budget" where a screen says it another way
+    // (Home's "₹250 left of ₹5,000", step F5); the spoken line follows it.
+    val pair = amounts ?: "$formattedSpent of $formattedBudget"
+    val spoken = contentDescription ?: "$label, $pair"
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .semantics { this.contentDescription = spoken },
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(tokens.gap),
     ) {
         // **`FlowRow`, not `Row`, and the goldens are why.** With a weighted
         // `Row` the unbreakable amount pair took its width first and the label
@@ -79,34 +79,34 @@ public fun LfBudgetBar(
         // widths the amounts drop to their own line and the name gets the row.
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(tokens.wideGap),
+            verticalArrangement = Arrangement.spacedBy(tokens.gap),
         ) {
             Text(
                 text = label,
-                style = LfTheme.typography.bodyM,
-                color = colors.textPrimary,
+                style = tokens.textStyle,
+                color = tokens.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.clearAndSetSemantics { },
             )
             BudgetAmounts(
-                text = "$formattedSpent of $formattedBudget",
-                color = if (over) colors.warn else colors.textSecondary,
+                text = pair,
+                color = if (over) tokens.overBudget else tokens.secondaryText,
             )
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height)
-                .clip(RoundedCornerShape(height / 2))
-                .background(colors.surfaceOverlay),
+        // LfProgressBar's track (step E1), with the burn-rate tick on top. The
+        // bar says nothing itself: the row's description above already does.
+        ProgressTrack(
+            fraction = fraction,
+            fill = fill,
+            track = tokens.track,
+            height = height,
         ) {
-            FractionalBar(fraction = fraction.coerceIn(0f, 1f), color = fill)
             // Only when the projection is both meaningful and not already true.
             if (projectedFraction > fraction && projectedFraction <= 1f) {
-                ProjectionTick(fraction = projectedFraction, color = colors.textTertiary)
+                ProjectionTick(fraction = projectedFraction, color = tokens.reference)
             }
         }
     }
@@ -132,25 +132,12 @@ internal fun BudgetAmounts(
 ) {
     Text(
         text = text,
-        style = LfTheme.typography.label,
+        style = LfChartTokens.labelStyle,
         color = color,
         maxLines = AMOUNT_MAX_LINES,
         onTextLayout = onTextLayout,
         modifier = Modifier.clearAndSetSemantics { },
     )
-}
-
-@Composable
-private fun FractionalBar(fraction: Float, color: Color) {
-    Layout(
-        content = {},
-        modifier = Modifier
-            .background(color)
-            .clearAndSetSemantics { },
-    ) { _, constraints ->
-        val width = (constraints.maxWidth * fraction).toInt().coerceIn(0, constraints.maxWidth)
-        layout(width, constraints.maxHeight) {}
-    }
 }
 
 /**

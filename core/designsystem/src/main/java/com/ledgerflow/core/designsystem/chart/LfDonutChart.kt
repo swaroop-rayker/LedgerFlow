@@ -3,16 +3,22 @@ package com.ledgerflow.core.designsystem.chart
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * Category breakdown and payment-method split (`SPEC.md` §5.6, A2 and A5).
@@ -40,9 +46,10 @@ public fun LfDonutChart(
     modifier: Modifier = Modifier,
     diameter: Dp = DefaultDiameter,
     thickness: Dp = DefaultThickness,
+    centerText: String? = null,
     centerContent: @Composable () -> Unit = {},
 ) {
-    val trackColor = LfTheme.colors.outline
+    val trackColor = LfChartTokens.donutTrack
     val total = slices.sumOf { it.value }.coerceAtLeast(0L)
 
     // One description for the whole chart. Per-slice semantics nodes on a
@@ -63,49 +70,101 @@ public fun LfDonutChart(
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(modifier = Modifier.size(diameter)) {
-            val stroke = Stroke(width = thickness.toPx())
-            val inset = thickness.toPx() / 2f
-            val arcSize = androidx.compose.ui.geometry.Size(
-                width = size.width - thickness.toPx(),
-                height = size.height - thickness.toPx(),
-            )
-            val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
+        Canvas(modifier = Modifier.size(diameter)) { drawRing(slices, total, thickness, trackColor) }
+        centerText?.let { CentreTotal(it, diameter - thickness * 2) }
+        centerContent()
+    }
+}
 
+/** The track, then each slice (step F6); drawn, not composed. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRing(
+    slices: List<LfDonutSlice>,
+    total: Long,
+    thickness: Dp,
+    trackColor: Color,
+) {
+    // Round ends (step F6): each arc's caps reach past its ends by half
+    // the ring, so the gap between two slices comes out of the sweep
+    // as the 2 dp the eye sees plus a whole ring's width of caps.
+    val stroke = Stroke(width = thickness.toPx(), cap = StrokeCap.Round)
+    val inset = thickness.toPx() / 2f
+    val arcSize = androidx.compose.ui.geometry.Size(
+        width = size.width - thickness.toPx(),
+        height = size.height - thickness.toPx(),
+    )
+    val topLeft = Offset(inset, inset)
+
+    drawArc(
+        color = trackColor,
+        startAngle = 0f,
+        sweepAngle = FULL_CIRCLE,
+        useCenter = false,
+        topLeft = topLeft,
+        size = arcSize,
+        style = stroke,
+    )
+
+    if (total <= 0L) return
+
+    val radius = arcSize.width / 2f
+    val gapDegrees = ((SLICE_GAP.toPx() + thickness.toPx()) / radius) * DEGREES_PER_RADIAN
+    val drawn = slices.count { it.value > 0L }
+    var start = START_ANGLE
+    slices.forEach { slice ->
+        if (slice.value <= 0L) return@forEach
+        val sweep = FULL_CIRCLE * (slice.value.toFloat() / total.toFloat())
+        val shown = if (drawn == 1) FULL_CIRCLE else sweep - gapDegrees
+        if (shown > 0f) {
             drawArc(
-                color = trackColor,
-                startAngle = 0f,
-                sweepAngle = FULL_CIRCLE,
+                color = slice.color,
+                startAngle = start,
+                // A gap between arcs keeps two similar hues legible as
+                // two slices. It comes out of the sweep rather than
+                // being drawn over the top, so the ring stays a ring; a
+                // lone slice is the whole ring, with no gap to close.
+                sweepAngle = shown,
                 useCenter = false,
                 topLeft = topLeft,
                 size = arcSize,
                 style = stroke,
             )
-
-            if (total <= 0L) return@Canvas
-
-            var start = START_ANGLE
-            slices.forEach { slice ->
-                if (slice.value <= 0L) return@forEach
-                val sweep = FULL_CIRCLE * (slice.value.toFloat() / total.toFloat())
-                drawArc(
-                    color = slice.color,
-                    startAngle = start,
-                    // A hairline gap between arcs, which is what keeps two
-                    // similar hues legible as two slices rather than one. It
-                    // comes out of the sweep rather than being drawn over the
-                    // top, so the ring stays a ring at any thickness.
-                    sweepAngle = (sweep - SLICE_GAP_DEGREES).coerceAtLeast(0f),
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = stroke,
-                )
-                start += sweep
-            }
+        } else {
+            // A slice narrower than the gap is a dot, never nothing:
+            // a category with spend must not vanish from the ring.
+            val middle = Math.toRadians((start + sweep / 2f).toDouble())
+            drawCircle(
+                color = slice.color,
+                radius = thickness.toPx() / 2f,
+                center = center + Offset(
+                    (radius * kotlin.math.cos(middle)).toFloat(),
+                    (radius * kotlin.math.sin(middle)).toFloat(),
+                ),
+            )
         }
-        centerContent()
+        start += sweep
     }
+}
+
+/**
+ * The total in the ring's middle, in Plex Mono (step F6). One line that
+ * shrinks to fit the hole rather than wrapping or clipping a figure (BUG9):
+ * "₹1,24,000.00" is twice the width of "₹4,200".
+ */
+@Composable
+private fun CentreTotal(text: String, hole: Dp) {
+    val tokens = LfChartTokens
+    BasicText(
+        text = text,
+        style = tokens.donutTotalStyle.copy(color = tokens.text, textAlign = TextAlign.Center),
+        maxLines = 1,
+        softWrap = false,
+        autoSize = TextAutoSize.StepBased(
+            minFontSize = tokens.donutTotalMin,
+            maxFontSize = tokens.donutTotalStyle.fontSize,
+            stepSize = tokens.donutTotalStep,
+        ),
+        modifier = Modifier.width(hole - tokens.wideGap * 2).clearAndSetSemantics { },
+    )
 }
 
 /**
@@ -128,7 +187,8 @@ private const val FULL_CIRCLE = 360f
 /** Twelve o'clock, because a reader starts there. */
 private const val START_ANGLE = -90f
 
-private const val SLICE_GAP_DEGREES = 1.5f
+private const val DEGREES_PER_RADIAN = 57.29578f
 
 private val DefaultDiameter: Dp = 104.dp
-private val DefaultThickness: Dp = 14.dp
+private val DefaultThickness: Dp = 12.dp
+private val SLICE_GAP: Dp = 2.dp

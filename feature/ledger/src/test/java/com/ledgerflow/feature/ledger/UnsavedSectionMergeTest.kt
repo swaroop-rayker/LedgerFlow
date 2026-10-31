@@ -6,7 +6,9 @@ import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.ledger.DraftSummaryFields
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.usecase.DeleteEntryUseCase
+import com.ledgerflow.core.domain.usecase.RestoreEntryUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
@@ -95,6 +97,7 @@ class UnsavedSectionMergeTest {
             ledger = ledger,
             drafts = drafts,
             deleteEntry = DeleteEntryUseCase(ledger),
+            restoreEntry = RestoreEntryUseCase(ledger, NoOpBudgetAlertTrigger),
             observePending = ObservePendingUseCase(pending),
             clock = Clock { FIXED_NOW },
         )

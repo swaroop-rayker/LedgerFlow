@@ -102,6 +102,52 @@ class AnalyticsRangeSelectionTest {
         assertThat(viewModel.state.value.showCustomSheet).isFalse()
     }
 
+    /** Step F5: a range chosen in the period sheet closes it, the current one included. */
+    @Test
+    fun choosingInThePeriodSheet_closesIt() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AnalyticsEvent.PeriodSheetShown(visible = true))
+        assertThat(viewModel.state.value.showPeriodSheet).isTrue()
+        viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.WEEK))
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.showPeriodSheet).isFalse()
+        assertThat(viewModel.state.value.range).isEqualTo(AnalyticsRange.WEEK)
+
+        // Re-choosing the range in force reloads nothing, and still closes.
+        viewModel.onEvent(AnalyticsEvent.PeriodSheetShown(visible = true))
+        viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.WEEK))
+        assertThat(viewModel.state.value.showPeriodSheet).isFalse()
+    }
+
+    /** Step F6: Spend over time opens on Total and switches to By category without a query. */
+    @Test
+    fun theTimeView_startsOnTotal_andSwitches() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.timeView).isEqualTo(TimeView.TOTAL)
+
+        viewModel.onEvent(AnalyticsEvent.TimeViewSelected(TimeView.BY_CATEGORY))
+
+        assertThat(viewModel.state.value.timeView).isEqualTo(TimeView.BY_CATEGORY)
+        assertThat(viewModel.state.value.isLoading).isFalse()
+    }
+
+    /** Custom in the period sheet swaps it for the Custom sheet, never stacking the two. */
+    @Test
+    fun customInThePeriodSheet_opensTheCustomSheetInItsPlace() = runTest {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AnalyticsEvent.PeriodSheetShown(visible = true))
+        viewModel.onEvent(AnalyticsEvent.RangeSelected(AnalyticsRange.CUSTOM))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.showPeriodSheet).isFalse()
+        assertThat(viewModel.state.value.showCustomSheet).isTrue()
+    }
+
     /**
      * A typed period becomes the window (§5.6).
      *

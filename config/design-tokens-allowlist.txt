@@ -1,0 +1,18 @@
+# designTokenCheck allowlist (DESIGN_SYSTEM_PLAN §6.2; the task is in build.gradle.kts).
+#
+# Today's violations, one line per file and rule:
+#   <path> <rule> <count> -- <reason, and the step that removes it>
+#
+# The counts must match exactly. A file that gains a violation fails the check;
+# so does a file that loses one, until its count here is lowered. This list only
+# shrinks. A new line is an exception that someone has to review in the diff,
+# with its reason: if you are adding one, say why the design system cannot do it.
+#
+# Rules: colour, alpha, size, shape, type, material-theme, icon, widget.
+# Recorded at step C1 (2026-10-25): 38 in 15 files.
+# Step C2: the 8 picker and sheet widgets moved to their Lf wrappers; 30 in 12 files.
+# Step D3: corners, hairlines, dialog list heights and the swipe tint read the
+# theme; 2 in 2 files.
+# Step F3: the entry row's empty swatch takes the tile's shape; 1 in 1 file.
+# Step F4: the budget alert draws Lucide's wallet, the app's one icon family;
+# 0. The list is empty: a line added now is a new exception, reviewed as one.

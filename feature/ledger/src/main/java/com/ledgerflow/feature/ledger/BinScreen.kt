@@ -1,6 +1,5 @@
 package com.ledgerflow.feature.ledger
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,9 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Text
@@ -30,18 +28,28 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.component.lfGroupPosition
+import com.ledgerflow.core.designsystem.component.lfGroupSlice
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfDetailPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.DeletedEntry
@@ -70,35 +78,29 @@ public fun BinScreen(
 ) {
     state.confirmation?.let { BinConfirmationDialog(it, onEvent) }
 
-    LfScaffold(
+    // Pinned header, as before: the count in the subtitle is what the actions
+    // below act on. The way back is the arrow beside the title (step F5).
+    LfDetailPage(
+        title = "Deleted entries",
+        subtitle = subtitleFor(state),
         modifier = modifier,
-        bottomBar = { if (state.entries.isNotEmpty()) BinActions(state, onEvent) },
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                LfScreenTitle(
-                    title = "Deleted entries",
-                    subtitle = subtitleFor(state),
-                    modifier = Modifier.weight(1f),
-                )
-                LfButton(
-                    text = "Done",
-                    style = LfButtonStyle.Text,
-                    onClick = onBack,
-                    modifier = Modifier.padding(end = LfTheme.spacing.md),
-                )
-            }
-
-            state.message?.let { BinMessage(it, onEvent) }
-
-            BinList(state, onEvent)
-        }
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
+        notices = state.message?.let { message -> { BinMessage(message, onEvent) } },
+        statusContent = when {
+            // Still skeletons after 300 ms rather than a blank page (E3).
+            !state.isLoaded -> { { LfStateContent(state = LfContentState.Loading) {} } }
+            state.entries.isEmpty() -> { { NothingDeleted() } }
+            else -> null
+        },
+        actionBar = if (state.entries.isNotEmpty()) { { BinActions(state, onEvent) } } else null,
+        // One panel for the bin (step F5): its rows draw their slices, so the
+        // list puts no gap between them.
+        spacing = LfPageSpacing.None,
+        pinHeader = true,
+    ) {
+        binRows(state, onEvent)
     }
 }
 
@@ -116,37 +118,30 @@ private fun subtitleFor(state: BinUiState): String? = when {
 }
 
 @Composable
-private fun BinList(state: BinUiState, onEvent: (BinEvent) -> Unit) {
-    if (!state.isLoaded) return
+private fun NothingDeleted() {
+    LfEmptyState(
+        title = "Nothing deleted",
+        body = "Entries you delete are kept here until you erase them. " +
+            "Nothing is lost in the meantime — they just stop counting " +
+            "towards your ledger and totals.",
+    )
+}
 
-    if (state.entries.isEmpty()) {
-        LfEmptyState(
-            title = "Nothing deleted",
-            body = "Entries you delete are kept here until you erase them. " +
-                "Nothing is lost in the meantime — they just stop counting " +
-                "towards your ledger and totals.",
+/** The binned entries, as the page template's list content. */
+private fun LazyListScope.binRows(state: BinUiState, onEvent: (BinEvent) -> Unit) {
+    items(
+        count = state.entries.size,
+        key = { state.entries[it].selectionKey() },
+        contentType = { BIN_ROW_TYPE },
+    ) { index ->
+        val entry = state.entries[index]
+        BinRow(
+            entry = entry,
+            position = lfGroupPosition(index, state.entries.size),
+            selected = entry.selectionKey() in state.selected,
+            enabled = !state.isWorking,
+            onEvent = onEvent,
         )
-        return
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.md),
-    ) {
-        items(
-            count = state.entries.size,
-            key = { state.entries[it].selectionKey() },
-            contentType = { BIN_ROW_TYPE },
-        ) { index ->
-            val entry = state.entries[index]
-            BinRow(
-                entry = entry,
-                selected = entry.selectionKey() in state.selected,
-                enabled = !state.isWorking,
-                onEvent = onEvent,
-            )
-        }
     }
 }
 
@@ -163,13 +158,13 @@ private fun BinList(state: BinUiState, onEvent: (BinEvent) -> Unit) {
 @Composable
 private fun BinRow(
     entry: DeletedEntry,
+    position: LfGroupPosition,
     selected: Boolean,
     enabled: Boolean,
     onEvent: (BinEvent) -> Unit,
 ) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerLarge)
 
     // displayCategoryName, not categoryName: an itemised entry files at line
     // grain and has none of its own (ADR-0018), so without the fallback a
@@ -190,11 +185,16 @@ private fun BinRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised, shape)
-            .border(
-                HAIRLINE.dp,
-                if (selected) colors.accent else colors.outline,
-                shape,
+            // One slice of the bin's panel (step F5, owner 2026-10-30). A
+            // selected row is the overlay tone with its box ticked, where it
+            // was an accent outline round its own card: a panel has one edge.
+            .lfGroupSlice(
+                position = position,
+                container = if (selected) colors.surface.overlay else colors.surface.raised,
+                edge = colors.border.subtle,
+                edgeWidth = LfTheme.borders.hairline,
+                radius = LfLayout.panelRadius,
+                dividerInset = LfTheme.space.rowInset,
             )
             .toggleable(
                 value = selected,
@@ -202,21 +202,26 @@ private fun BinRow(
                 role = Role.Checkbox,
                 onValueChange = { onEvent(BinEvent.Toggled(entry.selectionKey())) },
             )
-            .padding(start = spacing.sm, end = spacing.md, top = spacing.sm, bottom = spacing.sm)
+            .padding(
+                start = space.itemGap,
+                end = space.rowInset,
+                top = space.rowInsetVertical,
+                bottom = space.rowInsetVertical,
+            )
             // One announcement for the row. The checkbox inside it would
             // otherwise be a second, unlabelled node, and TalkBack would read
             // the state twice without ever saying what it belonged to.
             .clearAndSetSemantics {
                 contentDescription = entry.spokenAs(title, stamp, selected)
             },
-        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(
             checked = selected,
             onCheckedChange = null,
             enabled = enabled,
-            colors = CheckboxDefaults.colors(checkedColor = colors.accent),
+            colors = CheckboxDefaults.colors(checkedColor = colors.action.primary),
         )
 
         BinSwatch(entry)
@@ -224,8 +229,8 @@ private fun BinRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = LfTheme.typography.bodyL,
-                color = colors.textPrimary,
+                style = LfTheme.type.body,
+                color = colors.text.primary,
             )
             EntryRowBody(
                 leading = { BinStamp(stamp) },
@@ -240,8 +245,8 @@ private fun BinRow(
 private fun BinStamp(stamp: String) {
     Text(
         text = stamp,
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textTertiary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.muted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
@@ -261,8 +266,8 @@ private fun BinAmount(entry: DeletedEntry) {
     val colors = LfTheme.colors
     Text(
         text = MoneyFormat.directional(entry.amount.minor, entry.currency, entry.ledger),
-        style = LfTheme.typography.amountM,
-        color = if (entry.ledger == LedgerType.DEBIT) colors.debit else colors.credit,
+        style = LfTheme.type.amountRow,
+        color = if (entry.ledger == LedgerType.DEBIT) colors.money.outgoing else colors.money.incoming,
         textAlign = LfTextAlign.end,
     )
 }
@@ -271,7 +276,7 @@ private fun BinAmount(entry: DeletedEntry) {
 @Composable
 private fun BinSwatch(entry: DeletedEntry) {
     val namingLine = with(LocalDensity.current) {
-        LfTheme.typography.bodyL.lineHeight.toDp()
+        LfTheme.type.body.lineHeight.toDp()
     }
     Box(modifier = Modifier.height(namingLine), contentAlignment = Alignment.Center) {
         // The display variants, as the title above uses (ADR-0018).
@@ -282,8 +287,8 @@ private fun BinSwatch(entry: DeletedEntry) {
         } else {
             Box(
                 modifier = Modifier
-                    .size(LfTheme.spacing.lg)
-                    .border(HAIRLINE.dp, LfTheme.colors.outline, CircleShape),
+                    .size(LfLayout.categoryDotSize)
+                    .border(LfTheme.borders.hairline, LfTheme.colors.border.subtle, LfTheme.shapes.full),
             )
         }
     }
@@ -299,16 +304,7 @@ private fun BinSwatch(entry: DeletedEntry) {
  */
 @Composable
 private fun BinActions(state: BinUiState, onEvent: (BinEvent) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = LfTheme.spacing.md,
-                end = LfTheme.spacing.md,
-                top = LfTheme.spacing.xs,
-                bottom = LfTheme.spacing.xs,
-            ),
-    ) {
+    LfActionBar {
         LfActionRow(alignment = LfActionAlignment.End) {
             LfButton(
                 text = if (state.selectionCount == state.entries.size) "None" else "All",
@@ -373,28 +369,18 @@ private fun BinConfirmationDialog(confirmation: BinConfirmation, onEvent: (BinEv
     )
 }
 
-/** What happened, in a line the user can dismiss. */
+/**
+ * What happened ("Restored 3 entries."), as a success notice the user can
+ * dismiss: the shared notice, not a line of its own (E3).
+ */
 @Composable
 private fun BinMessage(message: String, onEvent: (BinEvent) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.md),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
-            modifier = Modifier.weight(1f),
-        )
-        LfButton(
-            text = "OK",
-            style = LfButtonStyle.Text,
-            onClick = { onEvent(BinEvent.MessageDismissed) },
-        )
-    }
+    LfNotice(
+        tone = LfNoticeTone.Success,
+        title = message,
+        actionLabel = "OK",
+        onAction = { onEvent(BinEvent.MessageDismissed) },
+    )
 }
 
 /**

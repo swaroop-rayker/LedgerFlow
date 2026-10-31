@@ -1,23 +1,25 @@
 package com.ledgerflow.feature.ledger
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -26,13 +28,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.LoadStates
 import androidx.paging.PagingData
@@ -41,14 +42,20 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfFeedback
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.PendingTransaction
@@ -90,32 +97,24 @@ public fun LedgerScreen(
 
     state.confirmation?.let { Confirmation(it, onEvent) }
 
-    // `sm` between the header bands, not `md`. The list is the only thing on
-    // this screen anyone scrolls, so every step of the gap scale above it is
-    // charged to the list twice (CLAUDE.md §5).
-    Column(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-    ) {
-        LfScreenTitle(title = "Ledger")
-
-        LfSegmentedControl(
-            options = listOf("Expenses", "Income"),
-            selectedIndex = state.ledger.ordinal,
-            onSelect = { onEvent(LedgerEvent.LedgerSelected(LedgerType.entries[it])) },
-            modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-        )
-
-        state.message?.let { MessageBanner(message = it, onEvent = onEvent) }
-
-        EntryList(
-            items = items,
-            state = state,
-            onEvent = onEvent,
-            onOpenDraft = onOpenDraft,
-            onReviewCandidate = onReviewCandidate,
-        )
+    // E5: a delete says where the entry went and offers to put it back, on the
+    // window's one snackbar. The confirmation before it stays.
+    val feedback = LfFeedback.current
+    state.undoable?.let { undoable ->
+        LaunchedEffect(undoable) {
+            val undone = feedback.show("Moved to Deleted entries", actionLabel = "Undo")
+            onEvent(if (undone) LedgerEvent.UndoDelete else LedgerEvent.UndoExpired)
+        }
     }
+
+    EntryList(
+        items = items,
+        state = state,
+        onEvent = onEvent,
+        onOpenDraft = onOpenDraft,
+        onReviewCandidate = onReviewCandidate,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -161,16 +160,14 @@ private fun Confirmation(confirmation: LedgerConfirmation, onEvent: (LedgerEvent
 @Composable
 private fun MessageBanner(message: String, onEvent: (LedgerEvent) -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.warn,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.status.warning,
             modifier = Modifier.weight(1f),
         )
         LfButton(
@@ -206,23 +203,13 @@ private fun EntryList(
     onEvent: (LedgerEvent) -> Unit,
     onOpenDraft: (String) -> Unit,
     onReviewCandidate: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    // Nothing is drawn until the drafts query has answered. Composing the list
-    // first and prepending the unsaved section afterwards put that section
-    // above the scroll anchor and out of sight -- see [LedgerUiState.isLoaded].
-    if (!state.isLoaded) return
-
     // `itemCount == 0` alone is also true for the first frame, before the first
     // page has loaded — showing an empty state there would flash "nothing here"
     // at a user whose ledger is full.
     val settled = items.loadState.refresh !is LoadState.Loading
-    // The empty state is about the *book*, so unsaved entries do not count
-    // towards it — but it must not hide them either. With drafts on screen the
-    // list still renders; without them it is genuinely empty.
-    if (settled && state.showsNothing(items.itemCount)) {
-        EmptyBook(state)
-        return
-    }
+    val status = statusFor(state, settled, items.itemCount)
 
     val snapshot = items.itemSnapshotList
     // One painter for every row's delete control: a painter per row was a
@@ -234,60 +221,86 @@ private fun EntryList(
     // two lists (Law 2), and it also means a book with more unsaved entries
     // than the last one cannot reproduce the prepend problem above.
     key(state.ledger) {
-    // Rows composed ahead of the viewport in idle time, not inside the frame
-    // that scrolls them in. Measured 2026-09-29 at 120 Hz: every frame that
-    // missed its 8.3 ms deadline was composing, creating and measuring a new
-    // row (~4 ms) because the default prefetch keeps one row ahead, and a fast
-    // fling outruns it. Two viewports ahead and one behind (for the fling
-    // back): one-and-a-half still left late frames on a warm phone, and the
-    // rows it keeps composed cost little (32 MB PSS after a scroll).
-    val listState = rememberLazyListState(
-        cacheWindow = LazyLayoutCacheWindow(aheadFraction = CACHE_AHEAD, behindFraction = CACHE_BEHIND),
-    )
-    LazyColumn(
-        state = listState,
-        // `md`, not the `lg` the taxonomy list uses. That screen holds a dozen
-        // items; this one holds a row per transaction and has to fit a name, an
-        // amount, a timestamp and a control on every one of them. 16dp of side
-        // inset instead of 24dp is 16dp back across the row, which is the
-        // difference between the amount sitting beside the timestamp and being
-        // pushed onto a line of its own.
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.xxl),
-    ) {
-        unsavedBand(state, onOpenDraft, onReviewCandidate, onEvent)
-
-        for (index in 0 until items.itemCount) {
-            val item = snapshot.getOrNull(index) ?: continue
-            val previous = if (index == 0) null else snapshot.getOrNull(index - 1)
-
-            val bucket = recencyBucketOf(item.localDate, state.today)
-            val previousBucket = previous?.let { recencyBucketOf(it.localDate, state.today) }
-
-            if (bucket != previousBucket) {
-                stickyHeader(key = "band-${bucket.name}", contentType = BAND_HEADER_TYPE) {
-                    BandHeader(bucket)
-                }
-            }
-
-            item(key = item.id, contentType = ENTRY_TYPE) {
-                // The indexed read is the prefetch signal. The snapshot value is
-                // the fallback for the window between a page being dropped and
-                // the list being told about it.
-                val row = items[index] ?: item
-                LfEntryRow(
-                    item = row,
-                    withDate = bucket.needsDate,
-                    deleteIcon = deleteIcon,
-                    onDelete = {
-                        onEvent(LedgerEvent.DeleteRequested(row.id, row.deleteLabel(row.entryTitle())))
-                    },
+        // Rows composed ahead of the viewport in idle time, not inside the frame
+        // that scrolls them in. Measured 2026-09-29 at 120 Hz: every frame that
+        // missed its 8.3 ms deadline was composing, creating and measuring a new
+        // row (~4 ms) because the default prefetch keeps one row ahead, and a fast
+        // fling outruns it. Two viewports ahead and one behind (for the fling
+        // back): one-and-a-half still left late frames on a warm phone, and the
+        // rows it keeps composed cost little (32 MB PSS after a scroll).
+        val listState = rememberLazyListState(
+            cacheWindow = LazyLayoutCacheWindow(aheadFraction = CACHE_AHEAD, behindFraction = CACHE_BEHIND),
+        )
+        // The header is pinned, as it always was: the book switch is what the
+        // list is read through. `None` since step F5: each band's rows join
+        // into one panel with hairlines between them (the reference samples),
+        // so the list puts no gap between rows; the unsaved rows, still cards
+        // of their own, carry theirs.
+        LfTabPage(
+            title = "Ledger",
+            modifier = modifier,
+            filters = {
+                LfSegmentedControl(
+                    options = listOf("Expenses", "Income"),
+                    selectedIndex = state.ledger.ordinal,
+                    onSelect = { onEvent(LedgerEvent.LedgerSelected(LedgerType.entries[it])) },
                 )
+            },
+            notices = state.message?.let { message -> { MessageBanner(message = message, onEvent = onEvent) } },
+            statusContent = status,
+            spacing = LfPageSpacing.None,
+            pinHeader = true,
+            listState = listState,
+        ) {
+            unsavedBand(state, onOpenDraft, onReviewCandidate, onEvent)
+
+            for (index in 0 until items.itemCount) {
+                val item = snapshot.getOrNull(index) ?: continue
+                val previous = if (index == 0) null else snapshot.getOrNull(index - 1)
+
+                val bucket = recencyBucketOf(item.localDate, state.today)
+                val previousBucket = previous?.let { recencyBucketOf(it.localDate, state.today) }
+                val next = snapshot.getOrNull(index + 1)
+                // The panel closes where the next row's band differs, or at the
+                // end of the book. A next row not loaded yet keeps it open: the
+                // page arrives as it scrolls in, and the read is one neighbour,
+                // as the headers' is.
+                val closes = index == items.itemCount - 1 ||
+                    (next != null && recencyBucketOf(next.localDate, state.today) != bucket)
+                val position = groupPosition(opens = bucket != previousBucket, closes = closes)
+
+                if (bucket != previousBucket) {
+                    stickyHeader(key = "band-${bucket.name}", contentType = BAND_HEADER_TYPE) {
+                        BandHeader(bucket)
+                    }
+                }
+
+                item(key = item.id, contentType = ENTRY_TYPE) {
+                    // The indexed read is the prefetch signal. The snapshot value is
+                    // the fallback for the window between a page being dropped and
+                    // the list being told about it.
+                    val row = items[index] ?: item
+                    LfEntryRow(
+                        item = row,
+                        withDate = bucket.needsDate,
+                        deleteIcon = deleteIcon,
+                        groupPosition = position,
+                        onDelete = {
+                            onEvent(LedgerEvent.DeleteRequested(row.id, row.deleteLabel(row.entryTitle())))
+                        },
+                    )
+                }
             }
         }
     }
-    }
+}
+
+/** Where a row sits in its band's panel (step F5). */
+internal fun groupPosition(opens: Boolean, closes: Boolean): LfGroupPosition = when {
+    opens && closes -> LfGroupPosition.Only
+    opens -> LfGroupPosition.First
+    closes -> LfGroupPosition.Last
+    else -> LfGroupPosition.Middle
 }
 
 /**
@@ -350,24 +363,20 @@ private fun CandidateRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceRaised, RoundedCornerShape(LfTheme.spacing.sm))
-            .border(
-                HAIRLINE.dp,
-                LfTheme.colors.outline,
-                RoundedCornerShape(LfTheme.spacing.sm),
-            )
+            .background(LfTheme.colors.surface.raised, LfTheme.shapes.row)
+            .border(LfTheme.borders.hairline, LfTheme.colors.border.subtle, LfTheme.shapes.row)
             .clickable { onReview(candidate.id) }
             .clearAndSetSemantics {
                 contentDescription = "$TO_REVIEW_MARKER, $amount, $title, $stamp. " +
                     "Opens the review screen."
             }
             .padding(
-                start = LfTheme.spacing.md,
-                end = LfTheme.spacing.md,
-                top = LfTheme.spacing.sm,
-                bottom = LfTheme.spacing.sm,
+                start = LfTheme.space.rowInset,
+                end = LfTheme.space.rowInset,
+                top = LfTheme.space.rowInsetVertical,
+                bottom = LfTheme.space.rowInsetVertical,
             ),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // The draft row's shape (BUG47): title across the top, then the detail
@@ -377,19 +386,19 @@ private fun CandidateRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
             )
             EntryRowBody(
                 // The marker is what stops two rows that look alike opening
                 // different screens with no warning. It rides the line the
                 // stamp is already on, so it costs no height.
-                leading = { UnsavedDetail(text = detail, color = LfTheme.colors.textTertiary) },
+                leading = { UnsavedDetail(text = detail, color = LfTheme.colors.text.muted) },
                 trailing = {
                     Text(
                         text = amount,
-                        style = LfTheme.typography.amountM,
-                        color = LfTheme.colors.textSecondary,
+                        style = LfTheme.type.amountRow,
+                        color = LfTheme.colors.text.secondary,
                         maxLines = 1,
                     )
                 },
@@ -422,19 +431,23 @@ private fun LazyListScope.unsavedBand(
             }
         },
     ) { index ->
-        when (val row = state.unsaved[index]) {
-            is UnsavedRow.Draft -> PendingRow(
-                draft = row.summary,
-                currencyCode = state.currencyCode,
-                onOpen = onOpenDraft,
-                onEvent = onEvent,
-            )
+        // The gap the list no longer puts between rows (step F5): these are
+        // still separate cards, each in its own accent or hairline.
+        Box(Modifier.padding(bottom = LfTheme.space.inlineGap)) {
+            when (val row = state.unsaved[index]) {
+                is UnsavedRow.Draft -> PendingRow(
+                    draft = row.summary,
+                    currencyCode = state.currencyCode,
+                    onOpen = onOpenDraft,
+                    onEvent = onEvent,
+                )
 
-            is UnsavedRow.Candidate -> CandidateRow(
-                candidate = row.candidate,
-                currencyCode = state.currencyCode,
-                onReview = onReviewCandidate,
-            )
+                is UnsavedRow.Candidate -> CandidateRow(
+                    candidate = row.candidate,
+                    currencyCode = state.currencyCode,
+                    onReview = onReviewCandidate,
+                )
+            }
         }
     }
 }
@@ -454,12 +467,12 @@ private fun LedgerUiState.showsNothing(entryCount: Int): Boolean =
 private fun BandLabel(text: String) {
     Text(
         text = text,
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceBase)
-            .padding(top = LfTheme.spacing.sm, bottom = LfTheme.spacing.xs),
+            .background(LfTheme.colors.surface.canvas)
+            .padding(top = LfTheme.space.rowInsetVertical, bottom = LfTheme.space.inlineGap),
     )
 }
 
@@ -482,9 +495,9 @@ private fun PendingRow(
     onOpen: (String) -> Unit,
     onEvent: (LedgerEvent) -> Unit,
 ) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerLarge)
+    val shape = LfTheme.shapes.row
 
     val title = listOfNotNull(draft.merchantName, draft.categoryName)
         .joinToString(SEPARATOR)
@@ -507,10 +520,15 @@ private fun PendingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised, shape)
-            .border(HAIRLINE.dp, colors.accent, shape)
-            .padding(start = spacing.md, end = spacing.xs, top = spacing.sm, bottom = spacing.sm),
-        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            .background(colors.surface.raised, shape)
+            .border(LfTheme.borders.emphasis, colors.action.primary, shape)
+            .padding(
+                start = space.rowInset,
+                end = space.inlineGap,
+                top = space.rowInsetVertical,
+                bottom = space.rowInsetVertical,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
@@ -521,14 +539,14 @@ private fun PendingRow(
                     contentDescription =
                         "$DRAFT_MARKER, $amount, $title, $stamp. Opens to finish it."
                 },
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(space.itemGap),
             verticalAlignment = Alignment.Top,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    style = LfTheme.typography.bodyL,
-                    color = colors.textPrimary,
+                    style = LfTheme.type.body,
+                    color = colors.text.primary,
                 )
                 EntryRowBody(
                     leading = { PendingStatus(detail) },
@@ -563,7 +581,7 @@ private fun PendingRow(
  */
 @Composable
 private fun PendingStatus(stamp: String) {
-    UnsavedDetail(text = stamp, color = LfTheme.colors.accent)
+    UnsavedDetail(text = stamp, color = LfTheme.colors.action.primary)
 }
 
 /** A draft's detail line: when it is dated, then the marker. */
@@ -583,9 +601,11 @@ internal fun UnsavedDetail(
     color: Color,
     onTextLayout: (TextLayoutResult) -> Unit = {},
 ) {
+    // Plex Mono, as a committed row's detail line is (step F5): a stamp is
+    // figures.
     Text(
         text = text,
-        style = LfTheme.typography.label,
+        style = LfTheme.type.figureLabel,
         color = color,
         maxLines = UNSAVED_DETAIL_MAX_LINES,
         overflow = TextOverflow.Ellipsis,
@@ -605,8 +625,8 @@ internal fun UnsavedDetail(
 private fun PendingAmount(amount: String) {
     Text(
         text = amount,
-        style = LfTheme.typography.amountM,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.amountRow,
+        color = LfTheme.colors.text.secondary,
         textAlign = LfTextAlign.end,
     )
 }
@@ -657,6 +677,31 @@ internal fun EntryRowBody(
  */
 private fun LedgerListItem.deleteLabel(title: String): String =
     MoneyFormat.symbolised(amount.minor, currency) + SEPARATOR + title
+
+/**
+ * What stands in for the list, if anything.
+ *
+ * Nothing is drawn until the drafts query has answered: composing the list
+ * first and prepending the unsaved section afterwards put that section above
+ * the scroll anchor and out of sight -- see [LedgerUiState.isLoaded]. Until the
+ * drafts and the first page have both answered, still skeletons after 300 ms
+ * rather than a blank page (E5).
+ *
+ * The empty state is about the *book*, so unsaved entries do not count towards
+ * it -- but it must not hide them either. With drafts on screen the list still
+ * renders; without them it is genuinely empty.
+ */
+private fun statusFor(
+    state: LedgerUiState,
+    settled: Boolean,
+    itemCount: Int,
+): (@Composable ColumnScope.() -> Unit)? = when {
+    !state.isLoaded || (!settled && itemCount == 0) -> {
+        { LfStateContent(state = LfContentState.Loading) {} }
+    }
+    settled && state.showsNothing(itemCount) -> { { EmptyBook(state) } }
+    else -> null
+}
 
 /**
  * The empty book — two of them, and they are not the same sentence.
@@ -720,9 +765,6 @@ private fun EmptyBook(state: LedgerUiState) {
 internal fun occurredStamp(occurredAt: Long, withDate: Boolean): String =
     TimeStamp.of(occurredAt, withDate)
 
-/** Hairline. The same weight the taxonomy cards and the nesting rail use. */
-internal const val HAIRLINE = 1
-
 private const val BAND_HEADER_TYPE = "band"
 private const val ENTRY_TYPE = "entry"
 
@@ -744,7 +786,7 @@ internal const val UNSAVED_DETAIL_MAX_LINES = 2
 /**
  * An entry filed under nothing. §5.1 writes these when a parse fails.
  *
- * `internal` so the bin says the same word, the way it shares [HAIRLINE]. Both
+ * `internal` so the bin says the same word. Both
  * screens reach it only after the line-item fallback has come back empty too
  * (ADR-0018), so it now means "genuinely nothing" on either.
  */

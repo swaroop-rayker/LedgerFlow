@@ -1,7 +1,14 @@
 package com.ledgerflow.feature.categories
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import com.github.takahirom.roborazzi.captureScreenRoboImage
+import com.ledgerflow.core.testing.screenshot.GOLDEN_DIR
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
+import org.robolectric.RuntimeEnvironment
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.CategoryTree
@@ -15,6 +22,7 @@ import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -31,13 +39,18 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class CategoriesScreenGoldensTest {
+open class CategoriesScreenGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
 
-    private fun capture(name: String, state: CategoriesUiState, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun capture(
+        name: String,
+        state: CategoriesUiState,
+        fontScale: Float,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, direction) {
             LfTheme { CategoriesScreen(state = state, onEvent = {}, onBack = {}) }
         }
 
@@ -59,6 +72,8 @@ class CategoriesScreenGoldensTest {
             CategoryTree(parent = category("3", "Transport"), children = emptyList()),
         ),
     )
+
+    private val refused by lazy { categories.copy(message = "\"Groceries\" already exists here.") }
 
     private val merchants = CategoriesUiState(
         section = TaxonomySection.Merchants,
@@ -87,6 +102,12 @@ class CategoriesScreenGoldensTest {
         ),
     )
 
+    /** A refused change, as a warning notice (E3). */
+    @Test fun refused_1x() = capture("organise-refused-1x", refused, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun refused_2x() = capture("organise-refused-2x", refused, 2f)
+
     @Test fun categories_1x() = capture("organise-categories-1x", categories, 1f)
 
     @Config(qualifiers = PHONE_2X)
@@ -102,7 +123,60 @@ class CategoriesScreenGoldensTest {
     @Config(qualifiers = PHONE_2X)
     @Test fun payment_2x() = capture("organise-payment-2x", payment, 2f)
 
+    /** Subcategories indent from the start, so in RTL they step in from the right. */
+    @Test fun categoriesRtl_1x() = capture("organise-categories-rtl-1x", categories, 1f, LayoutDirection.Rtl)
+
+    @Test fun merchantsRtl_1x() = capture("organise-merchants-rtl-1x", merchants, 1f, LayoutDirection.Rtl)
+
+    /** A category's actions: the sheet the row opens (option A, 2026-10-31). */
+    @Test fun categorySheet_1x() = withSheet("organise-category-sheet-1x", categorySheet, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun categorySheet_2x() = withSheet("organise-category-sheet-2x", categorySheet, 2f)
+
+    /** A subcategory's: no "Add subcategory", and Hide is still there. */
+    @Test fun subcategorySheet_1x() = withSheet("organise-subcategory-sheet-1x", subcategorySheet, 1f)
+
+    private val categorySheet by lazy {
+        categories.copy(
+            dialog = TaxonomyDialog.RowActions(TaxonomyRow.Category("1", "Food & Dining", isChild = false)),
+        )
+    }
+
+    private val subcategorySheet by lazy {
+        categories.copy(dialog = TaxonomyDialog.RowActions(TaxonomyRow.Category("2", "Groceries", isChild = true)))
+    }
+
+    /**
+     * A sheet is its own window: it ignores [captureScreenGolden]'s density
+     * override and is not under its one root, so the font scale goes through
+     * the configuration and the whole screen is captured (as the Budgets
+     * delete sheet's goldens do).
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    private fun withSheet(name: String, state: CategoriesUiState, fontScale: Float) {
+        if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale)
+        rule.setContent {
+            GoldenTheme.Provide {
+                LfTheme { CategoriesScreen(state = state, onEvent = {}, onBack = {}) }
+            }
+        }
+        rule.waitForIdle()
+        captureScreenRoboImage(
+            "$GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
+    }
+
     private companion object {
         const val HIDDEN_AT = 1_755_000_000_000L
     }
+}
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class CategoriesScreenGoldensDarkTest : CategoriesScreenGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
 }

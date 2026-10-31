@@ -39,10 +39,8 @@ android {
 }
 
 dependencies {
-    // `api`: LfIcons exposes ImageVector values built from this artifact, so
-    // consumers need it to name them. Core only -- material-icons-extended is a
-    // very large artifact and §11's budget has ML Kit still to fit into it.
-    api(libs.androidx.compose.material.icons.core)
+    // No icon artifact (step F4): LfIcons builds Lucide's geometry, copied into
+    // LfLucide.kt, so material-icons-core went with the last Material icon.
 
     // The category palette lives in :core:model (it is data, not a Compose
     // type); the WCAG assertions over it live here, next to the contrast maths.

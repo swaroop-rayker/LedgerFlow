@@ -161,7 +161,14 @@ public class DashboardViewModel @Inject constructor(
 
     private fun judgeBackup() {
         if (!lastBackupRead) return
-        _state.update { it.copy(backupReminder = BackupReminder.of(lastBackupAt, lastBackup.now())) }
+        val now = lastBackup.now()
+        val at = lastBackupAt
+        _state.update {
+            it.copy(
+                backupReminder = BackupReminder.of(at, now),
+                lastBackup = if (at == null) LastBackup.Never else LastBackup.DaysAgo((now - at) / DAY_MILLIS),
+            )
+        }
     }
 
     /** §5.2's resume poll. The grant half; see the class KDoc for why both exist. */
@@ -179,5 +186,7 @@ public class DashboardViewModel @Inject constructor(
     private companion object {
         /** V2-PLAN's "last five". Home orients; the Ledger is the list. */
         const val RECENT_ROWS = 5
+
+        const val DAY_MILLIS = 24L * 60L * 60L * 1000L
     }
 }

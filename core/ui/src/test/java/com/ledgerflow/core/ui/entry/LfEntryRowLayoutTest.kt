@@ -7,12 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -22,7 +19,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -35,17 +31,17 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
-import com.ledgerflow.core.designsystem.component.LfCategoryInk
 import com.ledgerflow.core.designsystem.component.LfIconButton
+import com.ledgerflow.core.designsystem.component.lfCategoryTile
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.LedgerListItem
 import com.ledgerflow.core.model.LedgerType
@@ -218,16 +214,20 @@ class LfEntryRowLayoutTest {
 /**
  * `LfEntryRow` as it was before PERF-120HZ-PLAN §2.1, kept as the reference the
  * flat layout is held to. Do not "tidy" this into the new shape: the point is
- * that it is the old one. Its swatch is the old composed dot too (§2.2), so the
- * comparison covers the drawn one as well.
+ * that it is the old one. Its swatch was the old composed dot (§2.2) until F3;
+ * since F3 it is the 40 dp tile drawn by the row's own modifier, so the tile is
+ * the same by construction and the comparison covers everything around it.
  */
 // Long because it is the old row verbatim; splitting it would stop it being that.
 @Suppress("LongMethod")
 @Composable
 private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: Painter?) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerLarge)
+    // The one deliberate departure from verbatim: the corner reads the role, as
+    // the real row does, so D3 moving `row` to 16 dp is not mistaken for a
+    // layout change. This test holds the layout, not a radius.
+    val shape = LfTheme.shapes.row
     val title = item.entryTitle()
     val stamp = TimeStamp.of(item.occurredAt, withDate)
     val note = item.note?.takeIf { it.isNotBlank() }
@@ -236,44 +236,44 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.surfaceRaised, shape)
-            .border(1.dp, colors.outline, shape)
+            .background(colors.surface.raised, shape)
+            .border(1.dp, colors.border.subtle, shape)
             .padding(
-                start = spacing.md,
-                end = if (deleteIcon != null) spacing.xs else spacing.md,
-                top = spacing.sm,
-                bottom = spacing.sm,
+                start = space.rowInset,
+                end = if (deleteIcon != null) space.inlineGap else space.rowInset,
+                top = space.rowInsetVertical,
+                bottom = space.rowInsetVertical,
             ),
-        horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(space.itemGap),
             verticalAlignment = Alignment.Top,
         ) {
-            val namingLine = with(LocalDensity.current) { LfTheme.typography.bodyL.lineHeight.toDp() }
-            Box(modifier = Modifier.height(namingLine), contentAlignment = Alignment.Center) {
-                val categoryName = item.displayCategoryName
-                val categoryColor = item.displayCategoryColorArgb
-                if (categoryName != null && categoryColor != null) {
-                    NestedCategoryDot(name = categoryName, colorArgb = categoryColor)
+            // F3's second departure: the swatch slot is the 40 dp tile, top-aligned,
+            // drawn by the same modifier the row uses -- so the tile is identical by
+            // construction and everything around it is still held to the old nesting.
+            val categoryName = item.displayCategoryName
+            val categoryColor = item.displayCategoryColorArgb
+            val tile = Modifier.size(LfLayout.categoryTileSize)
+            Box(
+                modifier = if (categoryName != null && categoryColor != null) {
+                    tile.lfCategoryTile(name = categoryName, colorArgb = categoryColor)
                 } else {
-                    Box(
-                        modifier = Modifier
-                            .size(LfTheme.spacing.lg)
-                            .border(1.dp, LfTheme.colors.outline, CircleShape),
-                    )
-                }
-            }
+                    tile.border(1.dp, LfTheme.colors.border.subtle, LfTheme.shapes.tile)
+                },
+            )
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = LfTheme.typography.bodyL, color = colors.textPrimary)
+                Text(text = title, style = LfTheme.type.body, color = colors.text.primary)
                 LfAdaptiveRow(
                     leading = {
                         Text(
                             text = detail,
-                            style = LfTheme.typography.label,
-                            color = LfTheme.colors.textTertiary,
+                            // F5's departure: the detail is in Plex Mono, as the row draws it.
+                            style = LfTheme.type.figureLabel,
+                            color = LfTheme.colors.text.muted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -281,8 +281,12 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
                     trailing = {
                         Text(
                             text = MoneyFormat.directional(item.amount.minor, item.currency, item.ledger),
-                            style = LfTheme.typography.amountM,
-                            color = if (item.ledger == LedgerType.DEBIT) colors.debit else colors.credit,
+                            style = LfTheme.type.amountRow,
+                            color = if (item.ledger == LedgerType.DEBIT) {
+                                colors.money.outgoing
+                            } else {
+                                colors.money.incoming
+                            },
                             // The one change to the old composition: the screen's
                             // end, as the real row aligns it since BUG61, where
                             // `TextAlign.End` now means the paragraph's end.
@@ -300,22 +304,5 @@ private fun NestedEntryRow(item: LedgerListItem, withDate: Boolean, deleteIcon: 
                 onClick = {},
             )
         }
-    }
-}
-
-/** `LfCategoryDot` as it was before PERF-120HZ-PLAN §2.2: a `Box` around a `Text`. */
-@Composable
-private fun NestedCategoryDot(name: String, colorArgb: Int) {
-    val diameter = LfTheme.spacing.lg
-    val initialSize = with(LocalDensity.current) { (diameter * 0.5f).toSp() }
-    Box(
-        modifier = Modifier.size(diameter).background(Color(colorArgb), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = name.firstOrNull()?.uppercase().orEmpty(),
-            style = LfTheme.typography.label.copy(fontSize = initialSize, lineHeight = TextUnit.Unspecified),
-            color = LfCategoryInk,
-        )
     }
 }

@@ -25,7 +25,10 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import androidx.compose.foundation.background
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -73,7 +76,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [ROBOLECTRIC_SDK])
-class LfComponentScreenshotTest {
+open class LfComponentScreenshotTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -92,29 +95,37 @@ class LfComponentScreenshotTest {
             CompositionLocalProvider(
                 LocalDensity provides Density(density.density, fontScale),
             ) {
-                LfTheme {
-                    Column(
-                        modifier = Modifier
-                            .width(NARROW_CARD.dp)
-                            .padding(LfTheme.spacing.md),
-                        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-                        content = { content() },
-                    )
+                GoldenTheme.Provide {
+                    LfTheme {
+                        // The app's background behind the component, so the dark golden is not
+                        // light text on the test window's near-white.
+                        Column(
+                            modifier = Modifier
+                                .width(NARROW_CARD.dp)
+                                .background(LfTheme.colors.surface.canvas)
+                                .padding(LfTheme.space.cardInset),
+                            verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+                            content = { content() },
+                        )
+                    }
                 }
             }
         }
-        composeRule.onRoot().captureRoboImage("$GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
+        composeRule.onRoot().captureRoboImage(
+            "$GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
     }
 
     /** BUG9's exact failing shape: three actions in a card-width row. */
     @Composable
     private fun ThreeActionCard() {
         LfCard {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
                 Text(
                     text = "Groceries",
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.body,
+                    color = LfTheme.colors.text.primary,
                 )
                 LfActionRow(alignment = LfActionAlignment.End) {
                     LfButton("Rename", {}, style = LfButtonStyle.Inline)
@@ -202,17 +213,17 @@ class LfComponentScreenshotTest {
     @Composable
     private fun ProseCard() {
         LfCard(modifier = Modifier.fillMaxWidth()) {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
                 Text(
                     text = "Notification capture",
-                    style = LfTheme.typography.titleM,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.heading,
+                    color = LfTheme.colors.text.primary,
                 )
                 Text(
                     text = "Most UPI payments never send an SMS, so they are not " +
                         "reaching your Inbox at all.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
         }
@@ -271,3 +282,11 @@ private const val GOLDEN_DIR = "src/test/screenshots"
  * silently start asking Robolectric for a jar that does not exist for it.
  */
 private const val ROBOLECTRIC_SDK = 34
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LfComponentScreenshotDarkTest : LfComponentScreenshotTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
+}

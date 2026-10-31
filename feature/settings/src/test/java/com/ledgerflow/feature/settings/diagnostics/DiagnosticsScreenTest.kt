@@ -23,6 +23,7 @@ import com.ledgerflow.core.domain.diagnostics.PipelineSpeed
 import com.ledgerflow.core.domain.diagnostics.ReadQualityReport
 import com.ledgerflow.core.domain.diagnostics.RollupHealth
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -42,7 +43,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [ROBOLECTRIC_SDK], qualifiers = TALL_1X)
-class DiagnosticsScreenTest {
+open class DiagnosticsScreenTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -74,6 +75,8 @@ class DiagnosticsScreenTest {
                 DiagnosticsScreen(state = state, onEvent = {}, onOpenSuppressed = {}, onBack = {})
             }
         }
+
+    private val unavailable = DiagnosticsUiState(report = DiagnosticsReport.Unavailable)
 
     private val full = DiagnosticsUiState(report = DiagnosticsReport.Ready(PreviewDiagnostics))
 
@@ -120,6 +123,12 @@ class DiagnosticsScreenTest {
 
     @Config(qualifiers = TALL_2X)
     @Test fun troubled_2x() = capture("diagnostics-troubled-2x", troubled, 2f)
+
+    /** BUG71: a report that could not be read, and its Try again. */
+    @Test fun unavailable_1x() = capture("diagnostics-unavailable-1x", unavailable, 1f)
+
+    @Config(qualifiers = TALL_2X)
+    @Test fun unavailable_2x() = capture("diagnostics-unavailable-2x", unavailable, 2f)
 
     // ── BUG17: the title never breaks mid-word ──────────────────────────────
     //
@@ -188,3 +197,11 @@ private const val ROBOLECTRIC_SDK = 34
 private const val TALL_1X = "w360dp-h1800dp"
 private const val TALL_2X = "w360dp-h3600dp"
 private const val SCREEN_TITLE = "Diagnostics"
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class DiagnosticsScreenDarkTest : DiagnosticsScreenTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
+}

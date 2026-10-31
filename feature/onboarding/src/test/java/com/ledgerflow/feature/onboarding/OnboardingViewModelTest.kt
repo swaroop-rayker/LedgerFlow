@@ -316,7 +316,7 @@ class OnboardingViewModelTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         assertThat(seedCategories.seedCalls).isEqualTo(0)
-        assertThat(vm.state.value.errorMessage).isNotNull()
+        assertThat(vm.state.value.setupFailed).isTrue()
     }
 
     // ── Recovery Kit (D-07) ─────────────────────────────────────────────────

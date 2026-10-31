@@ -29,7 +29,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.CurrencyDisplay
 
 /**
@@ -68,14 +67,14 @@ public fun LfAmountField(
     tone: LfAmountTone = LfAmountTone.Neutral,
     secondary: String? = null,
     focusRequester: FocusRequester? = null,
+    horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
 ) {
-    val colors = LfTheme.colors
-    val spacing = LfTheme.spacing
+    val tokens = LfAmountFieldTokens
 
     val amountColor = when (tone) {
-        LfAmountTone.Neutral -> colors.textPrimary
-        LfAmountTone.Debit -> colors.debit
-        LfAmountTone.Credit -> colors.credit
+        LfAmountTone.Neutral -> tokens.neutral
+        LfAmountTone.Debit -> tokens.outgoing
+        LfAmountTone.Credit -> tokens.incoming
     }
 
     // Announced as words, from the parsed value rather than the raw text, so a
@@ -87,11 +86,11 @@ public fun LfAmountField(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) { contentDescription = description },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(spacing.xs),
+        horizontalAlignment = horizontalAlignment,
+        verticalArrangement = Arrangement.spacedBy(tokens.gap),
     ) {
         label?.let {
-            Text(text = it, style = LfTheme.typography.label, color = colors.textSecondary)
+            Text(text = it, style = tokens.labelStyle, color = tokens.label)
         }
 
         AmountInput(
@@ -105,8 +104,8 @@ public fun LfAmountField(
         secondary?.let {
             Text(
                 text = it,
-                style = LfTheme.typography.bodyM,
-                color = colors.textTertiary,
+                style = tokens.hintStyle,
+                color = tokens.hint,
                 maxLines = 1,
                 softWrap = false,
             )
@@ -127,14 +126,13 @@ private fun AmountInput(
     amountColor: androidx.compose.ui.graphics.Color,
     focusRequester: FocusRequester?,
 ) {
-    val colors = LfTheme.colors
-    val spacing = LfTheme.spacing
+    val tokens = LfAmountFieldTokens
     val focusManager = LocalFocusManager.current
 
     CompositionLocalProvider(
         LocalTextSelectionColors provides TextSelectionColors(
-            handleColor = colors.accent,
-            backgroundColor = colors.accent.copy(alpha = SELECTION_ALPHA),
+            handleColor = tokens.selection,
+            backgroundColor = tokens.selection.copy(alpha = SELECTION_ALPHA),
         ),
     ) {
         BasicTextField(
@@ -148,12 +146,12 @@ private fun AmountInput(
             // offered rather than to its text, so centring the glyphs inside it
             // strands the currency symbol several centimetres to the left of the
             // number it belongs to -- which is what the first build did.
-            textStyle = LfTheme.typography.amountL.copy(
+            textStyle = tokens.amountStyle.copy(
                 color = amountColor,
                 textAlign = LfTextAlign.start,
             ),
             singleLine = true,
-            cursorBrush = SolidColor(colors.accent),
+            cursorBrush = SolidColor(tokens.cursor),
             keyboardOptions = KeyboardOptions(
                 // A hint, not a guarantee -- some OEM keyboards ignore it and
                 // serve QWERTY. The parser is what makes that harmless.
@@ -166,13 +164,13 @@ private fun AmountInput(
             keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
             decorationBox = { innerTextField ->
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+                    horizontalArrangement = Arrangement.spacedBy(tokens.gap),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         text = CurrencyDisplay.symbolOf(currencyCode),
-                        style = LfTheme.typography.titleL,
-                        color = colors.textSecondary,
+                        style = tokens.symbolStyle,
+                        color = tokens.symbol,
                         maxLines = 1,
                         softWrap = false,
                     )
@@ -180,8 +178,8 @@ private fun AmountInput(
                         if (value.isEmpty()) {
                             Text(
                                 text = MoneyFormat.plain(0L, currencyCode),
-                                style = LfTheme.typography.amountL,
-                                color = colors.textTertiary,
+                                style = tokens.amountStyle,
+                                color = tokens.placeholder,
                                 maxLines = 1,
                                 softWrap = false,
                             )

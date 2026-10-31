@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -17,8 +18,9 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,19 +29,20 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardOptions
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * The insets every LedgerFlow screen consumes: system bars and display cutout.
@@ -80,6 +83,12 @@ private val LfDrawingInsets: WindowInsets
  * it — so the content viewport shrinks and Compose scrolls the focused field
  * into view, and the pinned bar rides above the keyboard. Putting it on either
  * child instead double-counts against the other, which is the bug this fixed.
+ *
+ * **Shows the window's [LfFeedback]** (step E1): the outermost scaffold makes
+ * one when nothing above provides it, every scaffold inside shares it, and the
+ * innermost draws it, so a message appears once, above that screen's own
+ * pinned bar. A scaffold given its own [snackbarHostState] shows that instead
+ * and leaves the shared one to the scaffold around it.
  */
 @Composable
 public fun LfScaffold(
@@ -87,6 +96,34 @@ public fun LfScaffold(
     topBar: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
     snackbarHostState: SnackbarHostState? = null,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    val parentFeedback = LocalLfFeedback.current
+    val ownFeedback = remember { LfFeedback() }
+    // Only the scaffold that made the feedback gives it a scope: the outermost,
+    // which outlives every screen inside it.
+    if (parentFeedback == null) ownFeedback.ownScope()
+    val feedback = parentFeedback ?: ownFeedback
+    val claim = remember { Any() }
+    if (snackbarHostState == null) {
+        DisposableEffect(feedback) {
+            feedback.claims += claim
+            onDispose { feedback.claims -= claim }
+        }
+    }
+    CompositionLocalProvider(LocalLfFeedback provides feedback) {
+        ScaffoldBody(modifier, topBar, bottomBar, snackbarHostState, feedback, claim, content)
+    }
+}
+
+@Composable
+private fun ScaffoldBody(
+    modifier: Modifier,
+    topBar: @Composable () -> Unit,
+    bottomBar: @Composable () -> Unit,
+    snackbarHostState: SnackbarHostState?,
+    feedback: LfFeedback,
+    claim: Any,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val insets = LfDrawingInsets
@@ -107,11 +144,14 @@ public fun LfScaffold(
                 bottomBar()
             }
         },
-        containerColor = LfTheme.colors.surfaceBase,
-        contentColor = LfTheme.colors.textPrimary,
+        containerColor = LfScaffoldTokens.container,
+        contentColor = LfScaffoldTokens.content,
         contentWindowInsets = insets,
         snackbarHost = {
-            snackbarHostState?.let { SnackbarHost(it) }
+            when {
+                snackbarHostState != null -> LfSnackbarHost(snackbarHostState)
+                feedback.claims.lastOrNull() === claim -> LfSnackbarHost(feedback.hostState)
+            }
         },
         content = { padding ->
             // BUG49: mark what this scaffold paid for as consumed, so a scaffold
@@ -152,17 +192,16 @@ public fun LfButton(
     enabled: Boolean = true,
     loading: Boolean = false,
 ) {
-    val spacing = LfTheme.spacing
-    val colors = LfTheme.colors
+    val tokens = LfButtonTokens
 
     if (style == LfButtonStyle.Text || style == LfButtonStyle.Inline) {
         val inline = style == LfButtonStyle.Inline
         TextButton(
             onClick = onClick,
-            modifier = modifier.defaultMinSize(minHeight = spacing.minTouchTarget),
+            modifier = modifier.defaultMinSize(minHeight = tokens.minHeight),
             enabled = enabled && !loading,
             contentPadding = if (inline) {
-                PaddingValues(horizontal = spacing.sm, vertical = spacing.xs)
+                PaddingValues(horizontal = tokens.inlinePaddingHorizontal, vertical = tokens.inlinePaddingVertical)
             } else {
                 ButtonDefaults.TextButtonContentPadding
             },
@@ -175,8 +214,8 @@ public fun LfButton(
                 // works. Found on the bin's "Erase", which sits beside a
                 // correctly-greyed filled button and looked available with
                 // nothing selected.
-                color = if (enabled && !loading) colors.accent else colors.textTertiary,
-                style = if (inline) LfTheme.typography.label else LfTheme.typography.bodyL,
+                color = if (enabled && !loading) tokens.textLabel else tokens.disabledLabel,
+                style = if (inline) tokens.inlineLabelStyle else tokens.labelStyle,
             )
         }
         return
@@ -189,29 +228,29 @@ public fun LfButton(
 
     Button(
         onClick = onClick,
-        modifier = modifier.defaultMinSize(minHeight = spacing.minTouchTarget),
+        modifier = modifier.defaultMinSize(minHeight = tokens.mainMinHeight),
         enabled = enabled && !loading,
-        shape = RoundedCornerShape(spacing.cornerMedium),
+        shape = tokens.shape,
         colors = when (style) {
             LfButtonStyle.Filled -> ButtonDefaults.buttonColors(
-                containerColor = colors.accent,
-                contentColor = colors.onAccent,
+                containerColor = tokens.filledContainer,
+                contentColor = tokens.filledContent,
             )
             else -> ButtonDefaults.buttonColors(
-                containerColor = colors.surfaceOverlay,
-                contentColor = colors.textPrimary,
+                containerColor = tokens.tonalContainer,
+                contentColor = tokens.tonalContent,
             )
         },
     ) {
         if (loading) {
             CircularProgressIndicator(
                 modifier = Modifier
-                    .defaultMinSize(minHeight = spacing.md, minWidth = spacing.md)
+                    .defaultMinSize(minHeight = tokens.spinnerSize, minWidth = tokens.spinnerSize)
                     // The label already announces the action; a spinner with its
                     // own semantics would make TalkBack read it twice.
                     .clearAndSetSemantics {},
-                strokeWidth = 2.dp,
-                color = colors.onAccent,
+                strokeWidth = tokens.spinnerStroke,
+                color = tokens.spinnerColor,
             )
         } else {
             ButtonLabel(text = text, color = LocalContentColor.current)
@@ -235,29 +274,31 @@ private fun OutlinedRowAction(
     modifier: Modifier,
     enabled: Boolean,
 ) {
-    val spacing = LfTheme.spacing
-    val colors = LfTheme.colors
+    val tokens = LfButtonTokens
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.defaultMinSize(
-            minWidth = spacing.actionMinWidth,
-            minHeight = spacing.minTouchTarget,
+            minWidth = tokens.outlinedMinWidth,
+            minHeight = tokens.outlinedMinHeight,
         ),
         enabled = enabled,
-        shape = RoundedCornerShape(spacing.cornerMedium),
-        border = BorderStroke(1.dp, colors.outline),
+        shape = tokens.shape,
+        border = BorderStroke(tokens.outlinedBorderWidth, tokens.outlinedBorder),
         // Material's default is 24dp a side, generous for a compact action and
         // enough on its own to push a second control off the line inside an
         // indented subcategory card. The minimum width covers the cramped case.
-        contentPadding = PaddingValues(horizontal = spacing.md, vertical = spacing.sm),
+        contentPadding = PaddingValues(
+            horizontal = tokens.outlinedPaddingHorizontal,
+            vertical = tokens.outlinedPaddingVertical,
+        ),
         colors = ButtonDefaults.outlinedButtonColors(
             // A fill, faint but present: on the dark theme a border alone against
             // surfaceRaised is nearly invisible and the control still reads as text.
-            containerColor = colors.surfaceOverlay,
-            contentColor = colors.accent,
+            containerColor = tokens.outlinedContainer,
+            contentColor = tokens.outlinedContent,
         ),
     ) {
-        ButtonLabel(text = text, color = colors.accent)
+        ButtonLabel(text = text, color = tokens.outlinedContent)
     }
 }
 
@@ -275,12 +316,20 @@ private fun OutlinedRowAction(
  * next line (`FlowRow`), rather than the label wrapping inside a control. There
  * is deliberately no ellipsis either -- a "Delet…" button is no more usable than
  * a broken one.
+ *
+ * **It says so to intrinsic measurement too.** Compose reports a text's minimum
+ * intrinsic width as its longest word, whatever `softWrap` says, so a layout
+ * asking how narrow a control can go heard "Move" for "Move back". At the 24 dp
+ * screen edge (design-system step D1) the Inbox gave that label 124 dp of the
+ * 127 it needs at font scale 2.0. `IntrinsicSize.Max` makes the minimum the
+ * whole label; it changes no layout, since the label already measured at its
+ * natural width.
  */
 @Composable
 private fun ButtonLabel(
     text: String,
     color: Color,
-    style: androidx.compose.ui.text.TextStyle = LfTheme.typography.bodyL,
+    style: androidx.compose.ui.text.TextStyle = LfButtonTokens.labelStyle,
 ) {
     Text(
         text = text,
@@ -288,6 +337,7 @@ private fun ButtonLabel(
         color = color,
         maxLines = 1,
         softWrap = false,
+        modifier = Modifier.width(IntrinsicSize.Max),
     )
 }
 
@@ -296,20 +346,14 @@ public fun LfCard(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val spacing = LfTheme.spacing
+    val tokens = LfCardTokens
+    val shape = tokens.shape
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(
-                color = LfTheme.colors.surfaceRaised,
-                shape = RoundedCornerShape(spacing.cornerMedium),
-            )
-            .border(
-                width = 1.dp,
-                color = LfTheme.colors.outline,
-                shape = RoundedCornerShape(spacing.cornerMedium),
-            )
-            .padding(spacing.md),
+            .background(color = tokens.container, shape = shape)
+            .border(width = tokens.borderWidth, color = tokens.border, shape = shape)
+            .padding(tokens.inset),
     ) {
         content()
     }
@@ -353,6 +397,13 @@ public object LfKeyboards {
     )
 }
 
+/**
+ * A text field. [error], when set, is the message **directly under the field**
+ * (DESIGN_SYSTEM_PLAN §5.3, step E1), in place of [supportingText] and in the
+ * danger colour, and screen readers hear it as the field's error. Check when
+ * the user taps the action or leaves the field, not on every keystroke.
+ * [isError] alone marks the field without a message, as before.
+ */
 @Composable
 public fun LfTextField(
     value: String,
@@ -361,6 +412,7 @@ public fun LfTextField(
     modifier: Modifier = Modifier,
     supportingText: String? = null,
     isError: Boolean = false,
+    error: String? = null,
     singleLine: Boolean = true,
     keyboardOptions: KeyboardOptions = KeyboardOptions(
         // Recovery words and merchant keys are lowercase; auto-capitalising
@@ -368,29 +420,35 @@ public fun LfTextField(
         capitalization = KeyboardCapitalization.None,
     ),
 ) {
-    val colors = LfTheme.colors
+    val tokens = LfTextFieldTokens
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
-        label = { Text(text = label, style = LfTheme.typography.label) },
-        supportingText = supportingText?.let {
-            { Text(text = it, style = LfTheme.typography.label) }
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { error?.let { error(it) } },
+        label = { Text(text = label, style = tokens.labelStyle) },
+        supportingText = (error ?: supportingText)?.let {
+            { Text(text = it, style = tokens.labelStyle) }
         },
-        isError = isError,
+        isError = isError || error != null,
         singleLine = singleLine,
-        shape = RoundedCornerShape(LfTheme.spacing.cornerSmall),
+        shape = tokens.shape,
         keyboardOptions = keyboardOptions,
-        textStyle = LfTheme.typography.bodyL,
+        textStyle = tokens.textStyle,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = colors.textPrimary,
-            unfocusedTextColor = colors.textPrimary,
-            focusedBorderColor = colors.accent,
-            unfocusedBorderColor = colors.outline,
-            errorBorderColor = colors.debit,
-            focusedLabelColor = colors.accent,
-            unfocusedLabelColor = colors.textSecondary,
-            cursorColor = colors.accent,
+            focusedTextColor = tokens.text,
+            unfocusedTextColor = tokens.text,
+            focusedBorderColor = tokens.focusedBorder,
+            unfocusedBorderColor = tokens.unfocusedBorder,
+            errorBorderColor = tokens.errorBorder,
+            errorSupportingTextColor = tokens.errorText,
+            errorLabelColor = tokens.errorText,
+            errorCursorColor = tokens.cursor,
+            errorTextColor = tokens.text,
+            focusedLabelColor = tokens.focusedLabel,
+            unfocusedLabelColor = tokens.unfocusedLabel,
+            cursorColor = tokens.cursor,
         ),
     )
 }

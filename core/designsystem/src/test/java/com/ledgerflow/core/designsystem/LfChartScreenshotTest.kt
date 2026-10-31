@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.ledgerflow.core.designsystem.chart.LfAreaChart
+import com.ledgerflow.core.designsystem.chart.LfAreaPoint
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
@@ -31,7 +33,10 @@ import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
 import com.ledgerflow.core.designsystem.chart.LfTreemap
 import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import androidx.compose.foundation.background
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -64,7 +69,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [CHART_ROBOLECTRIC_SDK])
-class LfChartScreenshotTest {
+open class LfChartScreenshotTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -75,18 +80,26 @@ class LfChartScreenshotTest {
             CompositionLocalProvider(
                 LocalDensity provides Density(density.density, fontScale),
             ) {
-                LfTheme {
-                    Column(
-                        modifier = Modifier
-                            .width(NARROW_CHART.dp)
-                            .padding(LfTheme.spacing.md),
-                        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-                        content = { content() },
-                    )
+                GoldenTheme.Provide {
+                    LfTheme {
+                        // The app's background behind the component, so the dark golden is not
+                        // light text on the test window's near-white.
+                        Column(
+                            modifier = Modifier
+                                .width(NARROW_CHART.dp)
+                                .background(LfTheme.colors.surface.canvas)
+                                .padding(LfTheme.space.cardInset),
+                            verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+                            content = { content() },
+                        )
+                    }
                 }
             }
         }
-        composeRule.onRoot().captureRoboImage("$CHART_GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
+        composeRule.onRoot().captureRoboImage(
+            "$CHART_GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
     }
 
     // ── A2 / A5: the donut ─────────────────────────────────────────────────
@@ -113,6 +126,39 @@ class LfChartScreenshotTest {
                 LfDonutSlice("c", "Transport", 12_000L, Color(0xFF82C9A0)),
                 LfDonutSlice("d", "Sundries", 200L, Color(0xFFC39BD3)),
             ),
+            // Step F6: the total in the middle, in Plex Mono.
+            centerText = "₹1,572.00",
+        )
+    }
+
+    // ── F6: the area chart (running total) ─────────────────────────────────
+
+    @Test
+    fun area_1x() = capture("chart-area-1x", 1.0f) { Area() }
+
+    @Test
+    fun area_2x() = capture("chart-area-2x", 2.0f) { Area() }
+
+    /**
+     * A running total with flat days and one big jump: the shape a plain
+     * spline would draw falling, then overshooting. Here it only rises, and
+     * the last point carries its pill.
+     */
+    @Composable
+    private fun Area() {
+        val daily = listOf(
+            0L, 300_00L, 0L, 0L, 1_240_50L, 0L, 24_000_00L, 0L,
+            60_00L, 0L, 0L, 2_100_00L, 0L, 349_00L, 0L,
+        )
+        var running = 0L
+        LfAreaChart(
+            points = daily.mapIndexed { index, amount ->
+                running += amount
+                LfAreaPoint(label = "${index + 1} Oct", value = running)
+            },
+            color = Color(0xFFFF8A80),
+            formatValue = { minor -> "₹" + (minor / 100) },
+            description = "Spending so far",
         )
     }
 
@@ -209,7 +255,7 @@ class LfChartScreenshotTest {
      */
     @Composable
     private fun Budgets() {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
             LfBudgetBar(
                 label = "Groceries",
                 formattedSpent = "₹4,200",
@@ -353,3 +399,11 @@ private const val CHART_ROBOLECTRIC_SDK = 34
 private const val NARROW_CHART = 300
 
 private const val CHART_GOLDEN_DIR = "src/test/screenshots"
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LfChartScreenshotDarkTest : LfChartScreenshotTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
+}

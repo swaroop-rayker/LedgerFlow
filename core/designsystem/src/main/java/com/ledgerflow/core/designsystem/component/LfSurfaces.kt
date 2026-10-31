@@ -16,8 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * Screen title, as a plain block rather than Material's `TopAppBar`.
@@ -34,19 +32,36 @@ public fun LfScreenTitle(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
 ) {
+    LfTitleBlock(
+        title = title,
+        subtitle = subtitle,
+        modifier = modifier.fillMaxWidth().padding(horizontal = LfScreenTitleTokens.paddingHorizontal),
+    )
+}
+
+/**
+ * [LfScreenTitle] without its own side margin, for a page template that
+ * already applies the screen edge to everything it lays out.
+ */
+@Composable
+internal fun LfTitleBlock(
+    title: String,
+    subtitle: String?,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg, vertical = LfTheme.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            .padding(vertical = LfScreenTitleTokens.paddingVertical),
+        verticalArrangement = Arrangement.spacedBy(LfScreenTitleTokens.gap),
     ) {
         Text(
             text = title,
-            style = LfTheme.typography.displayL,
-            color = LfTheme.colors.textPrimary,
+            style = LfScreenTitleTokens.titleStyle,
+            color = LfScreenTitleTokens.title,
         )
         subtitle?.let {
-            Text(text = it, style = LfTheme.typography.bodyM, color = LfTheme.colors.textSecondary)
+            Text(text = it, style = LfScreenTitleTokens.subtitleStyle, color = LfScreenTitleTokens.subtitle)
         }
     }
 }
@@ -69,20 +84,20 @@ public fun LfEmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(LfTheme.spacing.xl),
+            .padding(LfEmptyStateTokens.padding),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(LfEmptyStateTokens.gap),
     ) {
         Text(
             text = title,
-            style = LfTheme.typography.titleM,
-            color = LfTheme.colors.textPrimary,
+            style = LfEmptyStateTokens.titleStyle,
+            color = LfEmptyStateTokens.title,
             textAlign = TextAlign.Center,
         )
         Text(
             text = body,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfEmptyStateTokens.bodyStyle,
+            color = LfEmptyStateTokens.body,
             textAlign = TextAlign.Center,
         )
         if (actionLabel != null && onAction != null) {
@@ -104,8 +119,8 @@ public fun LfDivider(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(1.dp)
-            .background(LfTheme.colors.outline),
+            .height(LfDividerTokens.thickness)
+            .background(LfDividerTokens.color),
     )
 }
 
@@ -121,7 +136,7 @@ public fun LfDivider(modifier: Modifier = Modifier) {
  * Colour alone would fail §9.6 for colour-blind users, which is exactly why the
  * initial is inside the dot rather than beside it.
  *
- * The initial is **always** [LfCategoryInk], never `LfTheme.colors.onAccent`.
+ * The initial is **always** [LfCategoryInk], never `LfTheme.colors.action.onPrimary`.
  * Using the theme's on-accent looked right and was not: in dark mode that token
  * is near-black, and no colour can clear 4.5:1 against both near-black and
  * near-white — the two ratios multiply to about 21, so demanding 4.5 of each is
@@ -147,14 +162,14 @@ public fun LfCategoryDot(
     // One node, drawn: this used to be a `Box` around a `Text`, two layout nodes
     // and a text node per swatch, and the Ledger composes one per row inside
     // the frame that scrolls it in (PERF-120HZ-PLAN §2.2).
-    Spacer(modifier = modifier.size(LfTheme.spacing.lg).lfCategoryDot(name, colorArgb))
+    Spacer(modifier = modifier.size(LfCategoryDotTokens.size).lfCategoryDot(name, colorArgb))
 }
 
 /**
  * Draws [LfCategoryDot] into the bounds of the node this modifies, for a caller
  * that already has a node of the right size and would otherwise nest a swatch
- * inside it -- the entry row's swatch slot. Size it `LfTheme.spacing.lg`
- * square: the initial is half the node's width, as the dot's always was.
+ * inside it -- the entry row's swatch slot. Size it 24 dp square, [LfCategoryDot]'s
+ * own size: the initial is half the node's width, as the dot's always was.
  *
  * Carries no semantics, for the reason [LfCategoryDot] gives: the adjacent
  * label already reads the category name aloud.
@@ -167,6 +182,24 @@ public fun Modifier.lfCategoryDot(name: String, colorArgb: Int): Modifier =
                 initial = name.firstOrNull()?.uppercase().orEmpty(),
                 color = Color(colorArgb),
                 ink = LfCategoryInk,
+            ),
+        )
+
+/**
+ * Draws the category's tinted tile (step F3, ADR-0031) into the bounds of the
+ * node this modifies: the reference samples' icon tile, carrying the initial
+ * until F4 brings icons. The entry row's swatch slot; size it 40 dp square.
+ * No semantics, for the reason [LfCategoryDot] gives.
+ */
+public fun Modifier.lfCategoryTile(name: String, colorArgb: Int): Modifier =
+    this
+        .clearAndSetSemantics {}
+        .then(
+            CategoryDotElement(
+                initial = name.firstOrNull()?.uppercase().orEmpty(),
+                color = Color(colorArgb),
+                ink = LfCategoryInk,
+                tile = true,
             ),
         )
 

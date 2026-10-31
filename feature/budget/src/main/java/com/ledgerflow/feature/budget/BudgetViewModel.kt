@@ -80,7 +80,12 @@ public class BudgetViewModel @Inject constructor(
                 )
             }
             is BudgetEvent.EditClicked -> openEditor(event.id)
-            is BudgetEvent.DeleteClicked -> delete(event.id)
+            is BudgetEvent.DeleteClicked -> _state.update { it.copy(confirmingDeleteId = event.id) }
+            BudgetEvent.DeleteConfirmed -> _state.value.confirmingDeleteId?.let { id ->
+                _state.update { it.copy(confirmingDeleteId = null) }
+                delete(id)
+            }
+            BudgetEvent.DeleteCancelled -> _state.update { it.copy(confirmingDeleteId = null) }
             BudgetEvent.SaveClicked -> save()
             BudgetEvent.MessageShown -> _state.update { it.copy(message = null) }
             is BudgetEvent.PickerOpened -> _state.update { current ->
@@ -174,6 +179,8 @@ public class BudgetViewModel @Inject constructor(
             BudgetEvent.AddClicked,
             is BudgetEvent.EditClicked,
             is BudgetEvent.DeleteClicked,
+            BudgetEvent.DeleteConfirmed,
+            BudgetEvent.DeleteCancelled,
             is BudgetEvent.PickerOpened,
             BudgetEvent.SaveClicked,
             BudgetEvent.EditorDismissed,

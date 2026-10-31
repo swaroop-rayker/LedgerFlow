@@ -2,8 +2,10 @@ package com.ledgerflow.feature.budget.notify
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -12,6 +14,7 @@ import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.usecase.BudgetAlert
+import com.ledgerflow.feature.budget.R
 import java.time.LocalDate
 
 /**
@@ -63,10 +66,15 @@ public object BudgetNotifications {
         val (title, text) = wordsFor(alert, currency)
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setSmallIcon(R.drawable.ic_lf_budget_notification)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            // BUG75: a tap did nothing -- the alert had no content intent, so
+            // it could only be swiped away. It opens Budgets, where the limit
+            // it is about can be read and changed. Package-explicit, like the
+            // Inbox's links, so only this app resolves it.
+            .setContentIntent(openBudgets(context))
             .setAutoCancel(true)
             .build()
 
@@ -126,6 +134,21 @@ public object BudgetNotifications {
             Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
                 .putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL_ID)
     }.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+
+    /** `ledgerflow://budgets`; `:app`'s `BudgetsDeepLink` routes it. */
+    public const val BUDGETS_LINK: String = "ledgerflow://budgets"
+
+    private fun openBudgets(context: Context): PendingIntent {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(BUDGETS_LINK))
+            .setPackage(context.packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        return PendingIntent.getActivity(
+            context,
+            BUDGETS_LINK.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
 
     private const val FULL = 100
 }

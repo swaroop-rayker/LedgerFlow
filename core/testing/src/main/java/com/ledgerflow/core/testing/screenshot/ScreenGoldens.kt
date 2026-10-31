@@ -77,13 +77,16 @@ public fun ComposeContentTestRule.captureScreenGolden(
                 LocalDensity provides Density(density.density, fontScale),
                 LocalLayoutDirection provides layoutDirection,
             ) {
-                content()
+                GoldenTheme.Provide(content)
             }
         }
         assertTouchTargetsAreAtLeast48dp()
         assertEveryTappableNodeIsLabelled()
         assertNoUnwrappableTextIsClipped()
-        onRoot().captureRoboImage("$GOLDEN_DIR/$name.png", roborazziOptions = LfScreenshotOptions)
+        onRoot().captureRoboImage(
+            "$GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
     } finally {
         TimeZone.setDefault(hostZone)
     }

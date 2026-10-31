@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDatePickerState
@@ -19,12 +17,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfDatePickerDialog
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.domain.taxonomy.MerchantNormalizer
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.ui.picker.LfPickerDialog
 import com.ledgerflow.core.ui.picker.LfPickerOption
 
@@ -88,11 +86,9 @@ private fun PickerDialog(
 private fun DateDialog(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     val pickerState = rememberDatePickerState(initialSelectedDateMillis = state.occurredAt)
 
-    DatePickerDialog(
-        onDismissRequest = { onEvent(EntryEvent.DateDismissed) },
-        colors = androidx.compose.material3.DatePickerDefaults.colors(
-            containerColor = LfTheme.colors.surfaceOverlay,
-        ),
+    LfDatePickerDialog(
+        state = pickerState,
+        onDismiss = { onEvent(EntryEvent.DateDismissed) },
         confirmButton = {
             LfButton(
                 text = "Set date",
@@ -117,9 +113,7 @@ private fun DateDialog(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
                 onClick = { onEvent(EntryEvent.DateDismissed) },
             )
         },
-    ) {
-        DatePicker(state = pickerState)
-    }
+    )
 }
 
 @Composable

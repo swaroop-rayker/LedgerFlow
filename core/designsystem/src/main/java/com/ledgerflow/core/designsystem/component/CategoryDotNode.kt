@@ -1,6 +1,7 @@
 package com.ledgerflow.core.designsystem.component
 
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -10,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
@@ -25,7 +27,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
+import com.ledgerflow.core.designsystem.theme.LocalLfColors
 import com.ledgerflow.core.designsystem.theme.LocalLfTypography
+import com.ledgerflow.core.designsystem.theme.primitive.LfScale
 import kotlin.math.roundToInt
 
 /**
@@ -62,11 +66,12 @@ internal data class CategoryDotElement(
     val initial: String,
     val color: Color,
     val ink: Color,
+    val tile: Boolean = false,
 ) : ModifierNodeElement<CategoryDotNode>() {
-    override fun create(): CategoryDotNode = CategoryDotNode(initial, color, ink)
+    override fun create(): CategoryDotNode = CategoryDotNode(initial, color, ink, tile)
 
     override fun update(node: CategoryDotNode) {
-        node.update(initial, color, ink)
+        node.update(initial, color, ink, tile)
     }
 
     override fun InspectorInfo.inspectableProperties() {
@@ -76,10 +81,17 @@ internal data class CategoryDotElement(
     }
 }
 
+/**
+ * [tile] draws the reference samples' tinted tile (step F3, ADR-0031) instead
+ * of the filled circle: a 12 dp-cornered square in the category's colour at
+ * [TILE_TINT] over the raised surface, the initial in the category's colour.
+ * One node either way, so a row that switches pays nothing for it.
+ */
 internal class CategoryDotNode(
     private var initial: String,
     private var color: Color,
     private var ink: Color,
+    private var tile: Boolean,
 ) : Modifier.Node(), DrawModifierNode, CompositionLocalConsumerModifierNode {
 
     private var ownMeasurer: TextMeasurer? = null
@@ -90,11 +102,12 @@ internal class CategoryDotNode(
     private var layout: TextLayoutResult? = null
     private var outline: Outline? = null
 
-    fun update(initial: String, color: Color, ink: Color) {
-        if (initial != this.initial) laidOutFor = null
+    fun update(initial: String, color: Color, ink: Color, tile: Boolean) {
+        if (initial != this.initial || tile != this.tile) laidOutFor = null
         this.initial = initial
         this.color = color
         this.ink = ink
+        this.tile = tile
         invalidateDraw()
     }
 
@@ -102,15 +115,17 @@ internal class CategoryDotNode(
         val box = IntSize(size.width.roundToInt(), size.height.roundToInt())
         val key = LayoutKey(box, density, fontScale, layoutDirection)
         if (key != laidOutFor) {
-            outline = CircleShape.createOutline(size, layoutDirection, this)
+            val shape = if (tile) RoundedCornerShape(TILE_CORNER) else CircleShape
+            outline = shape.createOutline(size, layoutDirection, this)
             layout = layOutInitial(box, this, layoutDirection)
             laidOutFor = key
         }
-        drawOutline(requireNotNull(outline) { "laid out above" }, color)
+        val fill = if (tile) lerp(currentValueOf(LocalLfColors).surface.raised, color, TILE_TINT) else color
+        drawOutline(requireNotNull(outline) { "laid out above" }, fill)
         val text = requireNotNull(layout) { "laid out above" }
         drawText(
             textLayoutResult = text,
-            color = ink,
+            color = if (tile) color else ink,
             topLeft = Alignment.Center.align(text.size, box, layoutDirection).let {
                 Offset(it.x.toFloat(), it.y.toFloat())
             },
@@ -126,7 +141,7 @@ internal class CategoryDotNode(
         return measurer.measure(
             text = initial,
             style = currentValueOf(LocalLfTypography).label.copy(
-                fontSize = initialSize(box, density),
+                fontSize = initialSize(box, density, if (tile) TILE_INITIAL_RATIO else INITIAL_HEIGHT_RATIO),
                 // Unspecified so the line box follows the pinned font size. The
                 // scale's 16sp line height would otherwise keep scaling and
                 // push a correctly-sized glyph out of a fixed-size circle.
@@ -152,8 +167,17 @@ internal class CategoryDotNode(
  * not follow the font scale. The same `Dp.toSp()` the composed dot used, so
  * the conversion is the platform's rather than a division of our own.
  */
-private fun initialSize(box: IntSize, density: Density): TextUnit =
-    with(density) { (box.width * INITIAL_HEIGHT_RATIO).toDp().toSp() }
+private fun initialSize(box: IntSize, density: Density, ratio: Float): TextUnit =
+    with(density) { (box.width * ratio).toDp().toSp() }
+
+/** The tile's initial: 16sp in a 40 dp tile, quieter than the dot's half. */
+internal const val TILE_INITIAL_RATIO: Float = 0.4f
+
+/** How much of the category's colour the tile's fill carries: the theme's subtle tint. */
+internal const val TILE_TINT: Float = 0.24f
+
+/** The samples' tile corner: 12, since 16 on a 40 dp square reads as a circle. */
+private val TILE_CORNER = LfScale.Radius12 // = LfShapeRoles.tile; a node reads no theme shapes
 
 /** The initial's height as a fraction of the swatch. Matches 12sp in a 24dp dot. */
 internal const val INITIAL_HEIGHT_RATIO: Float = 0.5f

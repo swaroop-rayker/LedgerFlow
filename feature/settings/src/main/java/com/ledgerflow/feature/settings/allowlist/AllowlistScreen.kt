@@ -3,6 +3,7 @@ package com.ledgerflow.feature.settings.allowlist
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
@@ -10,7 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -21,12 +22,18 @@ import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
-import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
+import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.component.lfGroupPosition
+import com.ledgerflow.core.designsystem.component.lfGroupSlice
+import com.ledgerflow.core.designsystem.pattern.LfDetailPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.AllowlistedApp
 import com.ledgerflow.core.domain.ingest.InstalledApp
@@ -57,25 +64,55 @@ public fun AllowlistScreen(
     state.confirming?.let { app -> PersonalMessagesWarning(app = app, onEvent = onEvent) }
     BackHandler(enabled = state.picking) { onEvent(AllowlistEvent.PickerClosed) }
 
-    LfScaffold(modifier = modifier) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = LfTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            item(key = "header", contentType = "header") {
-                Header(
-                    picking = state.picking,
-                    onBack = if (state.picking) ({ onEvent(AllowlistEvent.PickerClosed) }) else onBack,
-                    onAdd = { onEvent(AllowlistEvent.AddRequested) },
+    val back = if (state.picking) ({ onEvent(AllowlistEvent.PickerClosed) }) else onBack
+    LfDetailPage(
+        title = if (state.picking) "Add an app" else "Payment apps",
+        subtitle = if (state.picking) {
+            "Apps on this phone. Names only; nothing they posted is read."
+        } else {
+            ALLOWLIST_EXPLAINER
+        },
+        modifier = modifier,
+        // The arrow and title on one line, as the Settings pages it is
+        // reached from (step F5). In the picker it closes the picker.
+        onBack = back,
+        // The rows join into one panel (step F5): no gap between them.
+        spacing = LfPageSpacing.None,
+        // A search over the phone's apps, which can be hundreds (owner,
+        // 2026-10-30). Names and package names only, as the list shows.
+        search = if (state.picking) {
+            {
+                LfTextField(
+                    value = state.query,
+                    onValueChange = { onEvent(AllowlistEvent.QueryChanged(it)) },
+                    label = "Search apps",
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-            if (state.picking) {
-                pickerItems(state, onEvent)
-            } else {
-                items(items = state.apps, key = { it.packageName }, contentType = { "app" }) { app ->
-                    AllowlistRow(app = app, onEvent = onEvent)
+        } else {
+            null
+        },
+        notices = if (state.picking) {
+            null
+        } else {
+            {
+                LfActionRow(alignment = LfActionAlignment.Start) {
+                    LfButton(
+                        text = "Add an app",
+                        onClick = { onEvent(AllowlistEvent.AddRequested) },
+                        style = LfButtonStyle.Inline,
+                    )
                 }
+            }
+        },
+    ) {
+        if (state.picking) {
+            pickerItems(state, onEvent)
+        } else {
+            // One panel for the list (step F5), its rows drawing their slices.
+            itemsIndexed(items = state.apps, key = { _, app -> app.packageName }, contentType = { _, _ -> "app" }) {
+                    index, app ->
+                AllowlistRow(app = app, position = lfGroupPosition(index, state.apps.size), onEvent = onEvent)
             }
         }
     }
@@ -86,52 +123,41 @@ private fun androidx.compose.foundation.lazy.LazyListScope.pickerItems(
     onEvent: (AllowlistEvent) -> Unit,
 ) {
     if (state.installed.isEmpty()) {
-        item(key = "reading", contentType = "note") { Note("Reading the apps on this phone.") }
-    }
-    items(items = state.installed, key = { it.packageName }, contentType = { "installed" }) { app ->
-        InstalledRow(app = app, onPick = { onEvent(AllowlistEvent.Picked(app)) })
-    }
-}
-
-@Composable
-private fun Header(picking: Boolean, onBack: () -> Unit, onAdd: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-        LfActionRow(
-            modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
-            alignment = LfActionAlignment.Start,
-        ) {
-            LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline)
-        }
-        if (picking) {
-            LfScreenTitle(
-                title = "Add an app",
-                subtitle = "Apps on this phone. Names only; nothing they posted is read.",
+        item(key = "reading", contentType = "note") {
+            Note(
+                if (state.installedRead) {
+                    "No app matches " + OPEN_QUOTE + state.query.trim() + CLOSE_QUOTE + "."
+                } else {
+                    "Reading the apps on this phone."
+                },
             )
-        } else {
-            LfScreenTitle(title = "Payment apps", subtitle = ALLOWLIST_EXPLAINER)
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
-                alignment = LfActionAlignment.Start,
-            ) {
-                LfButton(text = "Add an app", onClick = onAdd, style = LfButtonStyle.Inline)
-            }
         }
+    }
+    itemsIndexed(items = state.installed, key = { _, app -> app.packageName }, contentType = { _, _ -> "installed" }) {
+            index, app ->
+        InstalledRow(
+            app = app,
+            position = lfGroupPosition(index, state.installed.size),
+            onPick = { onEvent(AllowlistEvent.Picked(app)) },
+        )
     }
 }
 
 /** One app on the list: name, whether it is read, and how it got there. */
 @Composable
-private fun AllowlistRow(app: AllowlistedApp, onEvent: (AllowlistEvent) -> Unit) {
-    LfCard(modifier = Modifier.fillMaxWidth().padding(horizontal = LfTheme.spacing.lg)) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+private fun AllowlistRow(app: AllowlistedApp, position: LfGroupPosition, onEvent: (AllowlistEvent) -> Unit) {
+    PanelSlice(position) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             LfSwitchRow(
                 label = app.label ?: app.packageName,
                 checked = app.enabled,
                 onCheckedChange = { onEvent(AllowlistEvent.Toggled(app.packageName, it)) },
                 supporting = rowSupporting(app),
+                // The package name is an identifier: Plex Mono (step F5).
+                figureSupporting = true,
                 // A full 48 dp, so the Remove under it cannot share its tap
                 // area (§9.6; caught by the golden's touch-target check).
-                modifier = Modifier.defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget),
+                modifier = Modifier.defaultMinSize(minHeight = LfLayout.minTouchTarget),
             )
             if (!app.builtIn) {
                 LfActionRow(alignment = LfActionAlignment.End) {
@@ -147,32 +173,56 @@ private fun AllowlistRow(app: AllowlistedApp, onEvent: (AllowlistEvent) -> Unit)
 }
 
 @Composable
-private fun InstalledRow(app: InstalledApp, onPick: () -> Unit) {
-    LfCard(
+private fun InstalledRow(app: InstalledApp, position: LfGroupPosition, onPick: () -> Unit) {
+    PanelSlice(
+        position = position,
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg)
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
+            .defaultMinSize(minHeight = LfLayout.minTouchTarget)
             .clickable(onClick = onPick),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(text = app.label, style = LfTheme.typography.bodyL, color = LfTheme.colors.textPrimary)
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
+            Text(text = app.label, style = LfTheme.type.body, color = LfTheme.colors.text.primary)
             Text(
                 text = installedSupporting(app),
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.figureLabel,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
+}
+
+/**
+ * One row's slice of the list's panel (step F5): the card's inset without a
+ * card per row, hairlines between, the panel's corners at its ends.
+ */
+@Composable
+private fun PanelSlice(
+    position: LfGroupPosition,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .lfGroupSlice(
+                position = position,
+                container = LfTheme.colors.surface.raised,
+                edge = LfTheme.colors.border.subtle,
+                edgeWidth = LfTheme.borders.hairline,
+                radius = LfLayout.panelRadius,
+                dividerInset = LfTheme.space.cardInset,
+            )
+            .then(modifier)
+            .padding(LfTheme.space.cardInset),
+    ) { content() }
 }
 
 @Composable
 private fun Note(text: String) {
     Text(
         text = text,
-        style = LfTheme.typography.bodyM,
-        color = LfTheme.colors.textSecondary,
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
+        style = LfTheme.type.bodySmall,
+        color = LfTheme.colors.text.secondary,
     )
 }
 
@@ -248,3 +298,7 @@ private fun AllowlistPreview() {
         )
     }
 }
+
+/** Curly quotes, as code points (CLAUDE.md 5). */
+private val OPEN_QUOTE: Char = Char(0x201C)
+private val CLOSE_QUOTE: Char = Char(0x201D)

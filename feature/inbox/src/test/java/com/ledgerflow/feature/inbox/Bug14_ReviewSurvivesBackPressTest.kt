@@ -318,6 +318,8 @@ class Bug14_ReviewSurvivesBackPressTest {
 
         assertThat(pending.get("p1")?.status).isEqualTo(PendingStatus.DISCARDED)
         assertThat(pending.get("p1")?.edits).isNull()
+        // BUG78: the screen is told it was a discard, so it does not say "Added".
+        assertThat(vm.state.value.discarded).isTrue()
     }
 
     /**

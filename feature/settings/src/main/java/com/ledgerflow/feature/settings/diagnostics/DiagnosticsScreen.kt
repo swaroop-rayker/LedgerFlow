@@ -17,8 +17,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.format.DisplayDates
-import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfHorizontalBarChart
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
@@ -26,9 +24,14 @@ import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.diagnostics.CaptureOutcomes
 import com.ledgerflow.core.domain.diagnostics.DiagnosticsWindow
@@ -71,44 +74,42 @@ public fun DiagnosticsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LfScaffold(modifier = modifier) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        ) {
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
-                alignment = LfActionAlignment.Start,
-            ) {
-                LfButton(text = "Back", onClick = onBack, style = LfButtonStyle.Inline)
-            }
-            LfScreenTitle(
-                title = "Diagnostics",
-                subtitle = "What automatic capture did with the messages it saw. " +
-                    "Counts only — no message text, no amounts.",
-            )
-            Column(
-                modifier = Modifier.padding(
-                    start = LfTheme.spacing.lg,
-                    end = LfTheme.spacing.lg,
-                    bottom = LfTheme.spacing.lg,
-                ),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            ) {
-                LfSegmentedControl(
-                    options = WINDOWS.map(::windowLabel),
-                    selectedIndex = WINDOWS.indexOf(state.window),
-                    onSelect = { index -> onEvent(DiagnosticsEvent.WindowSelected(WINDOWS[index])) },
+    // A scrolling page with nothing to submit: the form template, no bar.
+    LfFormPage(
+        title = "Diagnostics",
+        subtitle = "What automatic capture did with the messages it saw. " +
+            "Counts only — no message text, no amounts.",
+        actionBar = null,
+        modifier = modifier,
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
+    ) {
+        LfSegmentedControl(
+            options = WINDOWS.map(::windowLabel),
+            selectedIndex = WINDOWS.indexOf(state.window),
+            onSelect = { index -> onEvent(DiagnosticsEvent.WindowSelected(WINDOWS[index])) },
+        )
+        // E3: still skeletons after 300 ms instead of a blank page while the
+        // counts are read; and BUG71, a report that could not be read offers
+        // Try again instead of only telling the user to restart the app.
+        val report = state.report
+        LfStateContent(
+            state = when (report) {
+                DiagnosticsReport.Loading -> LfContentState.Loading
+                DiagnosticsReport.Unavailable -> LfContentState.Error(
+                    title = "Couldn't count your messages",
+                    body = "Your data could not be opened to count it. If trying again " +
+                        "doesn't work, close the app and open it again.",
+                    onRetry = { onEvent(DiagnosticsEvent.Retried) },
+                    actionLabel = "Try again",
                 )
-                when (val report = state.report) {
-                    DiagnosticsReport.Loading -> Unit
-                    DiagnosticsReport.Unavailable -> DiagnosticsCard(heading = "Nothing to count") {
-                        BodyText("Your data could not be opened to count it. Close the app and open it again.")
-                    }
-                    is DiagnosticsReport.Ready -> ReportCards(report.diagnostics, onOpenSuppressed)
+                is DiagnosticsReport.Ready -> LfContentState.Ready
+            },
+        ) {
+            if (report is DiagnosticsReport.Ready) {
+                Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
+                    ReportCards(report.diagnostics, onOpenSuppressed)
                 }
             }
         }
@@ -215,7 +216,7 @@ internal fun keptLabel(kept: KeptCopy): String = when (kept.source) {
 @Composable
 private fun ReadingCard(reading: ReadQualityReport, basis: String?) {
     DiagnosticsCard(heading = "How well messages are read") {
-        LfHorizontalBarChart(data = readingBars(reading, LfTheme.colors.accent))
+        LfHorizontalBarChart(data = readingBars(reading, LfTheme.colors.action.primary))
         BodyText(
             "How sure the matching rule was: high is 0.8 or more, low is under 0.5, " +
                 "and not recognised means no rule matched.",
@@ -224,8 +225,8 @@ private fun ReadingCard(reading: ReadQualityReport, basis: String?) {
         if (reading.weakestSenders.isNotEmpty()) {
             Text(
                 text = "Read worst",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
                 modifier = Modifier.semantics { heading() },
             )
             reading.weakestSenders.forEach { sender ->
@@ -371,11 +372,11 @@ internal fun rollupRepairs(rollup: RollupHealth): Pair<String, Boolean>? {
 @Composable
 private fun DiagnosticsCard(heading: String, content: @Composable () -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = heading,
-                style = LfTheme.typography.titleM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.heading,
+                color = LfTheme.colors.text.primary,
                 modifier = Modifier.semantics { heading() },
             )
             content()
@@ -387,15 +388,15 @@ private fun DiagnosticsCard(heading: String, content: @Composable () -> Unit) {
 private fun BodyText(text: String, primary: Boolean = false) {
     Text(
         text = text,
-        style = LfTheme.typography.bodyM,
-        color = if (primary) LfTheme.colors.textPrimary else LfTheme.colors.textSecondary,
+        style = LfTheme.type.bodySmall,
+        color = if (primary) LfTheme.colors.text.primary else LfTheme.colors.text.secondary,
     )
 }
 
 /** In words and in the warning colour — never colour alone (§9.6). */
 @Composable
 private fun WarningText(text: String) {
-    Text(text = text, style = LfTheme.typography.bodyM, color = LfTheme.colors.warn)
+    Text(text = text, style = LfTheme.type.bodySmall, color = LfTheme.colors.status.warning)
 }
 
 /** Label and a short figure on one line; the label wraps, the figure never does. */
@@ -404,16 +405,16 @@ private fun CountRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
             modifier = Modifier
                 .weight(1f)
-                .padding(end = LfTheme.spacing.sm),
+                .padding(end = LfTheme.space.itemGap),
         )
         Text(
             text = value,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             softWrap = false,
         )
@@ -424,8 +425,8 @@ private fun CountRow(label: String, value: String) {
 @Composable
 private fun StackedRow(label: String, value: String) {
     Column {
-        Text(text = label, style = LfTheme.typography.bodyM, color = LfTheme.colors.textSecondary)
-        Text(text = value, style = LfTheme.typography.bodyM, color = LfTheme.colors.textPrimary)
+        Text(text = label, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.secondary)
+        Text(text = value, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.primary)
     }
 }
 

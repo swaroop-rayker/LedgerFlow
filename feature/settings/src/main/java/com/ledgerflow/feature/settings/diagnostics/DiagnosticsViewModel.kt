@@ -25,6 +25,9 @@ public sealed interface DiagnosticsEvent {
      * arriving while the user is elsewhere and a report is a snapshot.
      */
     public data object Resumed : DiagnosticsEvent
+
+    /** "Try again" on a report that could not be read (BUG71). */
+    public data object Retried : DiagnosticsEvent
 }
 
 /** The report, or why there is none yet. */
@@ -82,6 +85,13 @@ public class DiagnosticsViewModel @Inject constructor(
             }
 
             DiagnosticsEvent.Resumed -> reload()
+
+            // Back to Loading first, so the screen shows the attempt rather than
+            // the failure it is answering.
+            DiagnosticsEvent.Retried -> {
+                mutableState.update { it.copy(report = DiagnosticsReport.Loading) }
+                reload()
+            }
         }
     }
 

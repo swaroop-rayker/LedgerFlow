@@ -1,7 +1,7 @@
 package com.ledgerflow.feature.export
 
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +23,7 @@ import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfErrorNotice
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
@@ -30,6 +31,8 @@ import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.export.ExportFormat
 
@@ -57,38 +60,18 @@ public fun ExportScreen(
     if (state.confirming) WarningDialog(onEvent)
     DestinationPicker(state, suggestedFileName, onEvent)
 
-    LfScaffold(
+    // "Done" takes the action band above the title (BUG17), at the end where
+    // it sat beside the title before.
+    LfFormPage(
+        title = "Export",
+        actionBar = { ExportBar(state, onEvent) },
         modifier = modifier,
-        bottomBar = { ExportBar(state, onEvent) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                LfScreenTitle(title = "Export", modifier = Modifier.weight(1f))
-                LfButton(
-                    text = "Done",
-                    style = LfButtonStyle.Text,
-                    onClick = onBack,
-                    modifier = Modifier.padding(end = LfTheme.spacing.md),
-                )
-            }
-
-            Column(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            ) {
-                FileCard(state, suggestedFileName, onEvent)
-                state.status.let { status -> StatusCard(status, onEvent) }
-            }
-        }
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
+    ) {
+        FileCard(state, suggestedFileName, onEvent)
+        state.status.let { status -> StatusCard(status, onEvent) }
     }
 }
 
@@ -114,7 +97,7 @@ public fun ExportScreen(
 @Composable
 private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (ExportEvent) -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             // The format is chosen on the card that describes it, so the
             // description under the control always answers for the selection.
             LfSegmentedControl(
@@ -124,8 +107,8 @@ private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (
             )
             Text(
                 text = state.format.description,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
             // `Start`, not the default `Center`: these are facts sitting under a
             // heading, not controls the eye has to find, and centring would
@@ -140,8 +123,8 @@ private fun FileCard(state: ExportUiState, suggestedFileName: String, onEvent: (
             }
             Text(
                 text = breakBeforeDate(suggestedFileName),
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.muted,
             )
         }
     }
@@ -168,19 +151,19 @@ private fun StatusCard(status: ExportStatus, onEvent: (ExportEvent) -> Unit) {
         ExportStatus.Idle, ExportStatus.Working -> Unit
 
         is ExportStatus.Done -> LfCard {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
                 Text(
                     text = "Exported",
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.credit,
+                    style = LfTheme.type.body,
+                    color = LfTheme.colors.money.incoming,
                 )
                 Text(
                     // The counts are the receipt. "Done" alone gives the user no
                     // way to tell a real export from one that wrote empty files.
                     text = "${status.rowCount} ${rowNoun(status.rowCount)} across " +
                         "${status.fileCount} ${status.format.containerNoun}.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
                 LfButton(
                     text = "OK",
@@ -190,25 +173,14 @@ private fun StatusCard(status: ExportStatus, onEvent: (ExportEvent) -> Unit) {
             }
         }
 
-        is ExportStatus.Failed -> LfCard {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-                Text(
-                    text = "Not exported",
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.debit,
-                )
-                Text(
-                    text = status.message,
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
-                )
-                LfButton(
-                    text = "OK",
-                    style = LfButtonStyle.Text,
-                    onClick = { onEvent(ExportEvent.StatusDismissed) },
-                )
-            }
-        }
+        // An error notice rather than a card titled in money-out's colour
+        // (E3). Export, still pinned below, is the way to try again.
+        is ExportStatus.Failed -> LfErrorNotice(
+            title = "Not exported",
+            body = status.message,
+            actionLabel = "OK",
+            onAction = { onEvent(ExportEvent.StatusDismissed) },
+        )
     }
 }
 
@@ -221,16 +193,7 @@ private fun StatusCard(status: ExportStatus, onEvent: (ExportEvent) -> Unit) {
  */
 @Composable
 private fun ExportBar(state: ExportUiState, onEvent: (ExportEvent) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = LfTheme.spacing.lg,
-                end = LfTheme.spacing.lg,
-                top = LfTheme.spacing.xs,
-                bottom = LfTheme.spacing.xs,
-            ),
-    ) {
+    LfActionBar {
         LfButton(
             text = if (state.status == ExportStatus.Working) "Exporting…" else "Export ${state.format.title}",
             modifier = Modifier.fillMaxWidth(),

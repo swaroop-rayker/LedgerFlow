@@ -18,8 +18,8 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import kotlin.math.roundToInt
 
 /**
@@ -41,7 +41,9 @@ public fun LfIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = LfTheme.colors.textSecondary,
+    tint: Color = LfIconButtonTokens.tint,
+    glyph: Dp = LfIconButtonTokens.glyph,
+    enabled: Boolean = true,
 ) {
     LfIconButton(
         icon = rememberVectorPainter(icon),
@@ -49,6 +51,8 @@ public fun LfIconButton(
         onClick = onClick,
         modifier = modifier,
         tint = tint,
+        glyph = glyph,
+        enabled = enabled,
     )
 }
 
@@ -77,16 +81,17 @@ public fun LfIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = LfTheme.colors.textSecondary,
+    tint: Color = LfIconButtonTokens.tint,
+    glyph: Dp = LfIconButtonTokens.glyph,
+    enabled: Boolean = true,
 ) {
-    val spacing = LfTheme.spacing
     // Material 3's icon-button state layer: 40dp inside the 48dp target.
-    val stateLayer = spacing.minTouchTarget - spacing.xs * 2
-    val glyph = spacing.md
+    val stateLayer = LfIconButtonTokens.touchTarget - LfIconButtonTokens.stateLayerInset * 2
     Spacer(
         modifier = modifier
-            .size(spacing.minTouchTarget)
+            .size(LfIconButtonTokens.touchTarget)
             .clickable(
+                enabled = enabled,
                 onClick = onClick,
                 role = Role.Button,
                 // Null, so the interaction source and the ripple are only built
@@ -102,7 +107,10 @@ public fun LfIconButton(
                 val outer = Alignment.Center.align(layer, target, layoutDirection)
                 val inner = Alignment.Center.align(ink, layer, layoutDirection)
                 val inkSize = Size(ink.width.toFloat(), ink.height.toFloat())
-                val filter = ColorFilter.tint(tint)
+                // Dimmed when it cannot be pressed, as a disabled button's
+                // label is (Back up now's arrow while a backup runs).
+                val shown = if (enabled) tint else tint.copy(alpha = LfIconButtonTokens.disabledAlpha)
+                val filter = ColorFilter.tint(shown)
                 onDrawBehind {
                     translate(left = (outer.x + inner.x).toFloat(), top = (outer.y + inner.y).toFloat()) {
                         with(icon) { draw(size = inkSize, colorFilter = filter) }

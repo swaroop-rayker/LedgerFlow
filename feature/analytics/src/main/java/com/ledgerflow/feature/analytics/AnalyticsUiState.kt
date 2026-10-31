@@ -47,9 +47,17 @@ public data class AnalyticsUiState(
      * everything else. So it is a toggle, and it is off by default.
      */
     val treemapShown: Boolean = false,
+    /**
+     * Spend over time as a running total (the area chart, the default) or
+     * split by category (the stacked bars), step F6, owner 2026-10-30. The
+     * same buckets drawn two ways, so changing it issues no query.
+     */
+    val timeView: TimeView = TimeView.TOTAL,
     /** §5.6's composable filters. [AnalyticsFilters.None] is the fast path. */
     val filters: AnalyticsFilters = AnalyticsFilters.None,
     val showFilterSheet: Boolean = false,
+    /** The period choice the filter bar's pill opens (step F5). */
+    val showPeriodSheet: Boolean = false,
     /** Custom range being picked, or null. */
     val customFrom: Int? = null,
     val customTo: Int? = null,
@@ -146,6 +154,12 @@ public sealed interface AnalyticsEvent {
     public data object TreemapToggled : AnalyticsEvent
 
     /**
+     * Spend over time's Total | By category (step F6). Presentational, no
+     * query, so it is a [Surface]: it changes what is shown, never what is read.
+     */
+    public data class TimeViewSelected(val view: TimeView) : Surface
+
+    /**
      * The events that only open or close something, and re-query nothing.
      *
      * A sub-interface rather than a comment, so the handler for them can be a
@@ -165,6 +179,9 @@ public sealed interface AnalyticsEvent {
      * complexity budget.
      */
     public data class FilterSheetShown(val visible: Boolean) : Surface
+
+    /** The period sheet was opened or closed (step F5). See [FilterSheetShown]. */
+    public data class PeriodSheetShown(val visible: Boolean) : Surface
 
     /** The custom-range picker was opened or closed. See [FilterSheetShown]. */
     public data class RangePickerShown(val visible: Boolean) : Surface
@@ -193,4 +210,13 @@ public sealed interface AnalyticsEvent {
 
     /** A filter's picker was opened, or closed by passing null. */
     public data class FilterFieldOpened(val field: AnalyticsFilterField?) : Surface
+}
+
+/** How Spend over time draws its buckets (step F6). */
+public enum class TimeView {
+    /** A running total over the window, as an area chart. */
+    TOTAL,
+
+    /** Each bucket split by category, as stacked bars. */
+    BY_CATEGORY,
 }

@@ -64,7 +64,7 @@ class Bug61_EnglishTextKeepsItsPunctuationInRtlTest {
     private fun layOut(
         text: String,
         direction: LayoutDirection,
-        style: @Composable () -> TextStyle = { LfTheme.typography.bodyM },
+        style: @Composable () -> TextStyle = { LfTheme.type.bodySmall },
     ): TextLayoutResult {
         var result: TextLayoutResult? = null
         rule.setContent {
@@ -128,7 +128,7 @@ class Bug61_EnglishTextKeepsItsPunctuationInRtlTest {
         // fallback has to be LTR, or the sign moves to the end and a debit
         // reads like a typo.
         val debit = MoneyFormat.directional(7_000L, "INR", LedgerType.DEBIT, Locale.US)
-        val layout = layOut(debit, LayoutDirection.Rtl) { LfTheme.typography.amountM }
+        val layout = layOut(debit, LayoutDirection.Rtl) { LfTheme.type.amountRow }
 
         assertThat(layout.getParagraphDirection(0)).isEqualTo(ResolvedTextDirection.Ltr)
         assertWithMessage("\"$debit\": the sign is the first glyph read")
@@ -151,7 +151,7 @@ class Bug61_EnglishTextKeepsItsPunctuationInRtlTest {
 
     private fun assertDirhamDebitReadsLtr(direction: LayoutDirection) {
         val debit = MoneyFormat.directional(7_000L, "AED", LedgerType.DEBIT, Locale.US)
-        val layout = layOut(debit, direction) { LfTheme.typography.amountM }
+        val layout = layOut(debit, direction) { LfTheme.type.amountRow }
 
         assertThat(layout.getParagraphDirection(0)).isEqualTo(ResolvedTextDirection.Ltr)
         assertWithMessage("\"-\" is the first glyph read")

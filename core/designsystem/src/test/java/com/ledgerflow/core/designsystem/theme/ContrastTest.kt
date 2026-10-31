@@ -7,7 +7,7 @@ import org.junit.Test
  * Enforces the accessibility requirement in SPEC.md §9.6.
  *
  * "Contrast AA minimum" was stated as a requirement but nothing measured it --
- * and the originally specified `textTertiary` (#6B7285) failed it at 3.73:1
+ * and the originally specified `text.muted` (#6B7285) failed it at 3.73:1
  * while being used as a text colour. That is exactly how an accessibility
  * requirement quietly becomes an accessibility preference.
  *
@@ -32,18 +32,18 @@ class ContrastTest {
         with(LfDarkColors) {
             assertPair(
                 "textPrimary/surfaceBase",
-                LfContrast.ratio(textPrimary, surfaceBase),
+                LfContrast.ratio(text.primary, surface.canvas),
                 LfContrast.AA_NORMAL,
             )
             assertPair(
                 "textSecondary/surfaceBase",
-                LfContrast.ratio(textSecondary, surfaceBase),
+                LfContrast.ratio(text.secondary, surface.canvas),
                 LfContrast.AA_NORMAL,
             )
             // The token that was originally wrong. Guarded permanently.
             assertPair(
                 "textTertiary/surfaceBase",
-                LfContrast.ratio(textTertiary, surfaceBase),
+                LfContrast.ratio(text.muted, surface.canvas),
                 LfContrast.AA_NORMAL,
             )
         }
@@ -54,12 +54,12 @@ class ContrastTest {
         with(LfDarkColors) {
             assertPair(
                 "textPrimary/surfaceRaised",
-                LfContrast.ratio(textPrimary, surfaceRaised),
+                LfContrast.ratio(text.primary, surface.raised),
                 LfContrast.AA_NORMAL,
             )
             assertPair(
                 "textSecondary/surfaceRaised",
-                LfContrast.ratio(textSecondary, surfaceRaised),
+                LfContrast.ratio(text.secondary, surface.raised),
                 LfContrast.AA_NORMAL,
             )
         }
@@ -68,17 +68,17 @@ class ContrastTest {
     @Test
     fun darkTheme_amountColoursMeetAaLarge() {
         with(LfDarkColors) {
-            assertPair("debit/surfaceBase", LfContrast.ratio(debit, surfaceBase), LfContrast.AA_LARGE)
-            assertPair("credit/surfaceBase", LfContrast.ratio(credit, surfaceBase), LfContrast.AA_LARGE)
-            assertPair("warn/surfaceBase", LfContrast.ratio(warn, surfaceBase), LfContrast.AA_LARGE)
+            assertPair("debit/surfaceBase", LfContrast.ratio(money.outgoing, surface.canvas), LfContrast.AA_LARGE)
+            assertPair("credit/surfaceBase", LfContrast.ratio(money.incoming, surface.canvas), LfContrast.AA_LARGE)
+            assertPair("warn/surfaceBase", LfContrast.ratio(status.warning, surface.canvas), LfContrast.AA_LARGE)
             assertPair(
                 "debit/surfaceRaised",
-                LfContrast.ratio(debit, surfaceRaised),
+                LfContrast.ratio(money.outgoing, surface.raised),
                 LfContrast.AA_LARGE,
             )
             assertPair(
                 "credit/surfaceRaised",
-                LfContrast.ratio(credit, surfaceRaised),
+                LfContrast.ratio(money.incoming, surface.raised),
                 LfContrast.AA_LARGE,
             )
         }
@@ -87,8 +87,8 @@ class ContrastTest {
     @Test
     fun darkTheme_accentIsReadableAsAButtonAndAsText() {
         with(LfDarkColors) {
-            assertPair("onAccent/accent", LfContrast.ratio(onAccent, accent), LfContrast.AA_NORMAL)
-            assertPair("accent/surfaceBase", LfContrast.ratio(accent, surfaceBase), LfContrast.AA_LARGE)
+            assertPair("onAccent/accent", LfContrast.ratio(action.onPrimary, action.primary), LfContrast.AA_NORMAL)
+            assertPair("accent/surfaceBase", LfContrast.ratio(action.primary, surface.canvas), LfContrast.AA_LARGE)
         }
     }
 
@@ -97,17 +97,17 @@ class ContrastTest {
         with(LfLightColors) {
             assertPair(
                 "textPrimary/surfaceBase",
-                LfContrast.ratio(textPrimary, surfaceBase),
+                LfContrast.ratio(text.primary, surface.canvas),
                 LfContrast.AA_NORMAL,
             )
             assertPair(
                 "textSecondary/surfaceBase",
-                LfContrast.ratio(textSecondary, surfaceBase),
+                LfContrast.ratio(text.secondary, surface.canvas),
                 LfContrast.AA_NORMAL,
             )
             assertPair(
                 "textTertiary/surfaceBase",
-                LfContrast.ratio(textTertiary, surfaceBase),
+                LfContrast.ratio(text.muted, surface.canvas),
                 LfContrast.AA_NORMAL,
             )
         }
@@ -116,11 +116,11 @@ class ContrastTest {
     @Test
     fun lightTheme_amountColoursMeetAaLarge() {
         with(LfLightColors) {
-            assertPair("debit/surfaceBase", LfContrast.ratio(debit, surfaceBase), LfContrast.AA_LARGE)
-            assertPair("credit/surfaceBase", LfContrast.ratio(credit, surfaceBase), LfContrast.AA_LARGE)
+            assertPair("debit/surfaceBase", LfContrast.ratio(money.outgoing, surface.canvas), LfContrast.AA_LARGE)
+            assertPair("credit/surfaceBase", LfContrast.ratio(money.incoming, surface.canvas), LfContrast.AA_LARGE)
             assertPair(
                 "debit/surfaceRaised",
-                LfContrast.ratio(debit, surfaceRaised),
+                LfContrast.ratio(money.outgoing, surface.raised),
                 LfContrast.AA_LARGE,
             )
         }
@@ -129,7 +129,7 @@ class ContrastTest {
     @Test
     fun lightTheme_accentIsReadableAsAButton() {
         with(LfLightColors) {
-            assertPair("onAccent/accent", LfContrast.ratio(onAccent, accent), LfContrast.AA_NORMAL)
+            assertPair("onAccent/accent", LfContrast.ratio(action.onPrimary, action.primary), LfContrast.AA_NORMAL)
         }
     }
 

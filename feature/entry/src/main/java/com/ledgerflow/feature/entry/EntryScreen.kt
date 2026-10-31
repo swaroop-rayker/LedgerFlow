@@ -6,9 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -36,10 +35,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionRow
-import com.ledgerflow.core.designsystem.component.LfAmountField
+import com.ledgerflow.core.designsystem.component.LfAmountCard
 import com.ledgerflow.core.designsystem.component.LfAmountTone
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
@@ -47,17 +44,24 @@ import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDivider
+import com.ledgerflow.core.designsystem.component.LfErrorNotice
+import com.ledgerflow.core.designsystem.component.LfFeedback
 import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
-import com.ledgerflow.core.ui.picker.LfDetailRow
+import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.ui.lineitem.LfLineItemEditor
 import com.ledgerflow.core.ui.lineitem.LineItemEditorEvent
-import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.ui.picker.LfDetailRow
 import java.time.Instant
 import java.time.ZoneId
 
@@ -82,12 +86,6 @@ public fun EntryScreen(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // The commit is the ViewModel's; leaving is the shell's. Keying on the id
-    // rather than a boolean means a second save cannot be swallowed by a flag
-    // that was never reset.
-    LaunchedEffect(state.savedEntryId) {
-        if (state.savedEntryId != null) onDone()
-    }
     // Cancel decides in the ViewModel whether it parks the form or leaves, so
     // the screen only reacts to the answer.
     LaunchedEffect(state.dismissed) {
@@ -107,16 +105,47 @@ public fun EntryScreen(
         }
     }
 
-    LfScaffold(
+    // No title: the form opens straight onto the book and the amount.
+    LfFormPage(
+        title = null,
+        actionBar = { SaveBar(state, onEvent) },
         modifier = modifier,
-        bottomBar = { SaveBar(state, onEvent) },
-    ) { padding ->
-        EntryForm(state, onEvent, amountFocus, padding)
+        spacing = LfPageSpacing.Sections,
+    ) {
+        SavedFeedback(state, onDone)
+        EntryFields(state, onEvent, amountFocus)
     }
 }
 
 /**
- * Everything that scrolls.
+ * The commit is the ViewModel's; leaving is the shell's. Keying on the id
+ * rather than a boolean means a second save cannot be swallowed by a flag that
+ * was never reset.
+ *
+ * BUG73: the form used to close on a save without a word. It says where the
+ * entry went, on the window's one snackbar, so the line outlives this screen
+ * and shows on the one it returns to. Inside the page's content because that is
+ * where the window's feedback is provided.
+ */
+@Composable
+private fun SavedFeedback(state: EntryUiState, onDone: () -> Unit) {
+    val feedback = LfFeedback.current
+    LaunchedEffect(state.savedEntryId) {
+        if (state.savedEntryId != null) {
+            feedback.post(savedMessage(state.ledger))
+            onDone()
+        }
+    }
+}
+
+/** What a save says (BUG73), naming the book the way the Ledger's tabs do. */
+internal fun savedMessage(ledger: LedgerType): String = when (ledger) {
+    LedgerType.DEBIT -> "Saved to Expenses"
+    LedgerType.CREDIT -> "Saved to Income"
+}
+
+/**
+ * Everything that scrolls, laid out by the form template.
  *
  * Split out of [EntryScreen] when the itemised-mode control pushed that
  * function past detekt's length and complexity thresholds. The limits were
@@ -125,72 +154,60 @@ public fun EntryScreen(
  * inside it.
  */
 @Composable
-private fun EntryForm(
+private fun EntryFields(
     state: EntryUiState,
     onEvent: (EntryEvent) -> Unit,
     amountFocus: FocusRequester,
-    padding: PaddingValues,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = LfTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-    ) {
-        LedgerSelector(state, onEvent)
+    LedgerSelector(state, onEvent)
 
-        LfAmountField(
-            value = state.amountText,
-            onValueChange = { onEvent(EntryEvent.AmountChanged(it)) },
-            currencyCode = state.currencyCode,
-            focusRequester = amountFocus,
-            label = if (state.ledger == LedgerType.DEBIT) "Amount spent" else "Amount received",
-            // Neutral until there is an amount. A coral zero on an
-            // untouched form reads as an error rather than as an expense,
-            // and it is the UI asserting something the user has not said.
-            tone = when {
-                state.amountMinor == 0L -> LfAmountTone.Neutral
-                state.ledger == LedgerType.DEBIT -> LfAmountTone.Debit
-                else -> LfAmountTone.Credit
-            },
+    // In the capture forms' head card (step F5), as Review's is. The book is
+    // the control above it, so the card carries no tag of its own.
+    LfAmountCard(
+        value = state.amountText,
+        onValueChange = { onEvent(EntryEvent.AmountChanged(it)) },
+        currencyCode = state.currencyCode,
+        focusRequester = amountFocus,
+        label = if (state.ledger == LedgerType.DEBIT) "Amount spent" else "Amount received",
+        // Neutral until there is an amount. A coral zero on an
+        // untouched form reads as an error rather than as an expense,
+        // and it is the UI asserting something the user has not said.
+        tone = when {
+            state.amountMinor == 0L -> LfAmountTone.Neutral
+            state.ledger == LedgerType.DEBIT -> LfAmountTone.Debit
+            else -> LfAmountTone.Credit
+        },
+    )
+
+    // Only once there is an amount -- the same rule the unsaved shelf
+    // follows below. On an untouched form this is a control for a
+    // decision the user has not reached yet.
+    if (state.amountMinor > 0L) ModeSelector(state, onEvent)
+
+    if (state.resumedFromDraft) ResumeNotice(onEvent)
+    if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
+    // Also shown with an empty shelf once the form has an amount, so
+    // "Start another" exists *before* there is a second draft. Gated on
+    // `unsaved` alone it only appeared once something was already
+    // parked -- which is the one state from which you can never park
+    // anything.
+    if (state.unsaved.isNotEmpty() || state.amountMinor > 0L) {
+        UnsavedStack(state, onEvent)
+    }
+
+    DetailRows(state, onEvent)
+
+    LfTextField(
+        value = state.note,
+        onValueChange = { onEvent(EntryEvent.NoteChanged(it)) },
+        label = "Note (optional)",
+    )
+
+    if (state.itemised) {
+        LfLineItemEditor(
+            state = state.editor,
+            onEvent = { onEvent(it.toEntryEvent()) },
         )
-
-        // Only once there is an amount -- the same rule the unsaved shelf
-        // follows below. On an untouched form this is a control for a
-        // decision the user has not reached yet.
-        if (state.amountMinor > 0L) ModeSelector(state, onEvent)
-
-        if (state.resumedFromDraft) ResumeNotice(onEvent)
-        if (state.combos.isNotEmpty()) ComboChips(state, onEvent)
-        // Also shown with an empty shelf once the form has an amount, so
-        // "Start another" exists *before* there is a second draft. Gated on
-        // `unsaved` alone it only appeared once something was already
-        // parked -- which is the one state from which you can never park
-        // anything.
-        if (state.unsaved.isNotEmpty() || state.amountMinor > 0L) {
-            UnsavedStack(state, onEvent)
-        }
-
-        DetailRows(state, onEvent)
-
-        LfTextField(
-            value = state.note,
-            onValueChange = { onEvent(EntryEvent.NoteChanged(it)) },
-            label = "Note (optional)",
-        )
-
-        if (state.itemised) {
-            LfLineItemEditor(
-                state = state.editor,
-                onEvent = { onEvent(it.toEntryEvent()) },
-            )
-        }
-
-        state.message?.let {
-            Text(text = it, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
-        }
     }
 }
 
@@ -200,7 +217,7 @@ private fun LedgerSelector(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
         options = listOf("Expense", "Income"),
         selectedIndex = state.ledger.ordinal,
         onSelect = { onEvent(EntryEvent.LedgerSelected(LedgerType.entries[it])) },
-        modifier = Modifier.padding(top = LfTheme.spacing.md),
+        modifier = Modifier.padding(top = LfTheme.space.cardInset),
     )
 }
 
@@ -214,11 +231,11 @@ private fun LedgerSelector(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 @Composable
 private fun ResumeNotice(onEvent: (EntryEvent) -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             Text(
                 text = "Picked up where you left off",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
             LfDivider()
             LfActionRow {
@@ -243,8 +260,8 @@ private fun ResumeNotice(onEvent: (EntryEvent) -> Unit) {
 private fun ComboChips(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         state.combos.forEachIndexed { index, combo ->
             LfChip(
@@ -284,9 +301,9 @@ private fun ComboChips(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
 
-    Column(verticalArrangement = Arrangement.spacedBy(spacing.sm)) {
+    Column(verticalArrangement = Arrangement.spacedBy(space.itemGap)) {
         // FlowRow, not Row. At font scale 2.0 "Start another" does not fit
         // beside the count, and `softWrap = false` turns that into a clipped
         // "Start anoth" -- BUG9's documented residual case. The remedy is the
@@ -294,8 +311,8 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
         // the whole control onto the next line, never the word.
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+            verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
         ) {
             Text(
                 modifier = Modifier.align(Alignment.CenterVertically),
@@ -304,8 +321,8 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
                 } else {
                     "Unsaved · ${state.unsaved.size}"
                 },
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
                 maxLines = 1,
                 softWrap = false,
             )
@@ -325,7 +342,7 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         ) {
             items(items = state.unsaved, key = { it.id }, contentType = { "draft" }) { draft ->
                 DraftCard(draft, onEvent)
@@ -336,30 +353,30 @@ private fun UnsavedStack(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
 
 @Composable
 private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
-    val spacing = LfTheme.spacing
+    val space = LfTheme.space
     val colors = LfTheme.colors
-    val shape = RoundedCornerShape(spacing.cornerMedium)
+    val shape = LfTheme.shapes.container
 
     Box(
         modifier = Modifier
-            .width(spacing.peekCardWidth)
+            .width(LfLayout.peekCardWidth)
             .clip(shape)
-            .background(colors.surfaceRaised)
-            .border(1.dp, colors.outline, shape)
+            .background(colors.surface.raised)
+            .border(LfTheme.borders.hairline, colors.border.subtle, shape)
             // The whole card opens it. A card whose only tap target is a small
             // button inside it is a card people tap and nothing happens.
             .clickable { onEvent(EntryEvent.DraftOpened(draft.id)) }
-            .padding(start = spacing.md, end = spacing.xs, bottom = spacing.md),
+            .padding(start = space.rowInset, end = space.inlineGap, bottom = space.cardInset),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(space.inlineGap)) {
             DraftCardHeader(draft, onEvent)
             Text(
                 text = MoneyFormat.symbolised(draft.amountMinor, draft.currencyCode),
-                style = LfTheme.typography.amountM,
-                color = colors.textPrimary,
+                style = LfTheme.type.amountRow,
+                color = colors.text.primary,
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier.padding(end = spacing.sm),
+                modifier = Modifier.padding(end = space.itemGap),
             )
             // What it is filed as gets its own line above the note. Folding
             // both onto one `maxLines = 1` line meant the merchant and category
@@ -368,23 +385,23 @@ private fun DraftCard(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit) {
             draft.filedAs?.let {
                 Text(
                     text = it,
-                    style = LfTheme.typography.bodyM,
-                    color = colors.textPrimary,
+                    style = LfTheme.type.bodySmall,
+                    color = colors.text.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(end = spacing.sm),
+                    modifier = Modifier.padding(end = space.itemGap),
                 )
             }
             Text(
                 text = draft.subtitle() ?: "No details yet",
-                style = LfTheme.typography.label,
-                color = colors.textSecondary,
+                style = LfTheme.type.label,
+                color = colors.text.secondary,
                 // A note is content, not a control label, so BUG9's no-ellipsis
                 // rule does not apply: a truncated note is still readable, and
                 // the card opens to the whole thing.
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(end = spacing.sm),
+                modifier = Modifier.padding(end = space.itemGap),
             )
         }
     }
@@ -400,8 +417,8 @@ private fun DraftCardHeader(draft: EntryDraftCard, onEvent: (EntryEvent) -> Unit
     ) {
         Text(
             text = draft.age,
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
             maxLines = 1,
             softWrap = false,
         )
@@ -513,12 +530,21 @@ private fun LineItemEditorEvent.toEntryEvent(): EntryEvent = when (this) {
 
 @Composable
 private fun SaveBar(state: EntryUiState, onEvent: (EntryEvent) -> Unit) {
-    // `xs` vertically, like every other pinned bar (the review screen's actions
-    // are this bar's closest sibling): LfScaffold has already inset it for the
-    // navigation bar. It was `md` all round, measured on SM-S721B 2026-10-12.
-    Column(
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.md, vertical = LfTheme.spacing.xs),
-    ) {
+    // An LfActionBar, like every pinned bar: LfScaffold has already inset it
+    // for the navigation bar. It was `md` all round, measured on SM-S721B
+    // 2026-10-12.
+    LfActionBar {
+        // BUG72: a refused save was a line at the very end of the form, under
+        // the note and any line items -- off screen whenever the form was taller
+        // than the window, so Save looked like it did nothing. It is drawn in
+        // the pinned bar now, directly above the button that raised it.
+        state.message?.let { message ->
+            LfErrorNotice(
+                title = message,
+                actionLabel = "OK",
+                onAction = { onEvent(EntryEvent.MessageDismissed) },
+            )
+        }
         LfActionRow {
             LfButton(
                 text = "Cancel",

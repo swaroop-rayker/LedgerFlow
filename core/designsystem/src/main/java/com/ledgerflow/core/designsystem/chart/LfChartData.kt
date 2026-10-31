@@ -110,3 +110,12 @@ public data class LfMirroredColumn(
     val creditMinor: Long,
     val debitMinor: Long,
 )
+
+/**
+ * One point of an [LfAreaChart] (step F6): a bucket's label and its value in
+ * minor units, already binned to the window (§11). One book only (Law 2).
+ */
+public data class LfAreaPoint(
+    val label: String,
+    val value: Long,
+)

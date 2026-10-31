@@ -2,53 +2,64 @@ package com.ledgerflow.feature.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.format.DisplayDates
-import com.ledgerflow.core.designsystem.format.DisplayLocale
-import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.format.DisplayLocale
+import com.ledgerflow.core.designsystem.icon.LfIcons
+import com.ledgerflow.core.designsystem.pattern.LfPanel
+import com.ledgerflow.core.designsystem.pattern.LfSettingsPage
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
-import com.ledgerflow.core.model.DateOrder
+import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.domain.security.LockTimeout
+import com.ledgerflow.core.model.DateOrder
 import java.util.Locale
 
 /**
- * The Settings tab (SPEC.md §9.3; `docs/V2-PLAN.md` §3, D7).
+ * One Settings page: a section's rows (SPEC.md §9.3; `docs/V2-PLAN.md` §3, D7).
  *
- * It replaced the More tab in the bar at V2-2, and every row More had moved
- * here unchanged -- same title, same subtitle, same destination. What V2-2
- * added is the grouping ([SettingsSections]), and nothing else: the sections
- * V2-PLAN §3 adds later (Appearance, Currency & region, App lock, Drive,
+ * Settings was the fourth tab until design-system step D4, one list of seven
+ * sections. Profile took the tab, Settings became an index of the sections
+ * ([SettingsIndexScreen]) and each section is this page. **The rows did not
+ * change**: same titles, sentences, dialogs and destinations, in the same
+ * order, and [SettingsSections] is still the one place that says which row
+ * lives where. The sections V2-PLAN §3 adds later (App lock PIN, Drive,
  * About...) are **absent until they are built**, with no "coming soon" rows
- * (owner, 2026-10-21) -- a row that cannot do anything is worse than none, the
- * rule the centre action's dial has always followed.
+ * (owner, 2026-10-21) -- a row that cannot do anything is worse than none.
  *
  * Navigation callbacks rather than routes -- the shell owns the graph, so this
  * module never learns that `:feature:categories` exists.
  */
 @Composable
-public fun SettingsScreen(
+public fun SettingsSectionScreen(
+    page: SettingsPage,
     state: SettingsUiState,
+    onBack: () -> Unit,
     onCategories: () -> Unit,
     onBudgets: () -> Unit,
     onExport: () -> Unit,
@@ -84,29 +95,37 @@ public fun SettingsScreen(
         SettingsItem.LockAfter to { onEvent(SettingsEvent.LockAfterRequested) },
         SettingsItem.Diagnostics to onDiagnostics,
     )
+    val section = SettingsSections.single { it.page == page }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+    LfSettingsPage(
+        title = section.heading,
+        modifier = modifier,
+        onBack = onBack,
     ) {
-        LfScreenTitle(title = "Settings")
-        Column(
-            modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-        ) {
-            SettingsSections.forEach { section ->
-                Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                    SectionHeading(section.heading)
-                    section.items.forEach { item ->
-                        SettingsItemRow(item = item, state = state, onClick = links[item], onEvent = onEvent)
-                    }
+        // One panel per page, with hairlines between its rows (step F5, owner
+        // 2026-10-29), as the index and Profile are: a card per row read as
+        // a stack of separate things.
+        item(key = page.name, contentType = "section") {
+            LfPanel {
+                section.items.forEachIndexed { index, item ->
+                    if (index > 0) LfDivider()
+                    SettingsItemRow(item = item, state = state, onClick = links[item], onEvent = onEvent)
                 }
             }
         }
     }
 }
+
+/**
+ * The Settings pages, one per section, in [SettingsSections]' order.
+ *
+ * Public because the shell's route names one: `Destination.SettingsSection`
+ * carries [name], and the shell reads it back with [settingsPageNamed].
+ */
+public enum class SettingsPage { Notifications, Organise, Data, Security, Appearance, Region, Tools }
+
+/** The page a route's argument names, or null for a name no page has. */
+public fun settingsPageNamed(name: String): SettingsPage? = SettingsPage.entries.firstOrNull { it.name == name }
 
 /** Every row the Settings tab has. [SettingsSections] decides where each goes. */
 internal enum class SettingsItem {
@@ -138,8 +157,8 @@ internal enum class SettingsItem {
     Diagnostics,
 }
 
-/** One heading and the rows under it, in drawing order. */
-internal data class SettingsSection(val heading: String, val items: List<SettingsItem>)
+/** One page: its name and its rows, in drawing order. */
+internal data class SettingsSection(val page: SettingsPage, val heading: String, val items: List<SettingsItem>)
 
 /**
  * The tab's layout, as data, so `SettingsSectionsTest` can hold it: a row that
@@ -174,11 +193,13 @@ internal data class SettingsSection(val heading: String, val items: List<Setting
  */
 internal val SettingsSections: List<SettingsSection> = listOf(
     SettingsSection(
+        SettingsPage.Notifications,
         "Notifications",
         listOf(SettingsItem.NotificationCapture, SettingsItem.PaymentApps, SettingsItem.BudgetAlerts),
     ),
-    SettingsSection("Organise", listOf(SettingsItem.Categories, SettingsItem.Budgets)),
+    SettingsSection(SettingsPage.Organise, "Organise", listOf(SettingsItem.Categories, SettingsItem.Budgets)),
     SettingsSection(
+        SettingsPage.Data,
         "Data",
         listOf(
             SettingsItem.BackUpNow,
@@ -188,18 +209,21 @@ internal val SettingsSections: List<SettingsSection> = listOf(
         ),
     ),
     SettingsSection(
+        SettingsPage.Security,
         "Security & privacy",
         listOf(SettingsItem.AppLock, SettingsItem.LockAfter, SettingsItem.BlockScreenshots),
     ),
     SettingsSection(
+        SettingsPage.Appearance,
         "Appearance",
         listOf(SettingsItem.Theme, SettingsItem.Animations, SettingsItem.StartScreen),
     ),
     SettingsSection(
+        SettingsPage.Region,
         "Currency & region",
         listOf(SettingsItem.BaseCurrency, SettingsItem.NumberGrouping, SettingsItem.DateOrder),
     ),
-    SettingsSection("Tools", listOf(SettingsItem.Diagnostics)),
+    SettingsSection(SettingsPage.Tools, "Tools", listOf(SettingsItem.Diagnostics)),
 )
 
 /**
@@ -436,42 +460,51 @@ internal fun captureSubtitle(state: SettingsUiState): String = when (state.captu
         "Not available on this device."
 }
 
-/**
- * A section's name: a plain line over its rows, not a card of its own, so the
- * screen keeps one shape (the rows' card). Marked as a heading so TalkBack can
- * move between sections (§9.6).
- */
-@Composable
-private fun SectionHeading(title: String) {
-    Text(
-        text = title,
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
-        modifier = Modifier.semantics { heading() },
-    )
-}
-
 @Composable
 private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
-    LfCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .clickable(onClick = onClick),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = title,
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
-            )
-            Text(
-                text = subtitle,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+    PanelRow(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
+            ) {
+                Text(
+                    text = title,
+                    style = LfTheme.type.body,
+                    color = LfTheme.colors.text.primary,
+                )
+                Text(
+                    text = subtitle,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
+                )
+            }
+            // It opens a page, as the index's rows do (step F5). Decoration:
+            // the row's click already says so.
+            Icon(
+                imageVector = LfIcons.Chevron,
+                contentDescription = null,
+                tint = LfTheme.colors.text.muted,
+                modifier = Modifier.padding(start = LfTheme.space.itemGap),
             )
         }
     }
+}
+
+/**
+ * A row's frame inside the page's panel (step F5): the card's inset without
+ * the card, so the rows' text sits where it did and the panel is the one
+ * outline. Tappable only when it leads somewhere.
+ */
+@Composable
+private fun PanelRow(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = LfLayout.minTouchTarget)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(LfTheme.space.cardInset),
+    ) { content() }
 }
 
 /** One row: a way somewhere when [onClick] is given, otherwise a choice made in place. */
@@ -500,10 +533,10 @@ private fun SettingsItemRow(
  */
 @Composable
 private fun InfoRow(title: String, subtitle: String) {
-    LfCard(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(text = title, style = LfTheme.typography.bodyL, color = LfTheme.colors.textPrimary)
-            Text(text = subtitle, style = LfTheme.typography.bodyM, color = LfTheme.colors.textSecondary)
+    PanelRow {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
+            Text(text = title, style = LfTheme.type.body, color = LfTheme.colors.text.primary)
+            Text(text = subtitle, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.secondary)
         }
     }
 }
@@ -571,20 +604,20 @@ private fun OptionsDialog(
  */
 @Composable
 private fun ToggleRow(title: String, toggle: SettingsToggle, subtitle: String, onEvent: (SettingsEvent) -> Unit) {
-    LfCard(modifier = Modifier.fillMaxWidth()) {
+    PanelRow {
         LfSwitchRow(
             label = title,
             checked = toggle.checked,
             onCheckedChange = { onEvent(toggle.eventFor(it)) },
             supporting = subtitle,
-            modifier = Modifier.defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget),
+            modifier = Modifier.defaultMinSize(minHeight = LfLayout.minTouchTarget),
             prominent = true,
         )
     }
 }
 
 /**
- * A choice made in place (Appearance): the same card as [SettingsRow], so the
+ * A choice made in place (Appearance): the same frame as [SettingsRow], so the
  * screen keeps one shape, with the options between the title and the sentence
  * that says what the current one means. It applies on tap; there is nothing to
  * confirm, and the theme visibly changing is the confirmation.
@@ -599,12 +632,12 @@ private fun ChoiceRow(
     subtitle: String,
     onEvent: (SettingsEvent) -> Unit,
 ) {
-    LfCard(modifier = Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+    PanelRow {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = title,
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
             )
             LfSegmentedControl(
                 options = choice.options,
@@ -613,8 +646,8 @@ private fun ChoiceRow(
             )
             Text(
                 text = subtitle,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
@@ -626,12 +659,14 @@ private fun ChoiceRow(
 @Composable
 private fun SettingsPreview() {
     LfTheme {
-        SettingsScreen(
+        SettingsSectionScreen(
+            page = SettingsPage.Data,
             state = SettingsUiState(
                 deletedCount = 3,
                 isLoaded = true,
                 receipts = AttachmentUsage(count = 12, bytes = 3_400_000L),
             ),
+            onBack = {},
             onCategories = {},
             onBudgets = {},
             onExport = {},
@@ -653,8 +688,10 @@ private fun SettingsPreview() {
 @Composable
 private fun SettingsEmptyBinPreview() {
     LfTheme {
-        SettingsScreen(
+        SettingsSectionScreen(
+            page = SettingsPage.Data,
             state = SettingsUiState(deletedCount = 0, isLoaded = true),
+            onBack = {},
             onCategories = {},
             onBudgets = {},
             onExport = {},

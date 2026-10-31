@@ -17,6 +17,7 @@ import com.google.common.truth.Truth.assertWithMessage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.appearance.MotionLevel
 import com.ledgerflow.core.domain.appearance.StartScreen
+import com.ledgerflow.feature.settings.SettingsPage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -74,17 +75,23 @@ class StartScreenTest {
     @Test
     fun aChangeWhileRunning_doesNotRebuildTheGraph() {
         // The setting's own page is inside this graph: following the choice
-        // live would rebuild it and throw the user off that page.
+        // live would rebuild it and throw the user off that page. Since D4 that
+        // page is Profile > Settings > Appearance.
         var choice by mutableStateOf(StartScreen.HOME)
         show { choice }
-        rule.runOnUiThread { navController.navigate(Destination.Settings) }
+        rule.runOnUiThread {
+            navController.switchTab(Destination.Profile)
+            navController.navigate(Destination.Settings)
+            navController.navigate(settingsRouteFor(SettingsPage.Appearance))
+        }
         rule.waitForIdle()
 
         choice = StartScreen.ANALYTICS
         rule.waitForIdle()
 
-        rule.onNodeWithText("Settings screen").assertExists()
-        assertThat(stackRoutes()).containsExactly("Dashboard", "Settings").inOrder()
+        rule.onNodeWithText("Appearance page").assertExists()
+        assertThat(stackRoutes())
+            .containsExactly("Dashboard", "Profile", "Settings", "SettingsSection").inOrder()
     }
 
     private fun show(start: StartScreen) = show { start }
@@ -101,7 +108,9 @@ class StartScreenTest {
                     composable<Destination.Dashboard> { Text("Home screen") }
                     composable<Destination.Ledger> { Text("Ledger screen") }
                     composable<Destination.Analytics> { Text("Analytics screen") }
+                    composable<Destination.Profile> { Text("Profile screen") }
                     composable<Destination.Settings> { Text("Settings screen") }
+                    composable<Destination.SettingsSection> { Text("Appearance page") }
                 }
             }
         }
@@ -111,8 +120,15 @@ class StartScreenTest {
     /** The back stack as tab names, graph node excluded. */
     private fun stackRoutes(): List<String> = navController.currentBackStack.value
         .mapNotNull { entry ->
-            listOf(Destination.Dashboard, Destination.Ledger, Destination.Analytics, Destination.Settings)
-                .firstOrNull { entry.destination.hasRoute(it::class) }
-                ?.let { it::class.simpleName }
+            listOf(
+                Destination.Dashboard::class,
+                Destination.Ledger::class,
+                Destination.Analytics::class,
+                Destination.Profile::class,
+                Destination.Settings::class,
+                Destination.SettingsSection::class,
+            )
+                .firstOrNull { entry.destination.hasRoute(it) }
+                ?.simpleName
         }
 }

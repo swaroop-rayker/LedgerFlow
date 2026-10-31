@@ -21,25 +21,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.chart.LfBudgetBar
-import com.ledgerflow.core.designsystem.chart.LfCategoryPalette
-import com.ledgerflow.core.designsystem.component.LfActionAlignment
-import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfLinkBanner
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.BudgetWords
+import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.pattern.LfPanel
+import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.BookMonth
@@ -143,17 +151,22 @@ public fun DashboardScreen(
     onOpenAnalytics: () -> Unit = {},
     onOpenLedger: (LedgerType) -> Unit = {},
 ) {
-    // A `LazyColumn`, not a scrolling `Column`, for the tab switch: a `Column`
+    // A lazy list, not a scrolling `Column`, for the tab switch: a `Column`
     // composes and measures every card and both recent lists on the frame Home
     // appears, including everything below the fold -- the costliest first frame
-    // of the four tabs (28 ms, PERF-120HZ-PLAN §5). One item per card, under the
-    // same `spacedBy`, so the layout is the one the `Column` drew.
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+    // of the four tabs (28 ms, PERF-120HZ-PLAN §5). One item per card; the
+    // template supplies the edge, the gap between cards and the list end.
+    LfTabPage(
+        title = "Home",
+        modifier = modifier,
+        spacing = LfPageSpacing.Sections,
     ) {
-        item(key = "title", contentType = "title") {
-            LfScreenTitle(title = "Home")
+
+        // F5: the canvas's one-line status, always there, so a healthy Home
+        // still says that capture is on and when the last backup was. The
+        // notices below it remain the way a problem is raised.
+        item(key = "status", contentType = "status") {
+            StatusLine(health = state.captureHealth, lastBackup = state.lastBackup)
         }
 
         // First: a loss has already happened, where the cards below it are
@@ -163,7 +176,6 @@ public fun DashboardScreen(
                 CaptureGapCard(
                     gap = gap,
                     onAcknowledge = onAcknowledgeCaptureGap,
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
                 )
             }
         }
@@ -175,7 +187,6 @@ public fun DashboardScreen(
                     saveFailed = state.crashSaveFailed,
                     onSave = onSaveCrashReports,
                     onDismiss = onDismissCrashReports,
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
                 )
             }
         }
@@ -185,7 +196,6 @@ public fun DashboardScreen(
                 BackupReminderCard(
                     reminder = reminder,
                     onBackUpNow = onBackUpNow,
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
                 )
             }
         }
@@ -195,7 +205,6 @@ public fun DashboardScreen(
                 CaptureHealthBanner(
                     health = state.captureHealth,
                     onAction = onSetUpNotifications,
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
                 )
             }
         }
@@ -207,11 +216,6 @@ public fun DashboardScreen(
             onOpenAnalytics = onOpenAnalytics,
             onOpenLedger = onOpenLedger,
         )
-
-        // The last card clears the bottom bar's shadow rather than touching it.
-        item(key = "end", contentType = "end") {
-            Spacer(modifier = Modifier.height(LfTheme.spacing.md))
-        }
     }
 }
 
@@ -230,12 +234,9 @@ private fun LazyListScope.homeBody(
     // Not inside the summary branch: a first-day user with only pending
     // suggestions has nothing in either book and still has work waiting.
     if (state.showsReview) {
-        item(key = "review", contentType = "card") {
-            ReviewCard(
-                count = state.pendingCount,
-                onOpenInbox = onOpenInbox,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-            )
+        item(key = "review", contentType = "banner") {
+            // The samples' link banner (F5): the whole line opens the Inbox.
+            LfLinkBanner(title = "${state.pendingCount} waiting in the Inbox", onClick = onOpenInbox)
         }
     }
 
@@ -254,8 +255,10 @@ private fun LazyListScope.homeBody(
             MonthCard(
                 summary = state.summary,
                 currency = state.baseCurrency,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
             )
+        }
+        item(key = "analytics", contentType = "banner") {
+            LfLinkBanner(title = "See this month in Analytics", onClick = onOpenAnalytics)
         }
         state.summary?.let { summary ->
             spendingCards(
@@ -273,7 +276,6 @@ private fun LazyListScope.homeBody(
                 title = "Recent spending",
                 rows = rows,
                 onSeeAll = { onOpenLedger(LedgerType.DEBIT) },
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
             )
         }
     }
@@ -283,7 +285,6 @@ private fun LazyListScope.homeBody(
                 title = "Recent income",
                 rows = rows,
                 onSeeAll = { onOpenLedger(LedgerType.CREDIT) },
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
             )
         }
     }
@@ -302,7 +303,6 @@ private fun LazyListScope.spendingCards(
                 budgets = summary.budgets,
                 currency = state.baseCurrency,
                 onOpenBudgets = onOpenBudgets,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
             )
         }
     }
@@ -311,8 +311,6 @@ private fun LazyListScope.spendingCards(
             RunwayCard(
                 summary = summary,
                 currency = state.baseCurrency,
-                onOpenAnalytics = onOpenAnalytics,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
             )
         }
     }
@@ -321,24 +319,6 @@ private fun LazyListScope.spendingCards(
             CoverageCard(
                 coverage = summary.captureCoverage,
                 onOpenAnalytics = onOpenAnalytics,
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-            )
-        }
-    }
-}
-
-/** Inbox items waiting (Law 1: nothing reaches a book without this tap). */
-@Composable
-private fun ReviewCard(count: Int, onOpenInbox: () -> Unit, modifier: Modifier = Modifier) {
-    LfCard(modifier = modifier) {
-        LineWithAction(
-            action = "Open Inbox",
-            onAction = onOpenInbox,
-        ) {
-            Text(
-                text = "To review: $count",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
             )
         }
     }
@@ -363,31 +343,31 @@ private fun MonthCard(summary: HomeSummary?, currency: String, modifier: Modifie
     val period = summary?.let { periodLabel(it.window.from, it.window.to) }
     val previousPeriod = summary?.let { periodLabel(it.previousWindow.from, it.previousWindow.to) }
     LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             Text(
                 text = period?.let { "This month, $it" } ?: "This month",
-                style = LfTheme.typography.label,
-                color = colors.textSecondary,
+                style = LfTheme.type.label,
+                color = colors.text.secondary,
             )
             BookFigure(
                 label = "Spent",
                 book = summary?.spending,
                 previousPeriod = previousPeriod,
                 currency = currency,
-                color = colors.debit,
+                color = colors.money.outgoing,
             )
             BookFigure(
                 label = "Received",
                 book = summary?.income,
                 previousPeriod = previousPeriod,
                 currency = currency,
-                color = colors.credit,
+                color = colors.money.incoming,
             )
             Text(
                 text = summary?.let { "Spent today: " + MoneyFormat.symbolised(it.spentToday.minor, currency) }
                     ?: PLACEHOLDER_LINE,
-                style = LfTheme.typography.label,
-                color = colors.textSecondary,
+                style = LfTheme.type.label,
+                color = colors.text.secondary,
             )
         }
     }
@@ -424,12 +404,12 @@ private fun BookFigure(
     Column(modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }) {
         LfAdaptiveRow(
             leading = {
-                Text(text = label, style = LfTheme.typography.bodyL, color = LfTheme.colors.textPrimary)
+                Text(text = label, style = LfTheme.type.body, color = LfTheme.colors.text.primary)
             },
             trailing = {
                 Text(
                     text = book?.let { MoneyFormat.symbolised(it.total.minor, currency) } ?: PLACEHOLDER_AMOUNT,
-                    style = LfTheme.typography.amountM,
+                    style = LfTheme.type.amountRow,
                     color = color,
                     maxLines = 1,
                     softWrap = false,
@@ -438,8 +418,8 @@ private fun BookFigure(
         )
         Text(
             text = comparison,
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
             textAlign = LfTextAlign.end,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -458,19 +438,18 @@ private fun BudgetsCard(
     modifier: Modifier = Modifier,
 ) {
     LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             SectionHeading(title = "Budgets", action = "All budgets", onAction = onOpenBudgets)
             budgets.forEach { progress ->
                 LfBudgetBar(
                     label = progress.categoryName,
                     formattedSpent = MoneyFormat.symbolised(progress.spent.minor, currency),
                     formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
+                    amounts = BudgetWords.headroom(progress.spent, progress.budget.amount, currency),
                     fraction = progress.fraction,
                     projectedFraction = progress.projectedFraction,
-                    color = LfCategoryPalette.colorForId(
-                        progress.budget.categoryId,
-                        progress.categoryColorArgb,
-                    ),
+                    // A budget is a plan, not money moving: the primary action's tone, amber
+                    // once over (step F6, owner 2026-10-30), never its category's colour.
                 )
             }
         }
@@ -485,24 +464,22 @@ private fun BudgetsCard(
 private fun RunwayCard(
     summary: HomeSummary,
     currency: String,
-    onOpenAnalytics: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = MoneyFormat.symbolised(summary.runwayTotal.minor, currency) +
                     " expected by " + dayLabel(summary.runwayThrough),
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
             )
-            LineWithAction(action = "Open Analytics", onAction = onOpenAnalytics) {
-                Text(
-                    text = runwayDetail(summary.runway.map { it.name }),
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
-                )
-            }
+            // Analytics is the banner above it now (F5): one way there per screen.
+            Text(
+                text = runwayDetail(summary.runway.map { it.name }),
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
+            )
         }
     }
 }
@@ -511,18 +488,18 @@ private fun RunwayCard(
 @Composable
 private fun CoverageCard(coverage: CaptureCoverage, onOpenAnalytics: () -> Unit, modifier: Modifier = Modifier) {
     LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "${coverage.automaticPercentByValue}% of this month's spending was captured automatically",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
             LineWithAction(action = "Details", onAction = onOpenAnalytics) {
                 Text(
                     text = "${coverage.automatic.count} of ${coverage.totalCount} " +
                         if (coverage.totalCount == 1) "entry" else "entries",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
         }
@@ -544,11 +521,61 @@ private fun RecentSection(
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         SectionHeading(title = title, action = "See all", onAction = onSeeAll)
-        rows.forEach { row -> key(row.id) { LfEntryRow(item = row, withDate = true) } }
+        // F5: one panel with hairlines between the rows, the samples' grouped
+        // list, rather than a bordered card per row.
+        LfPanel {
+            rows.forEachIndexed { index, row ->
+                key(row.id) {
+                    if (index > 0) LfDivider()
+                    LfEntryRow(item = row, withDate = true, grouped = true)
+                }
+            }
+        }
     }
 }
+
+/**
+ * The canvas's status line (step F5): capture's state and the last backup, in
+ * Plex Mono, under the title. A dot in capture's colour leads it, and the
+ * words say the same thing, so the colour is never the only cue (SPEC 9.6).
+ */
+@Composable
+private fun StatusLine(health: NotificationCaptureHealth, lastBackup: LastBackup?) {
+    val colors = LfTheme.colors
+    val (capture, dot) = when (health) {
+        NotificationCaptureHealth.CONNECTED -> "Capture on" to colors.status.success
+        NotificationCaptureHealth.NOT_GRANTED -> "Capture off" to colors.status.warning
+        NotificationCaptureHealth.DEAD -> "Capture stopped" to colors.status.danger
+        NotificationCaptureHealth.RECONNECTING -> "Capture reconnecting" to colors.text.muted
+        NotificationCaptureHealth.UNAVAILABLE -> "Capture unavailable" to colors.text.muted
+    }
+    Text(
+        text = buildAnnotatedString {
+            withStyle(SpanStyle(color = dot)) { append(STATUS_DOT) }
+            append(" ")
+            append(listOfNotNull(capture, backupPhrase(lastBackup)).joinToString(STATUS_SEPARATOR))
+        },
+        style = LfTheme.type.figureLabel,
+        color = colors.text.secondary,
+    )
+}
+
+/** The status line's backup half; null before the date has been read. */
+internal fun backupPhrase(lastBackup: LastBackup?): String? = when (lastBackup) {
+    null -> null
+    LastBackup.Never -> "No backup yet"
+    is LastBackup.DaysAgo -> when (lastBackup.days) {
+        0L -> "Backed up today"
+        1L -> "Backed up yesterday"
+        else -> "Backed up ${lastBackup.days} days ago"
+    }
+}
+
+/** A filled circle and a middle dot, as code points (CLAUDE.md 5). */
+private val STATUS_DOT: String = Char(0x25CF).toString()
+private val STATUS_SEPARATOR: String = " " + Char(0x00B7) + " "
 
 /**
  * A section's name with its one action on the same line.
@@ -560,7 +587,7 @@ private fun RecentSection(
 @Composable
 private fun SectionHeading(title: String, action: String, onAction: () -> Unit) {
     LineWithAction(action = action, onAction = onAction) {
-        Text(text = title, style = LfTheme.typography.label, color = LfTheme.colors.textSecondary)
+        Text(text = title, style = LfTheme.type.label, color = LfTheme.colors.text.secondary)
     }
 }
 
@@ -666,38 +693,21 @@ private fun CaptureHealthBanner(
     modifier: Modifier = Modifier,
 ) {
     val dead = health == NotificationCaptureHealth.DEAD
-    LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = if (dead) {
-                    "Notification capture has stopped"
-                } else {
-                    "Notification capture is off"
-                },
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.warn,
-            )
-            Text(
-                text = if (dead) {
-                    "Android hasn't reconnected LedgerFlow's listener for over " +
-                        "${DEAD_THRESHOLD_HOURS} hours. Battery optimisation is the " +
-                        "usual cause. Payments are not reaching your Inbox."
-                } else {
-                    "Most UPI payments never send an SMS, so they are not reaching " +
-                        "your Inbox at all."
-                },
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
-            )
-            LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(
-                    text = if (dead) "Check settings" else "Set up",
-                    style = LfButtonStyle.Inline,
-                    onClick = onAction,
-                )
-            }
-        }
-    }
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = if (dead) "Notification capture has stopped" else "Notification capture is off",
+        body = if (dead) {
+            "Android hasn't reconnected LedgerFlow's listener for over " +
+                "${DEAD_THRESHOLD_HOURS} hours. Battery optimisation is the " +
+                "usual cause. Payments are not reaching your Inbox."
+        } else {
+            "Most UPI payments never send an SMS, so they are not reaching " +
+                "your Inbox at all."
+        },
+        actionLabel = if (dead) "Check settings" else "Set up",
+        onAction = onAction,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -714,27 +724,18 @@ private fun BackupReminderCard(
     onBackUpNow: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = when (reminder) {
-                    BackupReminder.NeverBackedUp ->
-                        "No backup yet. Your data exists only on this phone."
-                    is BackupReminder.Stale ->
-                        "Last backup ${reminder.daysAgo} days ago. Anything since is only on this phone."
-                },
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.warn,
-            )
-            LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(
-                    text = "Back up now",
-                    style = LfButtonStyle.Inline,
-                    onClick = onBackUpNow,
-                )
-            }
-        }
-    }
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = when (reminder) {
+            BackupReminder.NeverBackedUp ->
+                "No backup yet. Your data exists only on this phone."
+            is BackupReminder.Stale ->
+                "Last backup ${reminder.daysAgo} days ago. Anything since is only on this phone."
+        },
+        actionLabel = "Back up now",
+        onAction = onBackUpNow,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -754,18 +755,13 @@ private fun CaptureGapCard(
 ) {
     val first = TimeStamp.of(gap.firstMissedAt, withDate = true)
     val last = TimeStamp.of(gap.lastMissedAt, withDate = true)
-    LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = captureGapSentence(first, last),
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.warn,
-            )
-            LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(text = "Got it", style = LfButtonStyle.Inline, onClick = onAcknowledge)
-            }
-        }
-    }
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = captureGapSentence(first, last),
+        actionLabel = "Got it",
+        onAction = onAcknowledge,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -785,26 +781,16 @@ private fun CrashReportCard(
     modifier: Modifier = Modifier,
 ) {
     val latest = TimeStamp.of(reports.latestAt, withDate = true)
-    LfCard(modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
-            Text(
-                text = crashReportSentence(reports.count, latest),
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
-            )
-            if (saveFailed) {
-                Text(
-                    text = "The report couldn't be saved there. It is still on this phone.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.warn,
-                )
-            }
-            LfActionRow(alignment = LfActionAlignment.End) {
-                LfButton(text = "Dismiss", style = LfButtonStyle.Inline, onClick = onDismiss)
-                LfButton(text = "Save report", style = LfButtonStyle.Inline, onClick = onSave)
-            }
-        }
-    }
+    LfNotice(
+        tone = LfNoticeTone.Info,
+        title = crashReportSentence(reports.count, latest),
+        body = if (saveFailed) "The report couldn't be saved there. It is still on this phone." else null,
+        actionLabel = "Save report",
+        onAction = onSave,
+        secondaryLabel = "Dismiss",
+        onSecondary = onDismiss,
+        modifier = modifier,
+    )
 }
 
 /** The crash card's words: once, or how many times and the latest. */

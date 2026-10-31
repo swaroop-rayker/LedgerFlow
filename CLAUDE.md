@@ -171,11 +171,12 @@ UP-TO-DATE, the cache is what changed, not the code.
 - `collectAsStateWithLifecycle()` — never bare `collectAsState()`.
 - `LazyColumn` always has `key` and `contentType`.
 - Preview annotations on every top-level screen: `@PreviewScreenSizes @PreviewFontScale @PreviewLightDark`.
-- Zero hardcoded colours, dimensions, or type sizes. Everything comes from `LfTheme`.
+- Zero hardcoded colours, dimensions, or type sizes. Everything comes from `LfTheme` **by role**: `colors`, `type`, `space`, `borders`, `shapes`, plus `LfLayout` for fixed sizes. Pick a role by its job, not its value: two 16 dp gaps that do different jobs are different roles. `docs/DESIGN_SYSTEM.md` is the guide; `designTokenCheck` fails a hard-coded value.
+- **Words in Inter, figures in IBM Plex Mono** (ADR-0031): amounts use the `amount*` roles, dates and times `figureLabel`; a line that is mostly words stays Inter. A recovery word is `mnemonic` (Inter); only its number is Plex. **Money colours are for money:** an error is `status.danger`, never `money.outgoing`; a budget is `action.primary`, amber when over.
 - **The app's theme is not the phone's** (V2-3, Settings > Appearance). Never style anything from `isSystemInDarkTheme()` or the configuration's night mode: a user on Dark with a light phone gets the wrong one. `MainActivity` resolves the theme once and hands it to `LfTheme(darkTheme)`; read colours from `LfTheme.colors`. The same goes for system-bar icons, which `MainActivity` re-applies for the app's theme.
 - **Every on-screen date goes through `DisplayDates`; every amount through `MoneyFormat`/`QuantityFormat` with their default locale** (V2-3, Settings > Currency & region). A new `DateFormat.getDateInstance(...)`, `DateTimeFormatter.ofPattern("d MMM")` or hand-built "day month year" on a screen ignores the user's date order. Files and parsing keep `Locale.ROOT`/ISO patterns. Typed numbers go through `TypedNumber` (BUG62): never fold a character with `c - '0'`, which is wrong for every digit that is not ASCII. Write non-ASCII code points in source as numbers (`0x066B`), not escapes, which this box's tools mangle.
 - **`MainActivity` builds the window's recomposer** (`setContent(parent = …)` with `AppMotionDurationScale`), so Animations > Off reaches every Compose animation, Material's included. A plain `setContent {}` there would still build and look fine, and Off would quietly cover only the app's own transitions.
-- **Text aligns to the screen, not the paragraph** (BUG61). `LfTheme.typography` styles read in their text's direction and sit on the screen's leading edge, so English on an RTL screen keeps its full stop last. To align explicitly use `LfTextAlign.start`/`end`; `TextAlign.Start`/`End` follow the paragraph and are banned outside `LfTextAlign` by `Bug61_…Test`. `Center` is fine.
+- **Text aligns to the screen, not the paragraph** (BUG61). `LfTheme.type` styles read in their text's direction and sit on the screen's leading edge, so English on an RTL screen keeps its full stop last. To align explicitly use `LfTextAlign.start`/`end`; `TextAlign.Start`/`End` follow the paragraph and are banned outside `LfTextAlign` by `Bug61_…Test`. `Center` is fine.
 - **A control's label never wraps** (BUG9). Buttons/chips render their label `maxLines = 1, softWrap = false`, with no ellipsis. Two or more actions go in an `LfActionRow` (`FlowRow`) so the *container* wraps whole controls — a bare `Row` of three actions inside a card is the defect, and it shows up as "Delet / e".
 - Insets: `enableEdgeToEdge()` + **`LfScaffold`**, never Material's `Scaffold` directly and never `WindowInsets.safeDrawing`. `safeDrawing` includes the IME, and consuming it on both the content and a pinned bottom bar subtracts the keyboard twice — measured on device, the bar rendered 8px tall at the top of the screen. `LfScaffold` consumes system bars + display cutout for layout and the keyboard exactly once via `imePadding()` on the scaffold. Never hardcode bar padding. A `bottomBar` therefore supplies only its own *visual* padding — `LfScaffold` has already inset it for the navigation bar, so a uniform `lg` on a pinned bar stacks 24dp on top of an inset that exists for the same purpose, and it comes out of the one thing on the screen that scrolls. Note the corollary when someone asks for a pinned control to sit lower: once its own padding is at `xs`, the control is *already* against the navigation bar and cannot move down at all. Any further height for the scrolling content has to come from the header — measure with `uiautomator dump` plus the nav bar's `mFrame` before changing numbers, rather than guessing which gap is the slack one. **Nested scaffolds pay once (BUG49).** Every full-screen destination is an `LfScaffold` inside the shell's, and until 2026-10-12 nothing told the inner one the system bars were paid for: content started at twice the status bar and every pinned bar sat a whole navigation bar too high (the corollary above was written while that was true, so the gap it called irreducible was 48 dp of the bug). `LfScaffold` now marks its padding consumed for its content. Robolectric has no system bars, so no golden can see this class of defect; `Bug49_NestedScaffoldInsetsOnceTest` supplies some.
 
@@ -191,6 +192,11 @@ every line below is something a change has already violated at least once.
   container. Two shapes on one screen reads as two designs, and it is obvious
   the moment the user switches tabs. Extract a private container composable
   (see `TaxonomyCard`) rather than repeating a `Modifier` chain.
+- **A list is one panel, not a card per row.** Rows sit in `LfPanel` with
+  `LfDivider`s, or draw their own slice with `lfGroupSlice` when they are lazy
+  items. A screen starts from a page template (`LfTabPage`, `LfDetailPage`,
+  `LfSettingsPage`, `LfFormPage`, `LfFlowStep`); a page reached from elsewhere
+  takes `onBack`, the back arrow beside its title.
 - **Hairline border over elevation** for anything list-sized. At that scale
   elevation reads as a smear rather than depth, and a border is what keeps
   adjacent structure (nesting rails, tree stubs) legible against the card edge.
@@ -414,6 +420,8 @@ Targets live in `SPEC.md` §11. Practical rules while coding:
 | `adb uninstall` during dev | `installDebug` (install-over-install) |
 | Feature module depending on another feature | shared code → `:core:*` |
 | Hardcoded colours/dp/sp | `LfTheme` tokens |
+| A card per row in a list | one panel with hairlines (`LfPanel` / `lfGroupSlice`) |
+| An error or a budget in a money colour | `status.danger` / `action.primary` |
 | `!!` | `requireNotNull` with a message |
 | Business logic in a Composable | ViewModel + use case |
 | A `Row` of 3 action buttons in a card | `LfActionRow`; labels never wrap (BUG9) |

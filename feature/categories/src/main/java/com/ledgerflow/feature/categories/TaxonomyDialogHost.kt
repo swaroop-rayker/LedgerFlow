@@ -4,17 +4,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.pattern.LfOptionsSheet
+import com.ledgerflow.core.designsystem.pattern.LfSheetOption
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.PaymentMethodType
 
@@ -41,7 +43,49 @@ internal fun TaxonomyDialogHost(
         is TaxonomyDialog.ReassignCategory -> ReassignDialog(dialog, state, onEvent)
         is TaxonomyDialog.MergeMerchant -> MergeDialog(dialog, state, onEvent)
         is TaxonomyDialog.NewPaymentMethod -> PaymentMethodDialog(dialog, state, onEvent)
+        is TaxonomyDialog.RowActions -> LfOptionsSheet(
+            title = dialog.row.name,
+            options = rowActions(dialog.row).map { action ->
+                LfSheetOption(label = action.label, onClick = { onEvent(action.event) })
+            },
+            onDismiss = { onEvent(CategoriesEvent.DialogDismissed) },
+        )
     }
+}
+
+/** One choice in a row's sheet: what it says, and the event it sends. */
+internal data class RowAction(val label: String, val event: CategoriesEvent)
+
+/**
+ * A row's actions, in the order the row's inline buttons had them: the
+ * recoverable ones first, and the one that removes the row last.
+ *
+ * The same events those buttons sent, so each action still does exactly what it
+ * did. Only top-level categories offer "Add subcategory" (the tree is two levels
+ * deep), and the default method does not offer to become the default.
+ */
+internal fun rowActions(row: TaxonomyRow): List<RowAction> = when (row) {
+    is TaxonomyRow.Category -> listOfNotNull(
+        RowAction("Rename", CategoriesEvent.RenameCategory(row.id, row.name)),
+        if (row.isChild) null else RowAction("Add subcategory", CategoriesEvent.AddCategory(row.id, row.name)),
+        // "Hide": every control on this screen names the soft delete that way
+        // (ADR-0016); "Erase" means the one that destroys.
+        RowAction("Hide", CategoriesEvent.DeleteCategory(row.id, row.name, row.isChild)),
+    )
+    is TaxonomyRow.Merchant -> listOf(
+        RowAction("Rename", CategoriesEvent.RenameMerchant(row.id, row.name)),
+        RowAction("Merge", CategoriesEvent.StartMergeMerchant(row.id, row.name)),
+        RowAction("Hide", CategoriesEvent.DeleteMerchant(row.id, row.name)),
+    )
+    is TaxonomyRow.PaymentMethod -> listOfNotNull(
+        if (row.isDefault) null else RowAction("Make default", CategoriesEvent.SetDefaultPaymentMethod(row.id)),
+        RowAction("Hide", CategoriesEvent.DeletePaymentMethod(row.id, row.name)),
+    )
+    // Restore before Erase: the recoverable action is the one reached first.
+    is TaxonomyRow.Hidden -> listOf(
+        RowAction("Restore", CategoriesEvent.RestoreHidden(row.id, row.name)),
+        RowAction("Erase", CategoriesEvent.EraseHidden(row.id, row.name)),
+    )
 }
 
 @Composable
@@ -74,7 +118,7 @@ private fun TextPromptDialog(
         onConfirm = { onEvent(CategoriesEvent.DialogConfirmed) },
         onDismiss = { onEvent(CategoriesEvent.DialogDismissed) },
         detail = {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
                 LfTextField(
                     value = dialog.value,
                     onValueChange = { onEvent(CategoriesEvent.DialogTextChanged(it)) },
@@ -211,15 +255,15 @@ private fun ReassignBeforeEraseDialog(
         detail = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
             ) {
                 if (dialog.candidates.isEmpty()) {
                     Text(
                         text = "There is nowhere else to move them yet. Add another " +
                             "$noun first.",
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textSecondary,
+                        style = LfTheme.type.bodySmall,
+                        color = LfTheme.colors.text.secondary,
                     )
                 }
                 dialog.candidates.forEach { choice ->
@@ -262,7 +306,7 @@ private fun ReassignDialog(
         detail = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
             ) {
                 dialog.candidates.forEach { choice ->
@@ -295,14 +339,14 @@ private fun MergeDialog(
         detail = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
             ) {
                 if (dialog.candidates.isEmpty()) {
                     Text(
                         text = "There is nothing else to merge into yet.",
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textSecondary,
+                        style = LfTheme.type.bodySmall,
+                        color = LfTheme.colors.text.secondary,
                     )
                 }
                 dialog.candidates.forEach { choice ->
@@ -333,9 +377,9 @@ private fun PaymentMethodDialog(
         detail = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                    .heightIn(max = LfLayout.dialogListMax)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
             ) {
                 LfTextField(
                     value = dialog.label,
@@ -359,8 +403,8 @@ private fun PaymentMethodDialog(
                 )
                 Text(
                     text = "Type",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
                 PaymentMethodType.entries.forEach { type ->
                     ChoiceRow(
@@ -384,10 +428,11 @@ private fun PaymentMethodDialog(
  */
 @Composable
 private fun ErrorText(message: String) {
-    Text(text = message, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
+    // An error is a status, not money out (as E2 settled for every other
+    // error line): pink, where the old `debit` alias made it coral.
+    Text(text = message, style = LfTheme.type.bodySmall, color = LfTheme.colors.status.danger)
 }
 
-private const val PICKER_MAX_HEIGHT = 280
 
 /** "entry" or "entries". One place, so the two re-assign dialogs cannot drift. */
 private fun entryNoun(count: Int): String = if (count == 1) "entry" else "entries"

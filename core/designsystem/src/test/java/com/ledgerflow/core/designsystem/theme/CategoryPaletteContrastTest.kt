@@ -26,7 +26,7 @@ class CategoryPaletteContrastTest {
     /**
      * The pairing that actually ships: white, fixed, on every swatch.
      *
-     * The first version of this test used `LfDarkColors.onAccent` because that
+     * The first version of this test used `LfDarkColors.action.onPrimary` because that
      * is what `LfCategoryDot` used, and it failed on all sixteen. It could only
      * ever fail: on-accent is near-black in dark mode and near-white in light,
      * and `contrast(white, c) x contrast(c, black)` is about 21 for any colour,
@@ -44,11 +44,11 @@ class CategoryPaletteContrastTest {
     @Test
     fun everySwatchIsVisibleAgainstTheDarkSurfaces() {
         CategoryPalette.swatches.forEach { argb ->
-            assertThat(LfContrast.ratio(swatch(argb), LfDarkColors.surfaceBase))
+            assertThat(LfContrast.ratio(swatch(argb), LfDarkColors.surface.canvas))
                 .isAtLeast(LfContrast.AA_LARGE)
             // surfaceRaised is the tighter of the two and the one that sets the
             // palette's lower luminance bound.
-            assertThat(LfContrast.ratio(swatch(argb), LfDarkColors.surfaceRaised))
+            assertThat(LfContrast.ratio(swatch(argb), LfDarkColors.surface.raised))
                 .isAtLeast(LfContrast.AA_LARGE)
         }
     }
@@ -56,9 +56,9 @@ class CategoryPaletteContrastTest {
     @Test
     fun everySwatchIsVisibleAgainstTheLightSurfaces() {
         CategoryPalette.swatches.forEach { argb ->
-            assertThat(LfContrast.ratio(swatch(argb), LfLightColors.surfaceBase))
+            assertThat(LfContrast.ratio(swatch(argb), LfLightColors.surface.canvas))
                 .isAtLeast(LfContrast.AA_LARGE)
-            assertThat(LfContrast.ratio(swatch(argb), LfLightColors.surfaceRaised))
+            assertThat(LfContrast.ratio(swatch(argb), LfLightColors.surface.raised))
                 .isAtLeast(LfContrast.AA_LARGE)
         }
     }

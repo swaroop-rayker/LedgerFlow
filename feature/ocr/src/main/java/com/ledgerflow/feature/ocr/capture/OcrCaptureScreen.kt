@@ -1,8 +1,11 @@
 package com.ledgerflow.feature.ocr.capture
 
 import android.Manifest
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.compose.CameraXViewfinder
@@ -13,8 +16,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +37,7 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
@@ -43,6 +47,7 @@ import com.ledgerflow.core.designsystem.component.LfCaptureGuide
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import kotlinx.coroutines.launch
 
@@ -100,46 +105,49 @@ public fun OcrCaptureScreen(
         onEvent(OcrCaptureEvent.CameraPermissionChanged(granted))
         if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
-
-    LfScaffold(modifier = modifier) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+    // BUG74: back from the phone's settings with the camera allowed, the
+    // viewfinder starts without the user leaving this screen and coming back.
+    LifecycleResumeEffect(state.cameraPermission) {
+        if (state.cameraPermission == CameraPermission.Denied &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
-            // Back on its own band above the title, as Diagnostics and Restore
-            // place it (BUG17), rather than floating under the cards.
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
-                alignment = LfActionAlignment.Start,
-            ) {
-                LfButton(text = "Back", style = LfButtonStyle.Inline, onClick = onBack)
-            }
-            LfScreenTitle(title = "Scan a receipt")
-
-            CaptureContent(
-                state = state,
-                onEvent = onEvent,
-                onGallery = {
-                    galleryLauncher.launch(
-                        androidx.activity.result.PickVisualMediaRequest(
-                            ActivityResultContracts.PickVisualMedia.ImageOnly,
-                        ),
-                    )
-                },
-                onDocument = { documentLauncher.launch(IMPORT_MIME_TYPES) },
-            )
+            onEvent(OcrCaptureEvent.CameraPermissionChanged(true))
         }
+        onPauseOrDispose {}
+    }
+
+    // Back on its own band above the title, as Diagnostics and Restore place it
+    // (BUG17), rather than floating under the cards. Nothing is pinned: the
+    // camera's own controls are the actions.
+    LfFormPage(
+        title = "Scan a receipt",
+        actionBar = null,
+        modifier = modifier,
+        // The back arrow beside the title (step F5, owner 2026-10-30), as on
+        // every page reached from Profile.
+        onBack = onBack,
+    ) {
+        CaptureContent(
+            state = state,
+            onEvent = onEvent,
+            onGallery = {
+                galleryLauncher.launch(
+                    androidx.activity.result.PickVisualMediaRequest(
+                        ActivityResultContracts.PickVisualMedia.ImageOnly,
+                    ),
+                )
+            },
+            onDocument = { documentLauncher.launch(IMPORT_MIME_TYPES) },
+        )
     }
 }
 
 /**
  * Everything under the title: the camera, what it read, and the import row.
  *
- * Inset like every other screen's cards. They ran edge to edge here, the one
- * screen that did, under a title inset by `lg` (P5 step 4).
+ * Inset like every other screen's cards, by the template. They ran edge to
+ * edge here, the one screen that did, under a title inset by `lg` (P5 step 4).
  */
 @Composable
 private fun CaptureContent(
@@ -148,10 +156,7 @@ private fun CaptureContent(
     onGallery: () -> Unit,
     onDocument: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
         Viewfinder(state = state, onEvent = onEvent)
 
         state.result?.let {
@@ -195,21 +200,15 @@ private fun Viewfinder(state: OcrCaptureUiState, onEvent: (OcrCaptureEvent) -> U
     }
 
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             when (state.cameraPermission) {
                 CameraPermission.Unknown -> Text(
                     text = "Checking the camera…",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
 
-                CameraPermission.Denied -> Text(
-                    // Not an error. Two of three inputs still work, and saying
-                    // so is more useful than a permission lecture.
-                    text = "No camera access. You can still import a photo or a PDF below.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
-                )
+                CameraPermission.Denied -> CameraRefused()
 
                 CameraPermission.Granted -> CameraPane(
                     state = state,
@@ -219,6 +218,39 @@ private fun Viewfinder(state: OcrCaptureUiState, onEvent: (OcrCaptureEvent) -> U
                 )
             }
         }
+    }
+}
+
+/**
+ * The camera was refused. Not an error: two of three inputs still work, and
+ * saying so is more useful than a permission lecture.
+ *
+ * BUG74: it was only that sentence. Once Android has been told no, it stops
+ * asking, so the camera could be turned back on only by someone who knew to
+ * find the app in the phone's settings. "Allow in Settings" opens that page,
+ * and the screen checks again when it comes back to the foreground.
+ */
+@Composable
+private fun CameraRefused() {
+    val context = LocalContext.current
+    Text(
+        text = "No camera access. You can still import a photo or a PDF below.",
+        style = LfTheme.type.bodySmall,
+        color = LfTheme.colors.text.secondary,
+    )
+    LfActionRow(alignment = LfActionAlignment.End) {
+        LfButton(
+            text = "Allow in Settings",
+            style = LfButtonStyle.Inline,
+            onClick = {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null),
+                    ),
+                )
+            },
+        )
     }
 }
 
@@ -242,7 +274,7 @@ private fun CameraPane(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = LfTheme.spacing.xs),
+            .padding(vertical = LfTheme.space.inlineGap),
         contentAlignment = Alignment.Center,
     ) {
         surfaceRequest?.let { request ->
@@ -297,8 +329,8 @@ private fun CameraPane(
             )
         } ?: Text(
             text = "Starting the camera…",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 
@@ -349,8 +381,8 @@ private fun CameraPane(
 private fun CaptureHint() {
     Text(
         text = "Fill the guide. Hold the phone square to the bill.",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
     )
 }
 
@@ -380,18 +412,18 @@ private fun ResultCard(
     onEvent: (OcrCaptureEvent) -> Unit,
 ) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = summary.merchant
                     ?: "${summary.elementCount} text runs · ${summary.sourceLabel}",
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
             )
             summary.dateText?.let {
                 Text(
                     text = it,
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
             Text(
@@ -411,8 +443,8 @@ private fun ResultCard(
                     // "after" state to render.
                     if (!saved) append(" · nothing saved yet")
                 },
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
             )
 
             if (summary.isBill) {
@@ -420,8 +452,8 @@ private fun ResultCard(
             } else {
                 Text(
                     text = summary.rawPreview,
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
 
@@ -459,19 +491,19 @@ private fun ResultCard(
 private fun ExtractedItemLine(item: ExtractedItemRow) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
         verticalAlignment = Alignment.Top,
     ) {
         Text(
             text = item.name,
             modifier = Modifier.weight(1f),
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.primary,
         )
         Text(
             text = item.amountText,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -481,8 +513,8 @@ private fun SavedCard(message: String) {
     LfCard {
         Text(
             text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -492,8 +524,8 @@ private fun FailureCard(message: String) {
     LfCard {
         Text(
             text = message,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.warn,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.status.warning,
         )
     }
 }
@@ -501,11 +533,11 @@ private fun FailureCard(message: String) {
 @Composable
 private fun ImportRow(enabled: Boolean, onGallery: () -> Unit, onDocument: () -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Or import one",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
                 maxLines = 1,
                 softWrap = false,
             )

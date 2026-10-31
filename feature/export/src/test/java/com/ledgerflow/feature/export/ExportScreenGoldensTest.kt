@@ -9,6 +9,7 @@ import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -25,7 +26,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class ExportScreenGoldensTest {
+open class ExportScreenGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
@@ -42,6 +43,10 @@ class ExportScreenGoldensTest {
             }
         }
 
+    private val failed = ExportUiState(
+        status = ExportStatus.Failed("That location could not be written to. Try somewhere else."),
+    )
+
     private val done = ExportUiState(
         status = ExportStatus.Done(fileCount = 24, rowCount = 1_482, format = ExportFormat.XLSX),
     )
@@ -55,4 +60,18 @@ class ExportScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun done_2x() = capture("export-done-2x", done, 2f)
+
+    /** A failed export, as an error notice (E3). */
+    @Test fun failed_1x() = capture("export-failed-1x", failed, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun failed_2x() = capture("export-failed-2x", failed, 2f)
+}
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class ExportScreenGoldensDarkTest : ExportScreenGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
 }

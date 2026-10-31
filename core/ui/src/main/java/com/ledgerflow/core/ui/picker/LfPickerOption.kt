@@ -14,10 +14,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
-import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.designsystem.theme.LfLayout
+import com.ledgerflow.core.ui.LfFormRowTokens
 
 /** One selectable option: an id to report back, and a label to show. */
 @Immutable
@@ -80,7 +80,7 @@ public fun LfPickerDialog(
                 }
                 Column(
                     modifier = Modifier
-                        .heightIn(max = PICKER_MAX_HEIGHT.dp)
+                        .heightIn(max = LfLayout.dialogListMax)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     if (createLabel != null && onCreate != null) {
@@ -94,8 +94,8 @@ public fun LfPickerDialog(
                     if (options.isEmpty() && onCreate == null) {
                         Text(
                             text = emptyMessage,
-                            style = LfTheme.typography.bodyM,
-                            color = LfTheme.colors.textSecondary,
+                            style = LfFormRowTokens.supportingStyle,
+                            color = LfFormRowTokens.secondary,
                         )
                     }
                     options.forEach { option ->
@@ -128,16 +128,16 @@ public fun LfChoiceRow(
 ) {
     Text(
         text = label,
-        style = LfTheme.typography.bodyL,
+        style = LfFormRowTokens.textStyle,
         // `emphasised` is the create row, which is an *action* rather than a
         // choice -- it reads in the accent colour for the same reason a
         // selected row does, because both are the row that does something.
-        color = if (selected || emphasised) LfTheme.colors.accent else LfTheme.colors.textPrimary,
+        color = if (selected || emphasised) LfFormRowTokens.selected else LfFormRowTokens.text,
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .padding(vertical = LfTheme.spacing.sm),
+            .defaultMinSize(minHeight = LfFormRowTokens.minHeight)
+            .padding(vertical = LfFormRowTokens.paddingVertical),
     )
 }
 
@@ -160,15 +160,15 @@ public fun LfDetailRow(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .padding(vertical = LfTheme.spacing.sm),
+            .defaultMinSize(minHeight = LfFormRowTokens.minHeight)
+            .padding(vertical = LfFormRowTokens.paddingVertical),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.labelGap),
     ) {
         Text(
             text = label,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfFormRowTokens.supportingStyle,
+            color = LfFormRowTokens.secondary,
             // A row label is a control label (BUG9): whole, on one line. The
             // value beside it is what wraps if anything has to.
             maxLines = 1,
@@ -176,12 +176,10 @@ public fun LfDetailRow(
         )
         Text(
             text = value ?: placeholder,
-            style = LfTheme.typography.bodyL,
-            color = if (value == null) LfTheme.colors.textTertiary else LfTheme.colors.textPrimary,
+            style = LfFormRowTokens.textStyle,
+            color = if (value == null) LfFormRowTokens.muted else LfFormRowTokens.text,
             modifier = Modifier.weight(1f),
         )
     }
 }
 
-/** Tall enough for a real category list, short enough to leave the dialog a dialog. */
-private const val PICKER_MAX_HEIGHT = 320

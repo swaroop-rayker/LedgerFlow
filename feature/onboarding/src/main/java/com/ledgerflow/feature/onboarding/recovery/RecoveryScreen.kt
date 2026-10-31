@@ -17,6 +17,8 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFlowStep
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -50,37 +52,30 @@ public fun RecoveryScreen(
         return
     }
 
-    LfScaffold(
+    LfFlowStep(
+        title = "Enter your recovery phrase",
+        body = state.reason.explanation(),
         modifier = modifier,
-        bottomBar = { SubmitBar(state, onEvent) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = LfTheme.spacing.lg)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
-        ) {
-            Header(state)
+        actionBar = { SubmitBar(state, onEvent) },
+    ) {
+        Reassurance()
 
-            // Shared with "Back up now", including the keyboard setting that
-            // keeps the words out of the keyboard's dictionary (BUG25).
-            LfPhraseEntry(
-                words = state.words,
-                draft = state.draft,
-                suggestions = state.suggestions,
-                draftIsUnknown = state.draftIsUnknown,
-                requiredWordCount = state.requiredWordCount,
-                onDraftChange = { onEvent(RecoveryEvent.DraftChanged(it)) },
-                onSuggestionTap = { onEvent(RecoveryEvent.WordCommitted(it)) },
-                onWordRemove = { onEvent(RecoveryEvent.WordRemoved(it)) },
-                onScanRequested = { onEvent(RecoveryEvent.Scanner.Requested) },
-            )
+        // Shared with "Back up now", including the keyboard setting that
+        // keeps the words out of the keyboard's dictionary (BUG25).
+        LfPhraseEntry(
+            words = state.words,
+            draft = state.draft,
+            suggestions = state.suggestions,
+            draftIsUnknown = state.draftIsUnknown,
+            requiredWordCount = state.requiredWordCount,
+            onDraftChange = { onEvent(RecoveryEvent.DraftChanged(it)) },
+            onSuggestionTap = { onEvent(RecoveryEvent.WordCommitted(it)) },
+            onWordRemove = { onEvent(RecoveryEvent.WordRemoved(it)) },
+            onScanRequested = { onEvent(RecoveryEvent.Scanner.Requested) },
+        )
 
-            state.scanMessage?.let { ScanMessage(it) }
-            state.failure?.let { FailureMessage(it) }
-        }
+        state.scanMessage?.let { ScanMessage(it) }
+        state.failure?.let { FailureMessage(it) }
     }
 }
 
@@ -94,10 +89,7 @@ public fun RecoveryScreen(
  */
 @Composable
 private fun SubmitBar(state: RecoveryUiState, onEvent: (RecoveryEvent) -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(LfTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-    ) {
+    LfActionBar {
         LfButton(
             text = if (state.isComplete) "Unlock" else "${state.remaining} words to go",
             onClick = { onEvent(RecoveryEvent.Submitted) },
@@ -109,19 +101,7 @@ private fun SubmitBar(state: RecoveryUiState, onEvent: (RecoveryEvent) -> Unit) 
 }
 
 @Composable
-private fun Header(state: RecoveryUiState) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-        Text(
-            text = "Enter your recovery phrase",
-            style = LfTheme.typography.displayL,
-            color = LfTheme.colors.textPrimary,
-        )
-        Text(
-            text = state.reason.explanation(),
-            style = LfTheme.typography.bodyL,
-            color = LfTheme.colors.textSecondary,
-        )
-    }
+private fun Reassurance() {
     // Reassurance before the work, not after it. This screen is the one place a
     // user reasonably fears their data is gone; saying plainly that it is not is
     // the most useful sentence on the page.
@@ -129,8 +109,8 @@ private fun Header(state: RecoveryUiState) {
         Text(
             text = "Your data is still here and still encrypted. These 24 words unlock " +
                 "it. Nothing is deleted by getting this wrong.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -140,8 +120,8 @@ private fun Header(state: RecoveryUiState) {
 private fun ScanMessage(message: String) {
     Text(
         text = "$message Type the words instead.",
-        style = LfTheme.typography.bodyM,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.bodySmall,
+        color = LfTheme.colors.text.secondary,
         textAlign = LfTextAlign.start,
     )
 }
@@ -150,8 +130,11 @@ private fun ScanMessage(message: String) {
 private fun FailureMessage(failure: RecoveryFailure) {
     Text(
         text = failure.message(),
-        style = LfTheme.typography.bodyM,
-        color = LfTheme.colors.debit,
+        style = LfTheme.type.bodySmall,
+        // A form's error line, in the problem colour rather than money-out's
+        // (E2). Not a notice: the pinned Unlock is the retry, and a notice
+        // would need a second one.
+        color = LfTheme.colors.status.danger,
         textAlign = LfTextAlign.start,
     )
 }

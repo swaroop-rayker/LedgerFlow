@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DateRangePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -18,15 +16,15 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfDateRangePickerDialog
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
@@ -109,7 +107,7 @@ private fun FilterForm(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = SHEET_MAX_HEIGHT)
+            .heightIn(max = LfLayout.dialogListMax)
             .verticalScroll(rememberScrollState()),
     ) {
         // "Clear all" belongs in the content, not on the dismiss button:
@@ -143,9 +141,9 @@ private fun FilterForm(
 private fun SearchField(filters: AnalyticsFilters, onEvent: (AnalyticsEvent) -> Unit) {
     Text(
         text = "Search",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
-        modifier = Modifier.padding(top = LfTheme.spacing.sm),
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
+        modifier = Modifier.padding(top = LfTheme.space.rowInsetVertical),
     )
     LfTextField(
         value = filters.query,
@@ -333,8 +331,8 @@ public fun AnalyticsCustomRangeSheet(
         onDismiss = { onEvent(AnalyticsEvent.CustomSheetShown(visible = false)) },
         dismissText = "Cancel",
         detail = {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
                     PeriodUnit.entries.forEach { unit ->
                         LfTextField(
                             value = state.valueFor(unit),
@@ -352,16 +350,16 @@ public fun AnalyticsCustomRangeSheet(
                     text = window?.let { "${dateLabel(it.from)} to ${dateLabel(it.to)}" +
                         " · ${it.spanDays} days" }
                         ?: "Enter a number in at least one field.",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
 
                 if (window != null && window.spanDays == AnalyticsWindow.MAX_SPAN_DAYS) {
                     Text(
                         // Says so rather than shrinking the answer quietly.
                         text = "Capped at five years, the longest range this screen reports.",
-                        style = LfTheme.typography.label,
-                        color = LfTheme.colors.warn,
+                        style = LfTheme.type.label,
+                        color = LfTheme.colors.status.warning,
                     )
                 }
 
@@ -402,8 +400,9 @@ private fun dateLabel(epochDay: Int): String =
 @Composable
 public fun AnalyticsRangePicker(onEvent: (AnalyticsEvent) -> Unit) {
     val state = rememberDateRangePickerState()
-    DatePickerDialog(
-        onDismissRequest = { onEvent(AnalyticsEvent.RangePickerShown(visible = false)) },
+    LfDateRangePickerDialog(
+        state = state,
+        onDismiss = { onEvent(AnalyticsEvent.RangePickerShown(visible = false)) },
         confirmButton = {
             LfButton(
                 text = "Apply",
@@ -434,24 +433,10 @@ public fun AnalyticsRangePicker(onEvent: (AnalyticsEvent) -> Unit) {
                 style = LfButtonStyle.Inline,
             )
         },
-    ) {
-        DateRangePicker(
-            state = state,
-            // **Material's default header breaks mid-phrase on a real device.**
-            // Seen at the owner's font scale: "Start date - End / date" wrapped
-            // across two lines beside the mode-toggle pencil, which is BUG17's
-            // shape exactly -- a heading competing with a control for one line.
-            // Ours is short, and it says what has been picked rather than
-            // labelling two empty slots.
-            title = null,
-            headline = { RangeHeadline(state) },
-            // The pencil switches to typed-date entry, a second input path with
-            // its own parsing and its own failure modes, for a range the user
-            // is already picking by tapping. Dropping it also gives the
-            // headline the whole line.
-            showModeToggle = false,
-        )
-    }
+        // Short, and says what has been picked; LfDateRangePickerDialog drops
+        // Material's header and typed-entry pencil (BUG17's shape).
+        headline = { RangeHeadline(state) },
+    )
 }
 
 /** What has been picked so far, on one line and in the user's own locale. */
@@ -466,12 +451,12 @@ private fun RangeHeadline(state: DateRangePickerState) {
             end == null -> pickedDateLabel(start) + " to…"
             else -> pickedDateLabel(start) + " to " + pickedDateLabel(end)
         },
-        style = LfTheme.typography.titleM,
-        color = LfTheme.colors.textPrimary,
+        style = LfTheme.type.heading,
+        color = LfTheme.colors.text.primary,
         modifier = Modifier.padding(
-            start = LfTheme.spacing.lg,
-            end = LfTheme.spacing.lg,
-            bottom = LfTheme.spacing.sm,
+            start = LfTheme.space.screenEdge,
+            end = LfTheme.space.screenEdge,
+            bottom = LfTheme.space.rowInsetVertical,
         ),
     )
 }
@@ -503,5 +488,3 @@ private fun EntrySource.label(): String = when (this) {
 }
 
 private const val MILLIS_PER_DAY = 86_400_000L
-
-private val SHEET_MAX_HEIGHT: Dp = 380.dp

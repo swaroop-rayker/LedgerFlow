@@ -8,26 +8,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfAmountCard
+import com.ledgerflow.core.designsystem.component.LfAmountTone
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfFeedback
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.LedgerType
@@ -63,25 +68,12 @@ public fun ReviewScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(state.finished) { if (state.finished) onDone() }
-
-    state.message?.let { message ->
-        LaunchedEffect(message) {
-            snackbarHostState.showSnackbar(message)
-            onEvent(ReviewEvent.MessageShown)
-        }
-    }
-
     ReviewDialogs(state, onEvent)
 
-    LfScaffold(
-        modifier = modifier,
-        snackbarHostState = snackbarHostState,
-        bottomBar = { if (!state.missing) ReviewActions(state, onEvent, onBack) },
-    ) { padding ->
-        if (state.missing) {
+    if (state.missing) {
+        // No form and no bar: the item is gone. The empty state on a plain
+        // scaffold, with its way back.
+        LfScaffold(modifier = modifier) { padding ->
             LfEmptyState(
                 title = "Not here any more",
                 body = "This item was already reviewed, or it has been removed.",
@@ -89,62 +81,126 @@ public fun ReviewScreen(
                 onAction = onBack,
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
-            return@LfScaffold
         }
-
-        ReviewForm(state, onEvent, Modifier.padding(padding))
+        return
     }
+
+    if (state.loading) {
+        // E4: the form used to draw empty -- a blank amount, no category --
+        // for the moment the candidate took to read, then fill in. The heading
+        // and still skeletons after 300 ms instead, and no Approve to press on
+        // a form that is not there yet. Back stays, so a slow read can be left.
+        LfFormPage(
+            title = "Review",
+            actionBar = null,
+            modifier = modifier,
+            actions = { LfButton(text = "Back", style = LfButtonStyle.Text, onClick = onBack) },
+        ) {
+            LfStateContent(state = LfContentState.Loading) {}
+        }
+        return
+    }
+
+    // Where it came from moved into the amount card (step F5), beside the
+    // figure it explains.
+    LfFormPage(
+        title = "Review",
+        actionBar = { ReviewActions(state, onEvent, onBack) },
+        modifier = modifier,
+    ) {
+        ReviewFeedback(state, onEvent, onDone)
+        ReviewFields(state, onEvent)
+    }
+}
+
+/**
+ * Review's messages, on the window's one snackbar (`LfFeedback`) rather than a
+ * host of its own: two hosts on one screen is what E1's feedback removed.
+ *
+ * BUG73: an approval closed Review without a word, where the Inbox row's own
+ * Approve says "Added to your ledger." It says which book now, posted so the
+ * line survives this screen closing and shows over the Inbox it returns to.
+ * A discard says "Discarded" (BUG78).
+ */
+@Composable
+private fun ReviewFeedback(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit, onDone: () -> Unit) {
+    val feedback = LfFeedback.current
+    state.message?.let { message ->
+        LaunchedEffect(message) {
+            feedback.show(message)
+            onEvent(ReviewEvent.MessageShown)
+        }
+    }
+    LaunchedEffect(state.finished) {
+        if (state.finished) {
+            // BUG78: a discard finishes Review too, and said "Added to
+            // Expenses" while this read `finished` alone.
+            feedback.post(if (state.discarded) DISCARDED_MESSAGE else approvedMessage(state.ledger))
+            onDone()
+        }
+    }
+}
+
+/** What a discard says (BUG78): the word the Inbox's own discard uses, and nothing about the ledger. */
+internal const val DISCARDED_MESSAGE: String = "Discarded"
+
+/** What an approval says (BUG73). */
+internal fun approvedMessage(ledger: LedgerType?): String = when (ledger) {
+    LedgerType.DEBIT -> "Added to Expenses"
+    LedgerType.CREDIT -> "Added to Income"
+    null -> "Added to your ledger."
 }
 
 /** The form itself, in the entry screen's order: how much, then what for. */
 @Composable
-private fun ReviewForm(
+private fun ReviewFields(
     state: ReviewUiState,
     onEvent: (ReviewEvent) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = LfTheme.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-    ) {
-        LfScreenTitle(title = "Review", subtitle = state.provenanceLine())
+    state.capturedText?.let { CapturedMessage(it) }
 
-        state.capturedText?.let { CapturedMessage(it) }
+    // The canvas's head card (step F5, owner 2026-10-29): the payee, the book
+    // as a word, the amount large in its book's colour, and the source. No
+    // tag and a neutral figure while the book is unread: colouring it would
+    // be the guess Law 2 forbids, made in pixels.
+    LfAmountCard(
+        value = state.amountText,
+        onValueChange = { onEvent(ReviewEvent.AmountChanged(it)) },
+        currencyCode = state.currencyCode,
+        label = "Amount",
+        title = state.selectedMerchant,
+        tag = state.ledger?.label(),
+        tone = when (state.ledger) {
+            null -> LfAmountTone.Neutral
+            LedgerType.DEBIT -> LfAmountTone.Debit
+            LedgerType.CREDIT -> LfAmountTone.Credit
+        },
+        detail = state.provenanceLine(),
+    )
 
-        LfTextField(
-            value = state.amountText,
-            onValueChange = { onEvent(ReviewEvent.AmountChanged(it)) },
-            label = "Amount",
-            modifier = Modifier.fillMaxWidth(),
-        )
+    // Under the amount, because that is the order of the decision:
+    // how much, then what for (§5.4, ADR-0018).
+    LfSegmentedControl(
+        options = listOf("Single item", "Itemised"),
+        selectedIndex = if (state.itemised) 1 else 0,
+        onSelect = { onEvent(ReviewEvent.ModeSelected(itemised = it == 1)) },
+    )
 
-        // Under the amount, because that is the order of the decision:
-        // how much, then what for (§5.4, ADR-0018).
-        LfSegmentedControl(
-            options = listOf("Single item", "Itemised"),
-            selectedIndex = if (state.itemised) 1 else 0,
-            onSelect = { onEvent(ReviewEvent.ModeSelected(itemised = it == 1)) },
-        )
-
-        if (state.itemised) {
-            LfLineItemEditor(
-                state = state.editorState(),
-                onEvent = { onEvent(it.toReviewEvent()) },
-            )
-        }
-
-        DetailRows(state, onEvent)
-
-        LfTextField(
-            value = state.noteText,
-            onValueChange = { onEvent(ReviewEvent.NoteChanged(it)) },
-            label = "Note",
-            modifier = Modifier.fillMaxWidth(),
+    if (state.itemised) {
+        LfLineItemEditor(
+            state = state.editorState(),
+            onEvent = { onEvent(it.toReviewEvent()) },
         )
     }
+
+    DetailRows(state, onEvent)
+
+    LfTextField(
+        value = state.noteText,
+        onValueChange = { onEvent(ReviewEvent.NoteChanged(it)) },
+        label = "Note",
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /**
@@ -161,17 +217,19 @@ private fun ReviewForm(
 @Composable
 private fun CapturedMessage(text: String) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Message",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.muted,
             )
             SelectionContainer {
+                // Plex Mono, as the canvas draws it (step F5): the message
+                // verbatim, the source the fields are read from.
                 Text(
                     text = text,
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.figureLabel,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
         }
@@ -243,9 +301,8 @@ private fun DetailRows(state: ReviewUiState, onEvent: (ReviewEvent) -> Unit) {
 /**
  * Pinned, so the decision never requires finding the bottom of the form.
  *
- * `xs` padding only: [LfScaffold] has already inset this for the navigation
- * bar, and a uniform `lg` would stack 24dp on an inset that exists for the same
- * purpose — out of the one thing on screen that scrolls.
+ * An [LfActionBar]: the screen edge across and a small inset vertically, since
+ * [LfScaffold] has already inset it for the navigation bar.
  */
 @Composable
 private fun ReviewActions(
@@ -253,22 +310,21 @@ private fun ReviewActions(
     onEvent: (ReviewEvent) -> Unit,
     onBack: () -> Unit,
 ) {
-    LfActionRow(
-        alignment = LfActionAlignment.End,
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.md, vertical = LfTheme.spacing.xs),
-    ) {
-        LfButton(text = "Back", style = LfButtonStyle.Text, onClick = onBack)
-        LfButton(
-            text = "Discard",
-            style = LfButtonStyle.Outlined,
-            onClick = { onEvent(ReviewEvent.Discard) },
-        )
-        LfButton(
-            text = "Approve",
-            enabled = state.canApprove,
-            loading = state.submitting,
-            onClick = { onEvent(ReviewEvent.Approve) },
-        )
+    LfActionBar {
+        LfActionRow(alignment = LfActionAlignment.End) {
+            LfButton(text = "Back", style = LfButtonStyle.Text, onClick = onBack)
+            LfButton(
+                text = "Discard",
+                style = LfButtonStyle.Outlined,
+                onClick = { onEvent(ReviewEvent.Discard) },
+            )
+            LfButton(
+                text = "Approve",
+                enabled = state.canApprove,
+                loading = state.submitting,
+                onClick = { onEvent(ReviewEvent.Approve) },
+            )
+        }
     }
 }
 

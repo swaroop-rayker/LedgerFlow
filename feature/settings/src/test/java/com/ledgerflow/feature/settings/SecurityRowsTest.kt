@@ -38,8 +38,10 @@ class SecurityRowsTest {
     private fun show(state: SettingsUiState) {
         rule.setContent {
             LfTheme {
-                SettingsScreen(
+                SettingsSectionScreen(
+                    page = SettingsPage.Security,
                     state = state,
+                    onBack = {},
                     onCategories = {},
                     onBudgets = {},
                     onExport = {},

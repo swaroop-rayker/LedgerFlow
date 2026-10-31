@@ -2,8 +2,6 @@ package com.ledgerflow.core.designsystem.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -11,6 +9,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -19,9 +18,9 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.ledgerflow.core.designsystem.component.GLYPH_MEASURER_CACHE_SIZE
+import com.ledgerflow.core.designsystem.theme.primitive.LfScale
+import com.ledgerflow.core.designsystem.theme.primitive.LfTypeScale
 import com.ledgerflow.core.designsystem.component.LocalLfGlyphMeasurer
 
 /**
@@ -61,6 +60,9 @@ public data class LfTypography(
 
     private val forLtr: LfTypography by lazy { aligned(LfTextAlign.startOf(LayoutDirection.Ltr)) }
     private val forRtl: LfTypography by lazy { aligned(LfTextAlign.startOf(LayoutDirection.Rtl)) }
+
+    /** These styles by job ([LfTypeRoles]); built once, so `LfTheme.type` costs no allocation per read. */
+    internal val roles: LfTypeRoles by lazy { toRoles() }
 
     private fun aligned(align: TextAlign): LfTypography = LfTypography(
         displayL = displayL.copy(textAlign = align),
@@ -115,8 +117,9 @@ private fun lfTextStyle(
     lineHeight: TextUnit,
     fontWeight: FontWeight = FontWeight.Normal,
     features: List<String> = emptyList(),
+    family: FontFamily = LfFontFamily,
 ): TextStyle = TextStyle(
-    fontFamily = LfFontFamily,
+    fontFamily = family,
     fontSize = fontSize,
     lineHeight = lineHeight,
     fontWeight = fontWeight,
@@ -142,101 +145,54 @@ private fun lfTextStyle(
 internal val LfTextDirection: TextDirection = TextDirection.ContentOrLtr
 
 public val LfDefaultTypography: LfTypography = LfTypography(
-    displayL = lfTextStyle(34.sp, 40.sp, FontWeight.SemiBold),
-    titleL = lfTextStyle(22.sp, 28.sp, FontWeight.SemiBold),
-    titleM = lfTextStyle(18.sp, 24.sp, FontWeight.Medium),
-    bodyL = lfTextStyle(16.sp, 24.sp),
-    bodyM = lfTextStyle(14.sp, 20.sp),
-    label = lfTextStyle(12.sp, 16.sp, FontWeight.Medium),
-    amountL = lfTextStyle(28.sp, 32.sp, FontWeight.SemiBold, listOf(TABULAR_FIGURES)),
-    amountM = lfTextStyle(18.sp, 22.sp, FontWeight.Medium, listOf(TABULAR_FIGURES)),
+    displayL = lfTextStyle(LfTypeScale.Size34, LfTypeScale.Line40, FontWeight.SemiBold),
+    titleL = lfTextStyle(LfTypeScale.Size22, LfTypeScale.Line28, FontWeight.SemiBold),
+    titleM = lfTextStyle(LfTypeScale.Size18, LfTypeScale.Line24, FontWeight.Medium),
+    bodyL = lfTextStyle(LfTypeScale.Size16, LfTypeScale.Line24),
+    bodyM = lfTextStyle(LfTypeScale.Size14, LfTypeScale.Line20),
+    label = lfTextStyle(LfTypeScale.Size12, LfTypeScale.Line16, FontWeight.Medium),
+    // IBM Plex Mono (ADR-0031): monospaced, so a column of amounts aligns on its
+    // own. `tnum` stays, so the figures hold if a style is ever set in Inter.
+    amountL = lfTextStyle(
+        LfTypeScale.Size28,
+        LfTypeScale.Line32,
+        FontWeight.SemiBold,
+        listOf(TABULAR_FIGURES),
+        LfFigureFontFamily,
+    ),
+    amountM = lfTextStyle(
+        LfTypeScale.Size18,
+        LfTypeScale.Line22,
+        FontWeight.Medium,
+        listOf(TABULAR_FIGURES),
+        LfFigureFontFamily,
+    ),
     mnemonicWord = lfTextStyle(
-        16.sp,
-        22.sp,
+        LfTypeScale.Size16,
+        LfTypeScale.Line22,
         FontWeight.Medium,
         listOf(TABULAR_FIGURES, DISAMBIGUATION),
     ),
 )
 
-/** Spacing scale. Nothing in the app may hardcode a dp value (CLAUDE.md §5). */
-@Immutable
-public data class LfSpacing(
-    val xs: Dp = 4.dp,
-    val sm: Dp = 8.dp,
-    val md: Dp = 16.dp,
-    val lg: Dp = 24.dp,
-    val xl: Dp = 32.dp,
-    val xxl: Dp = 48.dp,
-    /** Minimum touch target (§9.6). Not negotiable. */
-    val minTouchTarget: Dp = 48.dp,
-
-    /**
-     * Minimum width for a row action.
-     *
-     * A short label like "Delete" or "Hide" otherwise renders as a tight pill,
-     * and looks especially unintended when it is the one control that wrapped
-     * onto its own line beneath two wider ones. This is a *minimum*: a button
-     * whose label needs more keeps its natural width, so widening can never
-     * clip anything (BUG9).
-     *
-     * **112, not 128.** A card's inner width on a 360dp phone is ~261dp, so two
-     * actions plus their 8dp gap have ~126dp each. 128 missed that by two
-     * device pixels and silently stacked all three actions one per line, which
-     * made the card twice as tall — a minimum width chosen at the boundary is a
-     * layout that flips on a rounding error. This leaves real headroom.
-     */
-    val actionMinWidth: Dp = 112.dp,
-
-    /**
-     * Width one segment of `LfSegmentedControl` needs at font scale 1.0.
-     *
-     * Below this the control stacks its options vertically instead of dividing
-     * the row. A segment cannot grow to fit its label the way a button can --
-     * the cells split a fixed width -- so without the switch the label has no
-     * option but to break mid-word, which is BUG9.
-     *
-     * Measured, not guessed: on a 360dp phone a screen-padded control gives
-     * ~101dp per option across three, and "Categories" needs ~78dp of that at
-     * font scale 1.15. 96 tripped at 1.15 and stacked a row that fitted
-     * perfectly well; 72 keeps it horizontal there and still stacks at 2.0,
-     * where the same option would need ~144dp.
-     */
-    val segmentMinWidth: Dp = 72.dp,
-
-    /**
-     * Width of one card in a horizontally-scrolling peek row.
-     *
-     * Sized so a second card is always partly visible on a 360dp screen. That
-     * sliver is the entire affordance -- a row of cards that happens to fit
-     * exactly reads as a complete list, and nobody swipes it.
-     */
-    val peekCardWidth: Dp = 172.dp,
-
-    val cornerSmall: Dp = 8.dp,
-    val cornerMedium: Dp = 16.dp,
-    val cornerLarge: Dp = 24.dp,
-)
-
-/** Motion durations (SPEC.md §9.5). */
+/** Motion durations (SPEC.md §9.5). Already roles by job; the values come from the primitive scale. */
 @Immutable
 public data class LfMotion(
-    val micro: Int = 120,
-    val standard: Int = 240,
-    val emphasized: Int = 400,
+    val micro: Int = LfScale.Duration120,
+    val standard: Int = LfScale.Duration240,
+    val emphasized: Int = LfScale.Duration400,
     /**
      * How long an outgoing screen takes to fade out before the incoming one
      * starts to fade in (BUG57). The two never overlap: overlapping is the
      * cross-fade that drew two screens' text over each other for 700 ms.
      */
-    val fadeOut: Int = 60,
+    val fadeOut: Int = LfScale.Duration60,
     /** How far a forward/back navigation slides its screens (BUG57). */
-    val axisSlide: Dp = 30.dp,
+    val axisSlide: Dp = LfScale.Slide30,
 )
 
 public val LocalLfTypography: androidx.compose.runtime.ProvidableCompositionLocal<LfTypography> =
     staticCompositionLocalOf { LfDefaultTypography }
-public val LocalLfSpacing: androidx.compose.runtime.ProvidableCompositionLocal<LfSpacing> =
-    staticCompositionLocalOf { LfSpacing() }
 public val LocalLfMotion: androidx.compose.runtime.ProvidableCompositionLocal<LfMotion> =
     staticCompositionLocalOf { LfMotion() }
 
@@ -255,40 +211,17 @@ public fun LfTheme(
 ) {
     val colors = if (darkTheme) LfDarkColors else LfLightColors
 
-    // Material components still need a ColorScheme; map our tokens onto it so a
-    // stray Material widget inherits the right surface instead of purple.
-    val materialScheme = if (darkTheme) {
-        darkColorScheme(
-            primary = colors.accent,
-            onPrimary = colors.onAccent,
-            background = colors.surfaceBase,
-            onBackground = colors.textPrimary,
-            surface = colors.surfaceRaised,
-            onSurface = colors.textPrimary,
-            surfaceVariant = colors.surfaceOverlay,
-            onSurfaceVariant = colors.textSecondary,
-            outline = colors.outline,
-            error = colors.debit,
-        )
-    } else {
-        lightColorScheme(
-            primary = colors.accent,
-            onPrimary = colors.onAccent,
-            background = colors.surfaceBase,
-            onBackground = colors.textPrimary,
-            surface = colors.surfaceRaised,
-            onSurface = colors.textPrimary,
-            surfaceVariant = colors.surfaceOverlay,
-            onSurfaceVariant = colors.textSecondary,
-            outline = colors.outline,
-            error = colors.debit,
-        )
-    }
+    // Material components still read Material's theme; every one of its colour
+    // roles and shapes is mapped from our tokens (LfMaterialTheme.kt), so a
+    // Material widget never falls back to Material's own purple or 28 dp corners.
+    val materialScheme = if (darkTheme) LfDarkColorScheme else LfLightColorScheme
 
     CompositionLocalProvider(
         LocalLfColors provides colors,
         LocalLfTypography provides LfDefaultTypography,
-        LocalLfSpacing provides LfSpacing(),
+        LocalLfSpaceRoles provides LfDefaultSpaceRoles,
+        LocalLfBorderRoles provides LfDefaultBorderRoles,
+        LocalLfShapeRoles provides LfDefaultShapeRoles,
         LocalLfMotion provides LfMotion(),
         LocalLfGlyphMeasurer provides rememberTextMeasurer(cacheSize = GLYPH_MEASURER_CACHE_SIZE),
     ) {
@@ -299,23 +232,39 @@ public fun LfTheme(
         // reads its typography directly rather than through [LfTheme.typography].
         MaterialTheme(
             colorScheme = materialScheme,
+            shapes = LfMaterialShapes,
             typography = lfMaterialTypographyFor(LocalLayoutDirection.current),
             content = content,
         )
     }
 }
 
-/** Token accessors. `LfTheme.colors.debit`, never a hardcoded hex. */
+/**
+ * Token accessors: semantic roles only (DESIGN_SYSTEM_PLAN §4.3).
+ * `LfTheme.colors.money.outgoing`, `LfTheme.type.body`, `LfTheme.space.screenEdge`,
+ * `LfTheme.shapes.container`, never a hard-coded hex, size or radius. The raw values behind the roles are
+ * `internal` to this module.
+ */
 public object LfTheme {
+    /** Colour roles: `surface`, `text`, `border`, `action`, `money`, `status`, `chart`. */
     public val colors: LfColors
         @Composable get() = LocalLfColors.current
 
-    /** Aligned to the current layout direction's leading edge (BUG61). */
-    public val typography: LfTypography
-        @Composable get() = LocalLfTypography.current.alignedTo(LocalLayoutDirection.current)
+    /** Text styles by job, aligned to the current layout direction's leading edge (BUG61). */
+    public val type: LfTypeRoles
+        @Composable get() = LocalLfTypography.current.alignedTo(LocalLayoutDirection.current).roles
 
-    public val spacing: LfSpacing
-        @Composable get() = LocalLfSpacing.current
+    /** Space by job. */
+    public val space: LfSpaceRoles
+        @Composable get() = LocalLfSpaceRoles.current
+
+    /** Stroke widths by job; their colours are in [colors]`.border`. */
+    public val borders: LfBorderRoles
+        @Composable get() = LocalLfBorderRoles.current
+
+    /** Corner shapes by job. Layout constants, which no style changes, are in [LfLayout]. */
+    public val shapes: LfShapeRoles
+        @Composable get() = LocalLfShapeRoles.current
 
     public val motion: LfMotion
         @Composable get() = LocalLfMotion.current

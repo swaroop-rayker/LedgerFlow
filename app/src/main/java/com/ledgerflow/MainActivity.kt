@@ -10,12 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -38,7 +34,9 @@ import com.ledgerflow.appearance.RegionConventionsSync
 import com.ledgerflow.applock.AppLockController
 import com.ledgerflow.applock.DeviceUnlockPrompt
 import com.ledgerflow.applock.LockScreen
-import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.component.LfContentState
+import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.pattern.LfFlowStep
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.appearance.AnimationPreference
 import com.ledgerflow.core.domain.appearance.MotionLevel
@@ -391,19 +389,21 @@ internal fun ReadyRoute(
     if (prompt == NotificationSetupPrompt.Show && !openedByLink) explainer() else shell()
 }
 
+/**
+ * While the vault opens: usually about half a second (StrongBox and one key
+ * derivation). A step with only its heading, the way every other first-run
+ * screen looks, and after 10 s a line saying it is still going rather than a
+ * word on its own for as long as it takes (E2). No skeleton: there is no
+ * content shape to stand in for.
+ */
 @Composable
-private fun LoadingScreen() {
-    LfScaffold { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(LfTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            Text(
-                text = "Unlocking",
-                style = LfTheme.typography.titleM,
-                color = LfTheme.colors.textPrimary,
-            )
-        }
+internal fun LoadingScreen() {
+    LfFlowStep(title = "Unlocking", actionBar = null) {
+        LfStateContent(
+            state = LfContentState.Loading,
+            slowMessage = "Still unlocking. Nothing is lost; this is taking longer than usual.",
+            skeleton = {},
+        ) {}
     }
 }
 

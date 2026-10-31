@@ -41,6 +41,12 @@ public data class DashboardUiState(
     val backupReminder: BackupReminder? = null,
 
     /**
+     * The status line's backup half (step F5): null until the backup date has
+     * been read, then how long ago the last verified backup was.
+     */
+    val lastBackup: LastBackup? = null,
+
+    /**
      * When background capture could not reach the vault (§16 Q16), until the
      * user closes it. Null means nothing was lost, or the user has seen it.
      */
@@ -115,4 +121,12 @@ public data class DashboardUiState(
         /** Matches `EntryUiState.DEFAULT_CURRENCY`; onboarding always sets one. */
         public const val DEFAULT_CURRENCY: String = "INR"
     }
+}
+
+/** How long ago the last verified backup was, for the status line (step F5). */
+public sealed interface LastBackup {
+    public data object Never : LastBackup
+
+    /** Whole days; 0 is today. */
+    public data class DaysAgo(val days: Long) : LastBackup
 }

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,7 +21,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * Merchant leaderboard (`SPEC.md` §5.6, A4).
@@ -61,11 +59,12 @@ public fun LfHorizontalBarChart(
     rowHeight: Dp = DefaultRowHeight,
 ) {
     val max = data.maxOfOrNull { it.value }?.coerceAtLeast(1L) ?: 1L
-    val track = LfTheme.colors.surfaceOverlay
+    val tokens = LfChartTokens
+    val track = tokens.track
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(tokens.gap),
     ) {
         data.forEach { datum ->
             val fraction = (datum.value.toFloat() / max.toFloat()).coerceIn(0f, 1f)
@@ -73,7 +72,7 @@ public fun LfHorizontalBarChart(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(rowHeight)
-                    .clip(RoundedCornerShape(LfTheme.spacing.cornerSmall))
+                    .clip(tokens.cellShape)
                     .background(track)
                     .semantics {
                         contentDescription = "${datum.label}, ${datum.formattedValue}"
@@ -83,7 +82,7 @@ public fun LfHorizontalBarChart(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = LfTheme.spacing.sm),
+                        .padding(horizontal = tokens.wideGap),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // The label may ellipsise; the figure never may. A truncated
@@ -91,8 +90,8 @@ public fun LfHorizontalBarChart(
                     // truncated amount is a wrong number on screen.
                     Text(
                         text = datum.label,
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textPrimary,
+                        style = tokens.textStyle,
+                        color = tokens.text,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
@@ -106,8 +105,8 @@ public fun LfHorizontalBarChart(
                         // background; over a tint it is the amount that loses
                         // contrast first, and the amount is what the row is
                         // for.
-                        style = LfTheme.typography.amountM,
-                        color = LfTheme.colors.textPrimary,
+                        style = tokens.amountStyle,
+                        color = tokens.text,
                         maxLines = 1,
                         softWrap = false,
                         modifier = Modifier
@@ -116,7 +115,7 @@ public fun LfHorizontalBarChart(
                             // up flush against the amount, so "Dr. Lal P..."
                             // and "₹410.00" read as one string. Reviewed in
                             // `chart-leaderboard-2x` before this was changed.
-                            .padding(start = LfTheme.spacing.md)
+                            .padding(start = tokens.figureInset)
                             .clearAndSetSemantics { },
                     )
                 }
@@ -136,10 +135,11 @@ public fun LfHorizontalBarChart(
  */
 @Composable
 private fun FractionalFill(fraction: Float, color: Color) {
+    // Rounded at its free end, the track's corner (step F6).
     Layout(
         content = {},
         modifier = Modifier
-            .background(color)
+            .background(color, LfChartTokens.cellShape)
             .clearAndSetSemantics { },
     ) { _, constraints ->
         val width = (constraints.maxWidth * fraction).toInt().coerceIn(0, constraints.maxWidth)

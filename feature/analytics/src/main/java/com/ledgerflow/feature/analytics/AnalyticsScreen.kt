@@ -5,15 +5,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,7 +22,8 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.chart.LfAreaChart
+import com.ledgerflow.core.designsystem.chart.LfAreaPoint
 import com.ledgerflow.core.designsystem.chart.LfBarColumn
 import com.ledgerflow.core.designsystem.chart.LfBarDatum
 import com.ledgerflow.core.designsystem.chart.LfBarSegment
@@ -41,6 +39,7 @@ import com.ledgerflow.core.designsystem.chart.LfMirroredColumn
 import com.ledgerflow.core.designsystem.chart.LfStackedBarChart
 import com.ledgerflow.core.designsystem.chart.LfTreemap
 import com.ledgerflow.core.designsystem.chart.LfTreemapDatum
+import com.ledgerflow.core.designsystem.chart.LfViewportGesture
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
@@ -48,11 +47,17 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
-import com.ledgerflow.core.designsystem.component.LfChip
-import com.ledgerflow.core.designsystem.component.LfChipStyle
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfFilterBar
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.pattern.LfOptionsSheet
+import com.ledgerflow.core.designsystem.pattern.LfSheetOption
+import com.ledgerflow.core.designsystem.pattern.LfTabPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
@@ -62,6 +67,8 @@ import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.DimensionTotal
 import com.ledgerflow.core.domain.analytics.ParserGap
 import com.ledgerflow.core.domain.analytics.RecurringMerchant
+import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.Money
 
 /**
  * Analytics — A1 through A5 (`SPEC.md` §5.6).
@@ -84,46 +91,22 @@ public fun AnalyticsScreen(
     onEvent: (AnalyticsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.xl),
+    LfTabPage(
+        title = "Analytics",
+        modifier = modifier,
+        filters = {
+            // One line for the period and the filters (step F5, owner
+            // 2026-10-29): it was a row of seven chips and a "Filters" button
+            // under it. The pill names the period in force, a custom one by
+            // its dates, so the window is never hidden behind the extra tap.
+            LfFilterBar(
+                period = periodPillLabel(state.range, state.customFrom, state.customTo),
+                onPeriod = { onEvent(AnalyticsEvent.PeriodSheetShown(visible = true)) },
+                activeFilters = if (state.filters.isEmpty) 0 else state.filters.activeCount,
+                onFilters = { onEvent(AnalyticsEvent.FilterSheetShown(visible = true)) },
+            )
+        },
     ) {
-        item(key = "title", contentType = "title") {
-            LfScreenTitle(title = "Analytics")
-        }
-        item(key = "ranges", contentType = "ranges") {
-            RangeRow(selected = state.range, onEvent = onEvent)
-        }
-
-        item(key = "filters", contentType = "filters") {
-            LfActionRow(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-                alignment = LfActionAlignment.Start,
-            ) {
-                LfButton(
-                    // The count is on the control, so an active filter is
-                    // visible without opening the sheet -- a screen quietly
-                    // showing a subset is how someone concludes their data is
-                    // missing.
-                    text = if (state.filters.isEmpty) {
-                        "Filters"
-                    } else {
-                        "Filters (" + state.filters.activeCount + ")"
-                    },
-                    onClick = { onEvent(AnalyticsEvent.FilterSheetShown(visible = true)) },
-                    style = LfButtonStyle.Inline,
-                )
-                // **"Custom range" used to sit here and is gone.** Once the
-                // Custom *chip* opened the sheet (BUG21), the button was a
-                // second control for one action — and a duplicate on the one
-                // band of chrome above the scrolling content, which the design
-                // brief says the list pays for. The chip is also the better
-                // affordance: it shows when a custom range is active, which a
-                // button never could.
-            }
-        }
-
         val snapshot = state.snapshot
         if (state.showEmptyState || snapshot == null) {
             // **A panned window that is empty still keeps its chart.** Found on
@@ -150,10 +133,18 @@ public fun AnalyticsScreen(
  * flash of "no spending" before the real numbers arrived.
  */
 private fun LazyListScope.emptySection(state: AnalyticsUiState) {
+    // E5: loading is still skeletons after 300 ms, not an empty card titled
+    // "Loading" -- that read as a finding ("nothing here") for as long as it
+    // stayed.
+    if (state.isLoading) {
+        item(key = "loading", contentType = "loading") {
+            LfStateContent(state = LfContentState.Loading) {}
+        }
+        return
+    }
     item(key = "empty", contentType = "empty") {
         LfEmptyState(
             title = when {
-                state.isLoading -> "Loading"
                 state.emptyBecauseFiltered -> "Nothing matched"
                 state.range == AnalyticsRange.CUSTOM -> "Nothing in this range"
                 else -> "Nothing to chart yet"
@@ -164,7 +155,6 @@ private fun LazyListScope.emptySection(state: AnalyticsUiState) {
             // approve a transaction, which is how someone concludes their data
             // has gone missing.
             body = when {
-                state.isLoading -> "Reading your ledger."
                 state.emptyBecauseFiltered -> "No spending matches these filters."
                 state.range == AnalyticsRange.CUSTOM -> "Drag the chart or pick another range."
                 else -> "Approve a transaction and it will show up here."
@@ -211,8 +201,8 @@ private fun LazyListScope.chartSections(
                     // nothing in it. The mirror stays -- an empty half *is* the
                     // information -- but the caption now says so.
                     text = snapshot.bothBooksCaption(),
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
                 LfMirroredBarChart(
                     columns = snapshot.toMirroredColumns(),
@@ -277,14 +267,36 @@ private fun LazyListScope.timeChartSection(
 ) {
     item(key = "over-time", contentType = "chart") {
         SectionCard(title = "Spend over time") {
-            LfStackedBarChart(
-                columns = snapshot.toColumns(),
-                formatAxisValue = { minor -> MoneyFormat.symbolised(minor, state.baseCurrency) },
-                // Drag to pan, pinch to zoom -- and neither moves anything held
-                // here. ADR-0005: the gesture moves the *window* and the next
-                // frame is a fresh query at the new resolution.
-                onViewportChange = { onEvent(AnalyticsEvent.ViewportMoved(it)) },
+            // Total | By category (step F6, owner 2026-10-30; SPEC 5.6's
+            // toggle). The same buckets either way, so switching is no query.
+            LfSegmentedControl(
+                options = listOf("Total", "By category"),
+                selectedIndex = state.timeView.ordinal,
+                onSelect = { onEvent(AnalyticsEvent.TimeViewSelected(TimeView.entries[it])) },
             )
+            val format = { minor: Long -> MoneyFormat.symbolised(minor, state.baseCurrency) }
+            // Drag to pan, pinch to zoom -- and neither moves anything held
+            // here. ADR-0005: the gesture moves the *window* and the next
+            // frame is a fresh query at the new resolution.
+            val onViewport = { gesture: LfViewportGesture -> onEvent(AnalyticsEvent.ViewportMoved(gesture)) }
+            when (state.timeView) {
+                TimeView.TOTAL -> LfAreaChart(
+                    points = snapshot.toRunningTotal(),
+                    // The book's own colour: one book per chart (Law 2).
+                    color = when (state.ledger) {
+                        LedgerType.DEBIT -> LfTheme.colors.money.outgoing
+                        LedgerType.CREDIT -> LfTheme.colors.money.incoming
+                    },
+                    formatValue = format,
+                    description = if (state.ledger == LedgerType.DEBIT) "Spending so far" else "Income so far",
+                    onViewportChange = onViewport,
+                )
+                TimeView.BY_CATEGORY -> LfStackedBarChart(
+                    columns = snapshot.toColumns(),
+                    formatAxisValue = format,
+                    onViewportChange = onViewport,
+                )
+            }
         }
     }
 }
@@ -370,8 +382,8 @@ private fun LazyListScope.dailyAndCommitmentSections(
             SectionCard(title = "Usually typed by hand") {
                 Text(
                     text = "Capture is missing these. Each one is a rule worth adding.",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
                 snapshot.parserGaps.forEach { gap ->
                     ParserGapRow(gap = gap, currency = state.baseCurrency)
@@ -394,9 +406,9 @@ private fun ParserGapRow(gap: ParserGap, currency: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = LfTheme.spacing.xs),
+            .padding(vertical = LfTheme.space.inlineGap),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         // The amount never truncates (BUG9), and since P5 step 4 the name does
         // not either: it drops the amount below it instead of being squeezed.
@@ -406,23 +418,23 @@ private fun ParserGapRow(gap: ParserGap, currency: String) {
                 Column {
                     Text(
                         text = gap.name,
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textPrimary,
+                        style = LfTheme.type.bodySmall,
+                        color = LfTheme.colors.text.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = "${gap.manualCount} of ${gap.totalCount} typed by hand",
-                        style = LfTheme.typography.label,
-                        color = LfTheme.colors.textSecondary,
+                        style = LfTheme.type.label,
+                        color = LfTheme.colors.text.secondary,
                     )
                 }
             },
             trailing = {
                 Text(
                     text = MoneyFormat.symbolised(gap.manualAmount.minor, currency),
-                    style = LfTheme.typography.amountM,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.amountRow,
+                    color = LfTheme.colors.text.primary,
                     maxLines = 1,
                     softWrap = false,
                 )
@@ -450,25 +462,25 @@ private fun CaptureCoverageSection(coverage: CaptureCoverage, currency: String) 
     val colors = LfTheme.colors
     Text(
         text = "${coverage.automaticPercentByValue}% captured automatically",
-        style = LfTheme.typography.titleM,
-        color = colors.textPrimary,
+        style = LfTheme.type.heading,
+        color = colors.text.primary,
     )
     Text(
         // The count sentence, which is the half a percentage of money hides.
         text = "${coverage.automatic.count} of ${coverage.totalCount} " +
             (if (coverage.totalCount == 1) "entry" else "entries") +
             " (${coverage.automaticPercentByCount}%)",
-        style = LfTheme.typography.label,
-        color = colors.textSecondary,
+        style = LfTheme.type.label,
+        color = colors.text.secondary,
     )
     LfHorizontalBarChart(
         data = buildList {
-            add(coverage.bar("Automatic", coverage.automatic, currency, colors.accent))
-            add(coverage.bar("By hand", coverage.manual, currency, colors.textTertiary))
+            add(coverage.bar("Automatic", coverage.automatic, currency, colors.action.primary))
+            add(coverage.bar("By hand", coverage.manual, currency, colors.text.muted))
             // Imported is a real third answer and is hidden when it is zero: a
             // permanent empty row would imply the user should be importing.
             if (coverage.imported.count > 0) {
-                add(coverage.bar("Imported", coverage.imported, currency, colors.textTertiary))
+                add(coverage.bar("Imported", coverage.imported, currency, colors.text.muted))
             }
         },
     )
@@ -495,10 +507,8 @@ private fun BudgetRow(progress: BudgetProgress, currency: String) {
         formattedBudget = MoneyFormat.symbolised(progress.budget.amount.minor, currency),
         fraction = progress.fraction,
         projectedFraction = progress.projectedFraction,
-        color = LfCategoryPalette.colorForId(
-            progress.budget.categoryId,
-            progress.categoryColorArgb,
-        ),
+        // A budget is a plan, not money moving: the primary action's tone, amber
+        // once over (step F6, owner 2026-10-30), never its category's colour.
     )
     if (progress.onCourseToOverrun) {
         Text(
@@ -508,8 +518,8 @@ private fun BudgetRow(progress: BudgetProgress, currency: String) {
             text = "At this pace, " +
                 MoneyFormat.symbolised(progress.projectedSpend.minor, currency) +
                 " by period end",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.warn,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.status.warning,
         )
     }
 }
@@ -518,15 +528,15 @@ private fun BudgetRow(progress: BudgetProgress, currency: String) {
 private fun RunwaySummary(snapshot: AnalyticsSnapshot, currency: String) {
     Text(
         text = MoneyFormat.symbolised(snapshot.runwayTotal.minor, currency),
-        style = LfTheme.typography.amountM,
-        color = LfTheme.colors.textPrimary,
+        style = LfTheme.type.amountRow,
+        color = LfTheme.colors.text.primary,
         maxLines = 1,
         softWrap = false,
     )
     Text(
         text = runwayCountLabel(snapshot.runway.size),
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
     )
     snapshot.runway.forEach { merchant ->
         RecurringRow(merchant = merchant, currency = currency)
@@ -546,9 +556,9 @@ private fun RecurringRow(merchant: RecurringMerchant, currency: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = LfTheme.spacing.xs),
+            .padding(vertical = LfTheme.space.inlineGap),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         LfAdaptiveRow(
             modifier = Modifier.weight(1f),
@@ -556,8 +566,8 @@ private fun RecurringRow(merchant: RecurringMerchant, currency: String) {
             trailing = {
                 Text(
                     text = MoneyFormat.symbolised(merchant.typicalAmount.minor, currency),
-                    style = LfTheme.typography.amountM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.amountRow,
+                    color = LfTheme.colors.text.secondary,
                     maxLines = 1,
                     softWrap = false,
                 )
@@ -572,8 +582,8 @@ private fun RecurringName(merchant: RecurringMerchant) {
     Column {
         Text(
             text = merchant.name,
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -581,8 +591,8 @@ private fun RecurringName(merchant: RecurringMerchant) {
         // to "about every" -- the number was the part that went.
         Text(
             text = "about every ${merchant.intervalDays} days",
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
         )
     }
 }
@@ -620,7 +630,7 @@ private fun AnalyticsSnapshot.toHeatmapDays(currency: String): List<LfHeatmapDay
 
 @Composable
 private fun AnalyticsSnapshot.toMerchantBars(currency: String): List<LfBarDatum> {
-    val accent = LfTheme.colors.accent
+    val accent = LfTheme.colors.action.primary
     return merchants.take(TOP_MERCHANTS).map { total ->
         LfBarDatum(
             id = total.id,
@@ -632,35 +642,69 @@ private fun AnalyticsSnapshot.toMerchantBars(currency: String): List<LfBarDatum>
     }
 }
 
+/**
+ * The period sheet (step F5): every range in order, the scale the chip row
+ * was, and Custom last, which opens its own sheet (BUG21). Hosted by the
+ * route with the other Analytics surfaces.
+ */
 @Composable
-private fun RangeRow(selected: AnalyticsRange, onEvent: (AnalyticsEvent) -> Unit) {
-    // A horizontally scrolling row rather than a wrapping one: seven ranges in
-    // chronological order are a scale, and a scale that wraps mid-way reads as
-    // two groups.
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
-        contentPadding = PaddingValues(
-            horizontal = LfTheme.spacing.lg,
-        ),
-    ) {
-        items(AnalyticsRange.entries, key = { it.name }) { range ->
-            LfChip(
-                label = range.label,
-                style = if (range == selected) LfChipStyle.Selected else LfChipStyle.Assist,
+public fun AnalyticsPeriodSheet(state: AnalyticsUiState, onEvent: (AnalyticsEvent) -> Unit) {
+    LfOptionsSheet(
+        title = "Period",
+        options = AnalyticsRange.entries.map { range ->
+            LfSheetOption(
+                label = periodName(range),
+                // The one in force says so; a custom one by its dates.
+                value = when {
+                    range != state.range -> null
+                    range == AnalyticsRange.CUSTOM -> periodPillLabel(range, state.customFrom, state.customTo)
+                    else -> "Current"
+                },
                 onClick = { onEvent(AnalyticsEvent.RangeSelected(range)) },
             )
-        }
+        },
+        onDismiss = { onEvent(AnalyticsEvent.PeriodSheetShown(visible = false)) },
+    )
+}
+
+/** A range by name, in words: the chips' "3M" was a label for a tight row. */
+internal fun periodName(range: AnalyticsRange): String = when (range) {
+    AnalyticsRange.DAY -> "Day"
+    AnalyticsRange.WEEK -> "Week"
+    AnalyticsRange.MONTH -> "Month"
+    AnalyticsRange.THREE_MONTHS -> "3 months"
+    AnalyticsRange.SIX_MONTHS -> "6 months"
+    AnalyticsRange.YEAR -> "1 year"
+    AnalyticsRange.FIVE_YEARS -> "5 years"
+    AnalyticsRange.CUSTOM -> "Custom range"
+}
+
+/**
+ * What the filter bar's pill says: the range's name, or a custom window's two
+ * dates ("3 Aug – 19 Aug"; with years when it crosses one). A custom range
+ * with no dates yet reads as its name.
+ */
+internal fun periodPillLabel(range: AnalyticsRange, from: Int?, to: Int?): String {
+    if (range != AnalyticsRange.CUSTOM || from == null || to == null) return periodName(range)
+    val start = java.time.LocalDate.ofEpochDay(from.toLong())
+    val end = java.time.LocalDate.ofEpochDay(to.toLong())
+    return if (start.year == end.year) {
+        DisplayDates.dayMonth(start) + RANGE_DASH + DisplayDates.dayMonth(end)
+    } else {
+        DisplayDates.dayMonthYear(start) + RANGE_DASH + DisplayDates.dayMonthYear(end)
     }
 }
+
+/** An en dash between spaces, as a code point (CLAUDE.md 5). */
+private val RANGE_DASH: String = " " + Char(0x2013) + " "
 
 @Composable
 private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {
     SectionCard(title = null) {
         Text(
             text = MoneyFormat.symbolised(snapshot.total.minor, currency),
-            style = LfTheme.typography.amountL,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.amountHero,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             softWrap = false,
         )
@@ -674,8 +718,8 @@ private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {
             } else {
                 "${snapshot.transactionCount} transactions"
             },
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -683,11 +727,9 @@ private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {
 @Composable
 private fun SectionCard(title: String?, content: @Composable () -> Unit) {
     LfCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             if (title != null) {
                 // Wraps, never ellipsises: at font scale 2.0 "By payment method"
                 // and "Usually typed by hand" were cut to "By payment meth..."
@@ -695,8 +737,8 @@ private fun SectionCard(title: String?, content: @Composable () -> Unit) {
                 // rule is only that it breaks between words, which these do.
                 Text(
                     text = title,
-                    style = LfTheme.typography.titleM,
-                    color = LfTheme.colors.textPrimary,
+                    style = LfTheme.type.heading,
+                    color = LfTheme.colors.text.primary,
                 )
             }
             content()
@@ -722,11 +764,11 @@ private fun BookTotals(snapshot: AnalyticsSnapshot, currency: String) {
     // lose digits (P5 step 4's goldens). Still two figures, never a third.
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.blockGap),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
     ) {
-        BookTotal("In", inTotal, currency, LfTheme.colors.credit)
-        BookTotal("Out", outTotal, currency, LfTheme.colors.debit)
+        BookTotal("In", inTotal, currency, LfTheme.colors.money.incoming)
+        BookTotal("Out", outTotal, currency, LfTheme.colors.money.outgoing)
     }
 }
 
@@ -741,15 +783,15 @@ private fun BookTotal(
     Column(modifier = modifier) {
         Text(
             text = label,
-            style = LfTheme.typography.label,
+            style = LfTheme.type.label,
             color = color,
             maxLines = 1,
             softWrap = false,
         )
         Text(
             text = MoneyFormat.symbolised(minor, currency),
-            style = LfTheme.typography.amountM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.amountRow,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             softWrap = false,
         )
@@ -867,7 +909,7 @@ private fun DonutWithList(
                     id = "other",
                     label = "Other",
                     value = otherTotal,
-                    color = LfTheme.colors.textTertiary,
+                    color = LfTheme.colors.text.muted,
                 ),
             )
         }
@@ -877,7 +919,12 @@ private fun DonutWithList(
     // graphic orients and the list is what the user came to read -- measured on
     // device at 132dp it filled a third of the card for a single category, so
     // it is 104dp now.
-    LfDonutChart(slices = slices)
+    LfDonutChart(
+        slices = slices,
+        // The ring's total in its middle, Plex Mono (step F6), added up with
+        // Money (Law 3).
+        centerText = MoneyFormat.symbolised(Money.sum(totals.map { it.amount }).minor, currency),
+    )
 
     CategoryList(totals, currency, expandedId, subcategories, onExpand)
 }
@@ -891,7 +938,7 @@ private fun CategoryList(
     subcategories: Map<String, List<DimensionTotal>>,
     onExpand: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         totals.forEach { total ->
             DimensionRow(
                 total = total,
@@ -927,12 +974,12 @@ private fun DimensionRow(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(
-                start = if (indented) LfTheme.spacing.lg else 0.dp,
-                top = LfTheme.spacing.xs,
-                bottom = LfTheme.spacing.xs,
+                start = if (indented) LfTheme.space.screenEdge else 0.dp,
+                top = LfTheme.space.inlineGap,
+                bottom = LfTheme.space.inlineGap,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         // Name beside the amount, or above it when both will not fit: at font
         // scale 2.0 the weighted name was squeezed to "Groc..." (P5 step 4).
@@ -943,13 +990,13 @@ private fun DimensionRow(
             leading = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
                 ) {
                     LfCategoryDot(name = total.name, colorArgb = color.toArgb())
                     Text(
                         text = total.name,
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textPrimary,
+                        style = LfTheme.type.bodySmall,
+                        color = LfTheme.colors.text.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -965,8 +1012,8 @@ private fun DeltaAndAmount(total: DimensionTotal, currency: String) {
     Column(horizontalAlignment = Alignment.End) {
         Text(
             text = MoneyFormat.symbolised(total.amount.minor, currency),
-            style = LfTheme.typography.amountM,
-            color = LfTheme.colors.textPrimary,
+            style = LfTheme.type.amountRow,
+            color = LfTheme.colors.text.primary,
             maxLines = 1,
             softWrap = false,
         )
@@ -980,8 +1027,8 @@ private fun DeltaAndAmount(total: DimensionTotal, currency: String) {
                 // actually moved.
                 text = (if (delta >= 0) "+" else "-") +
                     MoneyFormat.symbolised(kotlin.math.abs(delta), currency),
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textTertiary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.muted,
                 maxLines = 1,
                 softWrap = false,
             )
@@ -1016,6 +1063,19 @@ private fun AnalyticsSnapshot.toColumns(): List<LfBarColumn> = timeBuckets.map {
             )
         },
     )
+}
+
+/**
+ * The window's running total, one point per bucket (step F6): what had been
+ * spent by the end of each. Added up with `Money`, never as bare minor units
+ * (Law 3); one book, the screen's (Law 2).
+ */
+internal fun AnalyticsSnapshot.toRunningTotal(): List<LfAreaPoint> {
+    var running = Money(0L)
+    return timeBuckets.map { bucket ->
+        running += bucket.amount
+        LfAreaPoint(label = shortDateLabel(bucket.startDate), value = running.minor)
+    }
 }
 
 /** `12 Aug` from a days-since-epoch value. */

@@ -107,7 +107,14 @@ public class CategoriesViewModel @Inject constructor(
      * through the group that lists its cases.
      */
     public fun onEvent(event: CategoriesEvent) {
+        // A choice in a row's sheet closes the sheet before it is acted on. The
+        // actions that ask something replace it with their dialog anyway; the
+        // ones that ask nothing (Restore, Make default) would otherwise leave it
+        // open over a row that has already changed.
+        if (event !is CategoriesEvent.RowActionsOpened) closeRowActions()
         when (event) {
+            is CategoriesEvent.RowActionsOpened ->
+                local.update { it.copy(dialog = TaxonomyDialog.RowActions(event.row)) }
             // Switching tabs re-collapses. `hiddenExpanded` is one flag over
             // three sections, so carrying it across would open the Merchants
             // hidden list because the user had opened the Categories one.
@@ -235,6 +242,10 @@ public class CategoriesViewModel @Inject constructor(
         }
     }
 
+    private fun closeRowActions() = local.update {
+        if (it.dialog is TaxonomyDialog.RowActions) it.copy(dialog = null) else it
+    }
+
     private fun prompt(
         kind: TextPromptKind,
         value: String = "",
@@ -265,7 +276,8 @@ public class CategoriesViewModel @Inject constructor(
 
     private fun confirm() {
         when (val dialog = local.value.dialog) {
-            null -> Unit
+            // A sheet has no confirm: each of its rows sends its own event.
+            null, is TaxonomyDialog.RowActions -> Unit
             is TaxonomyDialog.TextPrompt -> confirmTextPrompt(dialog)
             is TaxonomyDialog.ConfirmDelete -> confirmDelete(dialog)
             is TaxonomyDialog.ConfirmErase -> erase(dialog.target, dialog.id, dialog.name, null)

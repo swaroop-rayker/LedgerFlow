@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -26,13 +27,20 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
-import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.component.LfErrorNotice
 import com.ledgerflow.core.designsystem.component.LfKeyboards
+import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.bidiIsolated
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfConfirmSheet
+import com.ledgerflow.core.designsystem.pattern.LfFlowStep
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.RecoveryKitFormat
 import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
@@ -65,10 +73,14 @@ public fun OnboardingScreen(
     val chooseBackupTree = rememberBackupTreeLauncher(onEvent)
     RecoveryKitPicker(state, onEvent, kitFileName)
     state.kitConfirmFormat?.let { RecoveryKitConfirmDialog(it, onEvent) }
+    if (state.confirmingBackupDecline) SkipBackupsSheet(onEvent)
 
-    LfScaffold(
+    val copy = state.stepCopy()
+    LfFlowStep(
+        title = copy.title,
+        body = copy.body,
         modifier = modifier,
-        bottomBar = {
+        actionBar = {
             PrimaryActionBar(
                 state = state,
                 onEvent = onEvent,
@@ -76,28 +88,21 @@ public fun OnboardingScreen(
                 onChooseFolder = { chooseBackupTree() },
             )
         },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(LfTheme.spacing.lg)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
-        ) {
-            when (state.step) {
-                OnboardingStep.BaseCurrency -> {
-                    BaseCurrencyStep(state, onEvent)
-                    RestoreLink(onRestoreRequested)
-                }
-                OnboardingStep.PhraseDisplay -> PhraseDisplayStep(state, onEvent)
-                OnboardingStep.WordChallenge -> WordChallengeStep(state, onEvent)
-                OnboardingStep.RecoveryKit -> RecoveryKitStep(onEvent)
-                OnboardingStep.BackupLocation -> BackupLocationStep(onEvent)
-                OnboardingStep.Complete -> CompleteStep(state)
+    ) {
+        when (state.step) {
+            OnboardingStep.BaseCurrency -> {
+                BaseCurrencyStep(state, onEvent)
+                RestoreLink(onRestoreRequested)
             }
-            state.errorMessage?.let { ErrorFooter(it, onEvent) }
+            OnboardingStep.PhraseDisplay -> PhraseDisplayStep(state, onEvent)
+            OnboardingStep.WordChallenge -> WordChallengeStep(state, onEvent)
+            OnboardingStep.RecoveryKit -> RecoveryKitStep(onEvent)
+            OnboardingStep.BackupLocation -> BackupLocationStep(onEvent)
+            // Only a heading (the template's) while the key is made, and a
+            // way forward if making it failed (BUG66).
+            OnboardingStep.Complete -> if (state.setupFailed) SetupFailedNotice(onEvent)
         }
+        state.errorMessage?.let { ErrorFooter(it, onEvent) }
     }
 }
 
@@ -234,11 +239,9 @@ private fun primaryActionOf(
  * corollary is that a step must never put its *only* way forward in a secondary
  * action.
  *
- * Padding is horizontal `lg` to line up with the content's inset, and `sm`
- * vertically: [LfScaffold] has already inset this bar for the navigation bar,
- * so a uniform `lg` here would stack 24dp on top of an inset that exists for
- * the same purpose, and it comes out of the one part of the screen that
- * scrolls (CLAUDE.md §5).
+ * An [LfActionBar]: the screen edge across, to line up with the content, and a
+ * small inset vertically, since [LfScaffold] has already inset this bar for the
+ * navigation bar (CLAUDE.md §5).
  */
 @Composable
 private fun PrimaryActionBar(
@@ -248,33 +251,91 @@ private fun PrimaryActionBar(
     onChooseFolder: () -> Unit,
 ) {
     val action = primaryActionOf(state, onEvent, onContinue, onChooseFolder) ?: return
-    LfButton(
-        text = action.label,
-        onClick = action.onClick,
-        enabled = action.enabled,
-        loading = action.loading,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LfTheme.spacing.lg, vertical = LfTheme.spacing.sm),
-    )
+    LfActionBar {
+        LfButton(
+            text = action.label,
+            onClick = action.onClick,
+            enabled = action.enabled,
+            loading = action.loading,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
+/**
+ * A step's failure (a Recovery Kit that could not be written, say). An error
+ * notice, in the problem colour rather than money-out's (E2); the step's own
+ * button is still the way to try again.
+ */
 @Composable
 private fun ErrorFooter(message: String, onEvent: (OnboardingEvent) -> Unit) {
-    Text(text = message, style = LfTheme.typography.bodyM, color = LfTheme.colors.debit)
-    LfButton(
-        text = "Dismiss",
-        onClick = { onEvent(OnboardingEvent.ErrorDismissed) },
-        style = LfButtonStyle.Text,
+    LfErrorNotice(
+        title = message,
+        actionLabel = "Dismiss",
+        onAction = { onEvent(OnboardingEvent.ErrorDismissed) },
     )
 }
 
-@Composable
-private fun StepHeading(title: String, body: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-        Text(text = title, style = LfTheme.typography.displayL, color = LfTheme.colors.textPrimary)
-        Text(text = body, style = LfTheme.typography.bodyL, color = LfTheme.colors.textSecondary)
+/** Each step's heading, drawn by the template above the step's content. */
+private class StepCopy(val title: String, val body: String)
+
+private fun OnboardingUiState.stepCopy(): StepCopy = when (step) {
+    OnboardingStep.BaseCurrency -> StepCopy(
+        title = "Choose your currency",
+        // Stated plainly because §5.8 makes it permanent in v1. Discovering
+        // afterwards that it cannot be changed would be a bad surprise.
+        body = "All your amounts are stored in this currency. It cannot be changed later.",
+    )
+    OnboardingStep.PhraseDisplay -> StepCopy(
+        title = "Your recovery phrase",
+        body = "These 24 words are the only way to recover your data if you lose this " +
+            "device. Write them down on paper and keep them somewhere safe. " +
+            "Anyone with these words can read your backups.",
+    )
+    OnboardingStep.WordChallenge -> StepCopy(
+        title = "Confirm your phrase",
+        body = "Enter the words at these positions to confirm you wrote them down.",
+    )
+    OnboardingStep.RecoveryKit -> StepCopy(
+        title = "Save your Recovery Kit",
+        body = "Your 24 words and a QR code you can scan instead of typing them, on one " +
+            "printable page, with instructions for restoring your data. A text file — the " +
+            "words only, no code — is there for a password manager.",
+    )
+    OnboardingStep.BackupLocation -> StepCopy(
+        title = "Where should backups go?",
+        body = "LedgerFlow writes an encrypted backup every night. Only your recovery " +
+            "phrase can open it, so the location doesn't need to be private.",
+    )
+    OnboardingStep.Complete -> when {
+        isWorking -> StepCopy(
+            title = "Setting up your ledger",
+            body = "Generating your encryption key and creating the database.",
+        )
+        // BUG66: this said "You're set up" over the failure, with only "Dismiss"
+        // under it. Success never reaches this branch for long -- the vault
+        // opening is what moves the app on -- so a step still showing after the
+        // work stopped is a failure until proved otherwise.
+        setupFailed -> StepCopy(
+            title = "Couldn't finish setting up",
+            body = "Nothing was lost, and your recovery phrase is unchanged. You won't " +
+                "need to write it down again.",
+        )
+        else -> StepCopy(
+            title = "You're set up",
+            body = "Your ledger is encrypted and recoverable.",
+        )
     }
+}
+
+/** The failed setup's one way forward: the same setup again (BUG66). */
+@Composable
+private fun SetupFailedNotice(onEvent: (OnboardingEvent) -> Unit) {
+    LfErrorNotice(
+        title = "Your ledger wasn't created",
+        actionLabel = "Try again",
+        onAction = { onEvent(OnboardingEvent.SetupRetried) },
+    )
 }
 
 /**
@@ -285,11 +346,11 @@ private fun StepHeading(title: String, body: String) {
  */
 @Composable
 private fun RestoreLink(onRestoreRequested: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         Text(
             text = "Moving from another phone? You'll need a backup and its 24 words.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
         LfButton(
             text = "Restore from a backup",
@@ -301,12 +362,6 @@ private fun RestoreLink(onRestoreRequested: () -> Unit) {
 
 @Composable
 private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Choose your currency",
-        // Stated plainly because §5.8 makes it permanent in v1. Discovering
-        // afterwards that it cannot be changed would be a bad surprise.
-        body = "All your amounts are stored in this currency. It cannot be changed later.",
-    )
     LfCard {
         Column {
             SupportedCurrencies.forEach { currency ->
@@ -317,14 +372,14 @@ private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent
                         // A full-size target (BUG43): the radio has no onClick, so
                         // it brings no 48 dp minimum, and this row is a choice the
                         // user cannot change later (CLAUDE.md §0).
-                        .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
+                        .defaultMinSize(minHeight = LfLayout.minTouchTarget)
                         .selectable(
                             selected = selected,
                             onClick = { onEvent(OnboardingEvent.CurrencySelected(currency.code)) },
                         )
-                        .padding(vertical = LfTheme.spacing.sm),
+                        .padding(vertical = LfTheme.space.rowInsetVertical),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
                 ) {
                     // The row owns the selection semantics; the radio must not
                     // announce itself separately or TalkBack reads it twice.
@@ -337,8 +392,8 @@ private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent
                         // Isolated: the dirham's Arabic symbol would otherwise make
                         // this line right-to-left and put the name first (BUG61).
                         text = "${bidiIsolated(currency.symbol)}  ${currency.displayName}",
-                        style = LfTheme.typography.bodyL,
-                        color = LfTheme.colors.textPrimary,
+                        style = LfTheme.type.body,
+                        color = LfTheme.colors.text.primary,
                     )
                 }
             }
@@ -348,23 +403,16 @@ private fun BaseCurrencyStep(state: OnboardingUiState, onEvent: (OnboardingEvent
 
 @Composable
 private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Your recovery phrase",
-        body = "These 24 words are the only way to recover your data if you lose this " +
-            "device. Write them down on paper and keep them somewhere safe. " +
-            "Anyone with these words can read your backups.",
-    )
-
     LfCard {
         if (!state.phraseRevealed) {
             // Hidden until deliberately revealed: the phrase should not be
             // sitting on screen while the user is still working out what it is.
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md)) {
+            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
                 Text(
                     text = "Hidden until you're ready. Make sure nobody is looking over " +
                         "your shoulder.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
                 LfButton(
                     text = "Reveal phrase",
@@ -373,42 +421,89 @@ private fun PhraseDisplayStep(state: OnboardingUiState, onEvent: (OnboardingEven
                 )
             }
         } else {
-            Column(
+            // Two columns, read across (step F5, owner 2026-10-29): twelve rows
+            // fit the screen where twenty-four made the user scroll mid-copy.
+            // Each word is still its own node, said as "Word N: …", so a
+            // screen reader reads 1, 2, 3 in order, and every node keeps
+            // phraseSecret() (SPEC 9.6).
+            PhraseGrid(
                 modifier = Modifier.phraseSecret(),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+                columnGap = LfTheme.space.itemGap,
+                rowGap = LfTheme.space.inlineGap,
             ) {
-                state.mnemonic.forEachIndexed { index, word ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .phraseSecret()
-                            .semantics { contentDescription = "Word ${index + 1}: $word" },
-                        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-                    ) {
-                        Text(
-                            text = "${index + 1}".padStart(2, ' '),
-                            style = LfTheme.typography.mnemonicWord,
-                            color = LfTheme.colors.textTertiary,
-                        )
-                        Text(
-                            text = word,
-                            style = LfTheme.typography.mnemonicWord,
-                            color = LfTheme.colors.textPrimary,
-                        )
-                    }
-                }
+                state.mnemonic.forEachIndexed { index, word -> PhraseWord(position = index + 1, word = word) }
             }
         }
     }
 }
 
+/** One word of the phrase and its position; the number in Plex Mono, the word in Inter. */
+@Composable
+private fun PhraseWord(position: Int, word: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .phraseSecret()
+            .semantics { contentDescription = "Word $position: $word" },
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+    ) {
+        Text(
+            text = "$position".padStart(2, ' '),
+            style = LfTheme.type.mnemonicIndex,
+            color = LfTheme.colors.text.muted,
+        )
+        Text(
+            text = word,
+            style = LfTheme.type.mnemonic,
+            color = LfTheme.colors.text.primary,
+            // A recovery word is never broken across lines; the grid gives
+            // it a column it fits whole.
+            softWrap = false,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The phrase's words in two columns, read across -- **only while every word
+ * fits its column whole**, one column otherwise. At font scale 2.0 two
+ * columns broke "abandon" into "aband / on" (caught by the first 2x golden),
+ * and a recovery word split across lines can be copied down as half a word.
+ * So the layout measures the widest word before choosing, and a word is
+ * never given less than its own width.
+ */
+@Composable
+private fun PhraseGrid(
+    columnGap: Dp,
+    rowGap: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(content = content, modifier = modifier.fillMaxWidth()) { words, constraints ->
+        val width = constraints.maxWidth
+        val gap = columnGap.roundToPx()
+        val between = rowGap.roundToPx()
+        val widest = words.maxOfOrNull { it.maxIntrinsicWidth(Constraints.Infinity) } ?: 0
+        val columns = if (widest * PHRASE_COLUMNS + gap * (PHRASE_COLUMNS - 1) <= width) PHRASE_COLUMNS else 1
+        val cell = (width - gap * (columns - 1)) / columns
+        val placed = words.map { it.measure(Constraints(minWidth = cell, maxWidth = cell)) }
+        val rows = placed.chunked(columns)
+        val heights = rows.map { row -> row.maxOf { it.height } }
+        val height = heights.sum() + between * (rows.size - 1).coerceAtLeast(0)
+        layout(width, height) {
+            var y = 0
+            rows.forEachIndexed { r, row ->
+                row.forEachIndexed { c, word -> word.placeRelative(c * (cell + gap), y) }
+                y += heights[r] + between
+            }
+        }
+    }
+}
+
+/** The phrase display's columns, when the words fit (step F5): pairs, read across. */
+private const val PHRASE_COLUMNS = 2
+
 @Composable
 private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Confirm your phrase",
-        body = "Enter the words at these positions to confirm you wrote them down.",
-    )
-
     state.challengePositions.forEachIndexed { index, position ->
         LfTextField(
             modifier = Modifier.phraseSecret(),
@@ -425,8 +520,9 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
         Text(
             text = "That didn't match. Check your written copy — we've picked three " +
                 "different words to try again.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.debit,
+            style = LfTheme.type.bodySmall,
+            // The field error's colour, not money-out's (E2).
+            color = LfTheme.colors.status.danger,
         )
     }
 
@@ -438,12 +534,6 @@ private fun WordChallengeStep(state: OnboardingUiState, onEvent: (OnboardingEven
 
 @Composable
 private fun RecoveryKitStep(onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Save your Recovery Kit",
-        body = "Your 24 words and a QR code you can scan instead of typing them, on one " +
-            "printable page, with instructions for restoring your data. A text file — the " +
-            "words only, no code — is there for a password manager.",
-    )
     // "Save as PDF" is the pinned primary; these two are the alternatives to it.
     LfButton(
         text = "Save as text file",
@@ -492,27 +582,28 @@ private fun RecoveryKitFormat.label(): String = when (this) {
 
 @Composable
 private fun BackupLocationStep(onEvent: (OnboardingEvent) -> Unit) {
-    StepHeading(
-        title = "Where should backups go?",
-        body = "LedgerFlow writes an encrypted backup every night. Only your recovery " +
-            "phrase can open it, so the location doesn't need to be private.",
-    )
     LfButton(
         text = "Not now",
-        onClick = { onEvent(OnboardingEvent.BackupLocationDeclined) },
+        onClick = { onEvent(OnboardingEvent.BackupLocationDeclineRequested) },
         style = LfButtonStyle.Text,
     )
 }
 
+/**
+ * The warning `OnboardingStep.BackupLocation` always promised and "Not now"
+ * never showed (BUG67). A sheet, not a `Warning` dialog: declining can be
+ * undone from Back up now at any time, so it is consequential rather than
+ * irreversible (§5.2).
+ */
 @Composable
-private fun CompleteStep(state: OnboardingUiState) {
-    StepHeading(
-        title = if (state.isWorking) "Setting up your ledger" else "You're set up",
-        body = if (state.isWorking) {
-            "Generating your encryption key and creating the database."
-        } else {
-            "Your ledger is encrypted and recoverable."
-        },
+private fun SkipBackupsSheet(onEvent: (OnboardingEvent) -> Unit) {
+    LfConfirmSheet(
+        title = "Skip nightly backups?",
+        body = "Nothing is backed up until you choose a folder in Profile > Data > Back up " +
+            "now. If this phone is lost or reset before then, your ledger goes with it.",
+        confirmLabel = "Not now",
+        onConfirm = { onEvent(OnboardingEvent.BackupLocationDeclined) },
+        onDismiss = { onEvent(OnboardingEvent.BackupLocationDeclineCancelled) },
     )
 }
 
@@ -558,6 +649,20 @@ private fun OnboardingChallengePreview() {
                 challengePositions = listOf(3, 11, 19),
                 challengeError = true,
             ),
+            onEvent = {},
+            onGeneratePhrase = {},
+        )
+    }
+}
+
+@PreviewScreenSizes
+@PreviewFontScale
+@PreviewLightDark
+@Composable
+private fun OnboardingSetupFailedPreview() {
+    LfTheme {
+        OnboardingScreen(
+            state = OnboardingUiState(step = OnboardingStep.Complete, setupFailed = true),
             onEvent = {},
             onGeneratePhrase = {},
         )

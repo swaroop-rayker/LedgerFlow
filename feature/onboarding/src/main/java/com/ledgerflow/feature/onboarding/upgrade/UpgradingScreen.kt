@@ -14,6 +14,7 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.ledgerflow.core.designsystem.component.LfCard
 import com.ledgerflow.core.designsystem.component.LfScaffold
+import com.ledgerflow.core.designsystem.pattern.LfFlowStep
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
 import kotlin.math.ceil
@@ -43,23 +44,18 @@ public fun UpgradingScreen(
     to: Int,
     modifier: Modifier = Modifier,
 ) {
-    UpgradeFrame(
+    // Said plainly, because the one thing a user must not do here is
+    // force-stop the app halfway through a migration. The template's "what is
+    // safe" line, under the heading, rather than a card of its own (E2).
+    LfFlowStep(
         title = "Updating your ledger",
         body = "Moving your data from format $from to $to. This only happens after an " +
             "app update and usually takes a moment.",
+        safeNote = "A copy of your data was saved first, so nothing is at risk if " +
+            "this is interrupted. Please leave the app open.",
+        actionBar = null,
         modifier = modifier,
-    ) {
-        LfCard {
-            Text(
-                // Said plainly, because the one thing a user must not do here is
-                // force-stop the app halfway through a migration.
-                text = "A copy of your data was saved first, so nothing is at risk if " +
-                    "this is interrupted. Please leave the app open.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
-            )
-        }
-    }
+    ) {}
 }
 
 /**
@@ -81,8 +77,8 @@ public fun UpgradeBlockedScreen(
         LfCard {
             Text(
                 text = copy.detail,
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
@@ -166,29 +162,8 @@ private fun UpgradeFrame(
     modifier: Modifier = Modifier,
     detail: @Composable () -> Unit,
 ) {
-    LfScaffold(modifier = modifier) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(LfTheme.spacing.lg)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.lg),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
-                Text(
-                    text = title,
-                    style = LfTheme.typography.displayL,
-                    color = LfTheme.colors.textPrimary,
-                )
-                Text(
-                    text = body,
-                    style = LfTheme.typography.bodyL,
-                    color = LfTheme.colors.textSecondary,
-                )
-            }
-            detail()
-        }
+    LfFlowStep(title = title, body = body, actionBar = null, modifier = modifier) {
+        detail()
     }
 }
 

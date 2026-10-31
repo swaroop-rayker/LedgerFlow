@@ -33,14 +33,19 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -91,34 +96,17 @@ public fun RestoreScreen(
     val leave = onBack?.let { leavingVia(it, onEvent) }
     if (leave != null) RestoreBackHandler(state, leave, closeKeyboard)
 
-    LfScaffold(
+    LfFormPage(
+        title = if (resuming) "Finish restoring" else "Restore a backup",
+        actionBar = { SubmitBar(state, onEvent, onSubmit = closeKeyboard) },
         modifier = modifier,
-        bottomBar = { SubmitBar(state, onEvent, onSubmit = closeKeyboard) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            // The action takes its own band above the heading (BUG17).
-            if (leave != null && !state.isDone) {
-                LfActionRow(
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
-                    alignment = LfActionAlignment.Start,
-                ) {
-                    LfButton(
-                        text = "Back",
-                        onClick = leave,
-                        enabled = !state.isWorking,
-                        style = LfButtonStyle.Inline,
-                    )
-                }
-            }
-            LfScreenTitle(title = if (resuming) "Finish restoring" else "Restore a backup")
-            RestoreBody(state, resuming, onEvent)
-        }
+        // The back arrow beside the heading (step F5, owner 2026-10-29), as on
+        // the Settings pages; off while a restore runs, and absent once it is
+        // done or when there is nowhere to go back to.
+        onBack = if (leave != null && !state.isDone) leave else null,
+        backEnabled = !state.isWorking,
+    ) {
+        RestoreBody(state, resuming, onEvent)
     }
 }
 
@@ -128,10 +116,7 @@ public fun RestoreScreen(
  */
 @Composable
 private fun RestoreBody(state: RestoreUiState, resuming: Boolean, onEvent: (RestoreEvent) -> Unit) {
-    Column(
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
         val result = state.result
         if (result is RestoreOutcome.Done) {
             ResultMessage(result)
@@ -154,8 +139,8 @@ private fun RestoreBody(state: RestoreUiState, resuming: Boolean, onEvent: (Rest
         state.scanMessage?.let {
             Text(
                 text = "$it Type the words instead.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
@@ -176,8 +161,8 @@ private fun Explanation(resuming: Boolean) {
                 "Your ledger comes back protected by the backup's own 24 words — you won't be " +
                     "given new ones. They're used once and forgotten, never saved or sent."
             },
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.textSecondary,
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.text.secondary,
         )
     }
 }
@@ -208,11 +193,11 @@ private fun BackupChoice(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit)
     }
 
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Backup",
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.primary,
             )
             ChosenBackup(state, onEvent)
             LfActionRow(alignment = LfActionAlignment.Start) {
@@ -248,7 +233,7 @@ private fun ChosenBackup(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit)
         else -> null
     }
     if (note != null) {
-        Text(text = note, style = LfTheme.typography.bodyM, color = LfTheme.colors.textSecondary)
+        Text(text = note, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.secondary)
         return
     }
     state.backups.forEachIndexed { index, name ->
@@ -258,38 +243,47 @@ private fun ChosenBackup(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit)
                 .fillMaxWidth()
                 // A full-size target (BUG43): the radio has no onClick, so it
                 // brings no 48 dp minimum; these rows were 24 dp, 4 dp apart.
-                .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
+                .defaultMinSize(minHeight = LfLayout.minTouchTarget)
                 .selectable(
                     selected = selected,
                     enabled = !state.isWorking,
                     onClick = { onEvent(RestoreEvent.BackupSelected(name)) },
                 ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
         ) {
             // The row owns the selection semantics, as on the currency list.
             RadioButton(selected = selected, onClick = null, modifier = Modifier.clearAndSetSemantics {})
             Text(
                 text = backupLabel(name) + if (index == 0) " · newest" else "",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
         }
     }
 }
 
+/**
+ * The restore's answer. Success is a success notice; a failure is the form's
+ * error line, in the problem colour, with the pinned Restore as its retry. It
+ * was money-in green and money-out coral, which say something else (E2).
+ */
 @Composable
 private fun ResultMessage(outcome: RestoreOutcome) {
-    Text(
-        text = outcome.message(),
-        style = LfTheme.typography.bodyM,
-        color = if (outcome.isSuccess) LfTheme.colors.credit else LfTheme.colors.debit,
-    )
+    if (outcome.isSuccess) {
+        LfNotice(tone = LfNoticeTone.Success, title = outcome.message())
+    } else {
+        Text(
+            text = outcome.message(),
+            style = LfTheme.type.bodySmall,
+            color = LfTheme.colors.status.danger,
+        )
+    }
 }
 
 @Composable
 private fun SubmitBar(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit, onSubmit: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(LfTheme.spacing.sm)) {
+    LfActionBar {
         if (state.isDone) {
             LfButton(
                 text = "Open my ledger",

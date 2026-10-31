@@ -92,6 +92,15 @@ public class OnboardingViewModel @Inject constructor(
                     completeBackupLocation(granted = true, treeUri = event.uri)
                 }
 
+            OnboardingEvent.BackupLocationDeclineRequested ->
+                ifAt(OnboardingStep.BackupLocation, step) {
+                    _state.update { it.copy(confirmingBackupDecline = true) }
+                }
+
+            // Housekeeping, so not step-guarded: it only closes the warning.
+            OnboardingEvent.BackupLocationDeclineCancelled ->
+                _state.update { it.copy(confirmingBackupDecline = false) }
+
             OnboardingEvent.BackupLocationDeclined ->
                 ifAt(OnboardingStep.BackupLocation, step) {
                     completeBackupLocation(granted = false, treeUri = null)
@@ -99,6 +108,11 @@ public class OnboardingViewModel @Inject constructor(
 
             // Safe from any step: it clears a message, it does not advance.
             OnboardingEvent.ErrorDismissed -> _state.update { it.copy(errorMessage = null) }
+
+            OnboardingEvent.SetupRetried ->
+                ifAt(OnboardingStep.Complete, step) {
+                    if (_state.value.setupFailed) runSetup()
+                }
         }
     }
 
@@ -278,31 +292,39 @@ public class OnboardingViewModel @Inject constructor(
             it.copy(
                 backupLocationGranted = granted,
                 backupTreeUri = treeUri,
+                confirmingBackupDecline = false,
                 step = OnboardingStep.Complete,
-                isWorking = true,
             )
         }
+        runSetup()
+    }
+
+    /**
+     * Creates the vault from what the gate collected. Run once when the gate
+     * closes and again on each "Try again" (BUG66): the same words, currency and
+     * folder each time, so a retry asks for nothing new. A failure is reported
+     * as [OnboardingUiState.setupFailed] rather than a message under a step
+     * titled "You're set up", which was the dead end.
+     *
+     * Ignored while a run is in flight, so a second tap cannot start a second
+     * vault initialisation behind the first.
+     */
+    private fun runSetup() {
+        if (_state.value.isWorking) return
+        _state.update { it.copy(isWorking = true, setupFailed = false) }
         viewModelScope.launch {
+            val current = _state.value
             val outcome = initializeVault(
                 VaultInitRequest(
-                    mnemonic = _state.value.mnemonic,
-                    baseCurrency = _state.value.selectedCurrency,
-                    backupTreeUri = treeUri,
+                    mnemonic = current.mnemonic,
+                    baseCurrency = current.selectedCurrency,
+                    backupTreeUri = current.backupTreeUri,
                 ),
             )
             if (outcome == VaultOutcome.Unlocked) forgetThePhrase()
-            _state.update {
-                it.copy(
-                    isWorking = false,
-                    errorMessage = when (outcome) {
-                        VaultOutcome.Unlocked -> null
-                        // Nothing was destroyed; the phrase is still on screen and
-                        // the vault simply does not exist yet.
-                        else -> "Couldn't finish setting up your ledger. " +
-                            "Your recovery phrase is unchanged — try again."
-                    },
-                )
-            }
+            // Nothing was destroyed on failure: the phrase is still held and the
+            // vault simply does not exist yet.
+            _state.update { it.copy(isWorking = false, setupFailed = outcome != VaultOutcome.Unlocked) }
         }
     }
 

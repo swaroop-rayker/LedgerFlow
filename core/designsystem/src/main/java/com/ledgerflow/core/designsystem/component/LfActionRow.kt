@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.ledgerflow.core.designsystem.theme.LfTheme
 
 /**
  * A cluster of controls that wraps **whole controls** onto the next line (BUG9).
@@ -32,14 +31,14 @@ public fun LfActionRow(
     FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(
-            LfTheme.spacing.sm,
+            LfActionRowTokens.gap,
             when (alignment) {
                 LfActionAlignment.Start -> Alignment.Start
                 LfActionAlignment.Center -> Alignment.CenterHorizontally
                 LfActionAlignment.End -> Alignment.End
             },
         ),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(LfActionRowTokens.gap),
     ) {
         content()
     }

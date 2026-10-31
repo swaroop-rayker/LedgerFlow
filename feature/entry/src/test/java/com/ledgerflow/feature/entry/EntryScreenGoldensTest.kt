@@ -13,6 +13,7 @@ import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -31,7 +32,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class EntryScreenGoldensTest {
+open class EntryScreenGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
@@ -84,6 +85,8 @@ class EntryScreenGoldensTest {
         merchants = listOf(bigBazaar),
     )
 
+    private val saveError = filled.copy(message = "That category is no longer available. Choose another.")
+
     @Test fun fresh_1x() = capture("entry-fresh-1x", fresh, 1f)
 
     @Config(qualifiers = PHONE_2X)
@@ -94,10 +97,24 @@ class EntryScreenGoldensTest {
     @Config(qualifiers = PHONE_2X)
     @Test fun filled_2x() = capture("entry-filled-2x", filled, 2f)
 
+    /** BUG72: a refused save, above Save in the pinned bar. */
+    @Test fun saveError_1x() = capture("entry-save-error-1x", saveError, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun saveError_2x() = capture("entry-save-error-2x", saveError, 2f)
+
     /** RTL (BUG61): the amount field starts on the right, its "₹" still before the number. */
     @Test fun filledRtl_1x() = capture("entry-filled-rtl-1x", filled, 1f, LayoutDirection.Rtl)
 
     private companion object {
         const val NOW = 1_787_130_000_000L
     }
+}
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class EntryScreenGoldensDarkTest : EntryScreenGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
 }

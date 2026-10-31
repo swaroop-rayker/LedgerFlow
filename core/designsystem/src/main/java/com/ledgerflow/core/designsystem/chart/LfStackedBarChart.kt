@@ -26,7 +26,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import kotlin.math.abs
 
 /**
@@ -77,22 +76,24 @@ public fun LfStackedBarChart(
     onViewportChange: ((LfViewportGesture) -> Unit)? = null,
 ) {
     val measurer = rememberTextMeasurer()
-    val colors = LfTheme.colors
-    val labelStyle = LfTheme.typography.label.copy(color = colors.textTertiary)
+    val tokens = LfChartTokens
+    val labelStyle = tokens.labelStyle.copy(color = tokens.axisLabel)
+    val grid = tokens.grid
+    val track = tokens.track
     val ticks = LfAxisTicks.niceTicks(columns.maxOfOrNull { it.total } ?: 0L)
     val description = contentDescription ?: buildDescription(columns, formatAxisValue)
     // Formatted here rather than in the draw block, so the chart below is keyed
     // on the strings: a lambda only ever equals itself, and callers build a
     // new one whenever their own state changes.
     val tickLabels = ticks.map(formatAxisValue)
-    val chart = remember(columns, ticks, tickLabels, labelStyle, colors.outline, colors.surfaceOverlay) {
+    val chart = remember(columns, ticks, tickLabels, labelStyle, grid, track) {
         StackedChart(
             columns = columns,
             ticks = ticks,
             tickLabels = tickLabels,
             labelStyle = labelStyle,
-            gridColor = colors.outline,
-            trackColor = colors.surfaceOverlay,
+            gridColor = grid,
+            trackColor = track,
         )
     }
 
@@ -195,17 +196,44 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawColumns(
         )
 
         var bottom = plot.height
-        column.segments.forEach { segment ->
-            if (segment.value <= 0L) return@forEach
+        val drawn = column.segments.filter { it.value > 0L }
+        drawn.forEachIndexed { position, segment ->
             val segmentHeight = LfAxisTicks.fractionOf(segment.value, axisMax) * plot.height
             bottom -= segmentHeight
-            drawRect(
-                color = segment.color,
-                topLeft = Offset(left, bottom),
-                size = Size(barWidth, segmentHeight),
-            )
+            // The top of the stack is rounded, its free end (step F6); the
+            // joins between categories stay square.
+            if (position == drawn.lastIndex) {
+                drawTopRounded(segment.color, Offset(left, bottom), Size(barWidth, segmentHeight))
+            } else {
+                drawRect(
+                    color = segment.color,
+                    topLeft = Offset(left, bottom),
+                    size = Size(barWidth, segmentHeight),
+                )
+            }
         }
     }
+}
+
+/**
+ * A bar rounded at its free end only (step F6): the corner is half the bar's
+ * width, capped by its height, so a thin day reads as a bar, not a dot.
+ */
+internal fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTopRounded(
+    color: Color,
+    topLeft: Offset,
+    size: Size,
+    up: Boolean = true,
+) {
+    val r = minOf(size.width / 2f, size.height)
+    val corner = androidx.compose.ui.geometry.CornerRadius(r)
+    val rect = androidx.compose.ui.geometry.Rect(topLeft, size)
+    val shape = if (up) {
+        androidx.compose.ui.geometry.RoundRect(rect, topLeft = corner, topRight = corner)
+    } else {
+        androidx.compose.ui.geometry.RoundRect(rect, bottomLeft = corner, bottomRight = corner)
+    }
+    drawPath(androidx.compose.ui.graphics.Path().apply { addRoundRect(shape) }, color)
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGrid(
@@ -332,7 +360,7 @@ public sealed interface LfViewportGesture {
  * A gesture smaller than [MIN_PAN_FRACTION] is ignored: a stray touch while
  * scrolling the page should not silently move the window the user is reading.
  */
-private fun Modifier.viewportGestures(
+internal fun Modifier.viewportGestures(
     onViewportChange: (LfViewportGesture) -> Unit,
 ): Modifier = this
     .pointerInput(onViewportChange) {

@@ -18,14 +18,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.pattern.LfActionBar
+import com.ledgerflow.core.designsystem.pattern.LfFormPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.backup.BackupOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
@@ -44,6 +49,7 @@ import com.ledgerflow.core.ui.phrase.LfRecoveryKitWarningDialog
 public fun BackupNowScreen(
     state: BackupNowUiState,
     onEvent: (BackupNowEvent) -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (state.isScanning) {
@@ -57,48 +63,42 @@ public fun BackupNowScreen(
 
     KitFlow(state, onEvent)
 
-    LfScaffold(
+    // BUG76: a full-screen page with no on-screen way out. Since step F5 the
+    // way out is the back arrow beside the title, as on the Profile and
+    // Settings pages it is reached from (owner, 2026-10-29) -- still off
+    // while a backup is being written, so the screen is not left mid-write.
+    LfFormPage(
+        title = "Back up now",
+        actionBar = { SubmitBar(state, onEvent) },
         modifier = modifier,
-        bottomBar = { SubmitBar(state, onEvent) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-        ) {
-            LfScreenTitle(title = "Back up now")
-            Column(
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.lg),
-                verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.md),
-            ) {
-                Explanation(state.nightlyBackupsEnabled)
-                if (state.needsFolder) FolderPrompt(onEvent)
-                state.folderName?.let { FolderLine(it, state.folderChanged, state.isWorking, onEvent) }
-                state.failedNightlyAt?.let { FailedNightlyLine(it) }
-                state.result?.let { ResultMessage(it) }
-                if (state.kitOffered) KitOffer(state.isWorking, onEvent)
-                KitOutcome(state)
-                LfPhraseEntry(
-                    words = state.entry.words,
-                    draft = state.entry.draft,
-                    suggestions = state.entry.suggestions,
-                    draftIsUnknown = state.entry.draftIsUnknown,
-                    requiredWordCount = state.entry.requiredWordCount,
-                    onDraftChange = { onEvent(BackupNowEvent.DraftChanged(it)) },
-                    onSuggestionTap = { onEvent(BackupNowEvent.WordCommitted(it)) },
-                    onWordRemove = { onEvent(BackupNowEvent.WordRemoved(it)) },
-                    onScanRequested = { onEvent(BackupNowEvent.Scanner.Requested) },
-                )
-                state.scanMessage?.let {
-                    Text(
-                        text = "$it Type the words instead.",
-                        style = LfTheme.typography.bodyM,
-                        color = LfTheme.colors.textSecondary,
-                    )
-                }
-            }
+        onBack = onBack,
+        backEnabled = !state.isWorking,
+        spacing = LfPageSpacing.Sections,
+    ) {
+        Explanation(state.nightlyBackupsEnabled)
+        if (state.needsFolder) FolderPrompt(onEvent)
+        state.folderName?.let { FolderLine(it, state.folderChanged, state.isWorking, onEvent) }
+        state.failedNightlyAt?.let { FailedNightlyLine(it) }
+        state.result?.let { ResultMessage(it) }
+        if (state.kitOffered) KitOffer(state.isWorking, onEvent)
+        KitOutcome(state)
+        LfPhraseEntry(
+            words = state.entry.words,
+            draft = state.entry.draft,
+            suggestions = state.entry.suggestions,
+            draftIsUnknown = state.entry.draftIsUnknown,
+            requiredWordCount = state.entry.requiredWordCount,
+            onDraftChange = { onEvent(BackupNowEvent.DraftChanged(it)) },
+            onSuggestionTap = { onEvent(BackupNowEvent.WordCommitted(it)) },
+            onWordRemove = { onEvent(BackupNowEvent.WordRemoved(it)) },
+            onScanRequested = { onEvent(BackupNowEvent.Scanner.Requested) },
+        )
+        state.scanMessage?.let {
+            Text(
+                text = "$it Type the words instead.",
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
+            )
         }
     }
 }
@@ -110,12 +110,12 @@ public fun BackupNowScreen(
 @Composable
 private fun Explanation(nightlyBackupsEnabled: Boolean) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Your 24 words seal the backup. They're checked, used once and forgotten — " +
                     "never sent, and saved only if you ask for a new Recovery Kit afterwards.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
             // Said before the words are typed, because enrolment is a
             // consequence of typing them (ADR-0027): a user who does not want
@@ -129,8 +129,8 @@ private fun Explanation(nightlyBackupsEnabled: Boolean) {
                         "by itself — and still can't open a backup, because it keeps only the " +
                         "locking half of the key."
                 },
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textSecondary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
             )
         }
     }
@@ -147,14 +147,13 @@ private fun Explanation(nightlyBackupsEnabled: Boolean) {
 @Composable
 private fun FailedNightlyLine(at: Long) {
     val date = DisplayDates.medium(at)
-    LfCard {
-        Text(
-            text = "The automatic backup on $date couldn't be written. Your earlier backups are " +
-                "untouched. Backing up here now will fix it.",
-            style = LfTheme.typography.bodyM,
-            color = LfTheme.colors.debit,
-        )
-    }
+    // A warning notice rather than a card of money-out text (E6): the pinned
+    // Back up below is the fix it names.
+    LfNotice(
+        tone = LfNoticeTone.Warning,
+        title = "The automatic backup on $date couldn't be written. Your earlier backups are " +
+            "untouched. Backing up here now will fix it.",
+    )
 }
 
 /**
@@ -166,12 +165,12 @@ private fun FailedNightlyLine(at: Long) {
 private fun FolderPrompt(onEvent: (BackupNowEvent) -> Unit) {
     val launch = rememberFolderPicker(onEvent)
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap)) {
             Text(
                 text = "Choose where backups go — ideally a cloud drive, so they survive losing " +
                     "the phone.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
             LfButton(
                 text = "Choose folder",
@@ -197,17 +196,17 @@ private fun FolderLine(
 ) {
     val launch = rememberFolderPicker(onEvent)
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Backups go to $name.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
             if (changed) {
                 Text(
                     text = "Earlier backups stay in the previous folder.",
-                    style = LfTheme.typography.bodyM,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
             LfActionRow(alignment = LfActionAlignment.Start) {
@@ -231,12 +230,12 @@ private fun FolderLine(
 @Composable
 private fun KitOffer(isWorking: Boolean, onEvent: (BackupNowEvent) -> Unit) {
     LfCard {
-        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
                 text = "Save a new Recovery Kit? It's a PDF with your 24 words and a QR code you " +
                     "can scan instead of typing them.",
-                style = LfTheme.typography.bodyM,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.primary,
             )
             LfActionRow(alignment = LfActionAlignment.Start) {
                 LfButton(
@@ -265,11 +264,21 @@ private fun KitOutcome(state: BackupNowUiState) {
             "Try another place."
         else -> return
     }
-    Text(
-        text = text,
-        style = LfTheme.typography.bodyM,
-        color = if (state.kitSaved) LfTheme.colors.credit else LfTheme.colors.debit,
-    )
+    OutcomeLine(text, success = state.kitSaved)
+}
+
+/**
+ * A result: a success notice, or the form's error line in the problem colour
+ * with the pinned button as its retry -- never money-in green or money-out
+ * coral, which mean something else (E6, as Restore in E2).
+ */
+@Composable
+private fun OutcomeLine(text: String, success: Boolean) {
+    if (success) {
+        LfNotice(tone = LfNoticeTone.Success, title = text)
+    } else {
+        Text(text = text, style = LfTheme.type.bodySmall, color = LfTheme.colors.status.danger)
+    }
 }
 
 /** The D-07 warning, then the picker: the two steps between "Save Recovery Kit" and a file. */
@@ -302,18 +311,12 @@ private fun RecoveryKitPicker(requested: Boolean, onEvent: (BackupNowEvent) -> U
 
 @Composable
 private fun ResultMessage(outcome: BackupOutcome) {
-    Text(
-        text = outcome.message(),
-        style = LfTheme.typography.bodyM,
-        color = if (outcome.isSuccess) LfTheme.colors.credit else LfTheme.colors.debit,
-    )
+    OutcomeLine(outcome.message(), success = outcome.isSuccess)
 }
 
 @Composable
 private fun SubmitBar(state: BackupNowUiState, onEvent: (BackupNowEvent) -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(LfTheme.spacing.sm),
-    ) {
+    LfActionBar {
         LfButton(
             text = if (state.entry.isComplete) "Back up" else "${state.entry.remaining} words to go",
             onClick = { onEvent(BackupNowEvent.Submitted) },
@@ -356,6 +359,7 @@ private fun BackupNowNeedsFolderPreview() {
                 folderChecked = true,
             ),
             onEvent = {},
+            onBack = {},
         )
     }
 }
@@ -383,6 +387,7 @@ private fun BackupNowDonePreview() {
                 ),
             ),
             onEvent = {},
+            onBack = {},
         )
     }
 }

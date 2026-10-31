@@ -1,7 +1,6 @@
 package com.ledgerflow.feature.inbox
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,13 +30,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Constraints
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
@@ -43,13 +45,23 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
-import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfContentState
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
+import com.ledgerflow.core.designsystem.component.LfEmptyState
+import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfStateContent
+import com.ledgerflow.core.designsystem.component.lfGroupPosition
+import com.ledgerflow.core.designsystem.component.lfGroupSlice
+import com.ledgerflow.core.designsystem.component.shape
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
+import com.ledgerflow.core.designsystem.pattern.LfDetailPage
+import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
+import com.ledgerflow.core.designsystem.pattern.lfFullBleed
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingTransaction
@@ -91,6 +103,7 @@ public fun InboxScreen(
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onAddEntry: () -> Unit = {},
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -120,67 +133,76 @@ public fun InboxScreen(
 
     state.confirmation?.let { EraseConfirmationDialog(it, onEvent) }
 
-    LfScaffold(modifier = modifier, snackbarHostState = snackbarHostState) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        ) {
-            LfScreenTitle(
-                title = "Inbox",
-                subtitle = state.subtitle(),
-                modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
-            )
-
-            FilterBand(state, onEvent)
-
-            if (state.canErase && state.rows.isNotEmpty()) EraseBand(state, onEvent)
-
-            if (state.rows.isEmpty() && !state.loading) {
-                LfEmptyState(
-                    title = state.emptyTitle(),
-                    body = state.emptyBody(),
-                    modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
-                )
-            } else {
-                CandidateList(state, onEvent, onReview)
-            }
-        }
+    // The header is pinned: the filters are what the queue is read through.
+    LfDetailPage(
+        title = "Inbox",
+        subtitle = state.subtitle(),
+        modifier = modifier,
+        filters = { FilterBand(state, onEvent) },
+        notices = if (state.canErase && state.rows.isNotEmpty()) {
+            { EraseBand(state, onEvent) }
+        } else {
+            null
+        },
+        // E4: still skeletons after 300 ms while the queue is first read,
+        // instead of a page with filters and nothing under them.
+        statusContent = when {
+            state.loading -> { { LfStateContent(state = LfContentState.Loading) {} } }
+            state.rows.isEmpty() -> { { EmptyQueue(state, onAddEntry) } }
+            else -> null
+        },
+        snackbarHostState = snackbarHostState,
+        pinHeader = true,
+        // The rows join into one panel (step F5), so the list puts no gap
+        // between them.
+        spacing = LfPageSpacing.None,
+    ) {
+        candidateRows(state, onEvent, onReview)
     }
 }
 
 /**
- * The queue itself.
- *
- * Split out of [InboxScreen] when the erase band pushed that function past
- * detekt's length limit. The division is the one `LedgerFlowShell` already
- * makes: the outer function decides what chrome is on screen, this decides what
- * is under it.
+ * An empty filter. On Pending, the canvas's way forward (owner, 2026-10-29):
+ * the same Add entry the bar's + opens, for the payment no message announced.
  */
 @Composable
-private fun CandidateList(
+private fun EmptyQueue(state: InboxUiState, onAddEntry: () -> Unit) {
+    val pending = state.filter == InboxFilter.PENDING
+    LfEmptyState(
+        title = state.emptyTitle(),
+        body = state.emptyBody(),
+        // "Add an entry", not the canvas's "...yourself": that needed 288 dp
+        // at font scale 2.0 in a 200 dp slot (BUG9's guard caught it).
+        actionLabel = if (pending) "Add an entry" else null,
+        onAction = if (pending) onAddEntry else null,
+    )
+}
+
+/**
+ * The queue itself, as the page template's list content: the template owns the
+ * edge, the gap between rows and the list end.
+ */
+private fun LazyListScope.candidateRows(
     state: InboxUiState,
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = LfTheme.spacing.md),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
-        contentPadding = PaddingValues(bottom = LfTheme.spacing.md),
-    ) {
-        items(
-            items = state.rows,
-            key = { it.id },
-            // One row type, so the compiler can reuse every slot.
-            contentType = { "pending" },
-        ) { row ->
-            SwipeableRow(
-                row = row,
-                selectable = state.canErase,
-                selected = row.id in state.selected,
-                onEvent = onEvent,
-                onReview = onReview,
-            )
-        }
+    // One panel for the queue, its rows drawing their own slices (step F5),
+    // as the Ledger's days do: a list to scan, not a stack of cards.
+    itemsIndexed(
+        items = state.rows,
+        key = { _, row -> row.id },
+        // One row type, so the compiler can reuse every slot.
+        contentType = { _, _ -> "pending" },
+    ) { index, row ->
+        SwipeableRow(
+            row = row,
+            position = lfGroupPosition(index, state.rows.size),
+            selectable = state.canErase,
+            selected = row.id in state.selected,
+            onEvent = onEvent,
+            onReview = onReview,
+        )
     }
 }
 
@@ -189,7 +211,8 @@ private fun CandidateList(
  *
  * Chips rather than a segmented control: the options do not fit a segmented
  * control's fixed track at font scale 2.0 without truncating, and truncating a
- * label is BUG9. In an [LfActionRow] so they wrap as whole chips instead.
+ * label is BUG9. On one scrolling line since step F5, so a chip that does not
+ * fit scrolls into view whole rather than wrapping the band.
  *
  * **Adaptive, because four chips were two too many** (owner). `Suppressed` is
  * empty unless a payment arrived twice, and `Failed` is empty by construction —
@@ -201,24 +224,32 @@ private fun CandidateList(
  * would hide those rows on the day something finally writes one. See
  * [InboxUiState.visibleFilters].
  *
- * The count rides the label — `Discarded · 4` — the same shape the Ledger's
- * bands use, so "is there anything in there" is answered without a tap.
+ * The count follows the label in Plex Mono (`Discarded 4`, step F5), so "is
+ * there anything in there" is answered without a tap.
  */
 @Composable
 private fun FilterBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
-    LfActionRow(
-        alignment = LfActionAlignment.Start,
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
+    // **One line, scrolling** (step F5): three chips wrapped to two lines at
+    // phone width, a whole band charged to the queue. They scroll under the
+    // screen edge as Analytics' range chips did, so the last one visibly
+    // continues rather than ending at the margin.
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().lfFullBleed(),
+        horizontalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
+        contentPadding = PaddingValues(horizontal = LfTheme.space.screenEdge),
     ) {
-        state.visibleFilters.forEach { filter ->
+        items(state.visibleFilters, key = { it.name }) { filter ->
             val count = state.counts[filter] ?: 0
             LfChip(
-                // No count on an empty chip: "Discarded · 0" is a label for a
-                // thing that is not there, and the only empty chips drawn are
-                // the two this row keeps on purpose.
-                label = if (count > 0) "${filter.label()} · $count" else filter.label(),
+                label = filter.label(),
                 style = if (filter == state.filter) LfChipStyle.Selected else LfChipStyle.Assist,
                 onClick = { onEvent(InboxEvent.FilterSelected(filter)) },
+                // No count on an empty chip: "Discarded 0" is a label for a
+                // thing that is not there, and the only empty chips drawn are
+                // the two this row keeps on purpose.
+                count = count.takeIf { it > 0 },
+                // Said whole, as the label once wrote it.
+                contentDescription = if (count > 0) "${filter.label()}, $count" else null,
             )
         }
     }
@@ -243,10 +274,7 @@ private fun FilterBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
  */
 @Composable
 private fun EraseBand(state: InboxUiState, onEvent: (InboxEvent) -> Unit) {
-    LfActionRow(
-        alignment = LfActionAlignment.Start,
-        modifier = Modifier.padding(horizontal = LfTheme.spacing.md),
-    ) {
+    LfActionRow(alignment = LfActionAlignment.Start) {
         LfButton(
             text = "Erase all",
             style = LfButtonStyle.Inline,
@@ -327,13 +355,14 @@ private fun EraseConfirmationDialog(
 @Composable
 private fun SwipeableRow(
     row: PendingTransaction,
+    position: LfGroupPosition,
     selectable: Boolean,
     selected: Boolean,
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
     if (row.status != PendingStatus.PENDING) {
-        PendingRow(row, selectable, selected, onEvent, onReview)
+        PendingRow(row, position, selectable, selected, onEvent, onReview)
         return
     }
 
@@ -359,22 +388,23 @@ private fun SwipeableRow(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        LfTheme.colors.debit.copy(alpha = DISCARD_TRACK_ALPHA),
-                        RoundedCornerShape(LfTheme.spacing.sm),
-                    )
-                    .padding(horizontal = LfTheme.spacing.md),
+                    // Discarding is a destructive action, not money, so the
+                    // track takes the danger tint rather than the debit colour.
+                    // The slice's corners, so the track keeps the panel's
+                    // outline as the row slides off it.
+                    .background(LfTheme.colors.status.dangerSubtle, position.shape(LfLayout.panelRadius))
+                    .padding(horizontal = LfTheme.space.rowInset),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Text(
                     text = "Discard",
-                    style = LfTheme.typography.label,
-                    color = LfTheme.colors.textSecondary,
+                    style = LfTheme.type.label,
+                    color = LfTheme.colors.text.secondary,
                 )
             }
         },
     ) {
-        PendingRow(row, selectable, selected, onEvent, onReview)
+        PendingRow(row, position, selectable, selected, onEvent, onReview)
     }
 }
 
@@ -394,6 +424,7 @@ private fun SwipeableRow(
 @Composable
 private fun PendingRow(
     row: PendingTransaction,
+    position: LfGroupPosition,
     selectable: Boolean,
     selected: Boolean,
     onEvent: (InboxEvent) -> Unit,
@@ -402,17 +433,19 @@ private fun PendingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(LfTheme.colors.surfaceBase, RoundedCornerShape(LfTheme.spacing.sm))
-            .border(
-                HAIRLINE.dp,
-                LfTheme.colors.outline,
-                RoundedCornerShape(LfTheme.spacing.sm),
+            .lfGroupSlice(
+                position = position,
+                container = LfTheme.colors.surface.raised,
+                edge = LfTheme.colors.border.subtle,
+                edgeWidth = LfTheme.borders.hairline,
+                radius = LfLayout.panelRadius,
+                dividerInset = LfTheme.space.rowInset,
             )
             .padding(
-                start = if (selectable) LfTheme.spacing.xs else LfTheme.spacing.md,
-                end = LfTheme.spacing.md,
-                top = LfTheme.spacing.sm,
-                bottom = LfTheme.spacing.sm,
+                start = if (selectable) LfTheme.space.inlineGap else LfTheme.space.rowInset,
+                end = LfTheme.space.rowInset,
+                top = LfTheme.space.rowInsetVertical,
+                bottom = LfTheme.space.rowInsetVertical,
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -425,7 +458,7 @@ private fun PendingRow(
             Checkbox(
                 checked = selected,
                 onCheckedChange = { onEvent(InboxEvent.SelectionToggled(row.id)) },
-                colors = CheckboxDefaults.colors(checkedColor = LfTheme.colors.accent),
+                colors = CheckboxDefaults.colors(checkedColor = LfTheme.colors.action.primary),
                 modifier = Modifier.semantics {
                     contentDescription = if (selected) {
                         "Selected, ${row.title()}"
@@ -440,7 +473,7 @@ private fun PendingRow(
             modifier = Modifier
                 .weight(1f)
                 .clickable { onReview(row.id) },
-            verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.xs),
+            verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
         ) {
             RowBody(row, onEvent, onReview)
         }
@@ -468,8 +501,8 @@ private fun RowBody(
         leading = {
             Text(
                 text = row.title(),
-                style = LfTheme.typography.bodyL,
-                color = LfTheme.colors.textPrimary,
+                style = LfTheme.type.body,
+                color = LfTheme.colors.text.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -477,7 +510,7 @@ private fun RowBody(
         trailing = {
             Text(
                 text = row.amountLabel(),
-                style = LfTheme.typography.amountM,
+                style = LfTheme.type.amountRow,
                 color = row.amountColor(),
                 maxLines = 1,
                 softWrap = false,
@@ -485,35 +518,66 @@ private fun RowBody(
         },
     )
 
-    Row(
+    DetailBesideActions(
+        detail = {
+            Text(
+                // The stamp leads, and that ordering is the whole decision: this
+                // line is short of room and shares the row with the actions, so
+                // something gets ellipsised on a long one. Putting when-it-happened
+                // first means the account number is what goes, which is the least
+                // useful of the three and the one still visible on the review
+                // screen.
+                text = row.detailLine(),
+                // Inter, not the entry rows' Plex Mono (step F5): this line is
+                // mostly words, and Plex's width cut "needs details" to "needs
+                // detai..." on a phone-width row, the one word that says why.
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.muted,
+                // Two lines, not one: at font scale 2.0 one line cut the stamp to
+                // "19 Aug, 9:..." -- the hour went before the account number did.
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(end = LfTheme.space.itemGap),
+            )
+        },
+        actions = { RowActions(row, onEvent, onReview) },
+    )
+}
+
+/**
+ * The detail line beside the row's actions, sharing the line half and half --
+ * unless the actions' widest single control needs more than half, when the
+ * actions get that width and the detail line the rest.
+ *
+ * Half and half, and not left to a `Row`, for the reason the first device
+ * screenshot showed: `LfActionRow` is a FlowRow that fills its width, so beside
+ * an unweighted Text it claims the line and the provenance silently vanishes.
+ * But a FlowRow can wrap several controls inside its half and never one: with
+ * the 24 dp screen edge (design-system step D1), "Move back" at font scale 2.0
+ * needed 127 dp of a 124 dp half and was clipped (BUG9). The detail line can
+ * give way, since it already takes two lines and an ellipsis; a control's label
+ * cannot. Wherever the actions fit their half, which is every row at font
+ * scale 1.0, this is the `Row` it replaced, the leftover pixel included.
+ */
+@Composable
+private fun DetailBesideActions(detail: @Composable () -> Unit, actions: @Composable () -> Unit) {
+    Layout(
+        contents = listOf(detail, actions),
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Both weighted, and that is not arbitrary: `LfActionRow` is a FlowRow
-        // that calls `fillMaxWidth()` on itself, so an unweighted one beside a
-        // Text claims the whole line and squeezes the text to nothing -- which
-        // is exactly what the first device screenshot showed, provenance
-        // silently gone. Weighting both makes them share the line, and the
-        // FlowRow still wraps its controls whole inside its half at font scale
-        // 2.0 (BUG9).
-        Text(
-            // The stamp leads, and that ordering is the whole decision: this
-            // line is short of room and shares the row with the actions, so
-            // something gets ellipsised on a long one. Putting when-it-happened
-            // first means the account number is what goes, which is the least
-            // useful of the three and the one still visible on the review
-            // screen.
-            text = row.detailLine(),
-            style = LfTheme.typography.label,
-            color = LfTheme.colors.textTertiary,
-            // Two lines, not one: at font scale 2.0 one line cut the stamp to
-            // "19 Aug, 9:..." -- the hour went before the account number did.
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(end = LfTheme.spacing.sm),
-        )
-        RowActions(row, onEvent, onReview, Modifier.weight(1f))
+    ) { (detailMeasurables, actionMeasurables), constraints ->
+        val width = constraints.maxWidth
+        val actionsMeasurable = actionMeasurables.first()
+        // A Row of two equal weights gives the leftover pixel to the first.
+        val actionsWidth = maxOf(width / 2, actionsMeasurable.minIntrinsicWidth(constraints.maxHeight))
+            .coerceAtMost(width)
+        val detailWidth = width - actionsWidth
+        val actionsPlaceable = actionsMeasurable.measure(Constraints.fixedWidth(actionsWidth))
+        val detailPlaceable = detailMeasurables.first().measure(Constraints.fixedWidth(detailWidth))
+        val height = maxOf(detailPlaceable.height, actionsPlaceable.height)
+        layout(width, height) {
+            detailPlaceable.placeRelative(0, (height - detailPlaceable.height) / 2)
+            actionsPlaceable.placeRelative(detailWidth, (height - actionsPlaceable.height) / 2)
+        }
     }
 }
 
@@ -633,11 +697,11 @@ private fun PendingTransaction.amountLabel(): String {
 
 @Composable
 private fun PendingTransaction.amountColor() = when (effective.direction) {
-    ExtractedDirection.DEBIT -> LfTheme.colors.debit
-    ExtractedDirection.CREDIT -> LfTheme.colors.credit
+    ExtractedDirection.DEBIT -> LfTheme.colors.money.outgoing
+    ExtractedDirection.CREDIT -> LfTheme.colors.money.incoming
     // An unread direction is not a book, and colouring it as one would assert
     // something the parser did not find.
-    ExtractedDirection.UNKNOWN -> LfTheme.colors.textSecondary
+    ExtractedDirection.UNKNOWN -> LfTheme.colors.text.secondary
 }
 
 /**
@@ -689,11 +753,6 @@ private fun PendingTransaction.provenance(): String {
         extracted.accountLast4?.let { add("A/C $it") }
     }.joinToString(" · ")
 }
-
-private const val HAIRLINE = 1
-
-/** The swipe track, tinted toward the debit colour without shouting. */
-private const val DISCARD_TRACK_ALPHA = 0.12f
 
 // ── Previews ─────────────────────────────────────────────────────────────────
 //

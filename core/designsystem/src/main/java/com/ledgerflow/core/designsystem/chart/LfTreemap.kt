@@ -14,12 +14,12 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.theme.LfTheme
 import kotlin.math.abs
 
 /**
@@ -54,8 +54,10 @@ public fun LfTreemap(
     onTileClick: (String) -> Unit = {},
 ) {
     val measurer = rememberTextMeasurer()
-    val colors = LfTheme.colors
-    val labelStyle = LfTheme.typography.label
+    val labelStyle = LfChartTokens.labelStyle
+    val gutter = LfChartTokens.gutter
+    val text = LfChartTokens.text
+    val corner = LfChartTokens.cellRadius
 
     val layout = remember(tiles) {
         LfTreemapLayout.layout(tiles.map { it.id to it.value })
@@ -88,35 +90,47 @@ public fun LfTreemap(
     ) {
         layout.forEach { tile ->
             val datum = byId[tile.id] ?: return@forEach
-            val topLeft = Offset(tile.x * size.width, tile.y * size.height)
-            val tileSize = Size(tile.width * size.width, tile.height * size.height)
-
-            drawRect(color = datum.color, topLeft = topLeft, size = tileSize)
-            // A hairline gutter in the surface colour rather than a stroke:
-            // strokes straddle the edge and would eat into the neighbour's
-            // area, which is the one thing a treemap must not misrepresent.
-            drawRect(
-                color = colors.surfaceBase,
-                topLeft = topLeft,
-                size = Size(tileSize.width, GUTTER_PX),
-            )
-            drawRect(
-                color = colors.surfaceBase,
-                topLeft = topLeft,
-                size = Size(GUTTER_PX, tileSize.height),
-            )
-
-            drawTileLabel(
-                label = datum.label,
-                topLeft = topLeft,
-                size = tileSize,
-                measurer = measurer,
-                style = labelStyle.copy(
-                    color = readableOn(datum.color, colors.surfaceBase, colors.textPrimary),
-                ),
-            )
+            drawTile(tile, datum, corner, measurer, labelStyle.copy(color = readableOn(datum.color, gutter, text)))
         }
     }
+}
+
+/** One tile and its label (step F6: rounded, inset by the gutter). */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTile(
+    tile: LfTreemapTile,
+    datum: LfTreemapDatum,
+    corner: Dp,
+    measurer: TextMeasurer,
+    style: TextStyle,
+) {
+    val topLeft = Offset(tile.x * size.width, tile.y * size.height)
+    val tileSize = Size(tile.width * size.width, tile.height * size.height)
+
+    // Inset by the gutter on its top and start, so the page shows
+    // through between tiles without a stroke eating a neighbour's area
+    // (the one thing a treemap must not misrepresent), and rounded at
+    // the tile's corner (step F6).
+    drawRoundRect(
+        color = datum.color,
+        topLeft = Offset(topLeft.x + GUTTER_PX, topLeft.y + GUTTER_PX),
+        size = Size(
+            (tileSize.width - GUTTER_PX).coerceAtLeast(0f),
+            (tileSize.height - GUTTER_PX).coerceAtLeast(0f),
+        ),
+        // The tile's corner, scaled down on a small tile so it stays a
+        // tile and does not become a pill.
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+            minOf(corner.toPx(), minOf(tileSize.width, tileSize.height) * SMALL_TILE_CORNER),
+        ),
+    )
+
+    drawTileLabel(
+        label = datum.label,
+        topLeft = topLeft,
+        size = tileSize,
+        measurer = measurer,
+        style = style,
+    )
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTileLabel(
@@ -146,7 +160,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTileLabel(
  * colour the theme may move underneath us.
  *
  * The two candidates are passed in rather than hardcoded because `LfTheme` bans
- * literal colours, and because `surfaceBase` and `textPrimary` are opposite
+ * literal colours, and because `surface.canvas` and `text.primary` are opposite
  * ends of *whichever* theme is active — so this works in dark mode without a
  * second branch.
  */
@@ -156,6 +170,9 @@ private fun readableOn(background: Color, a: Color, b: Color): Color {
 }
 
 private const val GUTTER_PX = 2f
+
+/** A small tile's corner as a share of its shorter side. */
+private const val SMALL_TILE_CORNER = 0.2f
 private const val LABEL_PADDING_PX = 6f
 private const val DESCRIBED_TILES = 3
 

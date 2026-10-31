@@ -7,17 +7,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAmountField
@@ -25,8 +20,11 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfChip
 import com.ledgerflow.core.designsystem.component.LfChipStyle
+import com.ledgerflow.core.designsystem.component.LfDatePickerDialog
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
+import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.Category
@@ -114,9 +112,9 @@ private fun EditorForm(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = EDITOR_MAX_HEIGHT)
+            .heightIn(max = LfLayout.dialogListMax)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(LfTheme.space.itemGap),
     ) {
         // **Only the category pair is fixed** (Q20). It is what the budget *is*
         // -- the repository enforces one live budget per category/subcategory
@@ -167,8 +165,8 @@ private fun EditorForm(
         if (editor.error != null) {
             Text(
                 text = editor.error,
-                style = LfTheme.typography.label,
-                color = LfTheme.colors.warn,
+                style = LfTheme.type.label,
+                color = LfTheme.colors.status.warning,
             )
         }
     }
@@ -245,8 +243,8 @@ private fun BudgetPickers(
 private fun StartDateRow(startDate: Int, onClick: () -> Unit) {
     Text(
         text = "Starts",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
     )
     LfActionRow(alignment = LfActionAlignment.Start) {
         LfButton(
@@ -270,8 +268,9 @@ private fun StartDatePicker(selected: Int, onPicked: (Int) -> Unit, onDismiss: (
     val state = rememberDatePickerState(
         initialSelectedDateMillis = selected.toLong() * MILLIS_PER_DAY,
     )
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
+    LfDatePickerDialog(
+        state = state,
+        onDismiss = onDismiss,
         confirmButton = {
             LfButton(
                 text = "Set",
@@ -286,9 +285,7 @@ private fun StartDatePicker(selected: Int, onPicked: (Int) -> Unit, onDismiss: (
         dismissButton = {
             LfButton(text = "Cancel", onClick = onDismiss, style = LfButtonStyle.Inline)
         },
-    ) {
-        DatePicker(state = state)
-    }
+    )
 }
 
 /** `12 Aug 2026` from a day number. */
@@ -301,8 +298,8 @@ private const val MILLIS_PER_DAY = 86_400_000L
 private fun PeriodPicker(selected: BudgetPeriod, onPick: (BudgetPeriod) -> Unit) {
     Text(
         text = "Period",
-        style = LfTheme.typography.label,
-        color = LfTheme.colors.textSecondary,
+        style = LfTheme.type.label,
+        color = LfTheme.colors.text.secondary,
     )
     // Four chips, which do fit on a phone -- `LfActionRow` so they wrap as
     // whole controls at font scale 2.0 rather than clipping (BUG9).
@@ -331,11 +328,3 @@ private fun BudgetPeriod.label(): String = when (this) {
     BudgetPeriod.YEARLY -> "Yearly"
 }
 
-/**
- * Tall enough for the picker, short enough to leave the actions on screen.
- *
- * Measured against the device's 360dp-wide, ~780dp-tall viewport: beyond this
- * the dialog's own Cancel/Save row starts being pushed off, which is a worse
- * failure than scrolling.
- */
-private val EDITOR_MAX_HEIGHT: Dp = 380.dp

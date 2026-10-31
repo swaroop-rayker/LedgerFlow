@@ -3,10 +3,16 @@ package com.ledgerflow.feature.onboarding
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import com.github.takahirom.roborazzi.captureScreenRoboImage
+import com.ledgerflow.core.testing.screenshot.GOLDEN_DIR
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
+import com.ledgerflow.core.testing.screenshot.GoldenTheme
+import com.ledgerflow.core.testing.screenshot.LfScreenshotOptions
 import com.ledgerflow.core.testing.screenshot.PHONE_1X
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
 import com.ledgerflow.core.testing.screenshot.captureScreenGolden
@@ -20,8 +26,10 @@ import com.ledgerflow.feature.onboarding.restore.RestoreUiState
 import com.ledgerflow.feature.onboarding.upgrade.UpgradeBlockedScreen
 import com.ledgerflow.feature.onboarding.upgrade.UpgradingScreen
 import org.junit.Rule
+import com.ledgerflow.core.testing.screenshot.DarkGoldensRule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -39,7 +47,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [GOLDEN_SDK], qualifiers = PHONE_1X)
-class FirstRunScreensGoldensTest {
+open class FirstRunScreensGoldensTest {
 
     @get:Rule
     val rule = createComposeRule()
@@ -60,6 +68,26 @@ class FirstRunScreensGoldensTest {
         challengePositions = listOf(3, 11, 19),
         challengeError = true,
     )
+
+    private val backup = OnboardingUiState(step = OnboardingStep.BackupLocation)
+
+    private val kitFailed = OnboardingUiState(
+        step = OnboardingStep.RecoveryKit,
+        errorMessage = "Couldn't write the Recovery Kit to that location.",
+    )
+
+    private val restoreDone = RestoreUiState(
+        entry = PhraseEntry(requiredWordCount = 24),
+        result = RestoreOutcome.Done(
+            rows = 412,
+            imagesRestored = 9,
+            imagesNotFound = 3,
+            imagesUnreadable = 0,
+            imagesFailed = 0,
+        ),
+    )
+
+    private val setupFailed = OnboardingUiState(step = OnboardingStep.Complete, setupFailed = true)
 
     private val notificationsOff = NotificationAccessUiState(
         listenerGranted = false,
@@ -106,6 +134,67 @@ class FirstRunScreensGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun kit_2x() = onboarding("onboarding-kit-2x", OnboardingUiState(step = OnboardingStep.RecoveryKit), 2f)
+
+    /** BUG66: a setup that did not finish, and its one way forward. */
+    @Test fun setupFailed_1x() = onboarding("onboarding-setup-failed-1x", setupFailed, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun setupFailed_2x() = onboarding("onboarding-setup-failed-2x", setupFailed, 2f)
+
+    @Test fun backup_1x() = onboarding("onboarding-backup-1x", backup, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun backup_2x() = onboarding("onboarding-backup-2x", backup, 2f)
+
+    /** A step's own failure, as an error notice (E2). */
+    @Test fun kitFailed_1x() = onboarding("onboarding-kit-failed-1x", kitFailed, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun kitFailed_2x() = onboarding("onboarding-kit-failed-2x", kitFailed, 2f)
+
+    /** A finished restore's report, as a success notice (E2). */
+    @Test
+    fun restoreDone_1x() = rule.captureScreenGolden("restore-done-1x", 1f) {
+        LfTheme { RestoreScreen(state = restoreDone, resuming = false, onEvent = {}, onBack = {}) }
+    }
+
+    @Config(qualifiers = PHONE_2X)
+    @Test
+    fun restoreDone_2x() = rule.captureScreenGolden("restore-done-2x", 2f) {
+        LfTheme { RestoreScreen(state = restoreDone, resuming = false, onEvent = {}, onBack = {}) }
+    }
+
+    /** BUG67's warning, a sheet over the step. */
+    @Test fun skipBackups_1x() = withSheet("onboarding-skip-backups-1x", 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun skipBackups_2x() = withSheet("onboarding-skip-backups-2x", 2f)
+
+    /**
+     * A sheet is its own window, which ignores the [captureScreenGolden]
+     * density override and is not under its one root: the font scale goes
+     * through the configuration and the whole screen is captured.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    private fun withSheet(name: String, fontScale: Float) {
+        if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale)
+        rule.setContent {
+            GoldenTheme.Provide {
+                LfTheme {
+                    OnboardingScreen(
+                        state = backup.copy(confirmingBackupDecline = true),
+                        onEvent = {},
+                        onGeneratePhrase = {},
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        captureScreenRoboImage(
+            "$GOLDEN_DIR/${GoldenTheme.fileName(name)}.png",
+            roborazziOptions = LfScreenshotOptions,
+        )
+    }
 
     @Test
     fun notifications_1x() = rule.captureScreenGolden("notifications-off-1x", 1f) {
@@ -161,4 +250,12 @@ class FirstRunScreensGoldensTest {
     fun upgradeBlocked_2x() = rule.captureScreenGolden("upgrade-low-storage-2x", 2f) {
         LfTheme { UpgradeBlockedScreen(reason = lowStorage) }
     }
+}
+
+/** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class FirstRunScreensGoldensDarkTest : FirstRunScreensGoldensTest() {
+    @get:Rule
+    val darkGoldens: DarkGoldensRule = DarkGoldensRule()
 }

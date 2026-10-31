@@ -16,14 +16,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
-import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.designsystem.theme.LfLayout
+import com.ledgerflow.core.ui.LfFormRowTokens
 
 /**
  * [LfPickerDialog]'s multi-select twin, for the analytics filters (§5.6).
@@ -90,14 +90,14 @@ public fun LfMultiPickerDialog(
                 }
                 Column(
                     modifier = Modifier
-                        .heightIn(max = MULTI_PICKER_MAX_HEIGHT.dp)
+                        .heightIn(max = LfLayout.dialogListMax)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     if (options.isEmpty()) {
                         Text(
                             text = emptyMessage,
-                            style = LfTheme.typography.bodyM,
-                            color = LfTheme.colors.textSecondary,
+                            style = LfFormRowTokens.supportingStyle,
+                            color = LfFormRowTokens.secondary,
                         )
                     }
                     options.forEach { option ->
@@ -136,16 +136,16 @@ public fun LfCheckRow(
                 onValueChange = onCheckedChange,
                 role = Role.Checkbox,
             )
-            .defaultMinSize(minHeight = LfTheme.spacing.minTouchTarget)
-            .padding(vertical = LfTheme.spacing.xs),
+            .defaultMinSize(minHeight = LfFormRowTokens.minHeight)
+            .padding(vertical = LfFormRowTokens.compactPaddingVertical),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(LfTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap),
     ) {
         Checkbox(checked = checked, onCheckedChange = null)
         Text(
             text = label,
-            style = LfTheme.typography.bodyL,
-            color = LfTheme.colors.textPrimary,
+            style = LfFormRowTokens.textStyle,
+            color = LfFormRowTokens.text,
             modifier = Modifier.weight(1f),
         )
     }
@@ -170,5 +170,3 @@ public fun summariseSelection(
     else -> "${selectedIds.size} selected"
 }
 
-/** Matches [LfPickerDialog]'s list height, so the two dialogs are one size. */
-private const val MULTI_PICKER_MAX_HEIGHT = 320

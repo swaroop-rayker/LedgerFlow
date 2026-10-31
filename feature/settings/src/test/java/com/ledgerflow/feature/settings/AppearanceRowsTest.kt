@@ -40,8 +40,10 @@ class AppearanceRowsTest {
     private fun show(state: SettingsUiState) {
         rule.setContent {
             LfTheme {
-                SettingsScreen(
+                SettingsSectionScreen(
+                    page = SettingsPage.Appearance,
                     state = state,
+                    onBack = {},
                     onCategories = {},
                     onBudgets = {},
                     onExport = {},
