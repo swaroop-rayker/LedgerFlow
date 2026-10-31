@@ -26,6 +26,9 @@ public interface AppMetaDao {
     @Query("SELECT value FROM app_meta WHERE `key` = :key")
     public suspend fun value(key: String): String?
 
+    @Query("SELECT value FROM app_meta WHERE `key` = :key")
+    public fun observeValue(key: String): Flow<String?>
+
     @Query("SELECT * FROM app_meta ORDER BY `key`")
     public fun observeAll(): Flow<List<AppMetaEntity>>
 

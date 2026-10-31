@@ -51,6 +51,13 @@ public object LfIcons {
     /** Profile's Data row: backup, restore, export, the bin (step F5). */
     public val Data: ImageVector by lazy { lucide("Data", LfLucide.Database) }
 
+    /**
+     * "Opens Android's settings": a row that leaves the app for a page the
+     * phone owns (Data permissions, V2-3). Not mirrored: the arrow points out
+     * of the box, not along the reading direction.
+     */
+    public val OpensSystemSettings: ImageVector by lazy { lucide("OpensSystemSettings", LfLucide.ExternalLink) }
+
     public val Add: ImageVector by lazy { lucide("Add", LfLucide.Plus) }
     public val Close: ImageVector by lazy { lucide("Close", LfLucide.X) }
     public val Delete: ImageVector by lazy { lucide("Delete", LfLucide.Trash) }

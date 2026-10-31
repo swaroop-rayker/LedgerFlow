@@ -68,6 +68,13 @@ public data class AppMetaEntity(
          * non-zero value on a healthy install is a bug report waiting.
          */
         public const val KEY_ROLLUP_BUCKETS_REPAIRED: String = "rollupBucketsRepaired"
+
+        /**
+         * Hide amounts on Home (V2-PLAN §3.5): `"true"`, or absent for off.
+         * Here rather than in a device file because nothing needs it before
+         * unlock, and so a backup carries it (owner, 2026-10-31).
+         */
+        public const val KEY_HIDE_AMOUNTS_ON_HOME: String = "hideAmountsOnHome"
     }
 }
 

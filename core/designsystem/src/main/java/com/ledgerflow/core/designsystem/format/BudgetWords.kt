@@ -21,4 +21,13 @@ public object BudgetWords {
             MoneyFormat.symbolised((spent - budget).minor, currencyCode) + " over " + limit
         }
     }
+
+    /**
+     * [headroom] with both figures hidden (Hide amounts on Home): "₹•••• left
+     * of ₹••••". Left or over stays, as the bar's colour already says it.
+     */
+    public fun headroomHidden(over: Boolean, currencyCode: String): String {
+        val mask = AmountMask.symbolised(currencyCode)
+        return mask + (if (over) " over " else " left of ") + mask
+    }
 }

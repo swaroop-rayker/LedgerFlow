@@ -99,6 +99,7 @@ open class SettingsScreenGoldensTest {
                 onDiagnostics = {},
                 onBudgetAlerts = {},
                 onPaymentApps = {},
+                onDataPermissions = {},
                 onEvent = {},
             )
         }
