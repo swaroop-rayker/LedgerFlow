@@ -14,6 +14,10 @@ import androidx.navigation.toRoute
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.settings.ProfileScreen
+import com.ledgerflow.feature.categories.CategoriesScreen
+import com.ledgerflow.feature.categories.CategoriesViewModel
+import com.ledgerflow.feature.categories.MerchantCategoriesScreen
+import com.ledgerflow.feature.categories.MerchantCategoriesViewModel
 import com.ledgerflow.feature.settings.AboutLink
 import com.ledgerflow.feature.settings.SettingsEvent
 import com.ledgerflow.feature.settings.about.AboutDocument
@@ -178,6 +182,25 @@ internal fun NavGraphBuilder.aboutDestinations(navController: NavHostController)
         val state by viewModel.state.collectAsStateWithLifecycle()
         LaunchedEffect(id) { viewModel.load(id) }
         state?.let { LicenceScreen(state = it, onBack = navController::popBackStack) }
+    }
+}
+
+/** Organise and, from its Merchants tab, the merchant categories (V2-6). */
+internal fun NavGraphBuilder.organiseDestinations(navController: NavHostController) {
+    composable<Destination.Categories> {
+        val viewModel: CategoriesViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        CategoriesScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onBack = { navController.popBackStack() },
+            onOpenMerchantCategories = { navController.navigate(Destination.MerchantCategories) },
+        )
+    }
+    composable<Destination.MerchantCategories> {
+        val viewModel: MerchantCategoriesViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        MerchantCategoriesScreen(state = state, onEvent = viewModel::onEvent, onBack = { navController.popBackStack() })
     }
 }
 

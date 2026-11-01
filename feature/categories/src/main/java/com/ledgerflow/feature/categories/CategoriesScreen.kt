@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -20,11 +22,17 @@ import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.Dp
+import com.ledgerflow.core.designsystem.component.LfActionAlignment
+import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
+import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
+import com.ledgerflow.core.designsystem.component.LfChip
+import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDivider
 import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfGroupPosition
+import com.ledgerflow.core.designsystem.component.LfNavRow
 import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
@@ -37,6 +45,7 @@ import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
 import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
 import com.ledgerflow.core.designsystem.pattern.LfPanel
+import com.ledgerflow.core.designsystem.pattern.LfSelectionBar
 import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.model.Category
@@ -66,6 +75,7 @@ public fun CategoriesScreen(
     onEvent: (CategoriesEvent) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenMerchantCategories: () -> Unit = {},
 ) {
     state.dialog?.let { TaxonomyDialogHost(it, state, onEvent) }
 
@@ -99,6 +109,9 @@ public fun CategoriesScreen(
                         },
                     )
                 }
+                if (state.section == TaxonomySection.Merchants && state.merchants.isNotEmpty()) {
+                    MerchantFilterBand(state, onEvent)
+                }
             }
         },
         notices = state.message?.let { message -> { MessageBanner(message, onEvent) } },
@@ -107,7 +120,13 @@ public fun CategoriesScreen(
         } else {
             null
         },
-        actionBar = { AddBar(state, onEvent) },
+        actionBar = {
+            if (state.selecting && state.section == TaxonomySection.Merchants) {
+                SelectionBar(state, onEvent)
+            } else {
+                AddBar(state, onEvent)
+            }
+        },
         // No gap between items: a merchant list is one panel drawn a slice per
         // row, and slices only meet when nothing sits between them. The
         // category panels and the hidden header space themselves.
@@ -116,7 +135,7 @@ public fun CategoriesScreen(
     ) {
         when (state.section) {
             TaxonomySection.Categories -> categoryItems(state, onEvent)
-            TaxonomySection.Merchants -> merchantItems(state, onEvent)
+            TaxonomySection.Merchants -> merchantItems(state, onEvent, onOpenMerchantCategories)
             TaxonomySection.PaymentMethods -> paymentMethodItems(state, onEvent)
         }
     }
@@ -277,7 +296,7 @@ private fun CategoryRow(
  * announced before it is made rather than discovered.
  */
 @Composable
-private fun OrganiseRow(
+internal fun OrganiseRow(
     title: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -286,6 +305,8 @@ private fun OrganiseRow(
     startInset: Dp = LfTheme.space.rowInset,
     position: LfGroupPosition? = null,
     leading: (@Composable () -> Unit)? = null,
+    /** Non-null while selecting: the row is a check box, ticked or not. */
+    selectable: Boolean? = null,
 ) {
     val space = LfTheme.space
     // A lazy row draws its own slice of one panel (`lfGroupSlice`): merchants,
@@ -309,7 +330,13 @@ private fun OrganiseRow(
             .fillMaxWidth()
             .then(slice)
             .heightIn(min = LfLayout.minTouchTarget)
-            .clickable(onClickLabel = SHOW_ACTIONS, role = Role.Button, onClick = onClick)
+            .then(
+                if (selectable != null) {
+                    Modifier.toggleable(value = selectable, role = Role.Checkbox, onValueChange = { onClick() })
+                } else {
+                    Modifier.clickable(onClickLabel = SHOW_ACTIONS, role = Role.Button, onClick = onClick)
+                },
+            )
             .padding(
                 start = startInset,
                 end = space.rowInset,
@@ -329,22 +356,136 @@ private fun OrganiseRow(
     }
 }
 
-private fun LazyListScope.merchantItems(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
-    val merchants = state.merchants
+private fun LazyListScope.merchantItems(
+    state: CategoriesUiState,
+    onEvent: (CategoriesEvent) -> Unit,
+    onOpenMerchantCategories: () -> Unit,
+) {
+    // V2-6 (owner, 2026-10-31): the merchant categories themselves are kept on
+    // a page of their own, reached from the top of this tab rather than a
+    // fourth tab, which the three already stacking at 2.0 could not afford.
+    item(key = "merchant-categories", contentType = "nav") {
+        Column(modifier = Modifier.padding(bottom = LfTheme.space.sectionGap)) {
+            LfPanel {
+                LfNavRow(
+                    title = "Merchant categories",
+                    value = state.merchantCategories.size.toString(),
+                    onClick = onOpenMerchantCategories,
+                )
+            }
+        }
+    }
+    val merchants = state.visibleMerchants
+    if (merchants.isEmpty() && state.merchantFilter == MerchantFilter.Uncategorised) {
+        item(key = "all-filed", contentType = "note") {
+            Text(
+                text = "Every merchant has a category.",
+                style = LfTheme.type.bodySmall,
+                color = LfTheme.colors.text.secondary,
+            )
+        }
+    }
     items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
-        MerchantRow(merchants[index], lfGroupPosition(index, merchants.size), onEvent)
+        MerchantRow(merchants[index], lfGroupPosition(index, merchants.size), state, onEvent)
     }
     hiddenSection(state, onEvent)
 }
 
+/**
+ * A merchant and, under it, its merchant category (V2-6): two lines, as the
+ * compactness brief allows a row that presents one thing. Selecting, the row
+ * is a check box and a tap ticks it; otherwise a tap opens its actions.
+ */
 @Composable
-private fun MerchantRow(merchant: Merchant, position: LfGroupPosition, onEvent: (CategoriesEvent) -> Unit) {
+private fun MerchantRow(
+    merchant: Merchant,
+    position: LfGroupPosition,
+    state: CategoriesUiState,
+    onEvent: (CategoriesEvent) -> Unit,
+) {
     val name = merchant.canonicalName
+    val checked = merchant.id in state.selected
     OrganiseRow(
         title = name,
+        detail = state.merchantCategoryName(merchant.merchantCategoryId),
         position = position,
-        onClick = { onEvent(CategoriesEvent.RowActionsOpened(TaxonomyRow.Merchant(merchant.id, name))) },
+        selectable = if (state.selecting) checked else null,
+        onClick = {
+            onEvent(
+                if (state.selecting) {
+                    CategoriesEvent.SelectionToggled(merchant.id)
+                } else {
+                    CategoriesEvent.RowActionsOpened(TaxonomyRow.Merchant(merchant.id, name))
+                },
+            )
+        },
+        leading = if (state.selecting) {
+            { Checkbox(checked = checked, onCheckedChange = null) }
+        } else {
+            null
+        },
     )
+}
+
+/**
+ * All and Uncategorised (V2-PLAN §5.2), with their counts, and the way into
+ * selecting several. Whole controls wrap at 2.0 rather than a label breaking
+ * (BUG9).
+ */
+@Composable
+private fun MerchantFilterBand(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
+    LfActionRow(alignment = LfActionAlignment.Start) {
+        MerchantFilter.entries.forEach { filter ->
+            LfChip(
+                label = if (filter == MerchantFilter.All) "All" else UNCATEGORISED,
+                count = if (filter == MerchantFilter.All) state.merchants.size else state.uncategorisedCount,
+                style = if (state.merchantFilter == filter) LfChipStyle.Selected else LfChipStyle.Assist,
+                onClick = { onEvent(CategoriesEvent.MerchantFilterSelected(filter)) },
+            )
+        }
+        if (!state.selecting) {
+            LfButton(
+                text = "Select",
+                style = LfButtonStyle.Inline,
+                onClick = { onEvent(CategoriesEvent.SelectionStarted) },
+            )
+        }
+    }
+}
+
+/**
+ * The pinned bar while selecting: the count, and what can be done to them.
+ * Select all takes what the filter shows, so Uncategorised, Select all, Set
+ * category files every merchant left in three taps.
+ */
+@Composable
+private fun SelectionBar(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
+    val count = state.selected.size
+    LfSelectionBar(label = if (count == 1) "1 merchant selected" else "$count merchants selected") {
+        LfButton(
+            text = "Cancel",
+            style = LfButtonStyle.Text,
+            onClick = { onEvent(CategoriesEvent.SelectionCancelled) },
+        )
+        LfButton(
+            text = "Select all",
+            style = LfButtonStyle.Text,
+            onClick = { onEvent(CategoriesEvent.SelectAllShown) },
+        )
+        LfButton(
+            text = "Set category",
+            enabled = count > 0,
+            loading = state.isWorking,
+            onClick = {
+                onEvent(
+                    CategoriesEvent.SetMerchantCategory(
+                        merchantIds = state.selected.toList(),
+                        subject = if (count == 1) "1 merchant" else "$count merchants",
+                    ),
+                )
+            },
+        )
+    }
 }
 
 private fun LazyListScope.paymentMethodItems(state: CategoriesUiState, onEvent: (CategoriesEvent) -> Unit) {
@@ -399,7 +540,7 @@ private fun LazyListScope.hiddenSection(
     if (state.hidden.isEmpty()) return
 
     item(key = HIDDEN_HEADER_KEY, contentType = "hiddenHeader") {
-        HiddenHeader(state.hidden.size, state.hiddenExpanded, onEvent)
+        HiddenHeader(state.hidden.size, state.hiddenExpanded) { onEvent(CategoriesEvent.HiddenToggled) }
     }
     if (!state.hiddenExpanded) return
 
@@ -426,13 +567,13 @@ private fun LazyListScope.hiddenSection(
  * it, with no list gap between, so a shorter one would share their touch area.
  */
 @Composable
-private fun HiddenHeader(count: Int, expanded: Boolean, onEvent: (CategoriesEvent) -> Unit) {
+internal fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
     val space = LfTheme.space
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = LfLayout.minTouchTarget)
-            .clickable { onEvent(CategoriesEvent.HiddenToggled) }
+            .clickable(onClick = onToggle)
             .padding(vertical = space.rowInsetVertical),
         horizontalArrangement = Arrangement.spacedBy(space.inlineGap),
         verticalAlignment = Alignment.CenterVertically,

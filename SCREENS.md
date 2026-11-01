@@ -7,7 +7,7 @@ Built from the navigation graph (`app/.../navigation/LedgerFlowShell.kt`), the
 pre-app routing in `MainActivity.kt`, and every `LfDialog`, `ModalBottomSheet`,
 `DatePickerDialog`, `LfEmptyState` and notification builder in the source.
 
-**83 entries:** 38 full screens · 1 bottom sheet · 30 dialogs and pickers ·
+**86 entries:** 39 full screens · 1 bottom sheet · 32 dialogs and pickers ·
 10 empty, error and banner states · 4 system notifications. (2026-10-31: the
 last two V2-3 PRs add Data permissions, Home's hidden-amounts mode, and About
 with its three pages.)
@@ -91,6 +91,9 @@ missing or doesn't match what the code says · **Thin** = placeholder-level UI �
 | Merge (dialog) | `feature/categories/src/main/java/com/ledgerflow/feature/categories/TaxonomyDialogHost.kt:282` | Merge a merchant into another | Merge in Organise | **OK** |
 | New payment method (dialog) | `feature/categories/src/main/java/com/ledgerflow/feature/categories/TaxonomyDialogHost.kt:322` | Add a card or account | Payment methods tab | **OK** |
 | Organise empty states | `feature/categories/src/main/java/com/ledgerflow/feature/categories/CategoriesScreen.kt:204` | "No categories / merchants / payment methods yet" (also lines 380, 438) | Empty Organise tab | **OK** |
+| Merchant categories (V2-6) | `feature/categories/src/main/java/com/ledgerflow/feature/categories/MerchantCategoriesScreen.kt:40` | The kinds of place, with how many merchants each holds; rename, hide (asking where its merchants go), restore | "Merchant categories" at the top of Organise > Merchants | **OK** |
+| Set category (dialog, V2-6) | `feature/categories/src/main/java/com/ledgerflow/feature/categories/TaxonomyDialogHost.kt` | File one merchant or several under a merchant category, or Uncategorised | A merchant's sheet, or the selection bar | **OK** |
+| Hide merchant category (dialog, V2-6) | `feature/categories/src/main/java/com/ledgerflow/feature/categories/MerchantCategoriesScreen.kt` | Where its merchants go before it is hidden | Hide on a merchant category | **OK** |
 | Budgets | `feature/budget/src/main/java/com/ledgerflow/feature/budget/BudgetScreen.kt:45` | Add, edit or delete monthly limits | Settings "Budgets", Home "All budgets" | **OK.** "Done" above the title (BUG70); its messages show (BUG68); Delete asks first (BUG69) |
 | Budgets empty state | `feature/budget/src/main/java/com/ledgerflow/feature/budget/BudgetScreen.kt:75` | "No budgets yet" | Budgets with none set | **OK** |
 | Budget editor (dialog) | `feature/budget/src/main/java/com/ledgerflow/feature/budget/BudgetEditorDialog.kt:50` | Category, amount, period (inline chips), start date, alert switch | Add budget / Edit | **Note.** The budget-alert switch lives here until a Notifications page exists |
