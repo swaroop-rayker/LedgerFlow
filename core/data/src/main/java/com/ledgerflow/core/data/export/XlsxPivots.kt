@@ -37,10 +37,17 @@ internal object XlsxPivots {
     const val MONTHLY_TOTALS_SHEET: String = "Monthly totals"
     const val SPENDING_SHEET: String = "Spending by month"
     const val INCOME_SHEET: String = "Income by month"
+    const val MERCHANT_CATEGORY_SHEET: String = "Spending by merchant category"
 
     private const val TOTAL = "Total"
     private const val UNFILED = "Unfiled"
     private const val UNKNOWN_CATEGORY = "Unknown category"
+    private const val UNCATEGORISED = "Uncategorised"
+    private const val NO_MERCHANT = "No merchant"
+
+    // Keys no merchant category id can be: those are UUIDs.
+    private const val UNCATEGORISED_KEY = "uncategorised"
+    private const val NO_MERCHANT_KEY = ""
 
     /**
      * Month, Spent, Received — two figures per month, side by side.
@@ -104,6 +111,49 @@ internal object XlsxPivots {
         return PivotSheet(
             name = name,
             header = listOf("Category") + months.map { it.toString() } + TOTAL,
+            rows = if (rows.isEmpty()) rows else rows + total,
+        )
+    }
+
+    /**
+     * Spending by merchant category (V2-6, V2-PLAN §5.4): merchant categories
+     * down, months across, the expenses book only, in [byCategoryAndMonth]'s
+     * shape. Each rollup row lands in the category its merchant has *now*, as
+     * Analytics files it, so the sheet and the screen agree.
+     *
+     * Ranked by total, then **Uncategorised** (merchants not yet filed, or filed
+     * under a category since hidden) and **No merchant** last, so the rows add
+     * up to the book's total.
+     */
+    fun byMerchantCategoryAndMonth(
+        buckets: List<DailyRollupEntity>,
+        merchantCategoryOf: Map<String, String?>,
+        merchantCategoryNames: Map<String, String>,
+    ): PivotSheet {
+        requireOneBook(buckets, LedgerType.DEBIT)
+        fun keyOf(row: DailyRollupEntity): String = when {
+            row.merchantId.isEmpty() -> NO_MERCHANT_KEY
+            else -> merchantCategoryOf[row.merchantId]?.takeIf { it in merchantCategoryNames } ?: UNCATEGORISED_KEY
+        }
+        val months = buckets.map { monthOf(it.localDate) }.distinct().sorted()
+        val byKey = buckets.groupBy(::keyOf).mapValues { (_, rows) ->
+            rows.groupBy { monthOf(it.localDate) }.mapValues { (_, inMonth) -> inMonth.sumOf { it.sumMinor.minor } }
+        }
+        fun rowOf(key: String, label: String) = byKey[key]?.let { perMonth ->
+            PivotRow(label = label, cells = months.map { perMonth[it] } + perMonth.values.sum())
+        }
+
+        val filed = byKey.keys
+            .filter { it != UNCATEGORISED_KEY && it != NO_MERCHANT_KEY }
+            .mapNotNull { key -> rowOf(key, merchantCategoryNames.getValue(key)) }
+            .sortedByDescending { it.cells.last() }
+        val rows = filed + listOfNotNull(rowOf(UNCATEGORISED_KEY, UNCATEGORISED), rowOf(NO_MERCHANT_KEY, NO_MERCHANT))
+
+        val monthTotals = months.map { month -> byKey.values.sumOf { it[month] ?: 0L } }
+        val total = PivotRow(TOTAL, monthTotals + monthTotals.sum(), isTotal = true)
+        return PivotSheet(
+            name = MERCHANT_CATEGORY_SHEET,
+            header = listOf("Merchant category") + months.map { it.toString() } + TOTAL,
             rows = if (rows.isEmpty()) rows else rows + total,
         )
     }

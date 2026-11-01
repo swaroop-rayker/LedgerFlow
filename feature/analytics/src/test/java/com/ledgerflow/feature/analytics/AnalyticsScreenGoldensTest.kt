@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.analytics
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.theme.LfTheme
@@ -17,8 +18,10 @@ import com.ledgerflow.core.domain.analytics.ParallelBucket
 import com.ledgerflow.core.domain.analytics.ParserGap
 import com.ledgerflow.core.domain.analytics.RecurringMerchant
 import com.ledgerflow.core.domain.analytics.TimeBucket
+import com.ledgerflow.core.domain.analytics.merchantCategoryBreakdown
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.LedgerType
+import com.ledgerflow.core.model.MerchantCategory
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
 import com.ledgerflow.core.testing.screenshot.PHONE_2X
@@ -57,8 +60,13 @@ open class AnalyticsScreenGoldensTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun capture(name: String, state: AnalyticsUiState, fontScale: Float) =
-        rule.captureScreenGolden(name, fontScale) {
+    private fun capture(
+        name: String,
+        state: AnalyticsUiState,
+        fontScale: Float,
+        layoutDirection: LayoutDirection = LayoutDirection.Ltr,
+    ) =
+        rule.captureScreenGolden(name, fontScale, layoutDirection) {
             // In LfScaffold, as the shell hosts every tab: the screen paints no
             // background of its own, and without one the golden showed the test
             // window's colour instead of the app's.
@@ -86,6 +94,14 @@ open class AnalyticsScreenGoldensTest {
     ) // Largest first, as the repository returns them.
 
     private val total = categories.sumOf { it.amount.minor }
+
+    private val merchants = listOf(
+        dim("landlord", "Landlord", 24_000_00, 1, 24_000_00),
+        dim("bigbasket", "bigbasket", 5_210_00, 6, 4_300_00),
+        dim("zepto", "Zepto", 3_430_50, 8, 2_910_00),
+        dim("swiggy", "Swiggy", 2_140_00, 5, 2_900_00),
+        dim("uber", "Uber", 1_120_00, 7, 1_300_00),
+    )
 
     /** Day `i` of the window: a weekly shape plus a monthly rent spike, all integers. */
     private fun dayMinor(i: Int): Long = when {
@@ -137,13 +153,7 @@ open class AnalyticsScreenGoldensTest {
                 dim("dairy", "Dairy", 1_600_00, 2, 1_100_00),
             ),
         ),
-        merchants = listOf(
-            dim("landlord", "Landlord", 24_000_00, 1, 24_000_00),
-            dim("bigbasket", "bigbasket", 5_210_00, 6, 4_300_00),
-            dim("zepto", "Zepto", 3_430_50, 8, 2_910_00),
-            dim("swiggy", "Swiggy", 2_140_00, 5, 2_900_00),
-            dim("uber", "Uber", 1_120_00, 7, 1_300_00),
-        ),
+        merchants = merchants,
         paymentMethods = listOf(
             dim("netbanking", "Net banking", 24_000_00, 1, 24_000_00),
             dim("upi", "UPI", 15_810_50, 38, 14_200_00),
@@ -197,6 +207,18 @@ open class AnalyticsScreenGoldensTest {
                 debit = Money(if (w == 0) 26_400_00L else 4_600_00L + w * 300_00L),
             )
         },
+        // A11 (V2-6), by the repository's own rule from the merchants above:
+        // two filed, the landlord not yet, and the rest with no merchant.
+        merchantCategories = merchantCategoryBreakdown(
+            merchants = merchants + dim("", "No merchant", total - merchants.sumOf { it.amount.minor }, 12, null),
+            categoryOf = mapOf("bigbasket" to "mc-g", "zepto" to "mc-g", "swiggy" to "mc-f", "uber" to "mc-t"),
+            categories = listOf(
+                MerchantCategory("mc-g", "Groceries", GREEN, 0, isSystem = true),
+                MerchantCategory("mc-f", "Food delivery", ORANGE, 1, isSystem = true),
+                MerchantCategory("mc-t", "Travel & transport", PURPLE, 2, isSystem = true),
+            ),
+            previous = mapOf("bigbasket" to Money(4_300_00), "zepto" to Money(2_910_00), "swiggy" to Money(2_900_00)),
+        ),
     )
 
     private val full = AnalyticsUiState(isLoading = false, snapshot = snapshot)
@@ -225,6 +247,14 @@ open class AnalyticsScreenGoldensTest {
 
     @Config(qualifiers = TALLEST)
     @Test fun full_2x() = capture("analytics-full-2x", full, 2f)
+
+    /** A11 (V2-6): Groceries open on its merchants, Uncategorised's link under its row; RTL mirrors it. */
+    private val merchantCategoryOpen by lazy { full.copy(expandedMerchantCategoryId = "mc-g") }
+
+    @Test fun merchantCategoryOpen_1x() = capture("analytics-merchant-category-open-1x", merchantCategoryOpen, 1f)
+
+    @Test fun merchantCategoryOpen_1x_rtl() =
+        capture("analytics-merchant-category-open-1x-rtl", merchantCategoryOpen, 1f, LayoutDirection.Rtl)
 
     @Test fun empty_1x() = capture("analytics-empty-1x", empty, 1f)
 

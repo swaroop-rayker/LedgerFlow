@@ -237,7 +237,7 @@ internal fun SettingsSectionRoute(
         page = page,
         state = state,
         onBack = onBack,
-        onCategories = { navigate(Destination.Categories) },
+        onCategories = { navigate(Destination.Categories()) },
         onBudgets = { navigate(Destination.Budgets) },
         onExport = { navigate(Destination.Export) },
         onDeletedEntries = { navigate(Destination.DeletedEntries) },

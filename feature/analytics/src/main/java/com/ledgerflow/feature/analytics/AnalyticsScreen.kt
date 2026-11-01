@@ -90,6 +90,8 @@ public fun AnalyticsScreen(
     state: AnalyticsUiState,
     onEvent: (AnalyticsEvent) -> Unit,
     modifier: Modifier = Modifier,
+    /** A11's "Categorise in Merchants": Organise, on the merchants still to file (V2-6). */
+    onCategoriseMerchants: () -> Unit = {},
 ) {
     LfTabPage(
         title = "Analytics",
@@ -120,7 +122,7 @@ public fun AnalyticsScreen(
             }
             emptySection(state)
         } else {
-            chartSections(state, snapshot, onEvent)
+            chartSections(state, snapshot, onEvent, onCategoriseMerchants)
         }
     }
 }
@@ -177,6 +179,7 @@ private fun LazyListScope.chartSections(
     state: AnalyticsUiState,
     snapshot: AnalyticsSnapshot,
     onEvent: (AnalyticsEvent) -> Unit,
+    onCategoriseMerchants: () -> Unit,
 ) {
     item(key = "total", contentType = "total") {
         TotalCard(snapshot = snapshot, currency = state.baseCurrency)
@@ -229,6 +232,8 @@ private fun LazyListScope.chartSections(
             )
         }
     }
+
+    merchantCategorySection(state, snapshot, onEvent, onCategoriseMerchants)
 
     // A5 — payment method split. The same donut, different data.
     item(key = "methods", contentType = "chart") {
@@ -725,7 +730,7 @@ private fun TotalCard(snapshot: AnalyticsSnapshot, currency: String) {
 }
 
 @Composable
-private fun SectionCard(title: String?, content: @Composable () -> Unit) {
+internal fun SectionCard(title: String?, content: @Composable () -> Unit) {
     LfCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -836,7 +841,7 @@ private fun AnalyticsSnapshot.toMirroredColumns(): List<LfMirroredColumn> =
  * views cannot lose the user's place in the drill-down.
  */
 @Composable
-private fun CategoryBreakdown(
+internal fun CategoryBreakdown(
     totals: List<DimensionTotal>,
     currency: String,
     expandedId: String?,
@@ -844,6 +849,7 @@ private fun CategoryBreakdown(
     treemapShown: Boolean,
     onExpand: (String) -> Unit,
     onToggleTreemap: () -> Unit,
+    afterRow: (@Composable (DimensionTotal) -> Unit)? = null,
 ) {
     if (totals.isEmpty()) return
 
@@ -862,14 +868,14 @@ private fun CategoryBreakdown(
                     id = total.id,
                     label = total.name,
                     value = total.amount.minor,
-                    color = LfCategoryPalette.colorForId(total.id, total.colorArgb),
+                    color = dimensionColor(total.id, total.colorArgb),
                 )
             },
             onTileClick = onExpand,
         )
-        CategoryList(totals, currency, expandedId, subcategories, onExpand)
+        CategoryList(totals, currency, expandedId, subcategories, onExpand, afterRow)
     } else {
-        DonutWithList(totals, currency, expandedId, subcategories, onExpand)
+        DonutWithList(totals, currency, expandedId, subcategories, onExpand, afterRow)
     }
 }
 
@@ -887,6 +893,7 @@ private fun DonutWithList(
     expandedId: String?,
     subcategories: Map<String, List<DimensionTotal>>,
     onExpand: (String) -> Unit,
+    afterRow: (@Composable (DimensionTotal) -> Unit)? = null,
 ) {
     if (totals.isEmpty()) return
     val visible = totals.take(TOP_SLICES)
@@ -899,7 +906,7 @@ private fun DonutWithList(
                     id = total.id,
                     label = total.name,
                     value = total.amount.minor,
-                    color = LfCategoryPalette.colorForId(total.id, total.colorArgb),
+                    color = dimensionColor(total.id, total.colorArgb),
                 ),
             )
         }
@@ -926,10 +933,14 @@ private fun DonutWithList(
         centerText = MoneyFormat.symbolised(Money.sum(totals.map { it.amount }).minor, currency),
     )
 
-    CategoryList(totals, currency, expandedId, subcategories, onExpand)
+    CategoryList(totals, currency, expandedId, subcategories, onExpand, afterRow)
 }
 
-/** The ranked list with A3's drill-down, shared by the donut and the treemap. */
+/**
+ * The ranked list with A3's drill-down, shared by the donut and the treemap.
+ * [afterRow] draws under a row whatever belongs to it alone: A11's link from
+ * Uncategorised into Merchants.
+ */
 @Composable
 private fun CategoryList(
     totals: List<DimensionTotal>,
@@ -937,21 +948,23 @@ private fun CategoryList(
     expandedId: String?,
     subcategories: Map<String, List<DimensionTotal>>,
     onExpand: (String) -> Unit,
+    afterRow: (@Composable (DimensionTotal) -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         totals.forEach { total ->
             DimensionRow(
                 total = total,
                 currency = currency,
-                color = LfCategoryPalette.colorForId(total.id, total.colorArgb),
+                color = dimensionColor(total.id, total.colorArgb),
                 onClick = { onExpand(total.id) },
             )
+            afterRow?.invoke(total)
             if (total.id == expandedId) {
                 subcategories[total.id].orEmpty().forEach { child ->
                     DimensionRow(
                         total = child,
                         currency = currency,
-                        color = LfCategoryPalette.colorForId(child.id, child.colorArgb),
+                        color = dimensionColor(child.id, child.colorArgb),
                         onClick = {},
                         indented = true,
                     )

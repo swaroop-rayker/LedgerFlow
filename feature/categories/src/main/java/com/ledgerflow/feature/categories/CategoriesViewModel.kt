@@ -1,5 +1,6 @@
 package com.ledgerflow.feature.categories
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
@@ -49,10 +50,21 @@ public class CategoriesViewModel @Inject constructor(
     private val purgeCategory: PurgeHiddenCategoryUseCase,
     private val purgeMerchant: PurgeHiddenMerchantUseCase,
     private val purgePaymentMethod: PurgeHiddenPaymentMethodUseCase,
+    savedStateHandle: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
-    /** Everything the user is doing; everything else is derived from the database. */
-    private val local = MutableStateFlow(LocalState())
+    /**
+     * Everything the user is doing; everything else is derived from the
+     * database. Opened from Analytics' "Categorise in Merchants" (V2-6), it
+     * starts on the merchants still to file.
+     */
+    private val local = MutableStateFlow(
+        if (savedStateHandle.get<String>(VIEW_ARG) == VIEW_UNCATEGORISED_MERCHANTS) {
+            LocalState(section = TaxonomySection.Merchants, merchantFilter = MerchantFilter.Uncategorised)
+        } else {
+            LocalState()
+        },
+    )
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val tree = local
@@ -559,7 +571,17 @@ public class CategoriesViewModel @Inject constructor(
         val selected: Set<String> = emptySet(),
     )
 
-    private companion object {
+    public companion object {
+        /**
+         * The route argument naming where Organise opens, read by string for
+         * the reason `InboxViewModel.FILTER_ARG` gives. `Destination.Categories`'s
+         * property is the other half; `OrganiseViewArgumentTest` holds them together.
+         */
+        public const val VIEW_ARG: String = "view"
+
+        /** Merchants, on the Uncategorised filter: Analytics' "Categorise in Merchants". */
+        public const val VIEW_UNCATEGORISED_MERCHANTS: String = "uncategorised-merchants"
+
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val LAST4_LENGTH = 4
     }

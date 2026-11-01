@@ -31,6 +31,7 @@ import com.ledgerflow.core.designsystem.pattern.LfSheetOption
 import com.ledgerflow.core.domain.appearance.MotionLevel
 import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.inbox.InboxFilter
+import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.analytics.AnalyticsCustomRangeSheet
 import com.ledgerflow.feature.analytics.AnalyticsEvent
 import com.ledgerflow.feature.analytics.AnalyticsFilterSheet
@@ -247,6 +248,7 @@ private fun AnalyticsDialogs(state: AnalyticsUiState, onEvent: (AnalyticsEvent) 
             filters = state.filters,
             categories = state.allCategories,
             merchants = state.allMerchants,
+            merchantCategories = state.allMerchantCategories,
             openField = state.openFilterField,
             onEvent = onEvent,
         )
@@ -303,7 +305,14 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             viewModel.onEvent(AnalyticsEvent.Resumed)
             onPauseOrDispose { }
         }
-        AnalyticsScreen(state = state, onEvent = viewModel::onEvent)
+        AnalyticsScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            // Stacked on the tab, so Back returns to Analytics once filed (V2-6).
+            onCategoriseMerchants = {
+                navController.navigate(Destination.Categories(view = CategoriesViewModel.VIEW_UNCATEGORISED_MERCHANTS))
+            },
+        )
         AnalyticsDialogs(state = state, onEvent = viewModel::onEvent)
     }
 }
@@ -550,7 +559,7 @@ private val Destination.label: String
         Destination.Settings -> "Settings"
         is Destination.SettingsSection -> "Settings"
         is Destination.Entry -> "Add"
-        Destination.Categories -> "Categories"
+        is Destination.Categories -> "Categories"
         Destination.Budgets -> "Budgets"
         Destination.Export -> "Export"
         Destination.DeletedEntries -> "Deleted"

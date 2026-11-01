@@ -31,6 +31,9 @@ import com.ledgerflow.core.domain.analytics.AnalyticsWindow
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Merchant
+import com.ledgerflow.core.model.MerchantCategory
+import com.ledgerflow.core.domain.analytics.MerchantCategoryBreakdown
+import com.ledgerflow.core.domain.taxonomy.UNCATEGORISED_MERCHANTS
 import com.ledgerflow.core.ui.picker.LfDetailRow
 import com.ledgerflow.core.ui.picker.LfMultiPickerDialog
 import com.ledgerflow.core.ui.picker.LfPickerOption
@@ -59,7 +62,9 @@ public fun AnalyticsFilterSheet(
     merchants: List<Merchant>,
     openField: AnalyticsFilterField?,
     onEvent: (AnalyticsEvent) -> Unit,
+    merchantCategories: List<MerchantCategory> = emptyList(),
 ) {
+    val choices = FilterChoices(categories, merchants, merchantCategories)
     LfDialog(
         title = "Filters",
         body = "Narrow every figure on this screen. All of these apply together.",
@@ -68,25 +73,14 @@ public fun AnalyticsFilterSheet(
         onDismiss = { onEvent(AnalyticsEvent.FilterSheetShown(visible = false)) },
         dismissText = "Close",
         detail = {
-            FilterForm(
-                filters = filters,
-                categories = categories,
-                merchants = merchants,
-                onEvent = onEvent,
-            )
+            FilterForm(filters = filters, choices = choices, onEvent = onEvent)
         },
     )
 
     // Over the sheet, not inside it: the same stacking the entry form uses when
     // its picker opens on top of the form it is filling in.
     if (openField != null) {
-        FilterPicker(
-            field = openField,
-            filters = filters,
-            categories = categories,
-            merchants = merchants,
-            onEvent = onEvent,
-        )
+        FilterPicker(field = openField, filters = filters, choices = choices, onEvent = onEvent)
     }
 }
 
@@ -100,8 +94,7 @@ public fun AnalyticsFilterSheet(
 @Composable
 private fun FilterForm(
     filters: AnalyticsFilters,
-    categories: List<Category>,
-    merchants: List<Merchant>,
+    choices: FilterChoices,
     onEvent: (AnalyticsEvent) -> Unit,
 ) {
     Column(
@@ -127,7 +120,7 @@ private fun FilterForm(
         AnalyticsFilterField.entries.forEach { field ->
             LfDetailRow(
                 label = field.label,
-                value = field.summarise(filters, categories, merchants),
+                value = field.summarise(filters, choices),
                 onClick = { onEvent(AnalyticsEvent.FilterFieldOpened(field)) },
             )
         }
@@ -156,18 +149,17 @@ private fun SearchField(filters: AnalyticsFilters, onEvent: (AnalyticsEvent) -> 
 private fun FilterPicker(
     field: AnalyticsFilterField,
     filters: AnalyticsFilters,
-    categories: List<Category>,
-    merchants: List<Merchant>,
+    choices: FilterChoices,
     onEvent: (AnalyticsEvent) -> Unit,
 ) {
-    val options = field.optionsFrom(filters, categories, merchants)
+    val options = field.optionsFrom(filters, choices)
     LfMultiPickerDialog(
         title = field.label,
         body = field.body,
         options = options,
         selectedIds = field.selectedIn(filters),
         onToggle = { id ->
-            onEvent(AnalyticsEvent.FiltersChanged(field.toggle(filters, categories, id)))
+            onEvent(AnalyticsEvent.FiltersChanged(field.toggle(filters, choices.categories, id)))
         },
         onClear = { onEvent(AnalyticsEvent.FiltersChanged(field.cleared(filters))) },
         onDismiss = { onEvent(AnalyticsEvent.FilterFieldOpened(null)) },
@@ -182,6 +174,7 @@ private val AnalyticsFilterField.body: String
         // narrows to the categories chosen above, when any are.
         AnalyticsFilterField.SUBCATEGORY -> "Subcategories of the categories you chose."
         AnalyticsFilterField.MERCHANT -> "Where the money went."
+        AnalyticsFilterField.MERCHANT_CATEGORY -> "What kind of place: every merchant filed under it."
         AnalyticsFilterField.SOURCE -> "How the entry reached the ledger."
     }
 
@@ -190,6 +183,7 @@ private val AnalyticsFilterField.emptyMessage: String
         AnalyticsFilterField.CATEGORY -> "No categories yet. Add some in Settings → Organise."
         AnalyticsFilterField.SUBCATEGORY -> "Those categories have no subcategories."
         AnalyticsFilterField.MERCHANT -> "No merchants yet."
+        AnalyticsFilterField.MERCHANT_CATEGORY -> "No merchant categories yet."
         AnalyticsFilterField.SOURCE -> "No sources."
     }
 
@@ -202,19 +196,25 @@ private val AnalyticsFilterField.emptyMessage: String
  */
 private fun AnalyticsFilterField.optionsFrom(
     filters: AnalyticsFilters,
-    categories: List<Category>,
-    merchants: List<Merchant>,
+    choices: FilterChoices,
 ): List<LfPickerOption> = when (this) {
-    AnalyticsFilterField.CATEGORY -> categories
+    AnalyticsFilterField.CATEGORY -> choices.categories
         .filterNot { it.isSubcategory }
         .map { LfPickerOption(it.id, it.name) }
 
-    AnalyticsFilterField.SUBCATEGORY -> categories
+    AnalyticsFilterField.SUBCATEGORY -> choices.categories
         .filter { it.isSubcategory }
         .filter { filters.categoryIds.isEmpty() || it.parentId in filters.categoryIds }
         .map { LfPickerOption(it.id, it.name) }
 
-    AnalyticsFilterField.MERCHANT -> merchants.map { LfPickerOption(it.id, it.canonicalName) }
+    AnalyticsFilterField.MERCHANT -> choices.merchants.map { LfPickerOption(it.id, it.canonicalName) }
+
+    // The live categories, then Uncategorised for the merchants still to file
+    // (V2-6). No "No merchant": filtering by kind of place cannot reach an
+    // entry with no place.
+    AnalyticsFilterField.MERCHANT_CATEGORY ->
+        choices.merchantCategories.map { LfPickerOption(it.id, it.name) } +
+            LfPickerOption(MerchantCategoryBreakdown.UNCATEGORISED_ID, UNCATEGORISED_MERCHANTS)
 
     AnalyticsFilterField.SOURCE -> EntrySource.entries.map {
         LfPickerOption(it.name, it.label())
@@ -225,6 +225,7 @@ private fun AnalyticsFilterField.selectedIn(filters: AnalyticsFilters): Set<Stri
     AnalyticsFilterField.CATEGORY -> filters.categoryIds
     AnalyticsFilterField.SUBCATEGORY -> filters.subcategoryIds
     AnalyticsFilterField.MERCHANT -> filters.merchantIds
+    AnalyticsFilterField.MERCHANT_CATEGORY -> filters.merchantCategoryIds
     AnalyticsFilterField.SOURCE -> filters.sources.map { it.name }.toSet()
 }
 
@@ -242,6 +243,9 @@ private fun AnalyticsFilterField.toggle(
         filters.copy(subcategoryIds = filters.subcategoryIds.toggle(id))
 
     AnalyticsFilterField.MERCHANT -> filters.copy(merchantIds = filters.merchantIds.toggle(id))
+
+    AnalyticsFilterField.MERCHANT_CATEGORY ->
+        filters.copy(merchantCategoryIds = filters.merchantCategoryIds.toggle(id))
 
     AnalyticsFilterField.SOURCE -> {
         val source = EntrySource.valueOf(id)
@@ -282,17 +286,24 @@ private fun AnalyticsFilterField.cleared(filters: AnalyticsFilters): AnalyticsFi
     AnalyticsFilterField.CATEGORY -> filters.copy(categoryIds = emptySet())
     AnalyticsFilterField.SUBCATEGORY -> filters.copy(subcategoryIds = emptySet())
     AnalyticsFilterField.MERCHANT -> filters.copy(merchantIds = emptySet())
+    AnalyticsFilterField.MERCHANT_CATEGORY -> filters.copy(merchantCategoryIds = emptySet())
     AnalyticsFilterField.SOURCE -> filters.copy(sources = emptySet())
 }
 
 @Composable
 private fun AnalyticsFilterField.summarise(
     filters: AnalyticsFilters,
-    categories: List<Category>,
-    merchants: List<Merchant>,
+    choices: FilterChoices,
 ): String = summariseSelection(
     selectedIds = selectedIn(filters),
-    options = optionsFrom(filters, categories, merchants),
+    options = optionsFrom(filters, choices),
+)
+
+/** What the pickers choose from, in one value rather than a parameter each. */
+private class FilterChoices(
+    val categories: List<Category>,
+    val merchants: List<Merchant>,
+    val merchantCategories: List<MerchantCategory>,
 )
 
 /**

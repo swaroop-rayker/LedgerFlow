@@ -88,9 +88,15 @@ needs accumulated history.
 | A8 | **Recurring detection** | Suspected recurring merchants: ≥3 occurrences, interval σ/μ < 0.25 | **base tables**, not rollups — interval clustering needs individual dates per merchant | list | P3 |
 | A9 | **Window & filter machinery** | 8 time windows + custom; previous-period toggle on every one; 10 simultaneously-composable filters | `daily_rollup` + base tables | — | P3 |
 | A10 | **Recurring cash-flow runway** | "₹18,400 of detected recurring charges fall before the 30th" | derived from A8 | list | P5 |
-| A11 | **Merchant-category breakdown** | Where the money went by kind of place: donut plus a ranked list with share and Δ, treemap toggle; drill to merchants, then entries; Uncategorised as its own bucket with a "Categorise in Merchants" action. Optional A1 lens: spend over time stacked by merchant category | `daily_rollup` **joined through `merchant.merchant_category_id` at query time** — no new rollup dimension | `LfDonutChart` + list, `LfTreemap`, `LfHorizontalBarChart` (all shipped) | **v2** (V2-PLAN §5, V2-6) |
+| A11 | **Merchant-category breakdown** | Where the money went by kind of place: donut plus a ranked list with share and Δ, treemap toggle; drill to merchants, then entries; Uncategorised as its own bucket with a "Categorise in Merchants" action. Optional A1 lens: spend over time stacked by merchant category | `daily_rollup` **joined through `merchant.merchant_category_id` at query time** — no new rollup dimension | `LfDonutChart` + list, `LfTreemap`, `LfHorizontalBarChart` (all shipped) | **Shipped**, V2-6 PR 4 (2026-11-01); the A1 lens and the merchant → entries page left out |
 
-**A11 (planned with V2-PLAN §5, owner 2026-10-01).** Merchant categories are a
+**A11 (planned with V2-PLAN §5, owner 2026-10-01; built V2-6 PR 4, 2026-11-01).**
+*As built, the join is in memory.* The snapshot already sums the rollup per
+merchant with every filter applied; A11 regroups those rows through each
+merchant's category, so it costs no new query and no new Law 2 surface. A
+"No merchant" row sits after Uncategorised, because spending with no merchant
+is not something filing can fix, and the two together make the section equal
+the page total. Merchant categories are a
 flat taxonomy *of merchants*, separate from spending categories, and assigned by
 hand in the Merchants section only — capture, review and entry never categorise.
 Two decisions carry into the chart:

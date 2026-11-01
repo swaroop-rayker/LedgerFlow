@@ -899,7 +899,7 @@ A live preview names the two dates the period resolves to before Apply is presse
 
 **Aggregation dimensions:** category, subcategory, category group, merchant, payment method, source (SMS/OCR/MANUAL), line-item vs entry grain.
 
-**Filters (composable, all simultaneously active):** ledger (fixed per screen), date range, category multi-select, subcategory multi-select, payment method multi-select, merchant multi-select, amount range, source, has-attachment, text search across note/merchant/item name.
+**Filters (composable, all simultaneously active):** ledger (fixed per screen), date range, category multi-select, subcategory multi-select, payment method multi-select, merchant multi-select, merchant-category multi-select (V2-6: the live categories plus Uncategorised, resolved to the merchants filed under them, so it reads the rollup and combines with the merchant filter as an intersection; one that leaves no merchant matches nothing), amount range, source, has-attachment, text search across note/merchant/item name.
 
 **Views.** The full catalogue, its reasoning and its phasing live in
 `docs/DATAVIZ-PLAN.md`; this table is the summary and the two must not diverge.
@@ -910,6 +910,7 @@ A live preview names the two dates the period resolves to before Apply is presse
 | Category breakdown | Donut + ranked list with % and Δ vs previous period | P3 |
 | Subcategory drill-down | Nested list, tap-to-expand. A squarified **treemap** is offered beside it as a toggle — secondary by design: it answers "which is biggest" at a glance and is worse than a list at everything else, so the list is unchanged under either graphic | P3 |
 | Merchant leaderboard | Horizontal bar, Top-N + "Other" | P3 |
+| **Merchant-category breakdown (A11)** | Where the money went by kind of place: donut or treemap over a ranked list with Δ, beside "By category" (what it was for). Each merchant's spending lands in the category the merchant has **now**, regrouped in memory from the merchant totals the snapshot already reads (no new query, no rollup column), so re-filing moves its history (V2-PLAN §5.4's retroactive rule). Ranked by amount, then **Uncategorised** (merchants not yet filed; a merchant under a category since hidden counts here) with "N merchants have no category · Categorise", which opens Organise > Merchants on its Uncategorised filter, then **No merchant** (spending with no merchant, which filing cannot fix). The rows add up to the page total, per book (Law 2). Tapping a row lists its merchants under it, as A3 does; a merchant's own entries are a later page (owner 2026-11-01). `MerchantCategoryBreakdownTest`, `AnalyticsByMerchantCategoryTest` (device), goldens `analytics-merchant-category-open-*` | v2 (V2-6) |
 | Payment method split | Donut | P3 |
 | Calendar heatmap | Day-cell intensity grid (month view) | P3 |
 | Budget progress | Ring/linear progress per category with burn-rate projection | P3 |
@@ -1022,7 +1023,7 @@ The schema was always currency-tagged, so the storage cost of this is zero. What
 | Artifact | Format | Encryption | Trigger |
 |---|---|---|---|
 | Data export | CSV (one file per table, zipped) — **shipped, ADR-0017** | none (user's choice, warned) | Manual, SAF destination |
-| Data export | XLSX — **shipped, ADR-0004**: Monthly totals (Spent, Received — no net), Spending by month and Income by month (category × month, one book each), then every table as a sheet | none (user's choice, warned) | Manual, SAF destination — the default format on the Export screen |
+| Data export | XLSX — **shipped, ADR-0004**: Monthly totals (Spent, Received — no net), Spending by month and Income by month (category × month, one book each), Spending by merchant category (V2-6: merchant category × month, expenses only, through each merchant's category now, Uncategorised and No merchant last), then every table as a sheet | none (user's choice, warned) | Manual, SAF destination — the default format on the Export screen |
 | **Full backup** | `.lfbk` (custom container; **v1 phrase-keyed, v2 sealed to a phrase-derived public key** — ADR-0027) | **AES-256-GCM.** v1's key is `HKDF-SHA256(24-word phrase seed)`; v2's comes from DHKEM(P-256, HKDF-SHA256) to a key only the phrase reproduces. Never a passphrase (§7.2). | **Nightly, unattended (ADR-0027), once enrolled** — plus **manual: "Back up now"** in Settings, which asks for the 24 words each time, into a user-granted SAF tree (ADR-0025). ~~Nightly `PeriodicWorkRequest`~~ — struck by ADR-0025 because a scheduled job cannot seal a *phrase-derived* `.lfbk`, and **restored by ADR-0027** on a different key: sealed to a public key, so the job needs no secret at all |
 | **Receipt images** | one `.lfba` per attachment, in an `attachments/` subfolder of the same tree (ADR-0023) | AES-256-GCM, key = `HKDF-SHA256(seed, salt = per file, info = "lfbk-attachment-v1")` | Written once per image, alongside a `.lfbk` write |
 
@@ -1906,7 +1907,7 @@ Requirements: 60fps pan/zoom on 5 years of daily buckets (~1,825 points) — ach
 | Cold start (P50, mid-tier device) | ≤ 700 ms to first frame | Macrobenchmark, CI regression check ±10% |
 | Warm start | ≤ 250 ms | Macrobenchmark |
 | Frame rendering | **0 frames > 16.6 ms** during Ledger scroll (locked 60fps); on 120 Hz panels target 8.3 ms | Macrobenchmark `FrameTimingMetric`, P99 |
-| Analytics screen (5Y range) | ≤ 300 ms to rendered chart | Instrumented timing test |
+| Analytics screen (5Y range) | ≤ 300 ms to rendered chart | Instrumented timing test: `AnalyticsFiveYearTimingTest` (V2-6 PR 4; before it the figure was measured by hand). The whole snapshot, comparison on, over five years of bench-shaped data with half the merchants filed. 2026-11-01, SM-S721B, debug build, thermal status 0: median **231 ms** unfiltered (runs 216–287), **189 ms** filtered by a merchant category |
 | SMS → notification latency | ≤ 1.5 s | Instrumented |
 | OCR (single receipt page) | ≤ 2.5 s | Instrumented |
 | APK size (arm64 release split) | ≤ 50 MB | CI check — builds the split and fails if it finds none |
