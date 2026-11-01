@@ -53,6 +53,9 @@ public object LfIcons {
 
     public val Add: ImageVector by lazy { lucide("Add", LfLucide.Plus) }
     public val Close: ImageVector by lazy { lucide("Close", LfLucide.X) }
+
+    /** "This is the one chosen": a picker's selected row (BUG83). Not mirrored; a tick reads the same both ways. */
+    public val Selected: ImageVector by lazy { lucide("Selected", LfLucide.Check) }
     public val Delete: ImageVector by lazy { lucide("Delete", LfLucide.Trash) }
 
     private fun lucide(name: String, paths: List<String>, autoMirror: Boolean = false): ImageVector =
