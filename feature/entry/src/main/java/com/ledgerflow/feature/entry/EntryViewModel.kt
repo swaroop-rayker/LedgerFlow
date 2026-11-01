@@ -18,6 +18,7 @@ import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
 import com.ledgerflow.core.domain.ledger.NewLineItem
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryReader
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.TaxonomyError
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
@@ -74,12 +75,18 @@ import kotlinx.coroutines.launch
  * fails the build if anything else opens it.
  */
 @HiltViewModel
+// The eleventh is V2-6's read-only merchant categories, for the picker. It is a
+// parameter of its own on purpose: folding it into the merchant repository
+// would hand this screen the store that files merchants (V2-PLAN §5.2).
+@Suppress("LongParameterList")
 public class EntryViewModel @Inject constructor(
     private val approveTransaction: ApproveTransactionUseCase,
     private val drafts: DraftRepository,
     private val ledgerRepository: LedgerRepository,
     private val categories: CategoryRepository,
     private val merchants: MerchantRepository,
+    /** Read only, for the picker's browse by kind; the entry form never files a merchant (V2-PLAN §5.2). */
+    merchantCategories: MerchantCategoryReader,
     private val paymentMethods: PaymentMethodRepository,
     private val clock: Clock,
     private val ids: Uuid7Generator,
@@ -106,8 +113,8 @@ public class EntryViewModel @Inject constructor(
         }
 
     public val state: StateFlow<EntryUiState> =
-        combine(form, ledgerScoped, currency) { form, scoped, currencyCode ->
-            form.toUiState(scoped, currencyCode, clock.nowMillis())
+        combine(form, ledgerScoped, currency, merchantCategories.observeAll()) { form, scoped, currencyCode, kinds ->
+            form.toUiState(scoped, currencyCode, clock.nowMillis()).copy(merchantCategories = kinds)
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),

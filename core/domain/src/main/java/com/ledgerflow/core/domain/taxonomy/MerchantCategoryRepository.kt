@@ -16,10 +16,7 @@ import kotlinx.coroutines.flow.Flow
  * category at query time, so moving a merchant moves all of its history (the
  * user is correcting a label, not recording a change in their spending).
  */
-public interface MerchantCategoryRepository {
-
-    /** Live categories in display order. */
-    public fun observeAll(): Flow<List<MerchantCategory>>
+public interface MerchantCategoryRepository : MerchantCategoryReader {
 
     /** Hidden categories, most recently hidden first (ADR-0016's lifecycle). */
     public fun observeHidden(): Flow<List<HiddenTaxonomy>>

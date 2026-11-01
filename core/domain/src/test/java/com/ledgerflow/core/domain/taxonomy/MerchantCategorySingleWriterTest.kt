@@ -70,9 +70,10 @@ class MerchantCategorySingleWriterTest {
     }
 
     /**
-     * Capture, review, the entry form and OCR never reach merchant categories
-     * at all: not the repository, not a use case over it. The merchant picker's
-     * browse-by-kind (PR 3) reads them through the Merchants' own flows.
+     * Capture, review, the entry form and OCR never reach the repository that
+     * writes merchant categories, nor a use case over it. The merchant picker's
+     * browse by kind (PR 3) reads them through [MerchantCategoryReader], which
+     * [theReader_onlyReads] keeps free of writes.
      */
     @Test
     fun captureReviewAndEntry_neverTouchMerchantCategories() {
@@ -84,6 +85,17 @@ class MerchantCategorySingleWriterTest {
             .filter { names.containsMatchIn(withoutComments(it.readText())) }
 
         assertThat(offenders.map { it.name }).isEmpty()
+    }
+
+    /**
+     * The view the entry form and review screen are given reads and nothing
+     * else. A write added to it would reach those screens without any of the
+     * name checks above noticing.
+     */
+    @Test
+    fun theReader_onlyReads() {
+        val methods = MerchantCategoryReader::class.java.declaredMethods.map { it.name }
+        assertThat(methods).containsExactly("observeAll")
     }
 
     private fun withoutComments(source: String): String = source

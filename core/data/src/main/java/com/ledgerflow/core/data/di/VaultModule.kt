@@ -47,6 +47,7 @@ import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryReader
 import com.ledgerflow.core.domain.taxonomy.MerchantCategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
@@ -218,6 +219,10 @@ public interface TaxonomyModule {
 
     @Binds
     public fun merchantCategoryRepository(impl: DefaultMerchantCategoryRepository): MerchantCategoryRepository
+
+    /** The picker's read-only view (V2-6 PR 3): the same store, without its writes. */
+    @Binds
+    public fun merchantCategoryReader(impl: DefaultMerchantCategoryRepository): MerchantCategoryReader
 
     @Binds
     public fun paymentMethodRepository(impl: DefaultPaymentMethodRepository): PaymentMethodRepository

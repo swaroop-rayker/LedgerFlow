@@ -24,6 +24,7 @@ import com.ledgerflow.core.model.Quantity
 import com.ledgerflow.core.testing.inbox.FakePendingRepository
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
 import com.ledgerflow.core.testing.taxonomy.FakeCategoryRepository
+import com.ledgerflow.core.testing.taxonomy.FakeMerchantCategoryRepository
 import com.ledgerflow.core.testing.taxonomy.FakeMerchantRepository
 import com.ledgerflow.core.testing.taxonomy.FakePaymentMethodRepository
 import java.security.SecureRandom
@@ -62,6 +63,7 @@ class ReviewSeedsExtractedLinesTest {
 
     private val pending = FakePendingRepository()
     private val merchants = FakeMerchantRepository()
+    private val merchantCategories = FakeMerchantCategoryRepository()
     private val paymentMethods = FakePaymentMethodRepository()
     private val categories = FakeCategoryRepository()
     private val ledger = FakeLedgerRepository()
@@ -101,6 +103,7 @@ class ReviewSeedsExtractedLinesTest {
         pendingRepository = pending,
         observeCategoryTree = ObserveCategoryTreeUseCase(categories),
         merchants = merchants,
+        merchantCategories = merchantCategories,
         paymentMethods = paymentMethods,
         ledgerRepository = ledger,
         ids = Uuid7Generator(SecureRandom()),

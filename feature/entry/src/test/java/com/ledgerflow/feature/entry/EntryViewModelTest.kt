@@ -16,10 +16,12 @@ import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.model.MerchantCategory
 import com.ledgerflow.core.testing.ledger.FakeDraftRepository
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
 import com.ledgerflow.core.testing.ledger.entryCombo
 import com.ledgerflow.core.testing.taxonomy.FakeCategoryRepository
+import com.ledgerflow.core.testing.taxonomy.FakeMerchantCategoryRepository
 import com.ledgerflow.core.testing.taxonomy.FakeMerchantRepository
 import com.ledgerflow.core.testing.taxonomy.FakePaymentMethodRepository
 import java.security.SecureRandom
@@ -56,6 +58,7 @@ class EntryViewModelTest {
     private val drafts = FakeDraftRepository()
     private val categories = FakeCategoryRepository()
     private val merchants = FakeMerchantRepository()
+    private val merchantCategories = FakeMerchantCategoryRepository()
     private val paymentMethods = FakePaymentMethodRepository()
 
     private val groceries = category("cat-groceries", "Groceries")
@@ -716,6 +719,7 @@ class EntryViewModelTest {
         ledgerRepository = ledger,
         categories = categories,
         merchants = merchants,
+        merchantCategories = merchantCategories,
         paymentMethods = paymentMethods,
         clock = Clock { NOW },
         ids = Uuid7Generator(SecureRandom()),
@@ -723,6 +727,21 @@ class EntryViewModelTest {
             openingDraftId?.let { mapOf(EntryViewModel.DRAFT_ID_ARG to it) } ?: emptyMap(),
         ),
     )
+
+    /** The merchant picker browses by merchant category (V2-6 PR 3): it reads them, and files nothing. */
+    @Test
+    fun thePicker_readsTheMerchantCategories_andChoosingFilesNothing() = runTest(dispatcher) {
+        val fuel = (merchantCategories.create("Fuel") as TaxonomyResult.Success<MerchantCategory>).value
+        merchants.merchants.value = listOf(Merchant("shell", "Shell", "shell", null, null))
+        val vm = collected()
+
+        vm.choose(EntryPicker.Merchant, "shell")
+        testScheduler.advanceUntilIdle()
+
+        assertThat(vm.state.value.merchantCategories).containsExactly(fuel)
+        assertThat(vm.state.value.merchantId).isEqualTo("shell")
+        assertThat(merchantCategories.filed).isEmpty()
+    }
 
     /**
      * A ViewModel with a live collector.

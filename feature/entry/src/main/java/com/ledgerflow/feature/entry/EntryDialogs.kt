@@ -22,8 +22,12 @@ import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.domain.taxonomy.MerchantGroup
 import com.ledgerflow.core.domain.taxonomy.MerchantNormalizer
+import com.ledgerflow.core.domain.taxonomy.merchantPickerGroups
+import com.ledgerflow.core.domain.taxonomy.title
 import com.ledgerflow.core.ui.picker.LfPickerDialog
+import com.ledgerflow.core.ui.picker.LfPickerGroup
 import com.ledgerflow.core.ui.picker.LfPickerOption
 
 /**
@@ -62,6 +66,14 @@ private fun PickerDialog(
         title = picker.title,
         body = picker.body,
         options = picker.optionsFrom(state).map { LfPickerOption(it.id, it.label) },
+        // Browse by kind while the search box is empty (V2-6 PR 3); the review
+        // screen asks the same rule, so the two pickers group alike.
+        groups = if (picker is EntryPicker.Merchant) {
+            merchantPickerGroups(state.merchants, state.merchantCategories, state.merchantQuery)
+                .map { it.toPickerGroup() }
+        } else {
+            emptyList()
+        },
         selectedId = picker.selectedIdIn(state),
         onSelect = { onEvent(EntryEvent.PickerItemSelected(it)) },
         onDismiss = { onEvent(EntryEvent.PickerDismissed) },
@@ -258,3 +270,6 @@ private fun EntryPicker.selectedIdIn(state: EntryUiState): String? {
     }
 }
 
+/** A merchant group as the picker draws it; Uncategorised takes the muted swatch. */
+private fun MerchantGroup.toPickerGroup() =
+    LfPickerGroup(title, category?.colorArgb, merchants.map { LfPickerOption(it.id, it.canonicalName) })

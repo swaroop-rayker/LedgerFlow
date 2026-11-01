@@ -12,6 +12,7 @@ import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.NewLineItem
 import com.ledgerflow.core.domain.taxonomy.MerchantNormalizer
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryReader
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
@@ -54,6 +55,10 @@ import kotlinx.coroutines.launch
  * discarding it in one place leaves it alive in the other.
  */
 @HiltViewModel
+// The eleventh is V2-6's read-only merchant categories, for the picker. It is a
+// parameter of its own on purpose: folding it into the merchant repository
+// would hand this screen the store that files merchants (V2-PLAN §5.2).
+@Suppress("LongParameterList")
 public class ReviewViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val approvePending: ApprovePendingUseCase,
@@ -65,6 +70,8 @@ public class ReviewViewModel @Inject constructor(
     private val pendingRepository: PendingRepository,
     private val observeCategoryTree: ObserveCategoryTreeUseCase,
     private val merchants: MerchantRepository,
+    /** Read only, for the picker's browse by kind; review never files a merchant (V2-PLAN §5.2). */
+    private val merchantCategories: MerchantCategoryReader,
     private val paymentMethods: PaymentMethodRepository,
     private val ledgerRepository: LedgerRepository,
     private val ids: Uuid7Generator,
@@ -190,6 +197,9 @@ public class ReviewViewModel @Inject constructor(
     private fun observeTaxonomy() {
         viewModelScope.launch {
             merchants.observeAll().collect { all -> _state.update { it.copy(merchants = all) } }
+        }
+        viewModelScope.launch {
+            merchantCategories.observeAll().collect { all -> _state.update { it.copy(merchantCategories = all) } }
         }
         viewModelScope.launch {
             paymentMethods.observeAll().collect { all ->

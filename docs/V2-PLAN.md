@@ -23,7 +23,7 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 · Hide amounts + Data permissions | Built on `claude/v2-3-hide-amounts` (§3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended). Not yet merged |
 | V2-3 · About | Built on `claude/v2-3-about`, stacked on #15 (§3.8; SPEC §9.3, §9.4). Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. The public contact email is still the owner's. Not yet merged |
 | LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
-| V2-6 · Merchant categories | Owner, 2026-10-31: four PRs (§5.5's note). PR 1, schema v13 and the data layer with BUG82: #18, stacked on #17. PR 2, Organise (filing merchants, the Merchant categories page), built on `claude/v2-6-organise`, stacked on #18. Not yet merged |
+| V2-6 · Merchant categories | Owner, 2026-10-31: four PRs (§5.5's note). PR 1, schema v13 and the data layer with BUG82: #18, stacked on #17. PR 2, Organise (filing merchants, merchants grouped by category, the Merchant categories page): #19, stacked on #18. PR 3, the merchant picker's browse by category, built on `claude/v2-6-picker`, stacked on #19. Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
