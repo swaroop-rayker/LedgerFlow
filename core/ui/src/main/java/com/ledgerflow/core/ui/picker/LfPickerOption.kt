@@ -1,5 +1,6 @@
 package com.ledgerflow.core.ui.picker
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,18 +10,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import com.ledgerflow.core.designsystem.component.LfCategoryDot
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
+import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.ui.LfFormRowTokens
 
@@ -98,7 +108,9 @@ public fun LfPickerDialog(
                 Column(
                     modifier = Modifier
                         .heightIn(max = LfLayout.dialogListMax)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(rememberScrollState())
+                        // One choice among these rows, to TalkBack (BUG83).
+                        .selectableGroup(),
                 ) {
                     if (createLabel != null && onCreate != null) {
                         LfChoiceRow(
@@ -170,6 +182,15 @@ private fun LfPickerGroupHeading(group: LfPickerGroup, first: Boolean) {
  * A full-width touch target rather than a radio button and a label: the whole
  * row is the control, and at font scale 2.0 a long category name wraps inside
  * it instead of pushing a control off the edge (BUG9).
+ *
+ * **The chosen row is marked by a fill and a tick, not by colour** (BUG83).
+ * It used to be drawn in `action.primary`, which under Night Vault is the same
+ * colour as every other row's text, so the merchant, category or payment
+ * method already chosen looked unchosen. TalkBack hears it too: the row is
+ * `selectable` with a radio button's role, so it reads "selected".
+ *
+ * @param emphasised the create row: an action rather than a choice, so it
+ *   leads with a + and is a button to TalkBack, never "selected".
  */
 @Composable
 public fun LfChoiceRow(
@@ -179,19 +200,52 @@ public fun LfChoiceRow(
     modifier: Modifier = Modifier,
     emphasised: Boolean = false,
 ) {
-    Text(
-        text = label,
-        style = LfFormRowTokens.textStyle,
-        // `emphasised` is the create row, which is an *action* rather than a
-        // choice -- it reads in the accent colour for the same reason a
-        // selected row does, because both are the row that does something.
-        color = if (selected || emphasised) LfFormRowTokens.selected else LfFormRowTokens.text,
+    val inset = LfFormRowTokens.choiceInset
+    val action = if (emphasised) {
+        Modifier.clickable(role = Role.Button, onClick = onClick)
+    } else {
+        Modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+    }
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .bleed(inset)
+            .clip(LfFormRowTokens.selectedShape)
+            .then(if (selected) Modifier.background(LfFormRowTokens.selectedFill) else Modifier)
+            .then(action)
             .defaultMinSize(minHeight = LfFormRowTokens.minHeight)
-            .padding(vertical = LfFormRowTokens.paddingVertical),
+            .padding(horizontal = inset, vertical = LfFormRowTokens.paddingVertical),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap),
+    ) {
+        if (emphasised) {
+            Icon(imageVector = LfIcons.Add, contentDescription = null, tint = LfFormRowTokens.glyph)
+        }
+        Text(
+            text = label,
+            style = LfFormRowTokens.textStyle,
+            color = LfFormRowTokens.text,
+            modifier = Modifier.weight(1f),
+        )
+        if (selected) {
+            Icon(imageVector = LfIcons.Selected, contentDescription = null, tint = LfFormRowTokens.glyph)
+        }
+    }
+}
+
+/**
+ * Lays the row out [by] wider on each side than its parent gave it, centred,
+ * while reporting the parent's width. The fill then reaches into the dialog's
+ * padding and the label lines up with the title above it (BUG83).
+ */
+private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints ->
+    val extra = by.roundToPx() * 2
+    val wider = constraints.copy(
+        minWidth = constraints.minWidth + extra,
+        maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + extra else Constraints.Infinity,
     )
+    val placeable = measurable.measure(wider)
+    layout(placeable.width - extra, placeable.height) { placeable.place(-extra / 2, 0) }
 }
 
 /**
