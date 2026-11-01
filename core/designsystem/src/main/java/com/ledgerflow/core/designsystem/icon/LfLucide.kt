@@ -9,9 +9,10 @@ package com.ledgerflow.core.designsystem.icon
  * line-icon family the Night Vault canvas drew in, 2 dp strokes with round
  * ends on a 24 dp grid.
  *
- * Copied, not depended on: 34 files from `lucide-icons/lucide` (`icons/<name>.svg`,
+ * Copied, not depended on: 36 files from `lucide-icons/lucide` (`icons/<name>.svg`,
  * fetched 2026-10-28; `list-filter`, `chevron-down`, `database` and `tag`
- * 2026-10-29, step F5; `external-link` 2026-10-31, V2-3), converted to path data unchanged in shape -- `circle`,
+ * 2026-10-29, step F5; `external-link` 2026-10-31, V2-3; `check` 2026-11-01, BUG83),
+ * converted to path data unchanged in shape -- `circle`,
  * `rect` and `polyline` written out as the equivalent paths. ISC licence, at
  * `assets/licenses/Lucide-ISC.txt`. A new icon is added here, from the same
  * source, so the family stays one.
@@ -59,6 +60,11 @@ internal object LfLucide {
     val X: List<String> = listOf(
         "M18 6 6 18",
         "m6 6 12 12",
+    )
+
+    /** Lucide `check`. */
+    val Check: List<String> = listOf(
+        "M20 6 9 17l-5-5",
     )
 
     /** Lucide `trash`. */
