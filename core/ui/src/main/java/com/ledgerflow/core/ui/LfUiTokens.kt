@@ -70,8 +70,25 @@ internal object LfFormRowTokens {
     val text: Color @Composable get() = LfTheme.colors.text.primary
     val secondary: Color @Composable get() = LfTheme.colors.text.secondary
     val muted: Color @Composable get() = LfTheme.colors.text.muted
-    val selected: Color @Composable get() = LfTheme.colors.action.primary
     val warning: Color @Composable get() = LfTheme.colors.status.warning
+
+    /**
+     * A picker's chosen row (BUG83): a fill and a tick, never a text colour.
+     * Night Vault's `action.primary` *is* `text.primary` in both themes, so a
+     * row "selected" by colour looked like every other row. `action.subtle` is
+     * the role's own faint fill for the current selection, and the tile's
+     * corners are what a stacked segmented option already draws.
+     */
+    val selectedFill: Color @Composable get() = LfTheme.colors.action.subtle
+    val selectedShape: Shape @Composable get() = LfTheme.shapes.tile
+    /** The tick on the chosen row and the + on the create row. */
+    val glyph: Color @Composable get() = LfTheme.colors.text.primary
+    /**
+     * How far a choice row's fill reaches past its label on each side. The row
+     * draws it outside its own bounds, so the label stays in line with the
+     * dialog's title and the fill sits in the dialog's own padding.
+     */
+    val choiceInset: Dp @Composable get() = LfTheme.space.itemGap
 }
 
 /** Recovery-phrase entry and the phrase scanner. */
