@@ -40,6 +40,27 @@ public class FakeMerchantEntriesRepository : MerchantEntriesRepository {
             MerchantTotal(Money.sum(rows.map { it.amount }), rows.size)
         }
 
+    /**
+     * The Ledger narrowed to merchant categories, per book: rows keyed by the
+     * merchant category their merchant has (`UNCATEGORISED_ID` for none).
+     * Every set asked for is recorded, so a test can prove what the screen asked.
+     */
+    public val byMerchantCategory: MutableStateFlow<Map<LedgerType, Map<String, List<LedgerListItem>>>> =
+        MutableStateFlow(emptyMap())
+    public val categoryRequests: MutableList<Set<String>> = mutableListOf()
+
+    override fun observeEntriesInMerchantCategories(
+        ledger: LedgerType,
+        merchantCategoryIds: Set<String>,
+        since: Int,
+    ): Flow<PagingData<LedgerListItem>> {
+        categoryRequests += merchantCategoryIds
+        return byMerchantCategory.map { all ->
+            val rows = merchantCategoryIds.flatMap { all[ledger]?.get(it).orEmpty() }.filter { it.localDate >= since }
+            PagingData.from(rows, sourceLoadStates = LoadStates(DONE, DONE, DONE))
+        }
+    }
+
     private fun inWindow(
         all: Map<LedgerType, Map<String, List<LedgerListItem>>>,
         ledger: LedgerType,

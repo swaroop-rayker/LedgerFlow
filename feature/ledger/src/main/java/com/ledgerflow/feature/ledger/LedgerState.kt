@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.common.time.OccurredAt
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ledger.DraftSummary
+import com.ledgerflow.core.model.MerchantCategory
 import com.ledgerflow.core.model.LedgerType
 
 /**
@@ -135,6 +136,19 @@ public data class LedgerUiState(
      * before it stays, because the icon is one mis-scroll away.
      */
     val undoable: LedgerUndo? = null,
+
+    /**
+     * The merchant categories the list is narrowed to (V2-6), empty for none;
+     * `MerchantCategoryBreakdown.UNCATEGORISED_ID` stands for the merchants
+     * not yet filed. While it is set the unsaved rows are hidden.
+     */
+    val merchantCategoryFilter: Set<String> = emptySet(),
+
+    /** The live merchant categories, for the filter's picker and its chip. */
+    val merchantCategories: List<MerchantCategory> = emptyList(),
+
+    /** The filter's picker is open. */
+    val choosingFilter: Boolean = false,
 )
 
 /** A deleted entry the snackbar can still put back: its book, its id, and how to name it. */
@@ -250,4 +264,12 @@ public sealed interface LedgerEvent {
 
     /** The snackbar went without its Undo being tapped. */
     public data object UndoExpired : LedgerEvent
+
+    /** The merchant-category filter (V2-6): the picker, a choice, clearing it. */
+    public sealed interface MerchantCategoryFilter : LedgerEvent
+
+    public data object FilterOpened : MerchantCategoryFilter
+    public data object FilterClosed : MerchantCategoryFilter
+    public data object FilterCleared : MerchantCategoryFilter
+    public data class FilterToggled(val merchantCategoryId: String) : MerchantCategoryFilter
 }

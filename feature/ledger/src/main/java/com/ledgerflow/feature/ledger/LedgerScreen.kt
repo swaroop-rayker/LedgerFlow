@@ -49,7 +49,6 @@ import com.ledgerflow.core.designsystem.component.LfFeedback
 import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
-import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfStateContent
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
@@ -96,6 +95,7 @@ public fun LedgerScreen(
     val items = entries.collectAsLazyPagingItems()
 
     state.confirmation?.let { Confirmation(it, onEvent) }
+    if (state.choosingFilter) MerchantCategoryFilterPicker(state, onEvent)
 
     // E5: a delete says where the entry went and offers to put it back, on the
     // window's one snackbar. The confirmation before it stays.
@@ -209,7 +209,7 @@ private fun EntryList(
     // page has loaded — showing an empty state there would flash "nothing here"
     // at a user whose ledger is full.
     val settled = items.loadState.refresh !is LoadState.Loading
-    val status = statusFor(state, settled, items.itemCount)
+    val status = statusFor(state, settled, items.itemCount, onEvent)
 
     val snapshot = items.itemSnapshotList
     // One painter for every row's delete control: a painter per row was a
@@ -239,13 +239,8 @@ private fun EntryList(
         LfTabPage(
             title = "Ledger",
             modifier = modifier,
-            filters = {
-                LfSegmentedControl(
-                    options = listOf("Expenses", "Income"),
-                    selectedIndex = state.ledger.ordinal,
-                    onSelect = { onEvent(LedgerEvent.LedgerSelected(LedgerType.entries[it])) },
-                )
-            },
+            // The book switch and, beside it, the merchant-category filter (V2-6).
+            filters = { LedgerHeaderBand(state, onEvent) },
             notices = state.message?.let { message -> { MessageBanner(message = message, onEvent = onEvent) } },
             statusContent = status,
             spacing = LfPageSpacing.None,
@@ -695,10 +690,13 @@ private fun statusFor(
     state: LedgerUiState,
     settled: Boolean,
     itemCount: Int,
+    onEvent: (LedgerEvent) -> Unit,
 ): (@Composable ColumnScope.() -> Unit)? = when {
     !state.isLoaded || (!settled && itemCount == 0) -> {
         { LfStateContent(state = LfContentState.Loading) {} }
     }
+    // Filtered to nothing is not an empty book: say which filter, offer the way out (V2-6).
+    settled && itemCount == 0 && state.merchantCategoryFilter.isNotEmpty() -> { { FilteredEmpty(state, onEvent) } }
     settled && state.showsNothing(itemCount) -> { { EmptyBook(state) } }
     else -> null
 }

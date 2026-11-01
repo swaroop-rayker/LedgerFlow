@@ -14,6 +14,8 @@ import com.ledgerflow.core.domain.ledger.DraftSummary
 import com.ledgerflow.core.domain.ledger.LedgerError
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.LedgerResult
+import com.ledgerflow.core.domain.ledger.MerchantEntriesRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryReader
 import com.ledgerflow.core.domain.usecase.BinnedRef
 import com.ledgerflow.core.domain.usecase.DeleteEntryUseCase
 import com.ledgerflow.core.domain.usecase.RestoreEntryUseCase
@@ -62,6 +64,10 @@ public class LedgerViewModel @Inject constructor(
     private val restoreEntry: RestoreEntryUseCase,
     private val observePending: ObservePendingUseCase,
     private val clock: Clock,
+    /** The list narrowed to merchant categories (V2-6); reads only. */
+    private val merchantEntries: MerchantEntriesRepository,
+    /** The filter's choices, read only: the Ledger files no merchant (V2-PLAN §5.2). */
+    merchantCategories: MerchantCategoryReader,
 ) : ViewModel() {
 
     /** Everything the user is doing; everything else is the database. */
@@ -116,8 +122,14 @@ public class LedgerViewModel @Inject constructor(
         observePending(InboxFilter.PENDING)
 
     public val state: StateFlow<LedgerUiState> =
-        combine(local, hasEntries, pending, candidates) { local, hasAny, drafts, queue ->
-            uiState(local, hasAny, unsavedFor(local.ledger, drafts, queue))
+        combine(local, hasEntries, pending, candidates, merchantCategories.observeAll()) {
+                local, hasAny, drafts, queue, kinds ->
+            // Filtering hides the unsaved rows: they are not ledger entries yet
+            // and mostly have no filed merchant, so a filtered list carrying
+            // them would look like the filter not working (owner, 2026-11-01).
+            val filtering = local.merchantCategoryFilter.isNotEmpty()
+            val unsaved = if (filtering) emptyList() else unsavedFor(local.ledger, drafts, queue)
+            uiState(local, hasAny, unsaved).copy(merchantCategories = kinds)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -152,8 +164,18 @@ public class LedgerViewModel @Inject constructor(
      * on a second collector.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    public val entries: Flow<PagingData<LedgerListItem>> = book
-        .flatMapLatest { ledger.observeEntries(it, since = windowStart()) }
+    public val entries: Flow<PagingData<LedgerListItem>> = local
+        // The book and the merchant-category filter (V2-6), and nothing else,
+        // so a dialog opening still does not rebuild the pager.
+        .map { it.ledger to it.merchantCategoryFilter }
+        .distinctUntilChanged()
+        .flatMapLatest { (book, filter) ->
+            if (filter.isEmpty()) {
+                ledger.observeEntries(book, since = windowStart())
+            } else {
+                merchantEntries.observeEntriesInMerchantCategories(book, filter, since = windowStart())
+            }
+        }
         .cachedIn(viewModelScope)
 
     public fun onEvent(event: LedgerEvent) {
@@ -173,6 +195,28 @@ public class LedgerViewModel @Inject constructor(
 
             LedgerEvent.UndoDelete -> undo()
             LedgerEvent.UndoExpired -> local.update { it.copy(undoable = null) }
+
+            is LedgerEvent.MerchantCategoryFilter -> filterBy(event)
+        }
+    }
+
+    /**
+     * The merchant-category filter (V2-6, V2-PLAN §5.3). Kept across a book
+     * switch, since merchant categories belong to neither book, and for as
+     * long as this ViewModel lives; a fresh launch starts unfiltered.
+     */
+    private fun filterBy(event: LedgerEvent.MerchantCategoryFilter) {
+        local.update { current ->
+            when (event) {
+                LedgerEvent.FilterOpened -> current.copy(choosingFilter = true)
+                LedgerEvent.FilterClosed -> current.copy(choosingFilter = false)
+                LedgerEvent.FilterCleared -> current.copy(merchantCategoryFilter = emptySet(), choosingFilter = false)
+                is LedgerEvent.FilterToggled -> {
+                    val id = event.merchantCategoryId
+                    val chosen = current.merchantCategoryFilter
+                    current.copy(merchantCategoryFilter = if (id in chosen) chosen - id else chosen + id)
+                }
+            }
         }
     }
 
@@ -317,6 +361,8 @@ public class LedgerViewModel @Inject constructor(
         confirmation = local.confirmation,
         message = local.message,
         undoable = local.undoable,
+        merchantCategoryFilter = local.merchantCategoryFilter,
+        choosingFilter = local.choosingFilter,
     )
 
     /**
@@ -334,6 +380,8 @@ public class LedgerViewModel @Inject constructor(
         val confirmation: LedgerConfirmation? = null,
         val message: String? = null,
         val undoable: LedgerUndo? = null,
+        val merchantCategoryFilter: Set<String> = emptySet(),
+        val choosingFilter: Boolean = false,
     )
 
     private companion object {
