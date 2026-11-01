@@ -16,12 +16,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfButton
@@ -375,8 +379,8 @@ private fun LazyListScope.merchantItems(
             }
         }
     }
-    val merchants = state.visibleMerchants
-    if (merchants.isEmpty() && state.merchantFilter == MerchantFilter.Uncategorised) {
+    val groups = state.merchantGroups
+    if (groups.isEmpty() && state.merchantFilter == MerchantFilter.Uncategorised) {
         item(key = "all-filed", contentType = "note") {
             Text(
                 text = "Every merchant has a category.",
@@ -385,16 +389,60 @@ private fun LazyListScope.merchantItems(
             )
         }
     }
-    items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
-        MerchantRow(merchants[index], lfGroupPosition(index, merchants.size), state, onEvent)
+    // Grouped under their categories (owner's option A, 2026-11-01): a small
+    // header, then the group's own panel. The header says the category, so a
+    // row is the merchant's name alone.
+    groups.forEachIndexed { groupIndex, group ->
+        item(key = "group-" + (group.categoryId ?: UNCATEGORISED), contentType = "groupHeader") {
+            MerchantGroupHeader(group, first = groupIndex == 0)
+        }
+        val merchants = group.merchants
+        items(merchants.size, key = { merchants[it].id }, contentType = { "merchant" }) { index ->
+            MerchantRow(merchants[index], lfGroupPosition(index, merchants.size), state, onEvent)
+        }
     }
     hiddenSection(state, onEvent)
 }
 
 /**
- * A merchant and, under it, its merchant category (V2-6): two lines, as the
- * compactness brief allows a row that presents one thing. Selecting, the row
- * is a check box and a tap ticks it; otherwise a tap opens its actions.
+ * A group's heading: its swatch, its name and how many merchants it holds.
+ * Muted label type rather than a row, so it reads as the panel's caption and
+ * costs a line, not a touch target. Uncategorised has no colour of its own
+ * and takes the muted one. Its swatch sits at the rows' text edge, so the
+ * names below line up under the category's.
+ */
+@Composable
+private fun MerchantGroupHeader(group: MerchantGroup, first: Boolean) {
+    val space = LfTheme.space
+    val muted = LfTheme.colors.text.muted
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = space.rowInset,
+                end = space.rowInset,
+                top = if (first) 0.dp else space.sectionGap,
+                bottom = space.inlineGap,
+            )
+            .semantics(mergeDescendants = true) { heading() },
+        horizontalArrangement = Arrangement.spacedBy(space.itemGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LfCategoryDot(name = group.name, colorArgb = group.colorArgb ?: muted.toArgb())
+        Text(
+            text = group.name,
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.secondary,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Text(text = group.merchants.size.toString(), style = LfTheme.type.figureLabel, color = muted)
+    }
+}
+
+/**
+ * A merchant: one line of name, under its category's header (V2-6).
+ * Selecting, the row is a check box and a tap ticks it; otherwise a tap opens
+ * its actions.
  */
 @Composable
 private fun MerchantRow(
@@ -407,7 +455,6 @@ private fun MerchantRow(
     val checked = merchant.id in state.selected
     OrganiseRow(
         title = name,
-        detail = state.merchantCategoryName(merchant.merchantCategoryId),
         position = position,
         selectable = if (state.selecting) checked else null,
         onClick = {

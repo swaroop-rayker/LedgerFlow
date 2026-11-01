@@ -57,7 +57,7 @@ public data class CategoriesUiState(
     /** A refusal the user should see, in words they can act on. */
     val message: String? = null,
 
-    /** Live merchant categories (V2-6), for each merchant's second line and the picker. */
+    /** Live merchant categories (V2-6), for the tab's groups and the picker. */
     val merchantCategories: List<MerchantCategory> = emptyList(),
 
     val merchantFilter: MerchantFilter = MerchantFilter.All,
@@ -76,10 +76,35 @@ public data class CategoriesUiState(
             MerchantFilter.Uncategorised -> merchants.filter { it.merchantCategoryId == null }
         }
 
-    /** A merchant's second line: its category, or Uncategorised. */
-    public fun merchantCategoryName(id: String?): String =
-        id?.let { wanted -> merchantCategories.firstOrNull { it.id == wanted }?.name } ?: UNCATEGORISED
+    /**
+     * [visibleMerchants] under their merchant categories (owner's option A,
+     * 2026-11-01): the categories in their own order, each only if it holds a
+     * merchant shown, then Uncategorised last, as the picker and Analytics
+     * order it. A merchant whose category is not live (hidden a moment ago,
+     * before its merchants moved) counts as Uncategorised, which is what
+     * Analytics will call it.
+     */
+    public val merchantGroups: List<MerchantGroup>
+        get() {
+            val live = merchantCategories.associateBy { it.id }
+            val byCategory = visibleMerchants.groupBy { merchant -> merchant.merchantCategoryId?.takeIf { it in live } }
+            return merchantCategories.mapNotNull { category ->
+                byCategory[category.id]?.let { MerchantGroup(category.id, category.name, category.colorArgb, it) }
+            } + listOfNotNull(byCategory[null]?.let { MerchantGroup(null, UNCATEGORISED, null, it) })
+        }
 }
+
+/**
+ * One merchant category's merchants on the Merchants tab. [categoryId] and
+ * [colorArgb] are null for Uncategorised, which has no swatch of its own.
+ */
+@Immutable
+public data class MerchantGroup(
+    val categoryId: String?,
+    val name: String,
+    val colorArgb: Int?,
+    val merchants: List<Merchant>,
+)
 
 /** The name of no merchant category (V2-PLAN §5): a bucket, not a category of its own. */
 public const val UNCATEGORISED: String = "Uncategorised"

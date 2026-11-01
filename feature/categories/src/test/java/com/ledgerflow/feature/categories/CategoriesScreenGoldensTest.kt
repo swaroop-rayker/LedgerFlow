@@ -81,12 +81,14 @@ open class CategoriesScreenGoldensTest {
         MerchantCategory("mc-f", "Food delivery", 0xFFAB5C15.toInt(), 1, isSystem = true),
     )
 
-    /** V2-6: one merchant filed, one not, so both second lines show. */
+    /** V2-6: grouped under their categories (option A), a group of two, one of one, and Uncategorised last. */
     private val merchants = CategoriesUiState(
         section = TaxonomySection.Merchants,
         merchantCategories = kinds,
         merchants = listOf(
             Merchant("1", "Big Bazaar", "bigbazaar", null, null, merchantCategoryId = "mc-g"),
+            Merchant("6", "Swiggy", "swiggy", null, null, merchantCategoryId = "mc-f"),
+            Merchant("7", "Corner Grocer", "cornergrocer", null, null, merchantCategoryId = "mc-g"),
             Merchant("5", "Zepto", "zepto", null, null),
         ),
         hidden = listOf(
