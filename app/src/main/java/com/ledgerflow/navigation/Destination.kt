@@ -81,6 +81,24 @@ public sealed interface Destination {
     @Serializable
     public data class Categories(val view: String? = null) : Destination
 
+    /**
+     * One merchant's entries in one book and window, opened from a merchant in
+     * Analytics (V2-6). [ledger] is a `LedgerType` name; [from] and [to] are
+     * days since epoch, Analytics' window; [analyticsFiltered] says its filters
+     * were on, which this page does not apply. **The property names are a
+     * contract**: `MerchantEntriesViewModel` reads them by string, and
+     * `MerchantEntriesArgumentTest` fails the build if they drift.
+     */
+    @Serializable
+    public data class MerchantEntries(
+        val ledger: String,
+        val merchantId: String,
+        val merchantName: String,
+        val from: Int,
+        val to: Int,
+        val analyticsFiltered: Boolean,
+    ) : Destination
+
     /** Budget management (§5.7). Reached from Settings, like Categories. */
     @Serializable
     public data object Budgets : Destination

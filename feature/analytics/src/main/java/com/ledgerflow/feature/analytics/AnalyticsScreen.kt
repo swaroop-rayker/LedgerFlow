@@ -92,6 +92,8 @@ public fun AnalyticsScreen(
     modifier: Modifier = Modifier,
     /** A11's "Categorise in Merchants": Organise, on the merchants still to file (V2-6). */
     onCategoriseMerchants: () -> Unit = {},
+    /** A11's last drill step: a merchant's entries, by id and name (V2-6). */
+    onOpenMerchant: (id: String, name: String) -> Unit = { _, _ -> },
 ) {
     LfTabPage(
         title = "Analytics",
@@ -122,7 +124,7 @@ public fun AnalyticsScreen(
             }
             emptySection(state)
         } else {
-            chartSections(state, snapshot, onEvent, onCategoriseMerchants)
+            chartSections(state, snapshot, onEvent, MerchantLinks(onCategoriseMerchants, onOpenMerchant))
         }
     }
 }
@@ -179,7 +181,7 @@ private fun LazyListScope.chartSections(
     state: AnalyticsUiState,
     snapshot: AnalyticsSnapshot,
     onEvent: (AnalyticsEvent) -> Unit,
-    onCategoriseMerchants: () -> Unit,
+    links: MerchantLinks,
 ) {
     item(key = "total", contentType = "total") {
         TotalCard(snapshot = snapshot, currency = state.baseCurrency)
@@ -233,7 +235,7 @@ private fun LazyListScope.chartSections(
         }
     }
 
-    merchantCategorySection(state, snapshot, onEvent, onCategoriseMerchants)
+    merchantCategorySection(state, snapshot, onEvent, links)
 
     // A5 — payment method split. The same donut, different data.
     item(key = "methods", contentType = "chart") {
@@ -850,6 +852,7 @@ internal fun CategoryBreakdown(
     onExpand: (String) -> Unit,
     onToggleTreemap: () -> Unit,
     afterRow: (@Composable (DimensionTotal) -> Unit)? = null,
+    onChildClick: ((DimensionTotal) -> Unit)? = null,
 ) {
     if (totals.isEmpty()) return
 
@@ -873,9 +876,9 @@ internal fun CategoryBreakdown(
             },
             onTileClick = onExpand,
         )
-        CategoryList(totals, currency, expandedId, subcategories, onExpand, afterRow)
+        CategoryList(totals, currency, expandedId, subcategories, onExpand, afterRow, onChildClick)
     } else {
-        DonutWithList(totals, currency, expandedId, subcategories, onExpand, afterRow)
+        DonutWithList(totals, currency, expandedId, subcategories, onExpand, afterRow, onChildClick)
     }
 }
 
@@ -894,6 +897,7 @@ private fun DonutWithList(
     subcategories: Map<String, List<DimensionTotal>>,
     onExpand: (String) -> Unit,
     afterRow: (@Composable (DimensionTotal) -> Unit)? = null,
+    onChildClick: ((DimensionTotal) -> Unit)? = null,
 ) {
     if (totals.isEmpty()) return
     val visible = totals.take(TOP_SLICES)
@@ -933,7 +937,7 @@ private fun DonutWithList(
         centerText = MoneyFormat.symbolised(Money.sum(totals.map { it.amount }).minor, currency),
     )
 
-    CategoryList(totals, currency, expandedId, subcategories, onExpand, afterRow)
+    CategoryList(totals, currency, expandedId, subcategories, onExpand, afterRow, onChildClick)
 }
 
 /**
@@ -949,6 +953,7 @@ private fun CategoryList(
     subcategories: Map<String, List<DimensionTotal>>,
     onExpand: (String) -> Unit,
     afterRow: (@Composable (DimensionTotal) -> Unit)? = null,
+    onChildClick: ((DimensionTotal) -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
         totals.forEach { total ->
@@ -965,7 +970,8 @@ private fun CategoryList(
                         total = child,
                         currency = currency,
                         color = dimensionColor(child.id, child.colorArgb),
-                        onClick = {},
+                        // A11's merchants open their entries; A3's subcategories stay put.
+                        onClick = { onChildClick?.invoke(child) },
                         indented = true,
                     )
                 }

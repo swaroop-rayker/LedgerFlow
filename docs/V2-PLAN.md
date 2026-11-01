@@ -23,7 +23,7 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 · Hide amounts + Data permissions | Built on `claude/v2-3-hide-amounts` (§3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended). Not yet merged |
 | V2-3 · About | Built on `claude/v2-3-about`, stacked on #15 (§3.8; SPEC §9.3, §9.4). Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. The public contact email is still the owner's. Not yet merged |
 | LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
-| V2-6 · Merchant categories | Owner, 2026-10-31: four PRs (§5.5's note). PR 1, schema v13 and the data layer with BUG82: #18, stacked on #17. PR 2, Organise (filing merchants, merchants grouped by category, the Merchant categories page): #19, stacked on #18. PR 3, the merchant picker's browse by category: #20, stacked on #19. PR 4, Analytics by merchant category (A11), the merchant-category filter and the XLSX sheet, built on `claude/v2-6-analytics`, stacked on #20. Not yet merged |
+| V2-6 · Merchant categories | Owner, 2026-10-31: four PRs (§5.5's note). PR 1, schema v13 and the data layer with BUG82: #18, stacked on #17. PR 2, Organise (filing merchants, merchants grouped by category, the Merchant categories page): #19, stacked on #18. PR 3, the merchant picker's browse by category: #20, stacked on #19. PR 4, Analytics by merchant category (A11), the merchant-category filter and the XLSX sheet: #22, stacked on #20. PR 5, a merchant's entries page, built on `claude/v2-6-merchant-entries`, stacked on #22. Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -463,10 +463,14 @@ Merchants section's Uncategorised filter; semantics per donut segment.
 **PR 4 as built (owner, 2026-11-01).** The "join at query time" is done in
 memory over the merchant totals the snapshot already reads: the same
 retroactive answer, with no new SQL. Spending with **no merchant** is its own
-row after Uncategorised rather than part of it. Two pieces of §5.3–5.4 wait for
-a page that does not exist yet: a **merchant's entries** drill-down (the Ledger
-has no filters to reuse), and with it the **Ledger list's merchant-category
-filter**. The Analytics filter sheet has its merchant-category filter.
+row after Uncategorised rather than part of it. The Analytics filter sheet has
+its merchant-category filter.
+
+**PR 5, a merchant's entries (owner, 2026-11-01).** The last drill step, built
+as its own page with the Ledger's rows: Analytics' book and window (so it adds
+up to the figure tapped), not its filters, look only. Still open: the **Ledger
+list's merchant-category filter** (§5.3), since the Ledger has no filters at all
+yet, and "Top merchants" as a way in, whose bars are under the touch target.
 
 **Not planned:** budgets per merchant category, and any automatic suggestion of
 a merchant's category. Either would be its own owner decision.
