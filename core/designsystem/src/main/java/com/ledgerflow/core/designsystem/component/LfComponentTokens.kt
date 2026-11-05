@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.ledgerflow.core.designsystem.theme.LfDarkColors
@@ -372,6 +373,39 @@ internal object LfMaskedAmountTokens {
 
     /** A hidden amount is a tap target: at least the touch size tall (§9.6). */
     val revealMinHeight: Dp = LfLayout.minTouchTarget
+}
+
+/** `LfProse`: text the app ships for reading (Settings > About, V2-3). */
+internal object LfProseTokens {
+    val headingStyle: TextStyle @Composable get() = LfTheme.type.heading
+    val bodyStyle: TextStyle @Composable get() = LfTheme.type.body
+    val text: Color @Composable get() = LfTheme.colors.text.primary
+    val secondaryText: Color @Composable get() = LfTheme.colors.text.secondary
+    val bullet: Color @Composable get() = LfTheme.colors.text.secondary
+
+    /** `**bold**`: the heading's weight, so emphasis and headings agree under "Bold text". */
+    val emphasisWeight: FontWeight? @Composable get() = LfTheme.type.heading.fontWeight
+
+    /** Code spans are set as figures are (ADR-0031): Plex Mono. */
+    val codeStyle: TextStyle @Composable get() = LfTheme.type.figureLabel
+
+    /** Above a heading, so a section reads as starting; below one, the ordinary gap. */
+    val headingTopGap: Dp @Composable get() = LfTheme.space.sectionGap
+    val bulletGap: Dp @Composable get() = LfTheme.space.itemGap
+}
+
+/** `LfExpandableRow`: a question that opens to its answer (Help & FAQ, V2-3). */
+internal object LfExpandableRowTokens {
+    val titleStyle: TextStyle @Composable get() = LfTheme.type.body
+    val title: Color @Composable get() = LfTheme.colors.text.primary
+    val chevron: Color @Composable get() = LfTheme.colors.text.muted
+    val minHeight: Dp = LfLayout.minTouchTarget
+    val inset: Dp @Composable get() = LfTheme.space.rowInset
+    val insetVertical: Dp @Composable get() = LfTheme.space.rowInsetVertical
+    val gap: Dp @Composable get() = LfTheme.space.itemGap
+
+    /** Turned half a circle when open: the same Lucide chevron, pointing up. */
+    const val openRotation: Float = 180f
 }
 
 internal object LfAmountCardTokens {

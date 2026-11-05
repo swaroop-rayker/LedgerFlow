@@ -21,14 +21,16 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 · App lock + screenshot block | Merged, PR #12 (`0cc93ea`, 2026-10-25): §3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned |
 | Night Vault redesign | Merged, PR #13 (`a5bc471`, 2026-10-31), squashed from `redesign/design-system`: `DESIGN_SYSTEM_PLAN.md` steps A–G plus the compact Organise layout; ADR-0031; `docs/DESIGN_SYSTEM.md` is the guide. Profile is the fourth tab and every Settings section is its own page (D7, amended). The new Organise screen has not been checked on the phone |
 | V2-3 · Hide amounts + Data permissions | Built on `claude/v2-3-hide-amounts` (§3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended). Not yet merged |
-| V2-3 · About | After that (§3.8; `LfProse`, `LfExpandableRow`). The licences generator is a dependency for the owner to approve first; the public contact email is still the owner's |
+| V2-3 · About | Built on `claude/v2-3-about`, stacked on #15 (§3.8; SPEC §9.3, §9.4). Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. The public contact email is still the owner's. Not yet merged |
 | LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
 FX ADR (D2) take the next free numbers when they are written, not 0029/0030.
 ADR-0030 is now V2-3's device preferences (2026-10-24), and ADR-0031 the
-design-system's visual direction (Night Vault, 2026-10-28), so D1 and D2 start at 0032.
+design-system's visual direction (Night Vault, 2026-10-28), and ADR-0032 the
+licences list generated at build time (V2-3 About, 2026-10-31), so D1, D2 and
+the LedgerFlow PIN take the next free numbers, 0033 and up.
 Schema v12 is BUG58's, so merchant categories (§5.5) become v13 and V2-7's
 tables v14 and later.
 
@@ -295,6 +297,14 @@ and FAQ (bundled, offline), Report a bug (opens the user's email/GitHub with
 device info **they review before sending** — no telemetry), Privacy policy,
 Terms, open-source Licenses (generated from the dependency graph at build
 time — dependency choice to approve).
+
+**Built (V2-3, 2026-10-31), owner's choices:** What's new is written by hand
+per release rather than generated from commits (a commit message is not
+written for users, and a build that reads git history breaks on a shallow
+clone); Report a bug hands the text to Android's share sheet instead of
+opening email or GitHub, so it needs no address; the Terms are a draft for
+the owner's sign-off. Licences: AboutLibraries' Gradle plugin, build time
+only (ADR-0032). SPEC §9.3 has the detail.
 
 **Public contact email (owner to decide, probably in v2; 2026-10-02).** Both
 store listings and `docs/play/privacy-policy.md` need one, and all three carry

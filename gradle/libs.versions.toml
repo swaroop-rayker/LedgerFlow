@@ -9,6 +9,9 @@
 #     carry the identical version.
 
 [versions]
+# Build time only: writes the open-source licences list into :app (ADR-0032).
+# Nothing from it ships in the APK but the generated JSON.
+aboutlibraries = "15.3.0"
 # Build toolchain
 agp = "9.3.1"
 kotlin = "2.3.21"
@@ -202,3 +205,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+aboutlibraries-android = { id = "com.mikepenz.aboutlibraries.plugin.android", version.ref = "aboutlibraries" }

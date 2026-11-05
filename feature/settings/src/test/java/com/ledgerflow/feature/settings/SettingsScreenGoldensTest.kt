@@ -8,6 +8,8 @@ import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.format.DisplayConventions
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.analytics.AlertChannelState
+import com.ledgerflow.core.domain.about.AppEdition
+import com.ledgerflow.core.domain.about.AppInfo
 import com.ledgerflow.core.domain.appearance.AnimationPreference
 import com.ledgerflow.core.domain.appearance.AppearancePreferences
 import com.ledgerflow.core.domain.appearance.StartScreen
@@ -100,6 +102,7 @@ open class SettingsScreenGoldensTest {
                 onBudgetAlerts = {},
                 onPaymentApps = {},
                 onDataPermissions = {},
+                onAbout = {},
                 onEvent = {},
             )
         }
@@ -203,6 +206,25 @@ open class SettingsScreenGoldensTest {
 
     @Config(qualifiers = PHONE_2X)
     @Test fun tools_2x() = page(SettingsPage.Tools, livedIn, 2f)
+
+    /** About (V2-3): the version as a fact, then five ways out. */
+    private val about = livedIn.copy(
+        appInfo = AppInfo(
+            versionName = "0.1.1",
+            versionCode = 2,
+            edition = AppEdition.FULL,
+            debuggable = false,
+            androidRelease = "16",
+            sdkInt = 36,
+            device = "samsung SM-S721B",
+            languageTag = "en-IN",
+        ),
+    )
+
+    @Test fun about_1x() = page(SettingsPage.About, about, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun about_2x() = page(SettingsPage.About, about, 2f)
 }
 
 /** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */

@@ -221,6 +221,7 @@ private fun LedgerFlowNavHost(
         // Profile is the fourth tab; Settings and its pages hang off it (D4).
         profileAndSettingsDestinations(navController)
         securityDestinations(navController)
+        aboutDestinations(navController)
         fullScreenDestinations(navController)
         captureAndReviewDestinations(navController)
     }
@@ -568,6 +569,11 @@ private val Destination.label: String
         Destination.Diagnostics -> "Diagnostics"
         Destination.PaymentApps -> "Payment apps"
         Destination.DataPermissions -> "Data permissions"
+        is Destination.AboutDocument -> "About"
+        Destination.Help -> "Help"
+        Destination.ReportBug -> "Report a bug"
+        Destination.Licences -> "Licences"
+        is Destination.Licence -> "Licence"
         is Destination.InboxReview -> "Review"
         Destination.ScanReceipt -> "Scan"
         Destination.NotificationAccess -> "Notifications"

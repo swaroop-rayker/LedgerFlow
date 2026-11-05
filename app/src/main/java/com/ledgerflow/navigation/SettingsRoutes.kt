@@ -14,7 +14,21 @@ import androidx.navigation.toRoute
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.settings.ProfileScreen
+import com.ledgerflow.feature.settings.AboutLink
 import com.ledgerflow.feature.settings.SettingsEvent
+import com.ledgerflow.feature.settings.about.AboutDocument
+import com.ledgerflow.feature.settings.about.AboutDocumentScreen
+import com.ledgerflow.feature.settings.about.AboutDocumentViewModel
+import com.ledgerflow.feature.settings.about.HelpScreen
+import com.ledgerflow.feature.settings.about.HelpViewModel
+import com.ledgerflow.feature.settings.about.LicenceScreen
+import com.ledgerflow.feature.settings.about.LicenceViewModel
+import com.ledgerflow.feature.settings.about.LicencesScreen
+import com.ledgerflow.feature.settings.about.LicencesViewModel
+import com.ledgerflow.feature.settings.about.ReportBugScreen
+import com.ledgerflow.feature.settings.about.ReportBugViewModel
+import com.ledgerflow.feature.settings.about.aboutDocumentNamed
+import com.ledgerflow.feature.settings.about.shareBugReport
 import com.ledgerflow.feature.settings.SettingsIndexScreen
 import com.ledgerflow.feature.settings.SettingsPage
 import com.ledgerflow.feature.settings.SettingsSectionScreen
@@ -119,6 +133,64 @@ internal fun NavGraphBuilder.securityDestinations(navController: NavHostControll
     }
 }
 
+/** The pages About opens (V2-3, V2-PLAN §3.8). */
+internal fun NavGraphBuilder.aboutDestinations(navController: NavHostController) {
+    composable<Destination.AboutDocument> { entry ->
+        val document = aboutDocumentNamed(entry.toRoute<Destination.AboutDocument>().document)
+        if (document == null) {
+            LaunchedEffect(Unit) { navController.popBackStack() }
+            return@composable
+        }
+        val viewModel: AboutDocumentViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        LaunchedEffect(document) { viewModel.load(document) }
+        state?.let { AboutDocumentScreen(state = it, onBack = navController::popBackStack) }
+    }
+    composable<Destination.Help> {
+        val viewModel: HelpViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        HelpScreen(state = state, onToggle = viewModel::toggle, onBack = navController::popBackStack)
+    }
+    composable<Destination.ReportBug> {
+        val viewModel: ReportBugViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        val context = LocalContext.current
+        ReportBugScreen(
+            state = state,
+            onDescribe = viewModel::describe,
+            // The text the screen shows, and nothing else (V2-PLAN §3.8).
+            onShare = { shareBugReport(context, state.report) },
+            onBack = navController::popBackStack,
+        )
+    }
+    composable<Destination.Licences> {
+        val viewModel: LicencesViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        LicencesScreen(
+            state = state,
+            onOpen = { id -> navController.navigate(Destination.Licence(id)) },
+            onBack = navController::popBackStack,
+        )
+    }
+    composable<Destination.Licence> { entry ->
+        val id = entry.toRoute<Destination.Licence>().component
+        val viewModel: LicenceViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        LaunchedEffect(id) { viewModel.load(id) }
+        state?.let { LicenceScreen(state = it, onBack = navController::popBackStack) }
+    }
+}
+
+/** Where each About row leads. */
+internal fun aboutRouteFor(link: AboutLink): Destination = when (link) {
+    AboutLink.WhatsNew -> Destination.AboutDocument(AboutDocument.WhatsNew.name)
+    AboutLink.Help -> Destination.Help
+    AboutLink.ReportBug -> Destination.ReportBug
+    AboutLink.PrivacyPolicy -> Destination.AboutDocument(AboutDocument.PrivacyPolicy.name)
+    AboutLink.Terms -> Destination.AboutDocument(AboutDocument.Terms.name)
+    AboutLink.Licences -> Destination.Licences
+}
+
 /** The route that opens [page]; `settingsPageNamed` reads it back. */
 internal fun settingsRouteFor(page: SettingsPage): Destination = Destination.SettingsSection(page.name)
 
@@ -151,6 +223,7 @@ internal fun SettingsSectionRoute(
         onDiagnostics = { navigate(Destination.Diagnostics) },
         onPaymentApps = { navigate(Destination.PaymentApps) },
         onDataPermissions = { navigate(Destination.DataPermissions) },
+        onAbout = { link -> navigate(aboutRouteFor(link)) },
         onBudgetAlerts = onBudgetAlerts,
         onEvent = onEvent,
     )

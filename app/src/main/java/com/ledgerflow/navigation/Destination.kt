@@ -118,6 +118,26 @@ public sealed interface Destination {
     @Serializable
     public data object DataPermissions : Destination
 
+    /** What's new, the privacy policy or the terms (V2-3, V2-PLAN §3.8): `AboutDocument.name`. */
+    @Serializable
+    public data class AboutDocument(val document: String) : Destination
+
+    /** Help & FAQ (V2-3), from About. */
+    @Serializable
+    public data object Help : Destination
+
+    /** Report a bug (V2-3), from About: the user reviews every line before sharing. */
+    @Serializable
+    public data object ReportBug : Destination
+
+    /** Open-source licences (V2-3, ADR-0032), from About. */
+    @Serializable
+    public data object Licences : Destination
+
+    /** One component's licences: `LicensedComponent.id`. */
+    @Serializable
+    public data class Licence(val component: String) : Destination
+
     /**
      * Receipt capture (§5.3), reached from the centre action's dial.
      *
