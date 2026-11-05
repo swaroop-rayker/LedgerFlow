@@ -26,6 +26,19 @@ public interface MerchantEntriesRepository {
 
     /** What [observeEntries] lists, summed and counted, kept current as entries change. */
     public fun observeTotal(ledger: LedgerType, merchantId: String, from: Int, to: Int): Flow<MerchantTotal>
+
+    /**
+     * The Ledger list narrowed to merchant categories (V2-6, V2-PLAN §5.3):
+     * [ledger]'s entries since [since] whose merchant is filed under one of
+     * [merchantCategoryIds] now, `MerchantCategoryBreakdown.UNCATEGORISED_ID`
+     * meaning the merchants with no live category. Entries with no merchant
+     * never match. Kept current as merchants are re-filed.
+     */
+    public fun observeEntriesInMerchantCategories(
+        ledger: LedgerType,
+        merchantCategoryIds: Set<String>,
+        since: Int,
+    ): Flow<PagingData<LedgerListItem>>
 }
 
 /** One merchant's entries in one book and window: their sum (Law 3, `Long` underneath) and how many. */

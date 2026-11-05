@@ -227,6 +227,31 @@ open class LedgerScreensGoldensTest {
     @Config(qualifiers = PHONE_2X)
     @Test fun empty_2x() = ledger("ledger-empty-2x", state(LedgerType.CREDIT, false), emptyList(), 2f)
 
+    // ── The merchant-category filter (V2-6) ─────────────────────────────────
+
+    /** Two categories on: the count on the button, a chip naming them, no unsaved rows. */
+    private val filtered = state(LedgerType.DEBIT, true).copy(
+        merchantCategories = listOf(
+            com.ledgerflow.core.model.MerchantCategory("g", "Groceries", 0, 0, isSystem = true),
+            com.ledgerflow.core.model.MerchantCategory("f", "Fuel", 0, 1, isSystem = true),
+        ),
+        merchantCategoryFilter = setOf("g", "f"),
+    )
+
+    /** Only entries with a merchant: an entry with none never matches a merchant category. */
+    private val filedOnly by lazy { expenses.filter { it.merchantName != null }.take(2) }
+
+    @Test fun filtered_1x() = ledger("ledger-filtered-1x", filtered, filedOnly, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun filtered_2x() = ledger("ledger-filtered-2x", filtered, filedOnly, 2f)
+
+    @Test fun filteredRtl_1x() =
+        ledger("ledger-filtered-rtl-1x", filtered, filedOnly, 1f, LayoutDirection.Rtl)
+
+    /** Filtered to nothing: names the filter and offers to clear it, rather than "no expenses yet". */
+    @Test fun filteredEmpty_1x() = ledger("ledger-filtered-empty-1x", filtered, emptyList(), 1f)
+
     /** What a restore did, as a success notice (E3). */
     @Test fun binRestored_1x() = bin("bin-restored-1x", 1f, binState.copy(message = "Restored 2 entries."))
 

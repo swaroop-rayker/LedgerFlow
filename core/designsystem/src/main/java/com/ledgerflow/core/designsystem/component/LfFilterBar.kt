@@ -63,17 +63,27 @@ public fun LfFilterBar(
             description = "Period: $period. Changes the period.",
             onClick = onPeriod,
         )
-        FilterPill(
-            label = if (activeFilters > 0) activeFilters.toString() else null,
-            leading = LfIcons.Filter,
-            description = when (activeFilters) {
-                0 -> "Filters, none on"
-                1 -> "Filters, 1 on"
-                else -> "Filters, $activeFilters on"
-            },
-            onClick = onFilters,
-        )
+        LfFilterButton(activeFilters = activeFilters, onClick = onFilters)
     }
+}
+
+/**
+ * The filter bar's filter control on its own, for a screen with filters but
+ * no period: the Ledger (V2-6), beside its book switch. The icon, and how many
+ * filters are on when any are, so a narrowed list says so where it is read.
+ */
+@Composable
+public fun LfFilterButton(activeFilters: Int, onClick: () -> Unit) {
+    FilterPill(
+        label = if (activeFilters > 0) activeFilters.toString() else null,
+        leading = LfIcons.Filter,
+        description = when (activeFilters) {
+            0 -> "Filters, none on"
+            1 -> "Filters, 1 on"
+            else -> "Filters, $activeFilters on"
+        },
+        onClick = onClick,
+    )
 }
 
 @Composable
