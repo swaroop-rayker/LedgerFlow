@@ -65,6 +65,10 @@ class RollupSingleWriterTest {
      * `LedgerSingleWriterTest` permits it on the ledger: a restore reinstates
      * rows a human already approved, and the rollups have to be rebuilt from
      * them because the payload deliberately does not carry the derived table.
+     *
+     * `DefaultMerchantRepository` since BUG82: a merge moves entries from one
+     * merchant to another, and the summaries are keyed by merchant too, so it
+     * re-sums the dates the moved entries span, inside the merge.
      */
     @Test
     fun onlyPermittedFilesReachTheRollupWriteStatements() {
@@ -74,6 +78,7 @@ class RollupSingleWriterTest {
             "DefaultLedgerRepository.kt",
             "DefaultRollupRepository.kt",
             "DatabaseBackupManager.kt",
+            "DefaultMerchantRepository.kt",
         )
 
         val offenders = productionSources()

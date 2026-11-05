@@ -109,6 +109,16 @@ public interface LedgerTaxonomyDao {
     )
     public suspend fun countForMerchant(ledger: LedgerType, merchantId: String): Int
 
+    /**
+     * The first and last day a merchant has entries in one book, binned ones
+     * included: the range a merge must re-sum (BUG82). Null when there are none.
+     */
+    @Query(
+        "SELECT MIN(local_date) AS firstDate, MAX(local_date) AS lastDate FROM ledger_entry " +
+            "WHERE ledger = :ledger AND merchant_id = :merchantId",
+    )
+    public suspend fun dateSpanForMerchant(ledger: LedgerType, merchantId: String): DateSpan
+
     @Query(
         "UPDATE ledger_entry SET merchant_id = :target, updated_at = :now " +
             "WHERE ledger = :ledger AND merchant_id = :source",
@@ -180,3 +190,6 @@ public interface LedgerTaxonomyDao {
     )
     public suspend fun countAllForMerchant(ledger: LedgerType, merchantId: String): Int
 }
+
+/** A range of `local_date`s; both null when there were no rows. */
+public data class DateSpan(val firstDate: Int?, val lastDate: Int?)

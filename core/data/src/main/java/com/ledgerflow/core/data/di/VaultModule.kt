@@ -25,6 +25,7 @@ import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
 import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
+import com.ledgerflow.core.data.taxonomy.DefaultMerchantCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
 import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
@@ -46,6 +47,7 @@ import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
 import com.ledgerflow.core.domain.vault.RecoveryKitRepository
@@ -213,6 +215,9 @@ public interface TaxonomyModule {
 
     @Binds
     public fun merchantRepository(impl: DefaultMerchantRepository): MerchantRepository
+
+    @Binds
+    public fun merchantCategoryRepository(impl: DefaultMerchantCategoryRepository): MerchantCategoryRepository
 
     @Binds
     public fun paymentMethodRepository(impl: DefaultPaymentMethodRepository): PaymentMethodRepository

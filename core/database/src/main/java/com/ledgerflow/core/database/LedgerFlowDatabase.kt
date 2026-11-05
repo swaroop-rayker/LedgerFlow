@@ -15,6 +15,7 @@ import com.ledgerflow.core.database.dao.IngestDiagnosticsDao
 import com.ledgerflow.core.database.dao.LedgerEntryDao
 import com.ledgerflow.core.database.dao.LedgerTaxonomyDao
 import com.ledgerflow.core.database.dao.MerchantAliasDao
+import com.ledgerflow.core.database.dao.MerchantCategoryDao
 import com.ledgerflow.core.database.dao.MerchantDao
 import com.ledgerflow.core.database.dao.NotificationRawDao
 import com.ledgerflow.core.database.dao.PackageAllowlistDao
@@ -37,6 +38,7 @@ import com.ledgerflow.core.database.entity.DraftEntryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
+import com.ledgerflow.core.database.entity.MerchantCategoryEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
@@ -84,6 +86,8 @@ import com.ledgerflow.core.database.entity.SmsRawEntity
         // v11 (SPEC.md §5.3, §6.1; ADR-0023) — OCR's two tables.
         AttachmentEntity::class,
         ItemCategoryMemoryEntity::class,
+        // v13 (V2-PLAN §5) — merchant categories.
+        MerchantCategoryEntity::class,
     ],
     views = [
         DebitEntryView::class,
@@ -103,6 +107,9 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun appMetaDao(): AppMetaDao
     public abstract fun categoryDao(): CategoryDao
     public abstract fun merchantDao(): MerchantDao
+
+    /** v13: merchant categories (V2-PLAN §5). */
+    public abstract fun merchantCategoryDao(): MerchantCategoryDao
     public abstract fun paymentMethodDao(): PaymentMethodDao
     public abstract fun ledgerEntryDao(): LedgerEntryDao
     public abstract fun ledgerTaxonomyDao(): LedgerTaxonomyDao
@@ -204,8 +211,16 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * (§5.1) and waits under the Inbox's "Not transactions" filter instead
          * of in the queue. Every existing row keeps `NULL`. A rebuild of one
          * table, like v8 — see `MIGRATION_11_12`.
+         *
+         * v13 adds merchant categories — V2-PLAN §5, V2-6. A new
+         * `merchant_category` table (flat, both books, soft-deleted like
+         * `category`) and a nullable `merchant.merchant_category_id`: every
+         * existing merchant keeps `NULL`, which is Uncategorised. The first
+         * rebuild of a table other tables point at (`ledger_entry`,
+         * `merchant_alias`); foreign keys are off while migrations run, and
+         * `MigrationV12ToV13Test` holds that both survive. See `MIGRATION_12_13`.
          */
-        public const val VERSION: Int = 12
+        public const val VERSION: Int = 13
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"
