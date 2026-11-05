@@ -146,8 +146,10 @@ public class OnboardingViewModel @Inject constructor(
             OnboardingEvent.RecoveryKitCancelled ->
                 _state.update { it.copy(kitConfirmFormat = null) }
 
+            // The request is consumed, but its format is kept for the file the
+            // picker returns (BUG84): that file was named for it.
             OnboardingEvent.RecoveryKitPickerLaunched ->
-                _state.update { it.copy(kitPickerRequest = null) }
+                _state.update { it.copy(kitPickerRequest = null, kitPendingFormat = it.kitPickerRequest) }
 
             is OnboardingEvent.RecoveryKitFileChosen ->
                 ifAt(OnboardingStep.RecoveryKit, step) { writeRecoveryKit(event.uri) }
@@ -253,11 +255,15 @@ public class OnboardingViewModel @Inject constructor(
         // Null means they backed out of the system picker. Not an error, not a
         // dismissal of the step -- just nothing happened.
         if (uri == null) return
-        val format = _state.value.kitConfirmFormat ?: RecoveryKitFormat.Pdf
+        // The format the picker was opened for, which named the file (BUG84).
+        val current = _state.value
+        val format = current.kitPendingFormat ?: current.kitConfirmFormat ?: RecoveryKitFormat.Pdf
         viewModelScope.launch {
             _state.update { it.copy(isWorking = true) }
             val written = recoveryKit.write(uri, format, _state.value.mnemonic)
-            _state.update { it.copy(isWorking = false) }
+            _state.update {
+                it.copy(isWorking = false, kitPendingFormat = if (written) null else it.kitPendingFormat)
+            }
             if (written) {
                 completeRecoveryKit(saved = true)
             } else {
