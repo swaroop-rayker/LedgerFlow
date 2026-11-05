@@ -91,6 +91,14 @@ public data class OnboardingUiState(
     val kitPickerRequest: RecoveryKitFormat? = null,
 
     /**
+     * The picker is open, for this format, and the file it returns is written
+     * in it (BUG84). The request above is consumed the moment the picker opens,
+     * and without this the write had no format left and fell back to PDF — a
+     * PDF under the `.txt` name the picker was opened with.
+     */
+    val kitPendingFormat: RecoveryKitFormat? = null,
+
+    /**
      * "Not now" was tapped on the backup step and its warning is showing
      * (BUG67). Declining happens only when the warning is accepted.
      */
