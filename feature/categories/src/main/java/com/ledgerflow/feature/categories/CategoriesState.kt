@@ -1,15 +1,24 @@
 package com.ledgerflow.feature.categories
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.taxonomy.UNCATEGORISED_MERCHANTS
+import com.ledgerflow.core.domain.taxonomy.groupByMerchantCategory
 import com.ledgerflow.core.model.CategoryTree
 import com.ledgerflow.core.model.HiddenTaxonomy
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
+import com.ledgerflow.core.model.MerchantCategory
 import com.ledgerflow.core.model.PaymentMethod
 import com.ledgerflow.core.model.PaymentMethodType
 
 /** The three things this screen manages (SPEC.md §5.5). */
 public enum class TaxonomySection { Categories, Merchants, PaymentMethods }
+
+/**
+ * Which merchants the Merchants tab lists (V2-PLAN §5.2). Uncategorised lists
+ * exactly the ones still to file, so the work can be cleared in one sitting.
+ */
+public enum class MerchantFilter { All, Uncategorised }
 
 @Immutable
 public data class CategoriesUiState(
@@ -49,7 +58,53 @@ public data class CategoriesUiState(
 
     /** A refusal the user should see, in words they can act on. */
     val message: String? = null,
+
+    /** Live merchant categories (V2-6), for the tab's groups and the picker. */
+    val merchantCategories: List<MerchantCategory> = emptyList(),
+
+    val merchantFilter: MerchantFilter = MerchantFilter.All,
+
+    /** Selecting merchants to file several at once; the pinned bar becomes the selection bar. */
+    val selecting: Boolean = false,
+    val selected: Set<String> = emptySet(),
+) {
+    /** Merchants still to file, for the filter's count. */
+    public val uncategorisedCount: Int get() = merchants.count { it.merchantCategoryId == null }
+
+    /** The merchants the tab lists under [merchantFilter]. */
+    public val visibleMerchants: List<Merchant>
+        get() = when (merchantFilter) {
+            MerchantFilter.All -> merchants
+            MerchantFilter.Uncategorised -> merchants.filter { it.merchantCategoryId == null }
+        }
+
+    /**
+     * [visibleMerchants] under their merchant categories (owner's option A,
+     * 2026-11-01), by the rule the merchant picker shares
+     * ([groupByMerchantCategory]): the categories in their own order, empty
+     * ones left out, Uncategorised last.
+     */
+    public val merchantGroups: List<MerchantGroup>
+        get() = groupByMerchantCategory(visibleMerchants, merchantCategories).map { group ->
+            val category = group.category
+            MerchantGroup(category?.id, category?.name ?: UNCATEGORISED, category?.colorArgb, group.merchants)
+        }
+}
+
+/**
+ * One merchant category's merchants on the Merchants tab. [categoryId] and
+ * [colorArgb] are null for Uncategorised, which has no swatch of its own.
+ */
+@Immutable
+public data class MerchantGroup(
+    val categoryId: String?,
+    val name: String,
+    val colorArgb: Int?,
+    val merchants: List<Merchant>,
 )
+
+/** The name of no merchant category (V2-PLAN §5): a bucket, not a category of its own. */
+public const val UNCATEGORISED: String = UNCATEGORISED_MERCHANTS
 
 /**
  * What is being asked, if anything.
@@ -161,7 +216,24 @@ public sealed interface TaxonomyDialog {
      * unchanged.
      */
     public data class RowActions(val row: TaxonomyRow) : TaxonomyDialog
+
+    /**
+     * File one merchant or several under a merchant category (V2-6, §5.2).
+     * [targetId] is the choice so far: a category id, [UNCATEGORISED_CHOICE]
+     * for Uncategorised, or null when nothing is chosen yet (several merchants
+     * with different categories have no one current answer).
+     */
+    public data class SetMerchantCategory(
+        val merchantIds: List<String>,
+        /** "Big Bazaar", or "3 merchants". */
+        val subject: String,
+        val candidates: List<TaxonomyChoice>,
+        val targetId: String? = null,
+    ) : TaxonomyDialog
 }
+
+/** The picker row for Uncategorised: not a category id, and never one. */
+public const val UNCATEGORISED_CHOICE: String = ""
 
 /**
  * The row a [TaxonomyDialog.RowActions] sheet is about: just enough to build
@@ -212,6 +284,16 @@ public sealed interface CategoriesEvent {
     public data class RenameMerchant(val id: String, val currentName: String) : CategoriesEvent
     public data class StartMergeMerchant(val id: String, val name: String) : CategoriesEvent
     public data class DeleteMerchant(val id: String, val name: String) : CategoriesEvent
+
+    /** V2-6: file [merchantIds] (one from a row's sheet, several from the selection). */
+    public data class SetMerchantCategory(val merchantIds: List<String>, val subject: String) : CategoriesEvent
+    public data class MerchantFilterSelected(val filter: MerchantFilter) : CategoriesEvent
+    public data object SelectionStarted : CategoriesEvent
+    public data class SelectionToggled(val merchantId: String) : CategoriesEvent
+
+    /** Selects every merchant the current filter shows. */
+    public data object SelectAllShown : CategoriesEvent
+    public data object SelectionCancelled : CategoriesEvent
 
     public data object AddPaymentMethod : CategoriesEvent
     public data class SetDefaultPaymentMethod(val id: String) : CategoriesEvent

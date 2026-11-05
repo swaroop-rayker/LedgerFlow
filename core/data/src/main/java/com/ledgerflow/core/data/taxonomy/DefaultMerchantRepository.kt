@@ -225,7 +225,17 @@ public class DefaultMerchantRepository @Inject constructor(
                 // credit. Iterating the partition rather than dropping the
                 // predicate keeps every statement inside one ledger (ADR-0002).
                 LedgerType.entries.forEach { ledger ->
+                    val span = entries.dateSpanForMerchant(ledger, sourceId)
                     entries.reassignMerchant(ledger, sourceId, target.id, clock.nowMillis())
+                    // BUG82: the summaries name the merchant too. Without this
+                    // they kept the folded merchant's id until the nightly
+                    // reconciliation, so Analytics showed its history under the
+                    // old name, and under the old merchant's category (V2-6).
+                    val first = span.firstDate
+                    val last = span.lastDate
+                    if (first != null && last != null) {
+                        database.dailyRollupDao().recompute(ledger, first, last)
+                    }
                 }
                 // The folded merchant's taught names follow it, and its own name
                 // becomes one -- without that, the next capture naming it would

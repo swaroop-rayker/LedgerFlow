@@ -138,6 +138,7 @@ internal object HomeFixtures {
         summary = summary,
         recentSpending = spending,
         recentIncome = income,
+        hideAmounts = false,
     )
 
 }

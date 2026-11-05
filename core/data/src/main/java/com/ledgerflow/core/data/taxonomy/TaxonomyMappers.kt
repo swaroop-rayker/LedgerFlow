@@ -34,6 +34,7 @@ internal fun MerchantEntity.toDomain(): Merchant = Merchant(
     normalizedKey = normalizedKey,
     defaultCategoryId = defaultCategoryId,
     logoRef = logoRef,
+    merchantCategoryId = merchantCategoryId,
 )
 
 internal fun PaymentMethodEntity.toDomain(): PaymentMethod = PaymentMethod(

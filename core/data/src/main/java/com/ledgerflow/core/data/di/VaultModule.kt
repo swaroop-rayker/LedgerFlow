@@ -24,7 +24,9 @@ import com.ledgerflow.core.data.ingest.DefaultPackageAllowlistRepository
 import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
 import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
+import com.ledgerflow.core.data.ledger.DefaultMerchantEntriesRepository
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
+import com.ledgerflow.core.data.taxonomy.DefaultMerchantCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
 import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
@@ -45,7 +47,10 @@ import com.ledgerflow.core.domain.ingest.PackageAllowlistRepository
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
+import com.ledgerflow.core.domain.ledger.MerchantEntriesRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryReader
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.PaymentMethodRepository
 import com.ledgerflow.core.domain.vault.RecoveryKitRepository
@@ -126,6 +131,9 @@ public interface LedgerModule {
 
     @Binds
     public fun ledgerRepository(impl: DefaultLedgerRepository): LedgerRepository
+
+    @Binds
+    public fun merchantEntriesRepository(impl: DefaultMerchantEntriesRepository): MerchantEntriesRepository
 
     @Binds
     public fun draftRepository(impl: DefaultDraftRepository): DraftRepository
@@ -213,6 +221,13 @@ public interface TaxonomyModule {
 
     @Binds
     public fun merchantRepository(impl: DefaultMerchantRepository): MerchantRepository
+
+    @Binds
+    public fun merchantCategoryRepository(impl: DefaultMerchantCategoryRepository): MerchantCategoryRepository
+
+    /** The picker's read-only view (V2-6 PR 3): the same store, without its writes. */
+    @Binds
+    public fun merchantCategoryReader(impl: DefaultMerchantCategoryRepository): MerchantCategoryReader
 
     @Binds
     public fun paymentMethodRepository(impl: DefaultPaymentMethodRepository): PaymentMethodRepository

@@ -54,6 +54,9 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class LedgerCandidateBandTest {
 
+    private val merchantEntries = com.ledgerflow.core.testing.ledger.FakeMerchantEntriesRepository()
+    private var merchantKinds: List<com.ledgerflow.core.model.MerchantCategory> = emptyList()
+
     private companion object {
         const val FIXED_NOW = 1_787_000_000_000L
     }
@@ -119,6 +122,8 @@ class LedgerCandidateBandTest {
             restoreEntry = RestoreEntryUseCase(ledger, NoOpBudgetAlertTrigger),
             observePending = ObservePendingUseCase(pending),
             clock = Clock { FIXED_NOW },
+            merchantEntries = merchantEntries,
+            merchantCategories = { kotlinx.coroutines.flow.flowOf(merchantKinds) },
         )
         CoroutineScope(dispatcher).launch { viewModel.state.collect {} }
         dispatcher.scheduler.advanceUntilIdle()

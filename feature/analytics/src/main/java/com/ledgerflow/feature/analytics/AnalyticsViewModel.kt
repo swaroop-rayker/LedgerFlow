@@ -10,6 +10,7 @@ import com.ledgerflow.core.domain.analytics.AnalyticsRange
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryReader
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.usecase.GetAnalyticsSnapshotUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,6 +43,8 @@ public class AnalyticsViewModel @Inject constructor(
     private val ledgerRepository: LedgerRepository,
     private val categories: CategoryRepository,
     private val merchants: MerchantRepository,
+    /** Read only, for the merchant-category filter (V2-6); Analytics files nothing. */
+    private val merchantCategories: MerchantCategoryReader,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -96,24 +99,28 @@ public class AnalyticsViewModel @Inject constructor(
                 _state.update { it.copy(comparePrevious = !it.comparePrevious) }
                 load()
             }
-            AnalyticsEvent.TreemapToggled -> {
-                // Presentational, like the expand below: the same totals drawn
-                // a second way, so no query.
-                _state.update { it.copy(treemapShown = !it.treemapShown) }
-            }
+            is AnalyticsEvent.BreakdownView -> showBreakdown(event)
+        }
+    }
 
-            is AnalyticsEvent.CategoryExpanded -> {
-                // Purely presentational: the subcategories are already in the
-                // snapshot, so expanding one is not a query.
-                _state.update { current ->
-                    val next =
-                        if (current.expandedCategoryId == event.categoryId) {
-                            null
-                        } else {
-                            event.categoryId
-                        }
-                    current.copy(expandedCategoryId = next)
-                }
+    /**
+     * A2's and A11's presentation. Purely presentational: subcategories and
+     * each bucket's merchants are already in the snapshot, so opening one, or
+     * drawing the same totals as a treemap, is not a query.
+     */
+    private fun showBreakdown(event: AnalyticsEvent.BreakdownView) {
+        _state.update { current ->
+            when (event) {
+                AnalyticsEvent.TreemapToggled -> current.copy(treemapShown = !current.treemapShown)
+                is AnalyticsEvent.CategoryExpanded -> current.copy(
+                    expandedCategoryId = event.categoryId.takeIf { it != current.expandedCategoryId },
+                )
+                AnalyticsEvent.MerchantTreemapToggled ->
+                    current.copy(merchantTreemapShown = !current.merchantTreemapShown)
+                is AnalyticsEvent.MerchantCategoryExpanded -> current.copy(
+                    expandedMerchantCategoryId = event.merchantCategoryId
+                        .takeIf { it != current.expandedMerchantCategoryId },
+                )
             }
         }
     }
@@ -310,6 +317,7 @@ public class AnalyticsViewModel @Inject constructor(
                     baseCurrency = currency,
                     allCategories = categories.observe(current.ledger).first(),
                     allMerchants = merchants.observeAll().first(),
+                    allMerchantCategories = merchantCategories.observeAll().first(),
                 )
             }
         }

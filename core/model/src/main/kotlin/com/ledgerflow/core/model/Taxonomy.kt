@@ -42,6 +42,31 @@ public data class Merchant(
     val normalizedKey: String,
     val defaultCategoryId: String?,
     val logoRef: String?,
+    /**
+     * What kind of place this is (V2-PLAN §5): a [MerchantCategory], or null
+     * for Uncategorised. Set only from Organise > Merchants (§5.2): capture,
+     * review and the entry form never write it. Not [defaultCategoryId], which
+     * pre-fills an entry's *spending* category.
+     */
+    val merchantCategoryId: String? = null,
+)
+
+/**
+ * A kind of place a merchant is: "Groceries", "Fuel", "Pharmacy & health"
+ * (V2-PLAN §5, owner 2026-10-01).
+ *
+ * A separate taxonomy from [Category]: a merchant category describes the
+ * merchant as it is now, so re-categorising one moves all of its history; a
+ * spending category describes one entry's money and is fixed when approved.
+ * Flat, with no subcategories, and the same for both books.
+ */
+public data class MerchantCategory(
+    val id: String,
+    val name: String,
+    val colorArgb: Int,
+    val sortOrder: Int,
+    /** One of the seeded defaults (§5.2). The user may still rename, hide or delete it. */
+    val isSystem: Boolean,
 )
 
 /** A user-defined instrument (SPEC.md §5.5). */

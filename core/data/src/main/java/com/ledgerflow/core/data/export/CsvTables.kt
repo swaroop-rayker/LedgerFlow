@@ -50,6 +50,7 @@ internal object CsvTables {
     fun documents(payload: BackupPayload): List<CsvDocument> = listOf(
         appMeta(payload),
         categories(payload),
+        merchantCategories(payload),
         merchants(payload),
         paymentMethods(payload),
         ledgerEntries(payload, LedgerType.DEBIT),
@@ -166,7 +167,7 @@ internal object CsvTables {
         fileName = "merchant.csv",
         header = listOf(
             "id", "canonical_name", "normalized_key", "default_category_id",
-            "logo_ref", "deleted_at", "deleted_at_iso",
+            "logo_ref", "deleted_at", "deleted_at_iso", "merchant_category_id",
         ),
         rows = payload.merchants.map { row ->
             listOf(
@@ -175,6 +176,24 @@ internal object CsvTables {
                 row.normalizedKey,
                 row.defaultCategoryId,
                 row.logoRef,
+                row.deletedAt.toString(),
+                hiddenAtIso(row.deletedAt),
+                row.merchantCategoryId,
+            )
+        },
+    )
+
+    /** v13 (V2-PLAN 5.4): merchant categories ride along as their own table. */
+    private fun merchantCategories(payload: BackupPayload) = CsvDocument(
+        fileName = "merchant_category.csv",
+        header = listOf("id", "name", "color_argb", "sort_order", "is_system", "deleted_at", "deleted_at_iso"),
+        rows = payload.merchantCategories.map { row ->
+            listOf(
+                row.id,
+                row.name,
+                row.colorArgb.toString(),
+                row.sortOrder.toString(),
+                row.isSystem.toString(),
                 row.deletedAt.toString(),
                 hiddenAtIso(row.deletedAt),
             )

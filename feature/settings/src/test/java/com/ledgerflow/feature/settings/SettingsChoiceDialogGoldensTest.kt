@@ -66,6 +66,8 @@ open class SettingsChoiceDialogGoldensTest {
                             onDiagnostics = {},
                             onBudgetAlerts = {},
                             onPaymentApps = {},
+                            onDataPermissions = {},
+                            onAbout = {},
                             onEvent = {},
                         )
                     }

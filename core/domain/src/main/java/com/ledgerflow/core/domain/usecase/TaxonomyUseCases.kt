@@ -1,6 +1,7 @@
 package com.ledgerflow.core.domain.usecase
 
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.taxonomy.NewPaymentMethod
@@ -89,6 +90,20 @@ public class SeedDefaultTaxonomyUseCase @Inject constructor(
 ) {
     public suspend operator fun invoke(): Int =
         categories.seedSystemDefaults() + paymentMethods.seedSystemDefaults()
+}
+
+/**
+ * The starter merchant categories (V2-PLAN §5.2), once per vault.
+ *
+ * Run at every launch once the vault is open, like the allowlist seed, because
+ * three kinds of vault need it and only one is new: a fresh install, one just
+ * migrated to v13, and one restored from a v12 backup. The repository records
+ * that it ran, so deleting them all does not bring them back.
+ */
+public class SeedMerchantCategoriesUseCase @Inject constructor(
+    private val merchantCategories: MerchantCategoryRepository,
+) {
+    public suspend operator fun invoke(): Int = merchantCategories.seedDefaultsOnce()
 }
 
 // ── The hidden taxonomy: restore, and the three audited destroys (ADR-0016) ──

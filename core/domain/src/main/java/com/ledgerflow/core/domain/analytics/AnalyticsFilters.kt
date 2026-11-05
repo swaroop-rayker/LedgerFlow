@@ -30,6 +30,11 @@ public data class AnalyticsFilters(
     val categoryIds: Set<String> = emptySet(),
     val subcategoryIds: Set<String> = emptySet(),
     val merchantIds: Set<String> = emptySet(),
+    /**
+     * Merchant categories (V2-6), including [MerchantCategoryBreakdown.UNCATEGORISED_ID].
+     * Never reaches SQL: [resolveMerchantCategories] turns it into [merchantIds].
+     */
+    val merchantCategoryIds: Set<String> = emptySet(),
     val paymentMethodIds: Set<String> = emptySet(),
     val minAmount: Money? = null,
     val maxAmount: Money? = null,
@@ -40,7 +45,7 @@ public data class AnalyticsFilters(
     /** True when nothing is narrowed — the common case, and the fast path. */
     public val isEmpty: Boolean
         get() = categoryIds.isEmpty() && subcategoryIds.isEmpty() &&
-            merchantIds.isEmpty() && paymentMethodIds.isEmpty() &&
+            merchantIds.isEmpty() && merchantCategoryIds.isEmpty() && paymentMethodIds.isEmpty() &&
             minAmount == null && maxAmount == null && sources.isEmpty() &&
             query.isBlank()
 
@@ -59,6 +64,7 @@ public data class AnalyticsFilters(
             categoryIds.isNotEmpty(),
             subcategoryIds.isNotEmpty(),
             merchantIds.isNotEmpty(),
+            merchantCategoryIds.isNotEmpty(),
             paymentMethodIds.isNotEmpty(),
             minAmount != null || maxAmount != null,
             sources.isNotEmpty(),

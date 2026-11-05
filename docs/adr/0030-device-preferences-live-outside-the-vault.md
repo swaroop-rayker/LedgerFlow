@@ -105,6 +105,11 @@ The base currency is **not** here: it lives in the vault (`app_meta`) because
 every stored amount is in it, and it fails test 3 — it must travel with the
 data it labels.
 
+**Hide amounts on Home is not here either** (V2-3, owner 2026-10-31). It was
+built here first, as a second named exception; it fails test 2 (Home's figures
+come from the vault, so nothing needs the switch before unlock), and the owner
+chose the vault: `app_meta.hideAmountsOnHome`, which a backup carries.
+
 Later V2-3 pages amend this table in the commit that adds their keys.
 
 ## Consequences

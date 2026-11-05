@@ -12,6 +12,7 @@ import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.database.entity.ItemCategoryMemoryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
+import com.ledgerflow.core.database.entity.MerchantCategoryEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
@@ -198,7 +199,17 @@ internal fun toCategory(row: CategoryRow) = CategoryEntity(
 
 internal fun toMerchant(row: MerchantRow) = MerchantEntity(
     row.id, row.canonicalName, row.normalizedKey,
-    row.defaultCategoryId, row.logoRef, row.deletedAt,
+    row.defaultCategoryId, row.logoRef, row.deletedAt, row.merchantCategoryId,
+)
+
+internal fun toMerchantCategory(row: MerchantCategoryRow) = MerchantCategoryEntity(
+    id = row.id, name = row.name, colorArgb = row.colorArgb, sortOrder = row.sortOrder,
+    isSystem = row.isSystem, deletedAt = row.deletedAt,
+)
+
+internal fun toMerchantCategoryRow(row: MerchantCategoryEntity) = MerchantCategoryRow(
+    id = row.id, name = row.name, colorArgb = row.colorArgb, sortOrder = row.sortOrder,
+    isSystem = row.isSystem, deletedAt = row.deletedAt,
 )
 
 internal fun toPaymentMethod(row: PaymentMethodRow) = PaymentMethodEntity(

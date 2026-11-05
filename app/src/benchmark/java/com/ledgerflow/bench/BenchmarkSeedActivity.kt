@@ -23,6 +23,7 @@ import com.ledgerflow.core.domain.ingest.RawIngestEvent
 import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
@@ -69,6 +70,8 @@ class BenchmarkSeedActivity : ComponentActivity() {
 
     @Inject lateinit var merchants: MerchantRepository
 
+    @Inject lateinit var merchantCategories: MerchantCategoryRepository
+
     @Inject lateinit var approve: ApproveTransactionUseCase
 
     @Inject lateinit var pending: PendingRepository
@@ -84,6 +87,7 @@ class BenchmarkSeedActivity : ComponentActivity() {
         lifecycleScope.launch {
             status = runCatching {
                 val seeded = seed()
+                if (seeded.startsWith("Seeded")) fileMerchants()
                 when {
                     !seeded.startsWith("Seeded") -> seeded
                     inbox == INBOX_ON -> fillInbox()
@@ -160,6 +164,23 @@ class BenchmarkSeedActivity : ComponentActivity() {
             }
         }
         return "Inbox: ${pending.observe(InboxFilter.PENDING).first().size} pending"
+    }
+
+    /**
+     * Files the bench merchants under merchant categories (V2-6), so Analytics'
+     * "By merchant category" is timed with real groups, as a user's would be.
+     * Every launch, not only the first: the vault was seeded before merchant
+     * categories existed, and filing a merchant where it already is changes
+     * nothing. Three stay Uncategorised, as some of a real user's do.
+     */
+    private suspend fun fileMerchants() {
+        merchantCategories.seedDefaultsOnce()
+        val kindIdByName = merchantCategories.observeAll().first().associate { it.name to it.id }
+        val merchantIdByName = merchants.observeAll().first().associate { it.canonicalName to it.id }
+        MERCHANT_KINDS.entries.groupBy({ it.value }, { it.key }).forEach { (kind, names) ->
+            val kindId = kindIdByName[kind] ?: return@forEach
+            merchantCategories.setCategory(names.mapNotNull(merchantIdByName::get), kindId)
+        }
     }
 
     /** Discards every pending candidate, so the vault is as other benchmarks expect it. */
@@ -301,6 +322,29 @@ class BenchmarkSeedActivity : ComponentActivity() {
             "Rent", "Groceries", "Dining", "Transport", "Utilities", "Shopping", "Health", "Entertainment",
         )
         val CREDIT_CATEGORIES = listOf("Salary", "Interest")
+
+        /**
+         * Bench merchant to default merchant category (V2-6). Tiffin Corner,
+         * Family Clinic and Game Zone are left out on purpose: Uncategorised.
+         */
+        val MERCHANT_KINDS = mapOf(
+            "Corner Grocers" to "Groceries",
+            "Green Basket Market" to "Groceries",
+            "Fresh Farm Dairy" to "Groceries",
+            "Spice Route Kitchen" to "Restaurants & caf" + Char(0x00E9) + "s",
+            "Daily Brew Cafe" to "Restaurants & caf" + Char(0x00E9) + "s",
+            "City Cabs" to "Travel & transport",
+            "Metro Rail" to "Travel & transport",
+            "Highway Fuel" to "Fuel",
+            "City Power" to "Utilities & bills",
+            "Home Broadband" to "Utilities & bills",
+            "Mobile Recharge" to "Utilities & bills",
+            "Fashion Street" to "Shopping",
+            "Electronics Hub" to "Shopping",
+            "Book Nook" to "Shopping",
+            "Neighbourhood Pharmacy" to "Pharmacy & health",
+            "Cinema Hall" to "Entertainment",
+        )
 
         /**
          * Merchant to category. **Generic, made-up names, never a real business**

@@ -116,6 +116,14 @@ public class DefaultExportRepository @Inject constructor(
                 XlsxPivots.monthlyTotals(debit, credit),
                 XlsxPivots.byCategoryAndMonth(XlsxPivots.SPENDING_SHEET, LedgerType.DEBIT, debit, names),
                 XlsxPivots.byCategoryAndMonth(XlsxPivots.INCOME_SHEET, LedgerType.CREDIT, credit, names),
+                // Expenses only: merchants are where money is spent (V2-6).
+                XlsxPivots.byMerchantCategoryAndMonth(
+                    buckets = debit,
+                    merchantCategoryOf = payload.merchants.associate { it.id to it.merchantCategoryId },
+                    merchantCategoryNames = payload.merchantCategories
+                        .filter { it.deletedAt == 0L }
+                        .associate { it.id to it.name },
+                ),
             )
             val documents = CsvTables.documents(payload)
             val baseCurrency = payload.appMeta.firstOrNull { it.key == AppMetaEntity.KEY_BASE_CURRENCY }?.value

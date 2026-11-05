@@ -8,6 +8,7 @@ import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
 import com.ledgerflow.core.domain.ingest.IngestWorkTrigger
 import com.ledgerflow.core.domain.ingest.NotificationSetupStore
 import com.ledgerflow.core.domain.usecase.SeedIngestAllowlistsUseCase
+import com.ledgerflow.core.domain.usecase.SeedMerchantCategoriesUseCase
 import com.ledgerflow.core.domain.usecase.SeedParserRulesUseCase
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
@@ -85,6 +86,7 @@ public class AppViewModel @Inject constructor(
     private val purgeAbandonedDrafts: PurgeAbandonedDraftsUseCase,
     private val seedIngestAllowlists: SeedIngestAllowlistsUseCase,
     private val seedParserRules: SeedParserRulesUseCase,
+    private val seedMerchantCategories: SeedMerchantCategoriesUseCase,
     private val ingestWork: IngestWorkTrigger,
     private val notificationSetup: NotificationSetupStore,
 ) : ViewModel() {
@@ -176,6 +178,10 @@ public class AppViewModel @Inject constructor(
             // The ruleset lives in the vault beside the allowlists, and for the
             // same reason: there is nothing to write to until it opens.
             seedParserRules()
+
+            // V2-6's starter merchant categories, once per vault: a new
+            // install, a vault just migrated to v13, a restored v12 backup.
+            seedMerchantCategories()
 
             // Both of the above can change what the pipeline would now make of
             // messages it has already seen -- a seed that adds sender patterns

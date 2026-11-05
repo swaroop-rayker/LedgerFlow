@@ -35,10 +35,11 @@ class RowActionsTest {
     }
 
     @Test
-    fun aMerchant_offersRenameMergeAndHide() {
+    fun aMerchant_offersSetCategoryRenameMergeAndHide() {
         val row = TaxonomyRow.Merchant("m1", "Zepto")
 
         assertThat(rowActions(row).map { it.event }).containsExactly(
+            CategoriesEvent.SetMerchantCategory(listOf("m1"), "Zepto"),
             CategoriesEvent.RenameMerchant("m1", "Zepto"),
             CategoriesEvent.StartMergeMerchant("m1", "Zepto"),
             CategoriesEvent.DeleteMerchant("m1", "Zepto"),

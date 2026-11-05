@@ -1,5 +1,7 @@
 package com.ledgerflow.core.testing.ledger
 
+import androidx.paging.LoadState
+import androidx.paging.LoadStates
 import androidx.paging.PagingData
 import com.ledgerflow.core.domain.ledger.ApprovalRequest
 import com.ledgerflow.core.domain.ledger.DraftRepository
@@ -98,7 +100,12 @@ public class FakeLedgerRepository : LedgerRepository {
         // Filtered, not ignored: a fake that returned everything would let a
         // ViewModel test pass with the window wired to the wrong value.
         return revision.map { _ ->
-            PagingData.from(entries[ledger].orEmpty().filter { it.localDate >= since })
+            // Finished load states, stated: without them a static PagingData
+            // reports refresh = Loading forever, and asSnapshot waits on it.
+            PagingData.from(
+                entries[ledger].orEmpty().filter { it.localDate >= since },
+                sourceLoadStates = LoadStates(LOADED, LOADED, LOADED),
+            )
         }
     }
 
@@ -380,3 +387,5 @@ public fun manualDebit(minor: Long): ApprovalRequest = ApprovalRequest(
     occurredAt = 0L,
     origin = EntryOrigin.Manual,
 )
+
+private val LOADED = LoadState.NotLoading(endOfPaginationReached = true)

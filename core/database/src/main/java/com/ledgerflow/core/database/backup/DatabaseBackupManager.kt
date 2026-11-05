@@ -299,7 +299,7 @@ public class DatabaseBackupManager(
         merchants = database.merchantDao().all().map { row ->
             MerchantRow(
                 row.id, row.canonicalName, row.normalizedKey,
-                row.defaultCategoryId, row.logoRef, row.deletedAt,
+                row.defaultCategoryId, row.logoRef, row.deletedAt, row.merchantCategoryId,
             )
         },
         paymentMethods = database.paymentMethodDao().all().map { row ->
@@ -361,6 +361,7 @@ public class DatabaseBackupManager(
         // the .lfbk, not inside it, so what is captured here is the row that
         // says which file belongs to which entry and what it should hash to.
         attachments = database.attachmentDao().all().map(::toAttachmentRow),
+        merchantCategories = database.merchantCategoryDao().all().map(::toMerchantCategoryRow),
         itemCategoryMemory = database.itemCategoryMemoryDao().all()
             .map(::toItemCategoryMemoryRow),
     )
@@ -373,6 +374,8 @@ public class DatabaseBackupManager(
     private suspend fun import(payload: BackupPayload) {
         database.appMetaDao().putAll(payload.appMeta.map { AppMetaEntity(it.key, it.value) })
         database.categoryDao().insertAll(payload.categories.map(::toCategory))
+        // v13: before merchants, which name them.
+        database.merchantCategoryDao().insertAll(payload.merchantCategories.map(::toMerchantCategory))
         database.merchantDao().insertAll(payload.merchants.map(::toMerchant))
         database.paymentMethodDao().insertAll(payload.paymentMethods.map(::toPaymentMethod))
         payload.ledgerEntries.forEach { database.ledgerEntryDao().insertEntry(toEntry(it)) }

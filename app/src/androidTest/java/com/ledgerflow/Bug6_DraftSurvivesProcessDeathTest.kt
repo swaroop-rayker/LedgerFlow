@@ -329,6 +329,8 @@ class Bug6_DraftSurvivesProcessDeathTest {
             ledgerRepository = DefaultLedgerRepository(vault, ids, clock, attachmentFiles, Dispatchers.IO),
             categories = categories,
             merchants = DefaultMerchantRepository(vault, ids, clock, storage, Dispatchers.IO),
+            // The picker only reads them; none is needed to survive a process death.
+            merchantCategories = { kotlinx.coroutines.flow.flowOf(emptyList()) },
             paymentMethods = DefaultPaymentMethodRepository(vault, ids, clock, storage, Dispatchers.IO),
             clock = clock,
             ids = ids,

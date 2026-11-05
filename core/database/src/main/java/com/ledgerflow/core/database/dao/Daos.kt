@@ -15,6 +15,7 @@ import com.ledgerflow.core.database.entity.CreditEntryView
 import com.ledgerflow.core.database.entity.DebitEntryView
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
+import com.ledgerflow.core.database.entity.MerchantCategoryEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
 import com.ledgerflow.core.model.LedgerType
@@ -25,6 +26,9 @@ public interface AppMetaDao {
 
     @Query("SELECT value FROM app_meta WHERE `key` = :key")
     public suspend fun value(key: String): String?
+
+    @Query("SELECT value FROM app_meta WHERE `key` = :key")
+    public fun observeValue(key: String): Flow<String?>
 
     @Query("SELECT * FROM app_meta ORDER BY `key`")
     public fun observeAll(): Flow<List<AppMetaEntity>>
@@ -276,6 +280,72 @@ public interface MerchantDao {
      */
     @Query("DELETE FROM merchant WHERE id = :id AND deleted_at != 0")
     public suspend fun hardDelete(id: String): Int
+
+    // -- Merchant categories (v13, V2-PLAN §5) --------------------------------
+
+    /**
+     * Files [ids] under [merchantCategoryId], or under Uncategorised for null.
+     * The only statement that writes the column: `MerchantCategorySingleWriterTest`
+     * holds that only the Merchants section's repository reaches it (§5.2).
+     *
+     * @return rows changed.
+     */
+    @Query("UPDATE merchant SET merchant_category_id = :merchantCategoryId WHERE id IN (:ids)")
+    public suspend fun setMerchantCategory(ids: List<String>, merchantCategoryId: String?): Int
+
+    /** Moves every merchant filed under [from] to [to] (null: Uncategorised); a category's deletion. */
+    @Query("UPDATE merchant SET merchant_category_id = :to WHERE merchant_category_id = :from")
+    public suspend fun moveMerchantCategory(from: String, to: String?): Int
+
+    /** Live merchants filed under [merchantCategoryId]: what deleting it would move. */
+    @Query(
+        "SELECT COUNT(*) FROM merchant " +
+            "WHERE merchant_category_id = :merchantCategoryId AND deleted_at = 0",
+    )
+    public suspend fun countInMerchantCategory(merchantCategoryId: String): Int
+}
+
+/** Merchant categories (v13, V2-PLAN §5): a flat list, soft-deleted like `category`. */
+@Dao
+public interface MerchantCategoryDao {
+
+    @Query("SELECT * FROM merchant_category WHERE deleted_at = 0 ORDER BY sort_order, name")
+    public fun observeLive(): Flow<List<MerchantCategoryEntity>>
+
+    @Query("SELECT * FROM merchant_category ORDER BY id")
+    public suspend fun all(): List<MerchantCategoryEntity>
+
+    @Query("SELECT * FROM merchant_category WHERE id = :id")
+    public suspend fun byId(id: String): MerchantCategoryEntity?
+
+    /** A live category of that name, ignoring case (the column is NOCASE). */
+    @Query("SELECT * FROM merchant_category WHERE name = :name AND deleted_at = 0 LIMIT 1")
+    public suspend fun liveByName(name: String): MerchantCategoryEntity?
+
+    @Query("SELECT COUNT(*) FROM merchant_category")
+    public suspend fun count(): Int
+
+    @Query("SELECT COALESCE(MAX(sort_order), -1) FROM merchant_category")
+    public suspend fun maxSortOrder(): Int
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    public suspend fun insert(category: MerchantCategoryEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    public suspend fun insertAll(categories: List<MerchantCategoryEntity>)
+
+    @Update
+    public suspend fun update(category: MerchantCategoryEntity)
+
+    @Query("UPDATE merchant_category SET deleted_at = :deletedAt WHERE id = :id AND deleted_at = 0")
+    public suspend fun softDelete(id: String, deletedAt: Long): Int
+
+    @Query("SELECT * FROM merchant_category WHERE deleted_at != 0 ORDER BY deleted_at DESC")
+    public fun observeHidden(): Flow<List<MerchantCategoryEntity>>
+
+    /** @return rows affected; 0 means nothing hidden had that id. */
+    @Query("UPDATE merchant_category SET deleted_at = 0 WHERE id = :id AND deleted_at != 0")
+    public suspend fun restore(id: String): Int
 }
 
 @Dao

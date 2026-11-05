@@ -31,6 +31,9 @@ import com.ledgerflow.core.designsystem.pattern.LfSheetOption
 import com.ledgerflow.core.domain.appearance.MotionLevel
 import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.inbox.InboxFilter
+import com.ledgerflow.feature.categories.CategoriesViewModel
+import com.ledgerflow.feature.ledger.MerchantEntriesScreen
+import com.ledgerflow.feature.ledger.MerchantEntriesViewModel
 import com.ledgerflow.feature.analytics.AnalyticsCustomRangeSheet
 import com.ledgerflow.feature.analytics.AnalyticsEvent
 import com.ledgerflow.feature.analytics.AnalyticsFilterSheet
@@ -42,8 +45,6 @@ import com.ledgerflow.feature.analytics.AnalyticsViewModel
 import com.ledgerflow.feature.budget.BudgetEditorDialog
 import com.ledgerflow.feature.budget.BudgetScreen
 import com.ledgerflow.feature.budget.BudgetViewModel
-import com.ledgerflow.feature.categories.CategoriesScreen
-import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.dashboard.DashboardRoute
 import com.ledgerflow.feature.entry.EntryScreen
 import com.ledgerflow.feature.entry.EntryViewModel
@@ -220,6 +221,9 @@ private fun LedgerFlowNavHost(
         tabDestinations(navController)
         // Profile is the fourth tab; Settings and its pages hang off it (D4).
         profileAndSettingsDestinations(navController)
+        securityDestinations(navController)
+        aboutDestinations(navController)
+        organiseDestinations(navController)
         fullScreenDestinations(navController)
         captureAndReviewDestinations(navController)
     }
@@ -246,6 +250,7 @@ private fun AnalyticsDialogs(state: AnalyticsUiState, onEvent: (AnalyticsEvent) 
             filters = state.filters,
             categories = state.allCategories,
             merchants = state.allMerchants,
+            merchantCategories = state.allMerchantCategories,
             openField = state.openFilterField,
             onEvent = onEvent,
         )
@@ -302,7 +307,15 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             viewModel.onEvent(AnalyticsEvent.Resumed)
             onPauseOrDispose { }
         }
-        AnalyticsScreen(state = state, onEvent = viewModel::onEvent)
+        AnalyticsScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            // Stacked on the tab, so Back returns to Analytics once filed (V2-6).
+            onCategoriseMerchants = {
+                navController.navigate(Destination.Categories(view = CategoriesViewModel.VIEW_UNCATEGORISED_MERCHANTS))
+            },
+            onOpenMerchant = { id, name -> state.merchantEntries(id, name)?.let(navController::navigate) },
+        )
         AnalyticsDialogs(state = state, onEvent = viewModel::onEvent)
     }
 }
@@ -375,12 +388,12 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         )
     }
     composable<Destination.Budgets> { BudgetRoute(onBack = { navController.popBackStack() }) }
-    composable<Destination.Categories> {
-        val viewModel: CategoriesViewModel = hiltViewModel()
+    composable<Destination.MerchantEntries> {
+        val viewModel: MerchantEntriesViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
-        CategoriesScreen(
+        MerchantEntriesScreen(
             state = state,
-            onEvent = viewModel::onEvent,
+            entries = viewModel.entries,
             onBack = { navController.popBackStack() },
         )
     }
@@ -558,7 +571,8 @@ private val Destination.label: String
         Destination.Settings -> "Settings"
         is Destination.SettingsSection -> "Settings"
         is Destination.Entry -> "Add"
-        Destination.Categories -> "Categories"
+        is Destination.Categories -> "Categories"
+        is Destination.MerchantEntries -> "Entries"
         Destination.Budgets -> "Budgets"
         Destination.Export -> "Export"
         Destination.DeletedEntries -> "Deleted"
@@ -566,6 +580,13 @@ private val Destination.label: String
         is Destination.Inbox -> "Inbox"
         Destination.Diagnostics -> "Diagnostics"
         Destination.PaymentApps -> "Payment apps"
+        Destination.DataPermissions -> "Data permissions"
+        is Destination.AboutDocument -> "About"
+        Destination.Help -> "Help"
+        Destination.ReportBug -> "Report a bug"
+        Destination.Licences -> "Licences"
+        Destination.MerchantCategories -> "Merchant categories"
+        is Destination.Licence -> "Licence"
         is Destination.InboxReview -> "Review"
         Destination.ScanReceipt -> "Scan"
         Destination.NotificationAccess -> "Notifications"
@@ -579,3 +600,20 @@ private val Destination.icon
         Destination.Analytics -> LfIcons.Analytics
         else -> LfIcons.Profile
     }
+
+/**
+ * The merchant entries page for what Analytics is showing: its book and window,
+ * and whether its filters were on (V2-6). Null before the first snapshot,
+ * when there is no window to carry.
+ */
+private fun AnalyticsUiState.merchantEntries(id: String, name: String): Destination.MerchantEntries? {
+    val window = snapshot?.window ?: return null
+    return Destination.MerchantEntries(
+        ledger = ledger.name,
+        merchantId = id,
+        merchantName = name,
+        from = window.from,
+        to = window.to,
+        analyticsFiltered = !filters.isEmpty,
+    )
+}

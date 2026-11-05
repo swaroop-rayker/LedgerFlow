@@ -26,6 +26,7 @@ import com.ledgerflow.core.database.entity.ItemCategoryMemoryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
+import com.ledgerflow.core.database.entity.MerchantCategoryEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
@@ -134,9 +135,20 @@ class BackupRestoreRoundTripTest {
                 ),
             ),
         )
+        // v13: one live, one hidden; the live one is filed under it, the hidden
+        // merchant Uncategorised, so both states of the new column travel.
+        database.merchantCategoryDao().insertAll(
+            listOf(
+                MerchantCategoryEntity("mc-groceries", "Groceries", 0x002F7E50, 0, isSystem = true),
+                MerchantCategoryEntity("mc-fuel", "Fuel", 0x00AB5C15, 1, deletedAt = 1_700_000_000_000L),
+            ),
+        )
         database.merchantDao().insertAll(
             listOf(
-                MerchantEntity("mer-1", "Big Bazaar", "BIGBAZAAR", "cat-groceries", "logo-1", 0),
+                MerchantEntity(
+                    "mer-1", "Big Bazaar", "BIGBAZAAR", "cat-groceries", "logo-1", 0,
+                    merchantCategoryId = "mc-groceries",
+                ),
                 MerchantEntity("mer-2", "Corner Shop", "CORNERSHOP", null, null, 1_700_000_000_000L),
             ),
         )
@@ -433,6 +445,7 @@ class BackupRestoreRoundTripTest {
         val budgets: List<BudgetEntity>,
         val attachments: List<AttachmentEntity>,
         val itemCategoryMemory: List<ItemCategoryMemoryEntity>,
+        val merchantCategories: List<MerchantCategoryEntity>,
     ) {
         /**
          * Every table, as lists, for the vacuity guard below.
@@ -473,6 +486,7 @@ class BackupRestoreRoundTripTest {
             budgets = db.budgetDao().all(),
             attachments = db.attachmentDao().all(),
             itemCategoryMemory = db.itemCategoryMemoryDao().all(),
+            merchantCategories = db.merchantCategoryDao().all(),
         )
     }
 

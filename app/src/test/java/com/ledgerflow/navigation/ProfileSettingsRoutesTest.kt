@@ -73,7 +73,7 @@ class ProfileSettingsRoutesTest {
                 "Payment apps" to Destination.PaymentApps,
             ),
             SettingsPage.Organise to listOf(
-                "Categories & merchants" to Destination.Categories,
+                "Categories & merchants" to Destination.Categories(),
                 "Budgets" to Destination.Budgets,
             ),
             SettingsPage.Data to listOf(
@@ -81,7 +81,16 @@ class ProfileSettingsRoutesTest {
                 "Export" to Destination.Export,
                 "Deleted entries" to Destination.DeletedEntries,
             ),
+            SettingsPage.Security to listOf("Data permissions" to Destination.DataPermissions),
             SettingsPage.Tools to listOf("Diagnostics" to Destination.Diagnostics),
+            SettingsPage.About to listOf(
+                "What's new" to Destination.AboutDocument("WhatsNew"),
+                "Help & FAQ" to Destination.Help,
+                "Report a bug" to Destination.ReportBug,
+                "Privacy policy" to Destination.AboutDocument("PrivacyPolicy"),
+                "Terms" to Destination.AboutDocument("Terms"),
+                "Open-source licences" to Destination.Licences,
+            ),
         )
         val reached = mutableListOf<Destination>()
         var alerts = 0

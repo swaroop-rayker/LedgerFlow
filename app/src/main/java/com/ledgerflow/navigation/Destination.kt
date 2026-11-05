@@ -70,9 +70,34 @@ public sealed interface Destination {
     @Serializable
     public data class Entry(val draftId: String? = null) : Destination
 
-    /** Reached from Settings > Organise. */
+    /**
+     * Reached from Settings > Organise, and from Analytics' "Categorise in
+     * Merchants" (V2-6), which opens it on [view] =
+     * `CategoriesViewModel.VIEW_UNCATEGORISED_MERCHANTS`. **The property name is
+     * a contract**, as [Inbox.filter] is: `CategoriesViewModel.VIEW_ARG` reads
+     * it by string, and `OrganiseViewArgumentTest` fails the build if the two
+     * drift. Null opens Organise as it always opened.
+     */
     @Serializable
-    public data object Categories : Destination
+    public data class Categories(val view: String? = null) : Destination
+
+    /**
+     * One merchant's entries in one book and window, opened from a merchant in
+     * Analytics (V2-6). [ledger] is a `LedgerType` name; [from] and [to] are
+     * days since epoch, Analytics' window; [analyticsFiltered] says its filters
+     * were on, which this page does not apply. **The property names are a
+     * contract**: `MerchantEntriesViewModel` reads them by string, and
+     * `MerchantEntriesArgumentTest` fails the build if they drift.
+     */
+    @Serializable
+    public data class MerchantEntries(
+        val ledger: String,
+        val merchantId: String,
+        val merchantName: String,
+        val from: Int,
+        val to: Int,
+        val analyticsFiltered: Boolean,
+    ) : Destination
 
     /** Budget management (§5.7). Reached from Settings, like Categories. */
     @Serializable
@@ -113,6 +138,34 @@ public sealed interface Destination {
     /** The notification allowlist editor (V2-3, V2-PLAN §3.4), reached from Settings. */
     @Serializable
     public data object PaymentApps : Destination
+
+    /** What the app may use, why, and the way to Android's settings (V2-3, V2-PLAN §3.5), from Security & privacy. */
+    @Serializable
+    public data object DataPermissions : Destination
+
+    /** What's new, the privacy policy or the terms (V2-3, V2-PLAN §3.8): `AboutDocument.name`. */
+    @Serializable
+    public data class AboutDocument(val document: String) : Destination
+
+    /** Help & FAQ (V2-3), from About. */
+    @Serializable
+    public data object Help : Destination
+
+    /** Report a bug (V2-3), from About: the user reviews every line before sharing. */
+    @Serializable
+    public data object ReportBug : Destination
+
+    /** Open-source licences (V2-3, ADR-0032), from About. */
+    @Serializable
+    public data object Licences : Destination
+
+    /** Organise > Merchants > Merchant categories (V2-6, V2-PLAN §5.1). */
+    @Serializable
+    public data object MerchantCategories : Destination
+
+    /** One component's licences: `LicensedComponent.id`. */
+    @Serializable
+    public data class Licence(val component: String) : Destination
 
     /**
      * Receipt capture (§5.3), reached from the centre action's dial.

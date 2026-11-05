@@ -13,6 +13,7 @@ import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.testing.ledger.FakeDraftRepository
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
 import com.ledgerflow.core.testing.taxonomy.FakeCategoryRepository
+import com.ledgerflow.core.testing.taxonomy.FakeMerchantCategoryRepository
 import com.ledgerflow.core.testing.taxonomy.FakeMerchantRepository
 import com.ledgerflow.core.testing.taxonomy.FakePaymentMethodRepository
 import java.security.SecureRandom
@@ -52,6 +53,7 @@ class EntryItemisedModeTest {
     private val drafts = FakeDraftRepository()
     private val categories = FakeCategoryRepository()
     private val merchants = FakeMerchantRepository()
+    private val merchantCategories = FakeMerchantCategoryRepository()
     private val paymentMethods = FakePaymentMethodRepository()
 
     private val groceries = Category(
@@ -318,6 +320,7 @@ class EntryItemisedModeTest {
         ledgerRepository = ledger,
         categories = categories,
         merchants = merchants,
+        merchantCategories = merchantCategories,
         paymentMethods = paymentMethods,
         clock = Clock { FIXED_NOW },
         ids = Uuid7Generator(SecureRandom()),

@@ -1,7 +1,8 @@
 # Plan — LedgerFlow v2 (for general users)
 
-Status: **V2-1 and V2-2 merged (2026-10-22).** Written 2026-09-30 from
-the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
+Status: **V2-1, V2-2 and five of V2-3's seven PRs merged (2026-10-25);
+the Night Vault redesign merged (2026-10-31).** Written 2026-09-30 from the
+owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 
 | Item | State |
 |---|---|
@@ -13,17 +14,24 @@ the owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-2 Settings | Merged, PR #5 (`d40f5cd`, 2026-10-22): D7 (a), §3 below; SPEC §9.3. Device suites on `d40f5cd` (SM-S721B, 2026-10-23): `:core:database` 105/105 (migration chain v1→v12, backup round-trip, older-schema restores) and `:core:data` 402/402 (restore, nightly and manual backup, purge). CI skips its instrumented job behind the known receipt-corpus red. Its RTL check found BUG61, fixed separately in PR #6 |
 | BUG61 RTL text | Merged, PR #6 (`dd25dd9`, 2026-10-24) |
 | V2-3 decisions | Owner, 2026-10-24: seven PRs in order Appearance → Currency & region → Notifications (budget-alerts row + overspending) → Allowlist editor → App lock + screenshot block → Hide amounts + Data permissions → About. Lock on the platform `BiometricPrompt` (no `androidx.biometric`); preferences outside the vault under ADR-0030 |
-| V2-3 · Appearance | PR #8, `claude/v2-3-appearance` (§3.2; SPEC §9.3, §9.5; ADR-0030). Not yet merged |
-| V2-3 · Currency & region | PR #9, stacked on #8 (§3.3; SPEC §9.3, §16 Q26 closed; BUG62). Not yet merged |
-| V2-3 · Notifications | PR #10, stacked on #9 (§3.4: budget-alerts row, overspending alerts; SPEC §9.3, §5.7). Not yet merged |
-| V2-3 · Allowlist editor | PR #11, stacked on #10 (§3.4; SPEC §9.3, §5.2, §16 Q4). Not yet merged |
-| V2-3 · App lock + screenshot block | Built on `claude/v2-3-app-lock`, stacked on the allowlist editor (§3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned). Not yet merged |
+| V2-3 · Appearance | Merged, PR #8 (`9c9b523`, 2026-10-25): §3.2; SPEC §9.3, §9.5; ADR-0030 |
+| V2-3 · Currency & region | Merged, PR #9 (`582e730`, 2026-10-25): §3.3; SPEC §9.3, §16 Q26 closed; BUG62 |
+| V2-3 · Notifications | Merged, PR #10 (`9a570d0`, 2026-10-25): §3.4, budget-alerts row and overspending alerts; SPEC §9.3, §5.7 |
+| V2-3 · Allowlist editor | Merged, PR #11 (`5c4ce8a`, 2026-10-25): §3.4; SPEC §9.3, §5.2, §16 Q4 |
+| V2-3 · App lock + screenshot block | Merged, PR #12 (`0cc93ea`, 2026-10-25): §3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned |
+| Night Vault redesign | Merged, PR #13 (`a5bc471`, 2026-10-31), squashed from `redesign/design-system`: `DESIGN_SYSTEM_PLAN.md` steps A–G plus the compact Organise layout; ADR-0031; `docs/DESIGN_SYSTEM.md` is the guide. Profile is the fourth tab and every Settings section is its own page (D7, amended). The new Organise screen has not been checked on the phone |
+| V2-3 · Hide amounts + Data permissions | Built on `claude/v2-3-hide-amounts` (§3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended). Not yet merged |
+| V2-3 · About | Built on `claude/v2-3-about`, stacked on #15 (§3.8; SPEC §9.3, §9.4). Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. The public contact email is still the owner's. Not yet merged |
+| LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
+| V2-6 · Merchant categories | Owner, 2026-10-31: four PRs (§5.5's note). PR 1, schema v13 and the data layer with BUG82: #18, stacked on #17. PR 2, Organise (filing merchants, merchants grouped by category, the Merchant categories page): #19, stacked on #18. PR 3, the merchant picker's browse by category: #20, stacked on #19. PR 4, Analytics by merchant category (A11), the merchant-category filter and the XLSX sheet: #22, stacked on #20. PR 5, a merchant's entries page: #23, stacked on #22. PR 6, the Ledger's merchant-category filter, built on `claude/v2-6-ledger-filter`, stacked on #23. Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
 FX ADR (D2) take the next free numbers when they are written, not 0029/0030.
 ADR-0030 is now V2-3's device preferences (2026-10-24), and ADR-0031 the
-design-system's visual direction (Night Vault, 2026-10-28), so D1 and D2 start at 0032.
+design-system's visual direction (Night Vault, 2026-10-28), and ADR-0032 the
+licences list generated at build time (V2-3 About, 2026-10-31), so D1, D2 and
+the LedgerFlow PIN take the next free numbers, 0033 and up.
 Schema v12 is BUG58's, so merchant categories (§5.5) become v13 and V2-7's
 tables v14 and later.
 
@@ -257,8 +265,14 @@ listing each permission the app holds, why, and a deep link to revoke it.
 **Built (V2-3, 2026-10-24): app lock and screenshot block.** Platform prompt
 only (no `androidx.biometric`), on cold start and after Lock after
 (Immediately / 1 / 5 / 15 minutes); a screen overlay that touches no key.
-SPEC §7.6 has the detail. Hide amounts and the data-permissions page are the
-next PR.
+SPEC §7.6 has the detail.
+
+**Built (V2-3, 2026-10-31): Hide amounts on Home and Data permissions.** Home
+draws every amount as the same four dots until a tap shows them all; leaving
+Home hides them again. Data permissions lists what the installed package
+actually holds, read from Android, with a link to Android's page for each one
+the user can turn off. SPEC §9.3 has the detail. The switch lives in the vault
+(`app_meta`, owner 2026-10-31), so a backup carries it.
 
 **PIN (owner, 2026-10-25).** The Security page offers a choice: the phone's
 own lock (today's default) or a LedgerFlow PIN, as in the reference samples.
@@ -284,6 +298,14 @@ and FAQ (bundled, offline), Report a bug (opens the user's email/GitHub with
 device info **they review before sending** — no telemetry), Privacy policy,
 Terms, open-source Licenses (generated from the dependency graph at build
 time — dependency choice to approve).
+
+**Built (V2-3, 2026-10-31), owner's choices:** What's new is written by hand
+per release rather than generated from commits (a commit message is not
+written for users, and a build that reads git history breaks on a shallow
+clone); Report a bug hands the text to Android's share sheet instead of
+opening email or GitHub, so it needs no address; the Terms are a draft for
+the owner's sign-off. Licences: AboutLibraries' Gradle plugin, build time
+only (ADR-0032). SPEC §9.3 has the detail.
 
 **Public contact email (owner to decide, probably in v2; 2026-10-02).** Both
 store listings and `docs/play/privacy-policy.md` need one, and all three carry
@@ -438,8 +460,37 @@ total; Law 2 guard on the new query; picker browse groups and Uncategorised
 last; goldens at 1x and 2x for the section, the picker's browse mode and the
 Merchants section's Uncategorised filter; semantics per donut segment.
 
+**PR 4 as built (owner, 2026-11-01).** The "join at query time" is done in
+memory over the merchant totals the snapshot already reads: the same
+retroactive answer, with no new SQL. Spending with **no merchant** is its own
+row after Uncategorised rather than part of it. The Analytics filter sheet has
+its merchant-category filter.
+
+**PR 5, a merchant's entries (owner, 2026-11-01).** The last drill step, built
+as its own page with the Ledger's rows: Analytics' book and window (so it adds
+up to the figure tapped), not its filters, look only. "Top merchants" is not a
+way in: its bars are under the touch target.
+
+**PR 6, the Ledger's merchant-category filter (owner, 2026-11-01).** The
+Ledger's first filter, so it is built as the filter control later dimensions
+will join: Analytics' filter button and picker, a chip that clears it, the
+unsaved rows hidden while it is on. §5 is complete with it.
+
 **Not planned:** budgets per merchant category, and any automatic suggestion of
 a merchant's category. Either would be its own owner decision.
+
+**V2-6 in four PRs (owner, 2026-10-31):** 1 the schema and data layer, 2
+Organise, 3 the merchant picker, 4 Analytics. Owner's choices: the categories
+are managed from a row at the top of Organise > Merchants, not a fourth tab;
+the defaults are seeded once per vault at launch, not by the migration; the
+A1 lens is left out.
+
+**PR 1 built (2026-10-31).** `merchant_category` has `category`'s actual shape
+(no `created_at`/`updated_at`, which `category` does not have either) plus
+`is_system`; `merchant.merchant_category_id` is a plain indexed column, no
+foreign key, like `default_category_id`. The migration is the first to rebuild
+a table others point at, and refuses to run with foreign keys on.
+BUG82, found on the way: a merge did not re-sum the daily summaries.
 
 ---
 
@@ -473,10 +524,10 @@ a merchant's category. Either would be its own owner decision.
 | V2-0 | Owner decisions D1–D8; ADRs for the network (D1), FX (D2) and D5, at the next free numbers | owner; D6 settled 2026-10-20 |
 | V2-1 | BUG-A transitions, BUG-B ghost entries + copy, BUG-C Home v1 | D6; ghost-message evidence; Home card list |
 | V2-2 | Settings destination and restructure (moves only, no new features) | D7 |
-| V2-3 | Appearance, Currency & region, Notifications, App lock, About | D4 |
+| V2-3 | Appearance, Currency & region, Notifications, Allowlist editor, App lock + screenshot block (all merged); Hide amounts + Data permissions, About | D4 |
 | V2-4 | Data & sync: Drive, Import (CSV/XLSX), Restore entry | D1, D8; P5 XLSX |
 | V2-5 | Receipts management | D5 |
-| V2-6 | Merchant categories (schema v13): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; owner to confirm §5.2's seed list |
+| V2-6 | Merchant categories (schema v13): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; seed list confirmed 2026-10-31 |
 | V2-7 | More: recurring, goals, debts, utilities (schema v14+) | D2 for converter |
 | V2-8 | Recommended additions the owner picks; Play listing for v2 | owner |
 

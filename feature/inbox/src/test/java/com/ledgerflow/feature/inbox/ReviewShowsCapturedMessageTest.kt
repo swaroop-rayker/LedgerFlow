@@ -15,6 +15,7 @@ import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.testing.inbox.FakePendingRepository
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
 import com.ledgerflow.core.testing.taxonomy.FakeCategoryRepository
+import com.ledgerflow.core.testing.taxonomy.FakeMerchantCategoryRepository
 import com.ledgerflow.core.testing.taxonomy.FakeMerchantRepository
 import com.ledgerflow.core.testing.taxonomy.FakePaymentMethodRepository
 import java.security.SecureRandom
@@ -53,6 +54,7 @@ class ReviewShowsCapturedMessageTest {
     private val pending = FakePendingRepository()
     private val ledger = FakeLedgerRepository()
     private val merchants = FakeMerchantRepository()
+    private val merchantCategories = FakeMerchantCategoryRepository()
 
     private val ghost = PendingTransaction(
         id = "p1",
@@ -78,6 +80,7 @@ class ReviewShowsCapturedMessageTest {
         pendingRepository = pending,
         observeCategoryTree = ObserveCategoryTreeUseCase(FakeCategoryRepository()),
         merchants = merchants,
+        merchantCategories = merchantCategories,
         paymentMethods = FakePaymentMethodRepository(),
         ledgerRepository = ledger,
         ids = Uuid7Generator(SecureRandom()),

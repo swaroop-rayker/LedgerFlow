@@ -35,4 +35,7 @@ dependencies {
     implementation(libs.androidx.paging.compose)
 
     testImplementation(project(":core:testing"))
+    // asSnapshot, to read a ViewModel's PagingData in a unit test (V2-6's
+    // merchant entries page); the same artifact :core:data's device tests use.
+    testImplementation(libs.androidx.paging.testing)
 }

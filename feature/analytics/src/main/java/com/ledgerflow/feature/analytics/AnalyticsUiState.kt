@@ -8,6 +8,7 @@ import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
+import com.ledgerflow.core.model.MerchantCategory
 
 /**
  * Analytics, A1–A5 (`SPEC.md` §5.6).
@@ -47,6 +48,10 @@ public data class AnalyticsUiState(
      * everything else. So it is a toggle, and it is off by default.
      */
     val treemapShown: Boolean = false,
+
+    /** A11 (V2-6): the merchant category whose merchants are listed, and its own donut/treemap choice. */
+    val expandedMerchantCategoryId: String? = null,
+    val merchantTreemapShown: Boolean = false,
     /**
      * Spend over time as a running total (the area chart, the default) or
      * split by category (the stacked bars), step F6, owner 2026-10-30. The
@@ -79,6 +84,7 @@ public data class AnalyticsUiState(
     /** Everything the filter sheet may offer. */
     val allCategories: List<Category> = emptyList(),
     val allMerchants: List<Merchant> = emptyList(),
+    val allMerchantCategories: List<MerchantCategory> = emptyList(),
     /**
      * Which filter field has its picker open, or null.
      *
@@ -127,6 +133,7 @@ public enum class AnalyticsFilterField(public val label: String) {
     CATEGORY("Category"),
     SUBCATEGORY("Subcategory"),
     MERCHANT("Merchant"),
+    MERCHANT_CATEGORY("Merchant category"),
     SOURCE("Source"),
 }
 
@@ -147,11 +154,21 @@ public sealed interface AnalyticsEvent {
      */
     public data object Resumed : AnalyticsEvent
     public data object ComparisonToggled : AnalyticsEvent
-    public data class CategoryExpanded(val categoryId: String?) : AnalyticsEvent
+    public data class CategoryExpanded(val categoryId: String?) : BreakdownView
     public data object FiltersCleared : AnalyticsEvent
     public data class FiltersChanged(val filters: AnalyticsFilters) : AnalyticsEvent
     public data class CustomRangePicked(val from: Int, val to: Int) : AnalyticsEvent
-    public data object TreemapToggled : AnalyticsEvent
+    public data object TreemapToggled : BreakdownView
+
+    /**
+     * How A2 and A11 are drawn: which row is open, donut or treemap. None of
+     * these re-queries; the rows' children are in the snapshot already.
+     */
+    public sealed interface BreakdownView : AnalyticsEvent
+
+    /** A11: list a merchant category's merchants under it, or fold them away. */
+    public data class MerchantCategoryExpanded(val merchantCategoryId: String) : BreakdownView
+    public data object MerchantTreemapToggled : BreakdownView
 
     /**
      * Spend over time's Total | By category (step F6). Presentational, no

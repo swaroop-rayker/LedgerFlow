@@ -75,7 +75,31 @@ public data class DashboardUiState(
 
     /** The credit book's newest entries, a separate list (Law 2); null until read. */
     val recentIncome: List<LedgerListItem>? = null,
+
+    /**
+     * Settings > Security & privacy > Hide amounts on Home (V2-PLAN §3.5).
+     * Null until the setting has been read: it and the figures are separate
+     * reads of the vault, and either can land first.
+     */
+    val hideAmounts: Boolean? = null,
+
+    /**
+     * The user tapped a hidden amount. Never saved: leaving Home or the app
+     * hides them again, so nothing stays shown under the app lock or in
+     * Recents.
+     */
+    val amountsRevealed: Boolean = false,
 ) {
+
+    /**
+     * Every amount on Home is drawn as a mask (`LfMaskedAmount`) until one is
+     * tapped -- **and until the setting has been read**. Shown by default, a
+     * figure that arrived first would be on screen for a frame for someone
+     * who asked for it to be hidden; masked by default, someone who did not
+     * sees dots for that frame, which is the cheaper mistake.
+     */
+    public val amountsHidden: Boolean get() = hideAmounts != false && !amountsRevealed
+
 
     /**
      * "Nothing here yet", only when **both** books have answered and neither

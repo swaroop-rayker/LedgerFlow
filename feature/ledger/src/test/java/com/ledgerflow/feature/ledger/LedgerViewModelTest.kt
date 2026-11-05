@@ -45,6 +45,9 @@ import org.junit.Test
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class LedgerViewModelTest {
 
+    private val merchantEntries = com.ledgerflow.core.testing.ledger.FakeMerchantEntriesRepository()
+    private var merchantKinds: List<com.ledgerflow.core.model.MerchantCategory> = emptyList()
+
     private val dispatcher = StandardTestDispatcher()
     private lateinit var ledger: FakeLedgerRepository
     private lateinit var drafts: FakeDraftRepository
@@ -413,6 +416,8 @@ class LedgerViewModelTest {
             restoreEntry = RestoreEntryUseCase(ledger, NoOpBudgetAlertTrigger),
             observePending = ObservePendingUseCase(pending),
             clock = Clock { FIXED_NOW },
+            merchantEntries = merchantEntries,
+            merchantCategories = { kotlinx.coroutines.flow.flowOf(merchantKinds) },
         )
         CoroutineScope(dispatcher).launch { viewModel.state.collect {} }
         dispatcher.scheduler.advanceUntilIdle()

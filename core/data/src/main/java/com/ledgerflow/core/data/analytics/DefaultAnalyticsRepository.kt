@@ -22,6 +22,10 @@ import com.ledgerflow.core.domain.analytics.ParserGapDetection
 import com.ledgerflow.core.domain.analytics.RecurringDetection
 import com.ledgerflow.core.domain.analytics.RecurringMerchant
 import com.ledgerflow.core.domain.analytics.TimeBucket
+import com.ledgerflow.core.domain.analytics.merchantCategoryBreakdown
+import com.ledgerflow.core.domain.analytics.resolveMerchantCategories
+import com.ledgerflow.core.data.taxonomy.toDomain
+import com.ledgerflow.core.model.MerchantCategory
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
 import javax.inject.Inject
@@ -67,6 +71,21 @@ public class DefaultAnalyticsRepository @Inject constructor(
         val database = session.openForBackgroundWork()
             ?: return@withContext emptySnapshot(ledger, window)
         val names = NameBook.read(database)
+        // The merchant-category filter becomes a merchant filter here, once, so
+        // every read below honours it without knowing it exists (V2-6).
+        val resolved = filters.resolveMerchantCategories(names.merchantCategoryOf, names.merchantCategories)
+        build(database, names, ledger, window, comparePrevious, resolved)
+    }
+
+    @Suppress("LongParameterList")
+    private suspend fun build(
+        database: LedgerFlowDatabase,
+        names: NameBook,
+        ledger: LedgerType,
+        window: AnalyticsWindow,
+        comparePrevious: Boolean,
+        filters: AnalyticsFilters,
+    ): AnalyticsSnapshot {
         val dao = database.dailyRollupDao()
 
         val recurring = detectRecurring(dao, ledger, names, window.to)
@@ -76,8 +95,11 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 row.dimensionId to row.sumMinor
             }
         }.orEmpty()
+        val merchants = dimensionTotals(dao, ledger, MERCHANT, window, filters).map { row ->
+            row.toTotal(name = names.merchant(row.dimensionId), colorArgb = null)
+        }
 
-        AnalyticsSnapshot(
+        return AnalyticsSnapshot(
             ledger = ledger,
             window = window,
             total = windowTotal(dao, ledger, window, filters),
@@ -98,9 +120,7 @@ public class DefaultAnalyticsRepository @Inject constructor(
                 )
             },
             subcategories = buildSubcategories(dao, ledger, window, names, filters),
-            merchants = dimensionTotals(dao, ledger, MERCHANT, window, filters).map { row ->
-                row.toTotal(name = names.merchant(row.dimensionId), colorArgb = null)
-            },
+            merchants = merchants,
             paymentMethods = dimensionTotals(dao, ledger, METHOD, window, filters).map { row ->
                 row.toTotal(
                     name = names.paymentMethod(row.dimensionId),
@@ -120,8 +140,23 @@ public class DefaultAnalyticsRepository @Inject constructor(
             captureCoverage = buildCaptureCoverage(dao, ledger, window, filters),
             parserGaps = buildParserGaps(dao, ledger, window, names, filters),
             parallelBooks = buildParallelBooks(dao, window),
+            merchantCategories = merchantCategoryBreakdown(
+                merchants = merchants,
+                categoryOf = names.merchantCategoryOf,
+                categories = names.merchantCategories,
+                previous = previous?.let { previousMerchantTotals(dao, ledger, it, filters) },
+            ),
         )
     }
+
+    /** A11's comparison: last window's spending per merchant, regrouped as this one is. */
+    private suspend fun previousMerchantTotals(
+        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+        ledger: LedgerType,
+        earlier: AnalyticsWindow,
+        filters: AnalyticsFilters,
+    ): Map<String, Money> =
+        dimensionTotals(dao, ledger, MERCHANT, earlier, filters).associate { it.dimensionId to it.sumMinor }
 
     /**
      * The same sum [AnalyticsSnapshot.total] is, by the same path, so Home's
@@ -707,6 +742,10 @@ private class NameBook(
     private val categories: Map<String, Pair<String, Int?>>,
     private val merchants: Map<String, String>,
     private val paymentMethods: Map<String, Pair<String, Int?>>,
+    /** Every merchant's merchant category, hidden merchants included (V2-6). */
+    val merchantCategoryOf: Map<String, String?>,
+    /** The live merchant categories: a merchant filed under any other is Uncategorised. */
+    val merchantCategories: List<MerchantCategory>,
 ) {
     fun category(id: String): String =
         if (id.isEmpty()) UNCATEGORISED else categories[id]?.first ?: REMOVED
@@ -729,14 +768,21 @@ private class NameBook(
          */
         const val REMOVED = "Removed"
 
-        suspend fun read(database: LedgerFlowDatabase) = NameBook(
-            categories = database.categoryDao().all()
-                .associate { it.id to (it.name to it.colorArgb) },
-            merchants = database.merchantDao().all()
-                .associate { it.id to it.canonicalName },
-            paymentMethods = database.paymentMethodDao().all()
-                .associate { it.id to (it.label to it.colorArgb) },
-        )
+        suspend fun read(database: LedgerFlowDatabase): NameBook {
+            val merchants = database.merchantDao().all()
+            return NameBook(
+                categories = database.categoryDao().all()
+                    .associate { it.id to (it.name to it.colorArgb) },
+                merchants = merchants.associate { it.id to it.canonicalName },
+                paymentMethods = database.paymentMethodDao().all()
+                    .associate { it.id to (it.label to it.colorArgb) },
+                merchantCategoryOf = merchants.associate { it.id to it.merchantCategoryId },
+                merchantCategories = database.merchantCategoryDao().all()
+                    .filter { it.deletedAt == 0L }
+                    .sortedWith(compareBy({ it.sortOrder }, { it.name }))
+                    .map { it.toDomain() },
+            )
+        }
     }
 }
 

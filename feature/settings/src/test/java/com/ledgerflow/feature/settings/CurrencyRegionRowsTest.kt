@@ -54,6 +54,8 @@ class CurrencyRegionRowsTest {
                     onDiagnostics = {},
                     onBudgetAlerts = {},
                     onPaymentApps = {},
+                    onDataPermissions = {},
+                    onAbout = {},
                     onEvent = { events += it },
                 )
             }

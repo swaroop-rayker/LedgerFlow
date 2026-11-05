@@ -122,6 +122,9 @@ public class DashboardViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
+            home.hideAmounts.enabled.collect { hide -> _state.update { it.copy(hideAmounts = hide) } }
+        }
+        viewModelScope.launch {
             summaryRequests
                 .onStart { emit(Unit) }
                 .conflate()
@@ -152,6 +155,19 @@ public class DashboardViewModel @Inject constructor(
             dismissCrashReports.invoke()
             _state.update { it.copy(crashSaveFailed = false) }
         }
+    }
+
+    /** A tap on a hidden amount: every amount on Home shows (V2-PLAN §3.5). */
+    public fun revealAmounts() {
+        _state.update { it.copy(amountsRevealed = true) }
+    }
+
+    /**
+     * Home has stopped, by navigation or by leaving the app: amounts the user
+     * revealed are hidden again, so the next look at Home starts hidden.
+     */
+    public fun hideAmountsAgain() {
+        _state.update { it.copy(amountsRevealed = false) }
     }
 
     /** "Got it" on the capture-gap card: the user has seen the window. */

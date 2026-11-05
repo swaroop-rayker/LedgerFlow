@@ -69,6 +69,8 @@ public fun SettingsSectionScreen(
     onDiagnostics: () -> Unit,
     onBudgetAlerts: () -> Unit,
     onPaymentApps: () -> Unit,
+    onDataPermissions: () -> Unit,
+    onAbout: (AboutLink) -> Unit,
     onEvent: (SettingsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -93,7 +95,14 @@ public fun SettingsSectionScreen(
         // column four buttons tall), so this one opens a short picker.
         SettingsItem.DateOrder to { onEvent(SettingsEvent.DateOrderRequested) },
         SettingsItem.LockAfter to { onEvent(SettingsEvent.LockAfterRequested) },
+        SettingsItem.DataPermissions to onDataPermissions,
         SettingsItem.Diagnostics to onDiagnostics,
+        SettingsItem.WhatsNew to { onAbout(AboutLink.WhatsNew) },
+        SettingsItem.Help to { onAbout(AboutLink.Help) },
+        SettingsItem.ReportBug to { onAbout(AboutLink.ReportBug) },
+        SettingsItem.PrivacyPolicy to { onAbout(AboutLink.PrivacyPolicy) },
+        SettingsItem.Terms to { onAbout(AboutLink.Terms) },
+        SettingsItem.Licences to { onAbout(AboutLink.Licences) },
     )
     val section = SettingsSections.single { it.page == page }
 
@@ -122,7 +131,10 @@ public fun SettingsSectionScreen(
  * Public because the shell's route names one: `Destination.SettingsSection`
  * carries [name], and the shell reads it back with [settingsPageNamed].
  */
-public enum class SettingsPage { Notifications, Organise, Data, Security, Appearance, Region, Tools }
+public enum class SettingsPage { Notifications, Organise, Data, Security, Appearance, Region, Tools, About }
+
+/** Where an About row leads (V2-PLAN §3.8). The shell owns the destinations. */
+public enum class AboutLink { WhatsNew, Help, ReportBug, PrivacyPolicy, Terms, Licences }
 
 /** The page a route's argument names, or null for a name no page has. */
 public fun settingsPageNamed(name: String): SettingsPage? = SettingsPage.entries.firstOrNull { it.name == name }
@@ -153,8 +165,19 @@ internal enum class SettingsItem {
     AppLock,
     LockAfter,
     BlockScreenshots,
+    HideAmounts,
+    DataPermissions,
 
     Diagnostics,
+
+    // About (V2-3, V2-PLAN §3.8): the version as a fact, then ways out.
+    AppVersion,
+    WhatsNew,
+    Help,
+    ReportBug,
+    PrivacyPolicy,
+    Terms,
+    Licences,
 }
 
 /** One page: its name and its rows, in drawing order. */
@@ -211,7 +234,15 @@ internal val SettingsSections: List<SettingsSection> = listOf(
     SettingsSection(
         SettingsPage.Security,
         "Security & privacy",
-        listOf(SettingsItem.AppLock, SettingsItem.LockAfter, SettingsItem.BlockScreenshots),
+        // What guards the app, then what the screen shows, then what the
+        // app may reach: the permissions page last, as the one way out.
+        listOf(
+            SettingsItem.AppLock,
+            SettingsItem.LockAfter,
+            SettingsItem.BlockScreenshots,
+            SettingsItem.HideAmounts,
+            SettingsItem.DataPermissions,
+        ),
     ),
     SettingsSection(
         SettingsPage.Appearance,
@@ -224,6 +255,21 @@ internal val SettingsSections: List<SettingsSection> = listOf(
         listOf(SettingsItem.BaseCurrency, SettingsItem.NumberGrouping, SettingsItem.DateOrder),
     ),
     SettingsSection(SettingsPage.Tools, "Tools", listOf(SettingsItem.Diagnostics)),
+    // Last, after Tools (DESIGN_SYSTEM_PLAN Q8): read once, rarely revisited.
+    // The version first, as a fact; help before the legal pages.
+    SettingsSection(
+        SettingsPage.About,
+        "About",
+        listOf(
+            SettingsItem.AppVersion,
+            SettingsItem.WhatsNew,
+            SettingsItem.Help,
+            SettingsItem.ReportBug,
+            SettingsItem.PrivacyPolicy,
+            SettingsItem.Terms,
+            SettingsItem.Licences,
+        ),
+    ),
 )
 
 /**
@@ -257,7 +303,16 @@ internal val SettingsItem.title: String
         SettingsItem.AppLock -> "App lock"
         SettingsItem.LockAfter -> "Lock after"
         SettingsItem.BlockScreenshots -> "Block screenshots"
+        SettingsItem.HideAmounts -> "Hide amounts on Home"
+        SettingsItem.DataPermissions -> "Data permissions"
         SettingsItem.Diagnostics -> "Diagnostics"
+        SettingsItem.AppVersion -> "Version"
+        SettingsItem.WhatsNew -> "What's new"
+        SettingsItem.Help -> "Help & FAQ"
+        SettingsItem.ReportBug -> "Report a bug"
+        SettingsItem.PrivacyPolicy -> "Privacy policy"
+        SettingsItem.Terms -> "Terms"
+        SettingsItem.Licences -> "Open-source licences"
     }
 
 /**
@@ -290,6 +345,8 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.AppLock to { appLockSubtitle(it) },
     SettingsItem.LockAfter to { lockAfterSubtitle(it.security) },
     SettingsItem.BlockScreenshots to { blockScreenshotsSubtitle(it.security.blockScreenshots) },
+    SettingsItem.HideAmounts to { hideAmountsSubtitle(it.hideAmounts) },
+    SettingsItem.DataPermissions to { "What LedgerFlow may use, why, and where to turn it off" },
     SettingsItem.Theme to { themeSubtitle(it.appearance.theme) },
     SettingsItem.Animations to { animationsSubtitle(it) },
     // The shell reads it once per launch (a live change would rebuild the
@@ -299,6 +356,13 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.NumberGrouping to { groupingSubtitle(it) },
     SettingsItem.DateOrder to { dateOrderSubtitle(it.region.dateOrder) },
     SettingsItem.Diagnostics to { "How automatic capture is working" },
+    SettingsItem.AppVersion to { appVersionSubtitle(it) },
+    SettingsItem.WhatsNew to { "What changed in this version" },
+    SettingsItem.Help to { "Answers to common questions, offline" },
+    SettingsItem.ReportBug to { "Describe a problem. You see everything before it's sent." },
+    SettingsItem.PrivacyPolicy to { "What stays on your phone, and the little that doesn't" },
+    SettingsItem.Terms to { "The terms for using LedgerFlow" },
+    SettingsItem.Licences to { "The libraries, fonts and icons LedgerFlow is built with" },
 )
 
 /**
@@ -497,7 +561,7 @@ private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
  * outline. Tappable only when it leads somewhere.
  */
 @Composable
-private fun PanelRow(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+internal fun PanelRow(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -676,6 +740,8 @@ private fun SettingsPreview() {
             onDiagnostics = {},
             onBudgetAlerts = {},
             onPaymentApps = {},
+            onDataPermissions = {},
+            onAbout = {},
             onEvent = {},
         )
     }
@@ -701,6 +767,8 @@ private fun SettingsEmptyBinPreview() {
             onDiagnostics = {},
             onBudgetAlerts = {},
             onPaymentApps = {},
+            onDataPermissions = {},
+            onAbout = {},
             onEvent = {},
         )
     }

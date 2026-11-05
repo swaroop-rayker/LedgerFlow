@@ -1,6 +1,8 @@
 package com.ledgerflow.feature.settings
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.domain.about.AppEdition
+import com.ledgerflow.core.domain.about.AppInfo
 import com.ledgerflow.core.domain.appearance.AppearancePreferences
 import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
@@ -31,7 +33,15 @@ class SettingsIndexValuesTest {
             SettingsPage.Appearance, "Dark",
             SettingsPage.Region, "INR",
             SettingsPage.Tools, null,
+            // V2-3: About says the version once it has been read; before that, nothing.
+            SettingsPage.About, null,
         )
+    }
+
+    @Test
+    fun about_saysTheVersion() {
+        val info = AppInfo("0.1.1", 2, AppEdition.FULL, false, "16", 36, "phone", "en-IN")
+        assertThat(indexValueFor(SettingsPage.About, state.copy(appInfo = info))).isEqualTo("0.1.1")
     }
 
     @Test

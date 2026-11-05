@@ -231,6 +231,7 @@ class AnalyticsRangeSelectionTest {
         ledgerRepository = FakeLedgerRepository(),
         categories = FakeCategoryRepository(),
         merchants = FakeMerchantRepository(),
+        merchantCategories = { kotlinx.coroutines.flow.flowOf(emptyList()) },
         clock = Clock { FIXED_NOW },
     )
 
