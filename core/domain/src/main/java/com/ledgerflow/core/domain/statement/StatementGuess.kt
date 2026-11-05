@@ -18,9 +18,10 @@ package com.ledgerflow.core.domain.statement
 public object StatementGuess {
 
     /**
-     * The guess, and whether the dates themselves said which order they are
-     * in. When they did not (every value reads both ways), the Columns page
-     * asks.
+     * The guess, and whether the date order is settled: by the dates
+     * themselves (a day above 12), or because none of them depends on it
+     * (serials, named months, year first: BUG85). Only when neither holds
+     * does the Columns page ask.
      */
     public data class Guess(val columns: StatementColumns, val dateOrderKnown: Boolean)
 
@@ -30,7 +31,9 @@ public object StatementGuess {
         val columns = byHeadings ?: byContent(table) ?: return null
         val samples = (columns.headerRow + 1 until table.rows.size).map { table.cell(it, columns.date) }
         val order = StatementDate.orderOf(samples)
-        return Guess(columns.copy(dateOrder = order ?: StatementDateOrder.DayFirst), dateOrderKnown = order != null)
+        // Asked only when some date needs it and none of them settles it (BUG85).
+        val known = order != null || samples.none(StatementDate::dependsOnOrder)
+        return Guess(columns.copy(dateOrder = order ?: StatementDateOrder.DayFirst), dateOrderKnown = known)
     }
 
     private fun headingsAt(table: StatementTable, row: Int): StatementColumns? {

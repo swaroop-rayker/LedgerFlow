@@ -31,6 +31,18 @@ public object StatementDate {
     }
 
     /**
+     * Whether [text] needs a [StatementDateOrder] to be read: an all-number
+     * date with the day or the month first (`03/04/26`). A spreadsheet serial,
+     * a named month and a year-first date read one way only (BUG85).
+     */
+    public fun dependsOnOrder(text: String): Boolean {
+        val trimmed = text.trim()
+        val parts = PARTS.findAll(TIME.replace(trimmed, "")).map { it.value }.toList()
+        return serial(trimmed) == null && parts.size == DATE_PARTS &&
+            parts.all { part -> part.all { it in '0'..'9' } } && parts[0].length != YEAR_DIGITS
+    }
+
+    /**
      * The order a column's dates must be in, if its values say: a first part
      * above 12 can only be a day, a second part above 12 only a day too. Null
      * when every value would read either way — then the user is asked.
