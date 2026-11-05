@@ -1,6 +1,8 @@
 package com.ledgerflow.feature.categories
 
 import androidx.compose.runtime.Immutable
+import com.ledgerflow.core.domain.taxonomy.UNCATEGORISED_MERCHANTS
+import com.ledgerflow.core.domain.taxonomy.groupByMerchantCategory
 import com.ledgerflow.core.model.CategoryTree
 import com.ledgerflow.core.model.HiddenTaxonomy
 import com.ledgerflow.core.model.LedgerType
@@ -78,19 +80,14 @@ public data class CategoriesUiState(
 
     /**
      * [visibleMerchants] under their merchant categories (owner's option A,
-     * 2026-11-01): the categories in their own order, each only if it holds a
-     * merchant shown, then Uncategorised last, as the picker and Analytics
-     * order it. A merchant whose category is not live (hidden a moment ago,
-     * before its merchants moved) counts as Uncategorised, which is what
-     * Analytics will call it.
+     * 2026-11-01), by the rule the merchant picker shares
+     * ([groupByMerchantCategory]): the categories in their own order, empty
+     * ones left out, Uncategorised last.
      */
     public val merchantGroups: List<MerchantGroup>
-        get() {
-            val live = merchantCategories.associateBy { it.id }
-            val byCategory = visibleMerchants.groupBy { merchant -> merchant.merchantCategoryId?.takeIf { it in live } }
-            return merchantCategories.mapNotNull { category ->
-                byCategory[category.id]?.let { MerchantGroup(category.id, category.name, category.colorArgb, it) }
-            } + listOfNotNull(byCategory[null]?.let { MerchantGroup(null, UNCATEGORISED, null, it) })
+        get() = groupByMerchantCategory(visibleMerchants, merchantCategories).map { group ->
+            val category = group.category
+            MerchantGroup(category?.id, category?.name ?: UNCATEGORISED, category?.colorArgb, group.merchants)
         }
 }
 
@@ -107,7 +104,7 @@ public data class MerchantGroup(
 )
 
 /** The name of no merchant category (V2-PLAN §5): a bucket, not a category of its own. */
-public const val UNCATEGORISED: String = "Uncategorised"
+public const val UNCATEGORISED: String = UNCATEGORISED_MERCHANTS
 
 /**
  * What is being asked, if anything.

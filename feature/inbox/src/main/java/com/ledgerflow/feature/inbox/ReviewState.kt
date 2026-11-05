@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.model.Category
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
+import com.ledgerflow.core.model.MerchantCategory
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.model.PaymentMethod
 import com.ledgerflow.core.model.Quantity
@@ -77,6 +78,9 @@ public data class ReviewUiState(
     // ── Choices available ────────────────────────────────────────────────────
     val categories: List<Category> = emptyList(),
     val merchants: List<Merchant> = emptyList(),
+
+    /** Live merchant categories, read only: the merchant picker browses by them (V2-6 PR 3). */
+    val merchantCategories: List<MerchantCategory> = emptyList(),
     val paymentMethods: List<PaymentMethod> = emptyList(),
     val merchantQuery: String = "",
 

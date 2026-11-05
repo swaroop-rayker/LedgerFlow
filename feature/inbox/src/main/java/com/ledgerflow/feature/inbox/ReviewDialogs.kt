@@ -14,7 +14,11 @@ import com.ledgerflow.core.model.Quantity
 import com.ledgerflow.core.ui.lineitem.LineItemEditorEvent
 import com.ledgerflow.core.ui.lineitem.LineItemEditorState
 import com.ledgerflow.core.ui.lineitem.LineItemRow
+import com.ledgerflow.core.domain.taxonomy.MerchantGroup
+import com.ledgerflow.core.domain.taxonomy.merchantPickerGroups
+import com.ledgerflow.core.domain.taxonomy.title
 import com.ledgerflow.core.ui.picker.LfPickerDialog
+import com.ledgerflow.core.ui.picker.LfPickerGroup
 import com.ledgerflow.core.ui.picker.LfPickerOption
 import java.time.Instant
 import java.time.ZoneId
@@ -45,6 +49,14 @@ private fun PickerDialog(
         title = picker.title,
         body = picker.body,
         options = picker.optionsFrom(state),
+        // Browse by kind while the search box is empty (V2-6 PR 3), by the rule
+        // the entry form's picker asks, so the two group alike.
+        groups = if (picker is ReviewPicker.Merchant) {
+            merchantPickerGroups(state.merchants, state.merchantCategories, state.merchantQuery)
+                .map { it.toPickerGroup() }
+        } else {
+            emptyList()
+        },
         selectedId = picker.selectedIdIn(state),
         onSelect = { onEvent(ReviewEvent.PickerItemSelected(it)) },
         onDismiss = { onEvent(ReviewEvent.PickerDismissed) },
@@ -253,3 +265,7 @@ internal fun Long.asLocalDate(): String =
  * answers. It affects grouping and the minor-unit exponent, not the value.
  */
 private const val DEFAULT_CURRENCY_CODE = "INR"
+
+/** A merchant group as the picker draws it; Uncategorised takes the muted swatch. */
+private fun MerchantGroup.toPickerGroup() =
+    LfPickerGroup(title, category?.colorArgb, merchants.map { LfPickerOption(it.id, it.canonicalName) })

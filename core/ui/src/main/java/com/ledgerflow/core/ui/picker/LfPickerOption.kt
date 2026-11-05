@@ -20,10 +20,14 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import com.ledgerflow.core.designsystem.component.LfCategoryDot
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.icon.LfIcons
@@ -33,6 +37,14 @@ import com.ledgerflow.core.ui.LfFormRowTokens
 /** One selectable option: an id to report back, and a label to show. */
 @Immutable
 public data class LfPickerOption(val id: String, val label: String)
+
+/**
+ * Options under a heading: the merchant picker's browse by merchant category
+ * (V2-6 PR 3). [colorArgb] is the heading's swatch; null takes the muted one,
+ * as Uncategorised does on Organise.
+ */
+@Immutable
+public data class LfPickerGroup(val title: String, val colorArgb: Int?, val options: List<LfPickerOption>)
 
 /**
  * The app's one way to choose a category, a merchant, a payment method or a
@@ -54,6 +66,9 @@ public data class LfPickerOption(val id: String, val label: String)
  *   deliberate: once someone has typed a name the list does not contain,
  *   creating it is what they came for, and a column of near-misses above the
  *   answer is the wrong thing to read first.
+ * @param groups when not empty, drawn instead of [options]: each group's
+ *   heading, then its rows. The host decides when to group (the merchant
+ *   picker does while its search box is empty); this only draws it.
  */
 @Composable
 public fun LfPickerDialog(
@@ -70,6 +85,7 @@ public fun LfPickerDialog(
     queryLabel: String = "Search or add",
     createLabel: String? = null,
     onCreate: (() -> Unit)? = null,
+    groups: List<LfPickerGroup> = emptyList(),
 ) {
     LfDialog(
         title = title,
@@ -104,24 +120,60 @@ public fun LfPickerDialog(
                             onClick = onCreate,
                         )
                     }
-                    if (options.isEmpty() && onCreate == null) {
+                    if (options.isEmpty() && groups.isEmpty() && onCreate == null) {
                         Text(
                             text = emptyMessage,
                             style = LfFormRowTokens.supportingStyle,
                             color = LfFormRowTokens.secondary,
                         )
                     }
-                    options.forEach { option ->
-                        LfChoiceRow(
-                            label = option.label,
-                            selected = option.id == selectedId,
-                            onClick = { onSelect(option.id) },
-                        )
+                    if (groups.isEmpty()) {
+                        PickerRows(options, selectedId, onSelect)
+                    } else {
+                        groups.forEachIndexed { index, group ->
+                            LfPickerGroupHeading(group, first = index == 0)
+                            PickerRows(group.options, selectedId, onSelect)
+                        }
                     }
                 }
             }
         },
     )
+}
+
+@Composable
+private fun PickerRows(options: List<LfPickerOption>, selectedId: String?, onSelect: (String?) -> Unit) {
+    options.forEach { option ->
+        LfChoiceRow(
+            label = option.label,
+            selected = option.id == selectedId,
+            onClick = { onSelect(option.id) },
+        )
+    }
+}
+
+/**
+ * A group's heading: its swatch and name, in the muted caption Organise's
+ * Merchants tab uses for the same groups, so the two read as one list. A
+ * heading to TalkBack, not a row: nothing happens on a tap.
+ */
+@Composable
+private fun LfPickerGroupHeading(group: LfPickerGroup, first: Boolean) {
+    val muted = LfFormRowTokens.muted
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                top = if (first) LfFormRowTokens.tightGap else LfFormRowTokens.gap,
+                bottom = LfFormRowTokens.tightGap,
+            )
+            .semantics(mergeDescendants = true) { heading() },
+        horizontalArrangement = Arrangement.spacedBy(LfFormRowTokens.gap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LfCategoryDot(name = group.title, colorArgb = group.colorArgb ?: muted.toArgb())
+        Text(text = group.title, style = LfFormRowTokens.captionStyle, color = LfFormRowTokens.secondary)
+    }
 }
 
 /**
