@@ -13,6 +13,7 @@ import com.ledgerflow.core.database.dao.DailyRollupDao
 import com.ledgerflow.core.database.dao.DraftEntryDao
 import com.ledgerflow.core.database.dao.IngestDiagnosticsDao
 import com.ledgerflow.core.database.dao.LedgerEntryDao
+import com.ledgerflow.core.database.dao.MerchantEntriesDao
 import com.ledgerflow.core.database.dao.LedgerTaxonomyDao
 import com.ledgerflow.core.database.dao.MerchantAliasDao
 import com.ledgerflow.core.database.dao.MerchantCategoryDao
@@ -112,6 +113,9 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
     public abstract fun merchantCategoryDao(): MerchantCategoryDao
     public abstract fun paymentMethodDao(): PaymentMethodDao
     public abstract fun ledgerEntryDao(): LedgerEntryDao
+
+    /** The merchant entries page's reads (V2-6). */
+    public abstract fun merchantEntriesDao(): MerchantEntriesDao
     public abstract fun ledgerTaxonomyDao(): LedgerTaxonomyDao
     public abstract fun draftEntryDao(): DraftEntryDao
     public abstract fun merchantAliasDao(): MerchantAliasDao

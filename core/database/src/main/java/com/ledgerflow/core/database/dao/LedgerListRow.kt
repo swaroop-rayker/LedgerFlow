@@ -57,3 +57,13 @@ public data class LedgerListRow(
      */
     @ColumnInfo(name = "line_item_category_count") val lineItemCategoryCount: Int,
 )
+
+/**
+ * One merchant's entries in one book and window, summed and counted (V2-6):
+ * the merchant entries page's header. Plain `Long` minor units, as SQLite
+ * sums them; the repository wraps it in `Money` (Law 3).
+ */
+public data class MerchantTotalRow(
+    @ColumnInfo(name = "total_minor") val totalMinor: Long,
+    @ColumnInfo(name = "entries") val entries: Int,
+)

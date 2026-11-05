@@ -32,6 +32,8 @@ import com.ledgerflow.core.domain.appearance.MotionLevel
 import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.feature.categories.CategoriesViewModel
+import com.ledgerflow.feature.ledger.MerchantEntriesScreen
+import com.ledgerflow.feature.ledger.MerchantEntriesViewModel
 import com.ledgerflow.feature.analytics.AnalyticsCustomRangeSheet
 import com.ledgerflow.feature.analytics.AnalyticsEvent
 import com.ledgerflow.feature.analytics.AnalyticsFilterSheet
@@ -312,6 +314,7 @@ private fun NavGraphBuilder.tabDestinations(navController: NavHostController) {
             onCategoriseMerchants = {
                 navController.navigate(Destination.Categories(view = CategoriesViewModel.VIEW_UNCATEGORISED_MERCHANTS))
             },
+            onOpenMerchant = { id, name -> state.merchantEntries(id, name)?.let(navController::navigate) },
         )
         AnalyticsDialogs(state = state, onEvent = viewModel::onEvent)
     }
@@ -385,6 +388,15 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         )
     }
     composable<Destination.Budgets> { BudgetRoute(onBack = { navController.popBackStack() }) }
+    composable<Destination.MerchantEntries> {
+        val viewModel: MerchantEntriesViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        MerchantEntriesScreen(
+            state = state,
+            entries = viewModel.entries,
+            onBack = { navController.popBackStack() },
+        )
+    }
     composable<Destination.DeletedEntries> {
         val viewModel: BinViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -560,6 +572,7 @@ private val Destination.label: String
         is Destination.SettingsSection -> "Settings"
         is Destination.Entry -> "Add"
         is Destination.Categories -> "Categories"
+        is Destination.MerchantEntries -> "Entries"
         Destination.Budgets -> "Budgets"
         Destination.Export -> "Export"
         Destination.DeletedEntries -> "Deleted"
@@ -587,3 +600,20 @@ private val Destination.icon
         Destination.Analytics -> LfIcons.Analytics
         else -> LfIcons.Profile
     }
+
+/**
+ * The merchant entries page for what Analytics is showing: its book and window,
+ * and whether its filters were on (V2-6). Null before the first snapshot,
+ * when there is no window to carry.
+ */
+private fun AnalyticsUiState.merchantEntries(id: String, name: String): Destination.MerchantEntries? {
+    val window = snapshot?.window ?: return null
+    return Destination.MerchantEntries(
+        ledger = ledger.name,
+        merchantId = id,
+        merchantName = name,
+        from = window.from,
+        to = window.to,
+        analyticsFiltered = !filters.isEmpty,
+    )
+}

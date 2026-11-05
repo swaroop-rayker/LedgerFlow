@@ -29,7 +29,7 @@ internal fun LazyListScope.merchantCategorySection(
     state: AnalyticsUiState,
     snapshot: AnalyticsSnapshot,
     onEvent: (AnalyticsEvent) -> Unit,
-    onCategoriseMerchants: () -> Unit,
+    links: MerchantLinks,
 ) {
     val breakdown = snapshot.merchantCategories
     if (breakdown.totals.isEmpty()) return
@@ -45,13 +45,21 @@ internal fun LazyListScope.merchantCategorySection(
                 onToggleTreemap = { onEvent(AnalyticsEvent.MerchantTreemapToggled) },
                 afterRow = { total ->
                     if (total.id == MerchantCategoryBreakdown.UNCATEGORISED_ID) {
-                        UncategorisedLink(breakdown.merchants[total.id].orEmpty().size, onCategoriseMerchants)
+                        UncategorisedLink(breakdown.merchants[total.id].orEmpty().size, links.categorise)
                     }
                 },
+                // The last drill step (V2-6): a merchant's entries for this book and window.
+                onChildClick = { merchant -> links.openMerchant(merchant.id, merchant.name) },
             )
         }
     }
 }
+
+/** Where A11 leads out of Analytics: Organise to file merchants, and a merchant's entries. */
+internal class MerchantLinks(
+    val categorise: () -> Unit,
+    val openMerchant: (id: String, name: String) -> Unit,
+)
 
 /**
  * How many merchants are still to file, and the way to file them (§5.4:

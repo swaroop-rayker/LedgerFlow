@@ -2,6 +2,7 @@ package com.ledgerflow.core.data.analytics
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.data.ledger.DefaultMerchantEntriesRepository
 import com.ledgerflow.core.data.ledger.LedgerTestVault
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantCategoryRepository
 import com.ledgerflow.core.domain.analytics.AnalyticsFilters
@@ -21,7 +22,9 @@ import com.ledgerflow.core.model.MerchantCategory
 import com.ledgerflow.core.model.Money
 import java.time.LocalDate
 import java.time.ZoneOffset
+import androidx.paging.testing.asSnapshot
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -39,6 +42,7 @@ class AnalyticsByMerchantCategoryTest {
     private val vault = LedgerTestVault("lf_merchant_category_analytics_test")
     private lateinit var analytics: DefaultAnalyticsRepository
     private lateinit var kinds: DefaultMerchantCategoryRepository
+    private lateinit var pages: DefaultMerchantEntriesRepository
 
     private lateinit var food: Category
     private lateinit var salary: Category
@@ -55,6 +59,7 @@ class AnalyticsByMerchantCategoryTest {
         vault.open()
         analytics = DefaultAnalyticsRepository(vault.session, Dispatchers.IO)
         kinds = DefaultMerchantCategoryRepository(vault.session, vault.ids, vault.clock, Dispatchers.IO)
+        pages = DefaultMerchantEntriesRepository(vault.session)
         food = vault.categories.create(NewCategory(LedgerType.DEBIT, "Food")).success()
         salary = vault.categories.create(NewCategory(LedgerType.CREDIT, "Salary")).success()
         zepto = vault.merchants.createOrGet("Zepto").success()
@@ -129,6 +134,39 @@ class AnalyticsByMerchantCategoryTest {
     fun filteringByUncategorised_isTheUnfiledMerchants() = runBlocking<Unit> {
         val filters = AnalyticsFilters(merchantCategoryIds = setOf(MerchantCategoryBreakdown.UNCATEGORISED_ID))
         assertThat(snapshot(LedgerType.DEBIT, filters).total.minor).isEqualTo(12_000L)
+    }
+
+    // ── The merchant entries page (V2-6) ───────────────────────────────────
+
+    /** The page's total is the figure the user tapped in Analytics, and it lists those entries. */
+    @Test
+    fun aMerchantsEntries_addUpToItsAnalyticsFigure() = runBlocking<Unit> {
+        approve(LedgerType.DEBIT, 3_000L, zepto.id)
+        val window = AnalyticsWindow.endingOn(today, AnalyticsRange.MONTH)
+        val figure = snapshot(LedgerType.DEBIT).merchants.first { it.id == zepto.id }.amount
+
+        val total = pages.observeTotal(LedgerType.DEBIT, zepto.id, window.from, window.to).first()
+        val rows = pages.observeEntries(LedgerType.DEBIT, zepto.id, window.from, window.to).asSnapshot()
+
+        assertThat(total.total).isEqualTo(figure)
+        assertThat(total.entries).isEqualTo(2)
+        assertThat(rows.map { it.amount.minor }).containsExactly(45_000L, 3_000L)
+    }
+
+    /** Law 2 and the window: the income book and days outside the period are not this merchant's page. */
+    @Test
+    fun aMerchantsEntries_stayInTheirBookAndWindow() = runBlocking<Unit> {
+        approve(LedgerType.CREDIT, 7_000L, zepto.id)
+        val window = AnalyticsWindow.endingOn(today, AnalyticsRange.MONTH)
+
+        val debit = pages.observeTotal(LedgerType.DEBIT, zepto.id, window.from, window.to).first()
+        val credit = pages.observeTotal(LedgerType.CREDIT, zepto.id, window.from, window.to).first()
+        val before = pages.observeTotal(LedgerType.DEBIT, zepto.id, window.from - 40, window.from - 1)
+            .first()
+
+        assertThat(debit.total.minor).isEqualTo(45_000L)
+        assertThat(credit.total.minor).isEqualTo(7_000L)
+        assertThat(before.entries).isEqualTo(0)
     }
 
     private suspend fun snapshot(
