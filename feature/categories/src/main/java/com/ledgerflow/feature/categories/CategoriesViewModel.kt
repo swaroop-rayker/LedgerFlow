@@ -3,6 +3,7 @@ package com.ledgerflow.feature.categories
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
+import com.ledgerflow.core.domain.taxonomy.MerchantCategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantRepository
 import com.ledgerflow.core.domain.taxonomy.NewCategory
 import com.ledgerflow.core.domain.taxonomy.NewPaymentMethod
@@ -36,10 +37,15 @@ import kotlinx.coroutines.launch
  * looking at.
  */
 @HiltViewModel
+// One screen, five concerns (categories, merchants, filing, payment methods,
+// dialogs), each behind its own router; V2-6's filing took it one past the
+// count. Splitting it would mean two ViewModels sharing one state object.
+@Suppress("TooManyFunctions")
 public class CategoriesViewModel @Inject constructor(
     private val categories: CategoryRepository,
     private val merchants: MerchantRepository,
     private val paymentMethods: PaymentMethodRepository,
+    private val merchantCategories: MerchantCategoryRepository,
     private val purgeCategory: PurgeHiddenCategoryUseCase,
     private val purgeMerchant: PurgeHiddenMerchantUseCase,
     private val purgePaymentMethod: PurgeHiddenPaymentMethodUseCase,
@@ -95,8 +101,15 @@ public class CategoriesViewModel @Inject constructor(
             dialog = local.dialog,
             isWorking = local.isWorking,
             message = local.message,
+            merchantFilter = local.merchantFilter,
+            selecting = local.selecting,
+            selected = local.selected,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), CategoriesUiState())
+    }
+        // Joined after: `combine` is typed to five. V2-6's merchant categories,
+        // and what the user is doing with them on the Merchants tab.
+        .combine(merchantCategories.observeAll()) { state, kinds -> state.copy(merchantCategories = kinds) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), CategoriesUiState())
 
     /**
      * Routed by concern rather than handled in one block.
@@ -118,8 +131,10 @@ public class CategoriesViewModel @Inject constructor(
             // Switching tabs re-collapses. `hiddenExpanded` is one flag over
             // three sections, so carrying it across would open the Merchants
             // hidden list because the user had opened the Categories one.
-            is CategoriesEvent.SectionSelected ->
-                local.update { it.copy(section = event.section, hiddenExpanded = false) }
+            // ...and leaves a selection: it belongs to the Merchants tab.
+            is CategoriesEvent.SectionSelected -> local.update {
+                it.copy(section = event.section, hiddenExpanded = false, selecting = false, selected = emptySet())
+            }
             is CategoriesEvent.LedgerSelected ->
                 local.update { it.copy(ledger = event.ledger, hiddenExpanded = false) }
             CategoriesEvent.MessageDismissed -> local.update { it.copy(message = null) }
@@ -141,6 +156,14 @@ public class CategoriesViewModel @Inject constructor(
             is CategoriesEvent.StartMergeMerchant,
             is CategoriesEvent.DeleteMerchant,
             -> onMerchantEvent(event)
+
+            is CategoriesEvent.SetMerchantCategory,
+            is CategoriesEvent.MerchantFilterSelected,
+            CategoriesEvent.SelectionStarted,
+            is CategoriesEvent.SelectionToggled,
+            CategoriesEvent.SelectAllShown,
+            CategoriesEvent.SelectionCancelled,
+            -> onFilingEvent(event)
 
             CategoriesEvent.AddPaymentMethod,
             is CategoriesEvent.SetDefaultPaymentMethod,
@@ -194,6 +217,46 @@ public class CategoriesViewModel @Inject constructor(
             is CategoriesEvent.DeleteMerchant ->
                 askDelete(DeleteTarget.Merchant, event.id, event.name)
             else -> Unit
+        }
+    }
+
+    /**
+     * Filing merchants under merchant categories (V2-6, V2-PLAN §5.2). The
+     * Merchants tab is the only place this happens; capture, review and the
+     * entry form never do (`MerchantCategorySingleWriterTest`).
+     */
+    private fun onFilingEvent(event: CategoriesEvent) {
+        when (event) {
+            is CategoriesEvent.SetMerchantCategory -> askMerchantCategory(event.merchantIds, event.subject)
+            is CategoriesEvent.MerchantFilterSelected ->
+                // A selection is of what was shown; a new filter shows something else.
+                local.update { it.copy(merchantFilter = event.filter, selected = emptySet()) }
+            CategoriesEvent.SelectionStarted -> local.update { it.copy(selecting = true, selected = emptySet()) }
+            is CategoriesEvent.SelectionToggled -> local.update {
+                val id = event.merchantId
+                it.copy(selected = if (id in it.selected) it.selected - id else it.selected + id)
+            }
+            CategoriesEvent.SelectAllShown ->
+                local.update { it.copy(selected = state.value.visibleMerchants.map { m -> m.id }.toSet()) }
+            CategoriesEvent.SelectionCancelled -> local.update { it.copy(selecting = false, selected = emptySet()) }
+            else -> Unit
+        }
+    }
+
+    /**
+     * Opens the picker. One merchant starts on its current category; several
+     * start on nothing chosen, since they may not share one.
+     */
+    private fun askMerchantCategory(ids: List<String>, subject: String) {
+        if (ids.isEmpty()) return
+        val current = state.value
+        val choices = current.merchantCategories.map { TaxonomyChoice(it.id, it.name) } +
+            TaxonomyChoice(UNCATEGORISED_CHOICE, UNCATEGORISED)
+        val preset = ids.singleOrNull()
+            ?.let { id -> current.merchants.firstOrNull { it.id == id } }
+            ?.let { it.merchantCategoryId ?: UNCATEGORISED_CHOICE }
+        local.update {
+            it.copy(dialog = TaxonomyDialog.SetMerchantCategory(ids, subject, choices, preset))
         }
     }
 
@@ -270,6 +333,7 @@ public class CategoriesViewModel @Inject constructor(
             is TaxonomyDialog.ReassignCategory -> current.copy(dialog = dialog.copy(targetId = id))
             is TaxonomyDialog.ReassignBeforeErase -> current.copy(dialog = dialog.copy(targetId = id))
             is TaxonomyDialog.MergeMerchant -> current.copy(dialog = dialog.copy(targetId = id))
+            is TaxonomyDialog.SetMerchantCategory -> current.copy(dialog = dialog.copy(targetId = id))
             else -> current
         }
     }
@@ -288,6 +352,7 @@ public class CategoriesViewModel @Inject constructor(
             is TaxonomyDialog.MergeMerchant -> dialog.targetId?.let { target ->
                 run { merchants.merge(dialog.sourceId, target) }
             }
+            is TaxonomyDialog.SetMerchantCategory -> fileMerchants(dialog)
             is TaxonomyDialog.NewPaymentMethod -> run {
                 paymentMethods.create(
                     NewPaymentMethod(
@@ -317,6 +382,19 @@ public class CategoriesViewModel @Inject constructor(
             TextPromptKind.NewMerchant -> run { merchants.createOrGet(name) }
             TextPromptKind.RenameMerchant ->
                 run { merchants.rename(requireNotNull(dialog.contextId), name) }
+        }
+    }
+
+    /** Nothing chosen yet: the dialog stays, as a merge with no target does. */
+    private fun fileMerchants(dialog: TaxonomyDialog.SetMerchantCategory) {
+        val target = dialog.targetId ?: return
+        run {
+            merchantCategories.setCategory(dialog.merchantIds, target.ifEmpty { null }).also {
+                // Filed: the selection has done its job.
+                if (it is TaxonomyResult.Success) {
+                    local.update { s -> s.copy(selecting = false, selected = emptySet()) }
+                }
+            }
         }
     }
 
@@ -476,6 +554,9 @@ public class CategoriesViewModel @Inject constructor(
         val dialog: TaxonomyDialog? = null,
         val isWorking: Boolean = false,
         val message: String? = null,
+        val merchantFilter: MerchantFilter = MerchantFilter.All,
+        val selecting: Boolean = false,
+        val selected: Set<String> = emptySet(),
     )
 
     private companion object {

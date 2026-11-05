@@ -15,6 +15,7 @@ import com.ledgerflow.core.model.CategoryTree
 import com.ledgerflow.core.model.HiddenTaxonomy
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
+import com.ledgerflow.core.model.MerchantCategory
 import com.ledgerflow.core.model.PaymentMethod
 import com.ledgerflow.core.model.PaymentMethodType
 import com.ledgerflow.core.testing.screenshot.GOLDEN_SDK
@@ -75,10 +76,19 @@ open class CategoriesScreenGoldensTest {
 
     private val refused by lazy { categories.copy(message = "\"Groceries\" already exists here.") }
 
+    private val kinds = listOf(
+        MerchantCategory("mc-g", "Groceries", 0xFF2F7E50.toInt(), 0, isSystem = true),
+        MerchantCategory("mc-f", "Food delivery", 0xFFAB5C15.toInt(), 1, isSystem = true),
+    )
+
+    /** V2-6: grouped under their categories (option A), a group of two, one of one, and Uncategorised last. */
     private val merchants = CategoriesUiState(
         section = TaxonomySection.Merchants,
+        merchantCategories = kinds,
         merchants = listOf(
-            Merchant("1", "Big Bazaar", "bigbazaar", null, null),
+            Merchant("1", "Big Bazaar", "bigbazaar", null, null, merchantCategoryId = "mc-g"),
+            Merchant("6", "Swiggy", "swiggy", null, null, merchantCategoryId = "mc-f"),
+            Merchant("7", "Corner Grocer", "cornergrocer", null, null, merchantCategoryId = "mc-g"),
             Merchant("5", "Zepto", "zepto", null, null),
         ),
         hidden = listOf(
@@ -136,6 +146,46 @@ open class CategoriesScreenGoldensTest {
 
     /** A subcategory's: no "Add subcategory", and Hide is still there. */
     @Test fun subcategorySheet_1x() = withSheet("organise-subcategory-sheet-1x", subcategorySheet, 1f)
+
+    // ── V2-6: filing merchants (V2-PLAN §5.2) ──────────────────────────────
+
+    /** The Uncategorised filter: only the merchant still to file. */
+    private val uncategorised by lazy {
+        merchants.copy(merchantFilter = MerchantFilter.Uncategorised, hidden = emptyList())
+    }
+
+    /** Selecting: check boxes on the rows, the pinned bar as the selection bar. */
+    private val selecting by lazy {
+        merchants.copy(hidden = emptyList(), selecting = true, selected = setOf("5"))
+    }
+
+    private val setCategory by lazy {
+        merchants.copy(
+            hidden = emptyList(),
+            dialog = TaxonomyDialog.SetMerchantCategory(
+                merchantIds = listOf("5"),
+                subject = "Zepto",
+                candidates = kinds.map { TaxonomyChoice(it.id, it.name) } +
+                    TaxonomyChoice(UNCATEGORISED_CHOICE, UNCATEGORISED),
+                targetId = "mc-f",
+            ),
+        )
+    }
+
+    @Test fun merchantsUncategorised_1x() = capture("organise-merchants-uncategorised-1x", uncategorised, 1f)
+
+    @Test fun merchantsSelecting_1x() = capture("organise-merchants-selecting-1x", selecting, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun merchantsSelecting_2x() = capture("organise-merchants-selecting-2x", selecting, 2f)
+
+    @Test fun merchantsSelectingRtl_1x() =
+        capture("organise-merchants-selecting-rtl-1x", selecting, 1f, LayoutDirection.Rtl)
+
+    @Test fun setCategory_1x() = withSheet("organise-set-category-1x", setCategory, 1f)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun setCategory_2x() = withSheet("organise-set-category-2x", setCategory, 2f)
 
     private val categorySheet by lazy {
         categories.copy(

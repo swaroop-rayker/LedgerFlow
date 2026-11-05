@@ -42,8 +42,6 @@ import com.ledgerflow.feature.analytics.AnalyticsViewModel
 import com.ledgerflow.feature.budget.BudgetEditorDialog
 import com.ledgerflow.feature.budget.BudgetScreen
 import com.ledgerflow.feature.budget.BudgetViewModel
-import com.ledgerflow.feature.categories.CategoriesScreen
-import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.dashboard.DashboardRoute
 import com.ledgerflow.feature.entry.EntryScreen
 import com.ledgerflow.feature.entry.EntryViewModel
@@ -222,6 +220,7 @@ private fun LedgerFlowNavHost(
         profileAndSettingsDestinations(navController)
         securityDestinations(navController)
         aboutDestinations(navController)
+        organiseDestinations(navController)
         fullScreenDestinations(navController)
         captureAndReviewDestinations(navController)
     }
@@ -377,15 +376,6 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         )
     }
     composable<Destination.Budgets> { BudgetRoute(onBack = { navController.popBackStack() }) }
-    composable<Destination.Categories> {
-        val viewModel: CategoriesViewModel = hiltViewModel()
-        val state by viewModel.state.collectAsStateWithLifecycle()
-        CategoriesScreen(
-            state = state,
-            onEvent = viewModel::onEvent,
-            onBack = { navController.popBackStack() },
-        )
-    }
     composable<Destination.DeletedEntries> {
         val viewModel: BinViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -573,6 +563,7 @@ private val Destination.label: String
         Destination.Help -> "Help"
         Destination.ReportBug -> "Report a bug"
         Destination.Licences -> "Licences"
+        Destination.MerchantCategories -> "Merchant categories"
         is Destination.Licence -> "Licence"
         is Destination.InboxReview -> "Review"
         Destination.ScanReceipt -> "Scan"

@@ -13,6 +13,7 @@ import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Merchant
 import com.ledgerflow.core.model.PaymentMethodType
 import com.ledgerflow.core.testing.taxonomy.FakeCategoryRepository
+import com.ledgerflow.core.testing.taxonomy.FakeMerchantCategoryRepository
 import com.ledgerflow.core.testing.taxonomy.FakeMerchantRepository
 import com.ledgerflow.core.testing.taxonomy.FakePaymentMethodRepository
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +57,8 @@ class CategoriesViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private val merchantCategories = FakeMerchantCategoryRepository()
+
     private fun category(id: String, name: String, parent: String? = null, system: Boolean = false) =
         Category(id, parent, LedgerType.DEBIT, name, "", 0, 0, system)
 
@@ -68,6 +71,7 @@ class CategoriesViewModelTest {
             categories = categories,
             merchants = merchants,
             paymentMethods = paymentMethods,
+            merchantCategories = merchantCategories,
             // Real use cases over fake repositories. They are thin by design and
             // wrapping them in fakes would test the wrapper; what matters is
             // that the screen goes *through* them, which is what
@@ -729,6 +733,112 @@ class CategoriesViewModelTest {
     }
 
     private fun hidden(id: String, name: String) = HiddenTaxonomy(id, name, hiddenAt = 1_000L)
+
+    // ── Filing merchants under merchant categories (V2-6, V2-PLAN §5.2) ─────
+
+    private fun merchant(id: String, name: String, kind: String? = null) =
+        Merchant(id, name, name.lowercase(), null, null, merchantCategoryId = kind)
+
+    @Test
+    fun theUncategorisedFilter_listsExactlyTheMerchantsStillToFile() = runTest(dispatcher) {
+        merchants.merchants.value = listOf(
+            merchant("a", "Big Bazaar", kind = "mc-1"),
+            merchant("b", "Zepto"),
+            merchant("c", "Shell"),
+        )
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.onEvent(CategoriesEvent.MerchantFilterSelected(MerchantFilter.Uncategorised))
+        vm.settle()
+
+        assertThat(vm.state.value.uncategorisedCount).isEqualTo(2)
+        assertThat(vm.state.value.visibleMerchants.map { it.id }).containsExactly("b", "c").inOrder()
+        scope.cancel()
+    }
+
+    /** Uncategorised, Select all, Set category: everything left, filed in three taps. */
+    @Test
+    fun selectAll_takesWhatTheFilterShows_andSetCategoryFilesThemAll() = runTest(dispatcher) {
+        val fuel = (merchantCategories.create("Fuel") as TaxonomyResult.Success).value
+        merchants.merchants.value = listOf(
+            merchant("a", "Big Bazaar", kind = "mc-x"),
+            merchant("b", "HP"),
+            merchant("c", "Shell"),
+        )
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.onEvent(CategoriesEvent.MerchantFilterSelected(MerchantFilter.Uncategorised))
+        vm.onEvent(CategoriesEvent.SelectionStarted)
+        vm.settle()
+        vm.onEvent(CategoriesEvent.SelectAllShown)
+        vm.settle()
+        assertThat(vm.state.value.selected).containsExactly("b", "c")
+
+        vm.onEvent(CategoriesEvent.SetMerchantCategory(vm.state.value.selected.toList(), "2 merchants"))
+        vm.onEvent(CategoriesEvent.DialogTargetSelected(fuel.id))
+        vm.onEvent(CategoriesEvent.DialogConfirmed)
+        vm.settle()
+
+        assertThat(merchantCategories.filed).containsExactly("b", fuel.id, "c", fuel.id)
+        // Filed: the selection has done its job, and the dialog is gone.
+        assertThat(vm.state.value.selecting).isFalse()
+        assertThat(vm.state.value.dialog).isNull()
+        scope.cancel()
+    }
+
+    /** One merchant's picker starts on its current category; Uncategorised is a choice too. */
+    @Test
+    fun oneMerchantsPicker_startsOnItsCategory_andCanUnfileIt() = runTest(dispatcher) {
+        val fuel = (merchantCategories.create("Fuel") as TaxonomyResult.Success).value
+        merchantCategories.filed["s"] = fuel.id
+        merchants.merchants.value = listOf(merchant("s", "Shell", kind = fuel.id))
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.SetMerchantCategory(listOf("s"), "Shell"))
+        vm.settle()
+        val dialog = vm.state.value.dialog as TaxonomyDialog.SetMerchantCategory
+        assertThat(dialog.targetId).isEqualTo(fuel.id)
+        assertThat(dialog.candidates.last()).isEqualTo(TaxonomyChoice(UNCATEGORISED_CHOICE, UNCATEGORISED))
+
+        vm.onEvent(CategoriesEvent.DialogTargetSelected(UNCATEGORISED_CHOICE))
+        vm.onEvent(CategoriesEvent.DialogConfirmed)
+        vm.settle()
+
+        assertThat(merchantCategories.filed).doesNotContainKey("s")
+        scope.cancel()
+    }
+
+    /** Several merchants share no one current answer: nothing is chosen, and Set waits for a choice. */
+    @Test
+    fun severalMerchants_startOnNothingChosen() = runTest(dispatcher) {
+        merchants.merchants.value = listOf(merchant("a", "A"), merchant("b", "B"))
+        val (vm, scope) = viewModel()
+
+        vm.onEvent(CategoriesEvent.SetMerchantCategory(listOf("a", "b"), "2 merchants"))
+        vm.onEvent(CategoriesEvent.DialogConfirmed)
+        vm.settle()
+
+        assertThat((vm.state.value.dialog as TaxonomyDialog.SetMerchantCategory).targetId).isNull()
+        assertThat(merchantCategories.filed).isEmpty()
+        scope.cancel()
+    }
+
+    /** A selection belongs to the Merchants tab; leaving it clears it. */
+    @Test
+    fun leavingTheTab_clearsTheSelection() = runTest(dispatcher) {
+        merchants.merchants.value = listOf(merchant("a", "A"))
+        val (vm, scope) = viewModel()
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Merchants))
+        vm.onEvent(CategoriesEvent.SelectionStarted)
+        vm.onEvent(CategoriesEvent.SelectionToggled("a"))
+
+        vm.onEvent(CategoriesEvent.SectionSelected(TaxonomySection.Categories))
+        vm.settle()
+
+        assertThat(vm.state.value.selecting).isFalse()
+        assertThat(vm.state.value.selected).isEmpty()
+        scope.cancel()
+    }
 }
 
 private fun CoroutineScope.cancel() = coroutineContext[kotlinx.coroutines.Job]?.cancel()

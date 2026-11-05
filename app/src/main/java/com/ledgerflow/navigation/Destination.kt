@@ -134,6 +134,10 @@ public sealed interface Destination {
     @Serializable
     public data object Licences : Destination
 
+    /** Organise > Merchants > Merchant categories (V2-6, V2-PLAN §5.1). */
+    @Serializable
+    public data object MerchantCategories : Destination
+
     /** One component's licences: `LicensedComponent.id`. */
     @Serializable
     public data class Licence(val component: String) : Destination

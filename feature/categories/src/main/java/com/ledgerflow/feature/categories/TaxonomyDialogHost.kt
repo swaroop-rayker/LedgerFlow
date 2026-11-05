@@ -42,6 +42,7 @@ internal fun TaxonomyDialogHost(
         is TaxonomyDialog.TextPrompt -> TextPromptDialog(dialog, state, onEvent)
         is TaxonomyDialog.ReassignCategory -> ReassignDialog(dialog, state, onEvent)
         is TaxonomyDialog.MergeMerchant -> MergeDialog(dialog, state, onEvent)
+        is TaxonomyDialog.SetMerchantCategory -> SetMerchantCategoryDialog(dialog, state, onEvent)
         is TaxonomyDialog.NewPaymentMethod -> PaymentMethodDialog(dialog, state, onEvent)
         is TaxonomyDialog.RowActions -> LfOptionsSheet(
             title = dialog.row.name,
@@ -73,6 +74,8 @@ internal fun rowActions(row: TaxonomyRow): List<RowAction> = when (row) {
         RowAction("Hide", CategoriesEvent.DeleteCategory(row.id, row.name, row.isChild)),
     )
     is TaxonomyRow.Merchant -> listOf(
+        // First: filing a merchant is what this tab is mostly visited for (V2-6).
+        RowAction("Set category", CategoriesEvent.SetMerchantCategory(listOf(row.id), row.name)),
         RowAction("Rename", CategoriesEvent.RenameMerchant(row.id, row.name)),
         RowAction("Merge", CategoriesEvent.StartMergeMerchant(row.id, row.name)),
         RowAction("Hide", CategoriesEvent.DeleteMerchant(row.id, row.name)),
@@ -349,6 +352,43 @@ private fun MergeDialog(
                         color = LfTheme.colors.text.secondary,
                     )
                 }
+                dialog.candidates.forEach { choice ->
+                    ChoiceRow(
+                        label = choice.name,
+                        selected = choice.id == dialog.targetId,
+                        onClick = { onEvent(CategoriesEvent.DialogTargetSelected(choice.id)) },
+                    )
+                }
+                state.message?.let { ErrorText(it) }
+            }
+        },
+    )
+}
+
+/**
+ * "What kind of place is it?" (V2-6). Reversible, so no warning treatment:
+ * moving a merchant moves its history in Analytics, and moving it back moves
+ * it back.
+ */
+@Composable
+private fun SetMerchantCategoryDialog(
+    dialog: TaxonomyDialog.SetMerchantCategory,
+    state: CategoriesUiState,
+    onEvent: (CategoriesEvent) -> Unit,
+) {
+    LfDialog(
+        title = "Set category",
+        body = "What kind of place is ${dialog.subject}? Analytics files all of its spending, " +
+            "past and future, under the one you pick.",
+        confirmText = "Set",
+        onConfirm = { onEvent(CategoriesEvent.DialogConfirmed) },
+        onDismiss = { onEvent(CategoriesEvent.DialogDismissed) },
+        detail = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = LfLayout.dialogListMax)
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 dialog.candidates.forEach { choice ->
                     ChoiceRow(
                         label = choice.name,
