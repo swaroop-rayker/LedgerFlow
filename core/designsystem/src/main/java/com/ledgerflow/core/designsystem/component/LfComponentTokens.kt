@@ -365,6 +365,15 @@ internal object LfCategoryDotTokens {
 }
 
 /** `LfAmountCard` (step F5): the capture forms' head card. */
+/** A read-only amount that Home can hide (V2-3, SPEC §9.6). */
+internal object LfMaskedAmountTokens {
+    val style: TextStyle @Composable get() = LfTheme.type.amountRow
+    val content: Color @Composable get() = LfTheme.colors.text.primary
+
+    /** A hidden amount is a tap target: at least the touch size tall (§9.6). */
+    val revealMinHeight: Dp = LfLayout.minTouchTarget
+}
+
 internal object LfAmountCardTokens {
     val gap: Dp = LfScale.Space8
     val titleStyle: TextStyle @Composable get() = LfTheme.type.heading

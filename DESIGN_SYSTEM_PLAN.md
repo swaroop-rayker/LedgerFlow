@@ -598,8 +598,8 @@ Tools, About, Help. The V2-7 tools sit on the Tools page.
 | §3.1, logout sheet | Sign out of Google Drive? | confirm `LfSheet` (No / Yes) | — | confirm sheet variant |
 | settings sample | Settings index | `LfSettingsPage` of `LfNavRow`s with values | — | |
 | §3.1 | Erase this install | `LfDialog` Warning, typed confirmation | X | `LfTypedConfirmField` (also §3.6 Restore) |
-| §3.5 | Hide amounts on Home | a mode of the Home cards, tap to reveal | — | `LfMaskedAmount` (announced as "hidden", §9.6) |
-| §3.5 | Data permissions | `LfSettingsPage`, one row per permission (why + Manage link) | L | |
+| §3.5 | Hide amounts on Home | a mode of the Home cards, tap to reveal | — | `LfMaskedAmount` (announced as "hidden", §9.6). **Built, V2-3** |
+| §3.5 | Data permissions | `LfSettingsPage`, one row per permission (why + a link to Android's page) | L | **Built, V2-3** (Lucide external-link) |
 | §3.4 | Bill / recurring reminders (rows) | `LfSettingsPage` switch rows + timing choice | — | |
 | §3.4, §4.2 | Reminder notification | notification style (F4) | — | |
 | §3.6 | Data & sync | `LfSettingsPage` (absorbs today's Data rows) | L, U, S | |

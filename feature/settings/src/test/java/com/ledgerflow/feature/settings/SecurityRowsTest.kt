@@ -51,6 +51,7 @@ class SecurityRowsTest {
                     onDiagnostics = {},
                     onBudgetAlerts = {},
                     onPaymentApps = {},
+                    onDataPermissions = {},
                     onEvent = { events += it },
                 )
             }
@@ -62,12 +63,15 @@ class SecurityRowsTest {
         show(SettingsUiState(isLoaded = true, security = SecurityPreferences(appLock = true)))
         rule.onNodeWithText("App lock").performScrollTo().assertIsOn()
         rule.onNodeWithText("Block screenshots").performScrollTo().assertIsOff()
+        rule.onNodeWithText("Hide amounts on Home").performScrollTo().assertIsOff()
 
         rule.onNodeWithText("App lock").performClick()
         rule.onNodeWithText("Block screenshots").performClick()
+        rule.onNodeWithText("Hide amounts on Home").performClick()
         assertThat(events).containsExactly(
             SettingsEvent.AppLockToggled(false),
             SettingsEvent.BlockScreenshotsToggled(true),
+            SettingsEvent.HideAmountsToggled(true),
         ).inOrder()
     }
 
@@ -101,6 +105,43 @@ class SecurityRowsTest {
             .isEqualTo("When app lock is on: after 5 minutes away.")
         assertThat(lockAfterSubtitle(SecurityPreferences(appLock = true, lockAfter = LockTimeout.IMMEDIATELY)))
             .isEqualTo("As soon as you leave LedgerFlow.")
+    }
+
+    /** "Hide" alone could mean everywhere, or for good; the sentence says Home, and how they come back. */
+    @Test
+    fun hideAmounts_saysWhereAndHowTheyComeBack() {
+        assertThat(hideAmountsSubtitle(false)).isEqualTo("Show dots in place of amounts on Home until you tap them.")
+        assertThat(hideAmountsSubtitle(true)).isEqualTo(
+            "On. Home shows dots until you tap one. Other screens show amounts.",
+        )
+    }
+
+    @Test
+    fun dataPermissions_opensItsPage() {
+        var opened = 0
+        rule.setContent {
+            LfTheme {
+                SettingsSectionScreen(
+                    page = SettingsPage.Security,
+                    state = SettingsUiState(isLoaded = true),
+                    onBack = {},
+                    onCategories = {},
+                    onBudgets = {},
+                    onExport = {},
+                    onDeletedEntries = {},
+                    onNotificationAccess = {},
+                    onBackUp = {},
+                    onDiagnostics = {},
+                    onBudgetAlerts = {},
+                    onPaymentApps = {},
+                    onDataPermissions = { opened++ },
+                    onEvent = { events += it },
+                )
+            }
+        }
+        rule.onNodeWithText("Data permissions").performScrollTo().performClick()
+        assertThat(opened).isEqualTo(1)
+        assertThat(events).isEmpty()
     }
 
     @Test

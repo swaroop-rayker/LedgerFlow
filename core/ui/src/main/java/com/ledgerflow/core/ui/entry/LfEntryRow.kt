@@ -29,6 +29,7 @@ import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfIconButton
 import com.ledgerflow.core.designsystem.component.lfCategoryTile
 import com.ledgerflow.core.designsystem.component.lfGroupSlice
+import com.ledgerflow.core.designsystem.format.AmountMask
 import com.ledgerflow.core.designsystem.format.MoneyFormat
 import com.ledgerflow.core.designsystem.format.TimeStamp
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
@@ -82,6 +83,9 @@ import com.ledgerflow.core.ui.LfEntryRowTokens
  * @param groupPosition where the row sits in a panel it draws itself, one
  *   slice per row, for a lazy list whose rows cannot share a parent (the
  *   Ledger's days, step F5). Null: a standalone card, or [grouped].
+ * @param amountHidden the amount is a mask and TalkBack says "amount hidden"
+ *   (Hide amounts on Home, V2-PLAN §3.5). Off by default, and off it draws
+ *   exactly what it drew before the flag existed (`LfEntryRowLayoutTest`).
  */
 @Composable
 public fun LfEntryRow(
@@ -92,6 +96,7 @@ public fun LfEntryRow(
     onDelete: () -> Unit = {},
     grouped: Boolean = false,
     groupPosition: LfGroupPosition? = null,
+    amountHidden: Boolean = false,
 ) {
     val tokens = LfEntryRowTokens
     val shape = tokens.shape
@@ -147,7 +152,7 @@ public fun LfEntryRow(
             // screen-reader user with a control they cannot identify or reach.
             // The texts clear their own semantics, so this description is the
             // only thing the row says.
-            .semantics(mergeDescendants = true) { contentDescription = item.spokenAs(title, detail) },
+            .semantics(mergeDescendants = true) { contentDescription = item.spokenAs(title, detail, amountHidden) },
         content = {
             EntrySwatch(item)
             // No `maxLines` and no ellipsis: merchant and category are the
@@ -162,7 +167,7 @@ public fun LfEntryRow(
                 color = tokens.title,
             )
             EntryDetail(detail = detail)
-            EntryAmount(item = item)
+            EntryAmount(item = item, hidden = amountHidden)
             // An icon, not an `Inline` text action in an `LfActionRow`. The
             // taxonomy cards use the latter, but they carry three actions over a
             // list of a dozen items; this carries one over a list without end,
@@ -360,9 +365,9 @@ private fun EntryDetail(detail: String) {
     )
 }
 
-/** How much, and which way. */
+/** How much, and which way; hidden, only which way (`AmountMask`). */
 @Composable
-private fun EntryAmount(item: LedgerListItem) {
+private fun EntryAmount(item: LedgerListItem, hidden: Boolean) {
     val tokens = LfEntryRowTokens
     Text(
         // The sign is a glyph, not a stored value: `amount_minor` is positive
@@ -370,7 +375,11 @@ private fun EntryAmount(item: LedgerListItem) {
         // alone would carry it, but colour alone fails §9.6 for a colour-blind
         // reader — the sign is the same redundancy the category swatch's
         // initial provides for its colour.
-        text = MoneyFormat.directional(item.amount.minor, item.currency, item.ledger),
+        text = if (hidden) {
+            AmountMask.directional(item.currency, item.ledger)
+        } else {
+            MoneyFormat.directional(item.amount.minor, item.currency, item.ledger)
+        },
         modifier = Modifier.clearAndSetSemantics {},
         style = tokens.amountStyle,
         color = if (item.ledger == LedgerType.DEBIT) tokens.outgoing else tokens.incoming,
@@ -386,8 +395,16 @@ private fun EntryAmount(item: LedgerListItem) {
  * (SPEC.md §9.6), and the `-`/`+` prefix is skipped just as often — so the
  * direction becomes a word here rather than a character.
  */
-private fun LedgerListItem.spokenAs(title: String, detail: String): String =
-    listOf(MoneyFormat.spokenDirectional(amount.minor, currency, ledger), title, detail)
+private fun LedgerListItem.spokenAs(title: String, detail: String, amountHidden: Boolean): String =
+    listOf(
+        if (amountHidden) {
+            AmountMask.spokenDirectional(ledger)
+        } else {
+            MoneyFormat.spokenDirectional(amount.minor, currency, ledger)
+        },
+        title,
+        detail,
+    )
         .filter { it.isNotEmpty() }
         .joinToString(ENTRY_SEPARATOR)
 

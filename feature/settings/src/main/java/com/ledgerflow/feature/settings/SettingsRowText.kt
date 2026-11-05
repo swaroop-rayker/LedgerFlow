@@ -32,6 +32,8 @@ internal fun toggleFor(item: SettingsItem, state: SettingsUiState): SettingsTogg
     SettingsItem.AppLock -> SettingsToggle(state.security.appLock) { SettingsEvent.AppLockToggled(it) }
     SettingsItem.BlockScreenshots ->
         SettingsToggle(state.security.blockScreenshots) { SettingsEvent.BlockScreenshotsToggled(it) }
+    SettingsItem.HideAmounts -> SettingsToggle(state.hideAmounts) { SettingsEvent.HideAmountsToggled(it) }
+    SettingsItem.DataPermissions,
     SettingsItem.NotificationCapture,
     SettingsItem.PaymentApps,
     SettingsItem.BudgetAlerts,
@@ -78,6 +80,18 @@ internal fun blockScreenshotsSubtitle(on: Boolean): String =
         "On. No screenshots, recordings or Recents previews of LedgerFlow."
     } else {
         "Stop screenshots, recordings and Recents previews of LedgerFlow."
+    }
+
+/**
+ * Hide amounts on Home (V2-PLAN §3.5). Says where it applies and how the
+ * figures come back, since "hide" alone could read as hiding them everywhere
+ * or for good.
+ */
+internal fun hideAmountsSubtitle(on: Boolean): String =
+    if (on) {
+        "On. Home shows dots until you tap one. Other screens show amounts."
+    } else {
+        "Show dots in place of amounts on Home until you tap them."
     }
 
 /** The picker's options for [LockTimeout]. */
@@ -208,6 +222,8 @@ internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoi
     SettingsItem.AppLock,
     SettingsItem.LockAfter,
     SettingsItem.BlockScreenshots,
+    SettingsItem.HideAmounts,
+    SettingsItem.DataPermissions,
     SettingsItem.NotificationCapture,
     SettingsItem.PaymentApps,
     SettingsItem.BudgetAlerts,

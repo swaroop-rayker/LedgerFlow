@@ -69,6 +69,7 @@ public fun SettingsSectionScreen(
     onDiagnostics: () -> Unit,
     onBudgetAlerts: () -> Unit,
     onPaymentApps: () -> Unit,
+    onDataPermissions: () -> Unit,
     onEvent: (SettingsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -93,6 +94,7 @@ public fun SettingsSectionScreen(
         // column four buttons tall), so this one opens a short picker.
         SettingsItem.DateOrder to { onEvent(SettingsEvent.DateOrderRequested) },
         SettingsItem.LockAfter to { onEvent(SettingsEvent.LockAfterRequested) },
+        SettingsItem.DataPermissions to onDataPermissions,
         SettingsItem.Diagnostics to onDiagnostics,
     )
     val section = SettingsSections.single { it.page == page }
@@ -153,6 +155,8 @@ internal enum class SettingsItem {
     AppLock,
     LockAfter,
     BlockScreenshots,
+    HideAmounts,
+    DataPermissions,
 
     Diagnostics,
 }
@@ -211,7 +215,15 @@ internal val SettingsSections: List<SettingsSection> = listOf(
     SettingsSection(
         SettingsPage.Security,
         "Security & privacy",
-        listOf(SettingsItem.AppLock, SettingsItem.LockAfter, SettingsItem.BlockScreenshots),
+        // What guards the app, then what the screen shows, then what the
+        // app may reach: the permissions page last, as the one way out.
+        listOf(
+            SettingsItem.AppLock,
+            SettingsItem.LockAfter,
+            SettingsItem.BlockScreenshots,
+            SettingsItem.HideAmounts,
+            SettingsItem.DataPermissions,
+        ),
     ),
     SettingsSection(
         SettingsPage.Appearance,
@@ -257,6 +269,8 @@ internal val SettingsItem.title: String
         SettingsItem.AppLock -> "App lock"
         SettingsItem.LockAfter -> "Lock after"
         SettingsItem.BlockScreenshots -> "Block screenshots"
+        SettingsItem.HideAmounts -> "Hide amounts on Home"
+        SettingsItem.DataPermissions -> "Data permissions"
         SettingsItem.Diagnostics -> "Diagnostics"
     }
 
@@ -290,6 +304,8 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.AppLock to { appLockSubtitle(it) },
     SettingsItem.LockAfter to { lockAfterSubtitle(it.security) },
     SettingsItem.BlockScreenshots to { blockScreenshotsSubtitle(it.security.blockScreenshots) },
+    SettingsItem.HideAmounts to { hideAmountsSubtitle(it.hideAmounts) },
+    SettingsItem.DataPermissions to { "What LedgerFlow may use, why, and where to turn it off" },
     SettingsItem.Theme to { themeSubtitle(it.appearance.theme) },
     SettingsItem.Animations to { animationsSubtitle(it) },
     // The shell reads it once per launch (a live change would rebuild the
@@ -497,7 +513,7 @@ private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
  * outline. Tappable only when it leads somewhere.
  */
 @Composable
-private fun PanelRow(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+internal fun PanelRow(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -676,6 +692,7 @@ private fun SettingsPreview() {
             onDiagnostics = {},
             onBudgetAlerts = {},
             onPaymentApps = {},
+            onDataPermissions = {},
             onEvent = {},
         )
     }
@@ -701,6 +718,7 @@ private fun SettingsEmptyBinPreview() {
             onDiagnostics = {},
             onBudgetAlerts = {},
             onPaymentApps = {},
+            onDataPermissions = {},
             onEvent = {},
         )
     }

@@ -134,6 +134,11 @@ somewhere else takes `onBack`: the back arrow and the title on one line.
   for actions inside a row), `LfIconButton`, `LfChip` (with a Plex `count`),
   `LfSegmentedControl` (a pill row, or a card when it stacks — BUG79/80),
   `LfTextField`, `LfAmountField`, `LfAmountCard` (a capture form's head).
+- **Amounts.** `LfMaskedAmount` for a read-only figure that can be hidden
+  (Hide amounts on Home); a figure inside a sentence uses `AmountMask` for the
+  same dots. A block of hidden figures is the tap that shows them
+  (`Modifier.lfRevealAmounts`), and the figure is never in the semantics tree
+  while hidden.
 - **Bars.** `LfFilterBar` (a period pill and a filter control),
   `LfLinkBanner` (one line that opens a screen), `LfBottomBar` + `LfFab`.
 - **Overlays.** `LfDialog` (an irreversible step: `Warning`, naming the

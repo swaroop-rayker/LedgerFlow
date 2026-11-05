@@ -2,7 +2,9 @@ package com.ledgerflow.core.data.security
 
 import android.app.KeyguardManager
 import android.content.Context
+import com.ledgerflow.core.domain.security.AppPermissions
 import com.ledgerflow.core.domain.security.DeviceSecurity
+import com.ledgerflow.core.domain.security.HideAmountsSetting
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -19,11 +21,17 @@ internal class AndroidDeviceSecurity @Inject constructor(
         context.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true
 }
 
-/** Settings > Security & privacy's one platform reader (V2-PLAN §3.5). */
+/** Settings > Security & privacy's readers (V2-PLAN §3.5): two of the platform, one of the vault. */
 @Module
 @InstallIn(SingletonComponent::class)
 internal interface SecurityModule {
 
     @Binds
     fun deviceSecurity(impl: AndroidDeviceSecurity): DeviceSecurity
+
+    @Binds
+    fun appPermissions(impl: AndroidAppPermissions): AppPermissions
+
+    @Binds
+    fun hideAmounts(impl: VaultHideAmountsSetting): HideAmountsSetting
 }

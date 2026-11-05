@@ -12,9 +12,10 @@ import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
-import com.ledgerflow.core.domain.ingest.PackageAllowlistRepository
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
+import com.ledgerflow.core.domain.ingest.PackageAllowlistRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
+import com.ledgerflow.core.domain.security.HideAmountsSetting
 import com.ledgerflow.core.domain.security.LockTimeout
 import com.ledgerflow.core.domain.security.SecurityPreferences
 import com.ledgerflow.core.domain.usecase.GetNotificationCaptureHealthUseCase
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -77,6 +79,8 @@ public sealed interface SettingsEvent {
     public data object LockAfterDismissed : SecurityEvent
 
     public data class BlockScreenshotsToggled(val enabled: Boolean) : SecurityEvent
+
+    public data class HideAmountsToggled(val enabled: Boolean) : SecurityEvent
 }
 
 /**
@@ -187,6 +191,9 @@ public data class SettingsUiState(
 
     /** True while the lock-after picker is up. */
     val choosingLockAfter: Boolean = false,
+
+    /** Hide amounts on Home (V2-PLAN §3.5), kept in the vault. */
+    val hideAmounts: Boolean = false,
 )
 
 @HiltViewModel
@@ -198,6 +205,7 @@ public class SettingsViewModel @Inject constructor(
     device: DevicePreferences,
     private val budgetAlertChannel: BudgetAlertChannel,
     allowlist: PackageAllowlistRepository,
+    private val hideAmounts: HideAmountsSetting,
 ) : ViewModel() {
 
     private val appearanceStore = device.appearance
@@ -278,6 +286,7 @@ public class SettingsViewModel @Inject constructor(
         .combine(securityStore.preferences) { state, security -> state.copy(security = security) }
         .combine(hasScreenLock) { state, secure -> state.copy(hasScreenLock = secure) }
         .combine(choosingLockAfter) { state, choosing -> state.copy(choosingLockAfter = choosing) }
+        .combine(hideAmounts.enabled.onStart { emit(false) }) { state, hide -> state.copy(hideAmounts = hide) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), SettingsUiState())
 
     init {
@@ -363,6 +372,8 @@ public class SettingsViewModel @Inject constructor(
             }
             is SettingsEvent.BlockScreenshotsToggled ->
                 viewModelScope.launch { securityStore.setBlockScreenshots(event.enabled) }
+            is SettingsEvent.HideAmountsToggled ->
+                viewModelScope.launch { hideAmounts.set(event.enabled) }
         }
     }
 
