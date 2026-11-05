@@ -119,6 +119,14 @@ public sealed interface Destination {
     public data object BackUpNow : Destination
 
     /**
+     * Restore from a backup over this phone's ledger (ADR-0033), reached from
+     * Settings > Data. Full-screen for the same reason as [BackUpNow]: it takes
+     * the 24 words.
+     */
+    @Serializable
+    public data object RestoreBackup : Destination
+
+    /**
      * The approval queue, reached from the centre action's dial (§9.3) — and
      * from the diagnostics screen, which opens it on the Suppressed filter.
      *

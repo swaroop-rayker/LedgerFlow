@@ -17,6 +17,18 @@ public interface VaultRepository {
     public val state: StateFlow<VaultState>
 
     /**
+     * Which vault the app has: 0 until one is handed over, then one more each
+     * time a **different** vault becomes [VaultState.Unlocked] — at launch, and
+     * again when a restore from Settings replaces it (ADR-0033 h).
+     *
+     * [state] cannot say this: it goes `Unlocked`, `Working`, `Unlocked` across
+     * a replace, and a `StateFlow` collector that misses the middle value sees
+     * no change at all. The shell is rebuilt, and the once-per-vault
+     * housekeeping run again, when this changes.
+     */
+    public val generation: StateFlow<Long>
+
+    /**
      * Decides the starting state and, if a Keystore wrap exists, attempts the
      * silent unlock (§7.3 step 1). Safe to call more than once; a call while
      * already [VaultState.Unlocked] is a no-op rather than a re-open.

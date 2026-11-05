@@ -61,6 +61,8 @@ import com.ledgerflow.feature.ledger.LedgerViewModel
 import com.ledgerflow.feature.ocr.capture.OcrCaptureScreen
 import com.ledgerflow.feature.ocr.capture.OcrCaptureViewModel
 import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
+import com.ledgerflow.feature.onboarding.restore.RestoreMode
+import com.ledgerflow.feature.onboarding.restore.RestoreRoute
 import com.ledgerflow.feature.settings.allowlist.AllowlistScreen
 import com.ledgerflow.feature.settings.allowlist.AllowlistViewModel
 import com.ledgerflow.feature.settings.backup.BackupNowScreen
@@ -411,6 +413,7 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         val state by viewModel.state.collectAsStateWithLifecycle()
         BackupNowScreen(state = state, onEvent = viewModel::onEvent, onBack = { navController.popBackStack() })
     }
+    restoreDestination(navController)
     composable<Destination.Export> { ExportRoute(onBack = navController::popBackStack) }
     composable<Destination.PaymentApps> {
         val viewModel: AllowlistViewModel = hiltViewModel()
@@ -577,6 +580,7 @@ private val Destination.label: String
         Destination.Export -> "Export"
         Destination.DeletedEntries -> "Deleted"
         Destination.BackUpNow -> "Back up"
+        Destination.RestoreBackup -> "Restore"
         is Destination.Inbox -> "Inbox"
         Destination.Diagnostics -> "Diagnostics"
         Destination.PaymentApps -> "Payment apps"
@@ -616,4 +620,15 @@ private fun AnalyticsUiState.merchantEntries(id: String, name: String): Destinat
         to = window.to,
         analyticsFiltered = !filters.isEmpty,
     )
+}
+
+/**
+ * Restore from a backup, over this phone's ledger (ADR-0033). "Open my ledger"
+ * hands over a different vault and the shell is rebuilt around it at Home
+ * (MainActivity keys it on the vault), so nothing here navigates afterwards.
+ */
+private fun NavGraphBuilder.restoreDestination(navController: NavHostController) {
+    composable<Destination.RestoreBackup> {
+        RestoreRoute(mode = RestoreMode.Replace, onBack = { navController.popBackStack() })
+    }
 }

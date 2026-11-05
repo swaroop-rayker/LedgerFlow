@@ -2,6 +2,7 @@ package com.ledgerflow
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.usecase.ObserveVaultGenerationUseCase
 import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
@@ -19,7 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -82,6 +83,7 @@ public enum class NotificationSetupPrompt {
 @HiltViewModel
 public class AppViewModel @Inject constructor(
     observeVaultState: ObserveVaultStateUseCase,
+    observeVaultGeneration: ObserveVaultGenerationUseCase,
     private val openVaultOnLaunch: OpenVaultOnLaunchUseCase,
     private val purgeAbandonedDrafts: PurgeAbandonedDraftsUseCase,
     private val seedIngestAllowlists: SeedIngestAllowlistsUseCase,
@@ -151,57 +153,73 @@ public class AppViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), AppRoute.Loading)
 
+    /**
+     * Which vault the app has (ADR-0033 h). The shell is keyed on it, so a
+     * restore from Settings lands on a freshly built shell at Home rather than
+     * on screens that were showing the vault it replaced.
+     */
+    public val vaultGeneration: StateFlow<Long> = observeVaultGeneration()
+
     init {
         // §7.3 step 1. Idempotent, so a config change does not re-open anything.
         viewModelScope.launch { openVaultOnLaunch() }
 
-        // §6.1.2's orphan sweep: drafts the user abandoned 30 days ago, from
-        // launches where the app was killed and they never came back.
-        //
-        // It waits for the vault rather than running at construction, because
-        // there is no database until the unlock succeeds -- and it deliberately
-        // runs after *any* route reaches Ready, so a user who came in through
-        // Recovery gets the same housekeeping as one who came in through the
-        // Keystore. `first` cancels the collection as soon as it fires, so this
-        // is one sweep per process, not a subscription.
+        // Once per vault the app is handed: at launch, and again when a
+        // restore from Settings replaces it (ADR-0033 h) -- a restored older
+        // backup needs the same seeding a migrated vault does.
         viewModelScope.launch {
-            route.first { it is AppRoute.Ready }
-            purgeAbandonedDrafts()
+            vaultGeneration.filter { it > 0 }.collect { housekeeping() }
+        }
+    }
 
-            // D-10's curated allowlists, once the vault is open (they live in
-            // it). Idempotent and additive, so this runs every launch and a
-            // package the user disabled stays disabled -- see
-            // SeedIngestAllowlistsUseCase. It waits for Ready for the same
-            // reason the draft sweep does: there is no database before that.
-            seedIngestAllowlists()
+    /**
+     * §6.1.2's orphan sweep, the seeds, a parse pass and §5.2's explainer, for
+     * a vault that has just become the app's.
+     *
+     * It waits for the vault rather than running at construction, because
+     * there is no database until the unlock succeeds -- and it runs for *any*
+     * way in, so a user who came in through Recovery gets the same
+     * housekeeping as one who came in through the Keystore. The same vault
+     * reopening is not a new generation, so this is one sweep per vault.
+     */
+    private suspend fun housekeeping() {
+        // Drafts the user abandoned 30 days ago, from launches where the
+        // app was killed and they never came back.
+        purgeAbandonedDrafts()
 
-            // The ruleset lives in the vault beside the allowlists, and for the
-            // same reason: there is nothing to write to until it opens.
-            seedParserRules()
+        // D-10's curated allowlists, once the vault is open (they live in
+        // it). Idempotent and additive, so this runs every launch and a
+        // package the user disabled stays disabled -- see
+        // SeedIngestAllowlistsUseCase. It waits for Ready for the same
+        // reason the draft sweep does: there is no database before that.
+        seedIngestAllowlists()
 
-            // V2-6's starter merchant categories, once per vault: a new
-            // install, a vault just migrated to v13, a restored v12 backup.
-            seedMerchantCategories()
+        // The ruleset lives in the vault beside the allowlists, and for the
+        // same reason: there is nothing to write to until it opens.
+        seedParserRules()
 
-            // Both of the above can change what the pipeline would now make of
-            // messages it has already seen -- a seed that adds sender patterns
-            // (§16 Q14) or parser rules. Nothing else would ask: the worker is
-            // otherwise only enqueued by a capture, so on a quiet account the
-            // fix for a wrongly-rejected message could sit unrun for days. The
-            // pass is idempotent and collapses under KEEP, so asking on every
-            // launch costs a query that finds nothing.
-            ingestWork.requestParsePass()
+        // V2-6's starter merchant categories, once per vault: a new
+        // install, a vault just migrated to v13, a restored v12 backup.
+        seedMerchantCategories()
 
-            // §5.2's explainer, decided once the vault is open -- the same
-            // Ready gate everything else in this block waits for, though for a
-            // different reason: the flag lives outside the vault (ADR-0020) and
-            // could have been read earlier. It is read here so that the value
-            // cannot arrive before there is a screen it could change.
-            _notificationSetupPrompt.value = if (notificationSetup.hasSeenSetup()) {
-                NotificationSetupPrompt.Dismissed
-            } else {
-                NotificationSetupPrompt.Show
-            }
+        // Both of the above can change what the pipeline would now make of
+        // messages it has already seen -- a seed that adds sender patterns
+        // (§16 Q14) or parser rules. Nothing else would ask: the worker is
+        // otherwise only enqueued by a capture, so on a quiet account the
+        // fix for a wrongly-rejected message could sit unrun for days. The
+        // pass is idempotent and collapses under KEEP, so asking on every
+        // launch costs a query that finds nothing.
+        ingestWork.requestParsePass()
+
+        // §5.2's explainer, decided once the vault is open -- the same
+        // Ready gate everything else in this block waits for, though for a
+        // different reason: the flag lives outside the vault (ADR-0020) and
+        // could have been read earlier. It is read here so that the value
+        // cannot arrive before there is a screen it could change.
+        _notificationSetupPrompt.value = if (notificationSetup.hasSeenSetup()) {
+            NotificationSetupPrompt.Dismissed
+        } else {
+            NotificationSetupPrompt.Show
         }
     }
 

@@ -5,6 +5,7 @@ import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.crypto.AttachmentKey
 import com.ledgerflow.core.crypto.Dek
 import com.ledgerflow.core.crypto.DekManager
+import com.ledgerflow.core.crypto.PhraseVerification
 import com.ledgerflow.core.crypto.UnlockResult
 import com.ledgerflow.core.data.di.VaultDatabaseName
 import com.ledgerflow.core.database.CanaryResult
@@ -12,13 +13,16 @@ import com.ledgerflow.core.database.DatabaseCanary
 import com.ledgerflow.core.database.DatabaseKey
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.LedgerFlowDatabaseFactory
+import com.ledgerflow.core.database.WalCheckpointObserver
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
 import com.ledgerflow.core.database.backup.OpenedBackup
+import com.ledgerflow.core.database.backup.counts
 import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.database.migration.MigrationAssessment
 import com.ledgerflow.core.database.migration.PreMigrationGuard
 import com.ledgerflow.core.database.migration.SnapshotResult
 import com.ledgerflow.core.domain.backup.RestoreOutcome
+import com.ledgerflow.core.domain.backup.RestorePreview
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.domain.vault.RecoveryPhraseValidator
 import com.ledgerflow.core.domain.vault.RecoveryReason
@@ -36,8 +40,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -59,6 +63,13 @@ import kotlinx.coroutines.withContext
  * on. The only destruction in LedgerFlow is behind the explicit type-DELETE
  * dialog in §7.3 step 3, which is a screen and a user's choice.
  */
+// The vault's whole lifetime under one mutex: opening, recovery, first-run
+// restore and, since ADR-0033, restoring over it, setting it aside and
+// putting it back. Each of those holds the same lock and the same handle, and
+// one that lived in another class would need both handed to it -- the lock
+// shared across classes is exactly the race the mutex exists to rule out.
+// Stateless steps live in VaultSessionSupport.kt and ReplacedVault.kt instead.
+@Suppress("TooManyFunctions")
 @Singleton
 public class VaultSession @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -76,10 +87,39 @@ public class VaultSession @Inject constructor(
      * class that cannot be tested without collateral damage.
      */
     @param:VaultDatabaseName private val databaseName: String = LedgerFlowDatabase.DATABASE_NAME,
+    /**
+     * Where this vault's wraps and receipt images live, for the one operation
+     * that moves a whole vault: a restore from Settings (ADR-0033 e). The
+     * app's by default; an instrumented test that replaces a vault passes its
+     * own, so it never moves the test APK's real directories.
+     */
+    private val files: VaultFiles = VaultFiles.forApp(context),
 ) : VaultRepository {
 
     private val _state = MutableStateFlow<VaultState>(VaultState.Initializing)
     override val state: StateFlow<VaultState> = _state.asStateFlow()
+
+    private val _generation = MutableStateFlow(0L)
+    override val generation: StateFlow<Long> = _generation.asStateFlow()
+
+    /** Bumped for every database [accept]ed; [publish] hands it to [generation]. */
+    private var openedGeneration: Long = 0L
+
+    /** The open database's checkpoint observer, removed when the database is released. */
+    private var walObserver: WalCheckpointObserver? = null
+
+    /**
+     * Sets the state, and when it is [VaultState.Unlocked] over a database the
+     * app has not had before, moves [generation] on: a different vault has been
+     * handed over (ADR-0033 h). A restore's rows are accepted before the user
+     * has read its report, so this is the moment, not [accept].
+     */
+    private fun publish(next: VaultState) {
+        _state.value = next
+        if (next == VaultState.Unlocked && database != null && _generation.value != openedGeneration) {
+            _generation.value = openedGeneration
+        }
+    }
 
     /**
      * Serialises every transition.
@@ -178,7 +218,10 @@ public class VaultSession @Inject constructor(
      * Hilt builds the graph.
      */
     internal fun whenUnlocked(): Flow<LedgerFlowDatabase?> =
-        state.map { if (it is VaultState.Unlocked) database else null }
+        // The generation too: across a restore from Settings the state goes
+        // Unlocked, Working, Unlocked, and a collector that missed the middle
+        // value would see no change and keep the closed handle (ADR-0033 h).
+        combine(state, generation) { current, _ -> if (current is VaultState.Unlocked) database else null }
             .distinctUntilChanged()
 
     /**
@@ -197,15 +240,22 @@ public class VaultSession @Inject constructor(
      */
     public suspend fun close() {
         mutex.withLock {
-            withContext(io) { database?.close() }
-            database = null
-            // Zeroed rather than merely dropped: a released reference leaves
-            // the bytes in the heap until GC gets round to it, and this is key
-            // material.
-            attachmentKey?.fill(0)
-            attachmentKey = null
+            releaseDatabase()
             _state.value = VaultState.Initializing
         }
+    }
+
+    /** Closes the handle and forgets the key, leaving the state to the caller. */
+    private suspend fun releaseDatabase() {
+        walObserver?.let { unregisterWalCheckpoint(it) }
+        walObserver = null
+        withContext(io) { database?.close() }
+        database = null
+        // Zeroed rather than merely dropped: a released reference leaves
+        // the bytes in the heap until GC gets round to it, and this is key
+        // material.
+        attachmentKey?.fill(0)
+        attachmentKey = null
     }
 
     /**
@@ -218,41 +268,49 @@ public class VaultSession @Inject constructor(
      * much. Nothing here needs the main thread; [_state] is a `StateFlow`.
      */
     override suspend fun openOnLaunch(): Unit = withContext(io) {
-        mutex.withLock {
-            // Pull the BIP-39 wordlist off the APK here, on IO, so that every
-            // later call -- a Recovery keystroke, a phrase validation -- is pure
-            // memory. Without this the first touch is on the main thread and
-            // StrictMode kills the debug build, which is how this was found.
-            withContext(io) { validator.warmUp() }
+        mutex.withLock { openLocked() }
+    }
 
-            // Before anything else, including the open-database shortcut: a
-            // restore that is mid-way through its image pass has a database
-            // open and must not be flipped to Unlocked underneath its report,
-            // and one that died mid-way must not be opened at all (§16 Q11).
-            if (withContext(io) { restoreMarker.exists() }) {
-                if (database == null) _state.value = VaultState.RestoreInterrupted
-                return@withLock
-            }
+    /** [openOnLaunch]'s body, for callers that already hold [mutex]. */
+    private suspend fun openLocked() {
+        // Pull the BIP-39 wordlist off the APK here, on IO, so that every
+        // later call -- a Recovery keystroke, a phrase validation -- is pure
+        // memory. Without this the first touch is on the main thread and
+        // StrictMode kills the debug build, which is how this was found.
+        withContext(io) { validator.warmUp() }
 
-            if (database != null) {
-                _state.value = VaultState.Unlocked
-                return@withLock
-            }
-            if (!withContext(io) { dekManager.isInitialized() }) {
-                // No phrase wrap on disk: the §7.4 gate was never completed.
-                // Note this is the *phrase* wrap, not the Keystore one -- the
-                // phrase is the mandatory factor, so its absence is the only
-                // honest definition of "not set up".
-                _state.value = VaultState.NeedsOnboarding
-                return@withLock
-            }
-
-            _state.value = VaultState.Working
-            _state.value = when (val result = withContext(io) { dekManager.unlockWithKeystore() }) {
-                is UnlockResult.Success -> openDatabase(result.dek).toState()
-                is UnlockResult.Failure -> VaultState.NeedsRecovery(result.reason.toRecoveryReason())
-            }
+        // Before anything else, including the open-database shortcut: a
+        // restore that is mid-way through its image pass has a database
+        // open and must not be flipped to Unlocked underneath its report,
+        // and one that died mid-way must not be opened at all (§16 Q11).
+        if (withContext(io) { restoreMarker.exists() }) {
+            if (database == null) _state.value = VaultState.RestoreInterrupted
+            return
         }
+
+        if (database != null) {
+            publish(VaultState.Unlocked)
+            return
+        }
+        if (!withContext(io) { dekManager.isInitialized() }) {
+            // No phrase wrap on disk: the §7.4 gate was never completed.
+            // Note this is the *phrase* wrap, not the Keystore one -- the
+            // phrase is the mandatory factor, so its absence is the only
+            // honest definition of "not set up".
+            _state.value = VaultState.NeedsOnboarding
+            return
+        }
+
+        _state.value = VaultState.Working
+        val next = when (val result = withContext(io) { dekManager.unlockWithKeystore() }) {
+            is UnlockResult.Success -> openDatabase(result.dek).toState()
+            is UnlockResult.Failure -> VaultState.NeedsRecovery(result.reason.toRecoveryReason())
+        }
+        // The vault opened cleanly with no restore pending, so a vault a
+        // restore from Settings set aside has done its job (ADR-0033 e): the
+        // same moment the pre-migration snapshot goes (§8.1).
+        if (next == VaultState.Unlocked) withContext(io) { replaced.discard() }
+        publish(next)
     }
 
     override suspend fun initialize(request: VaultInitRequest): VaultOutcome = mutex.withLock {
@@ -272,7 +330,7 @@ public class VaultSession @Inject constructor(
         }
 
         val opened = openDatabase(dek, seedMetadata = request)
-        _state.value = opened.toState()
+        publish(opened.toState())
         opened
     }
 
@@ -304,7 +362,9 @@ public class VaultSession @Inject constructor(
         // DekManager re-wrapped KEK-A on the way through, so the next launch is
         // silent again. "User loses nothing" includes not typing 24 words twice.
         val opened = openDatabase(dek)
-        _state.value = opened.toState()
+        val next = opened.toState()
+        if (next == VaultState.Unlocked) withContext(io) { replaced.discard() }
+        publish(next)
         opened
     }
 
@@ -369,7 +429,8 @@ public class VaultSession @Inject constructor(
     /** The database is verified and becomes the session's. The DEK does not survive this. */
     private suspend fun accept(opened: LedgerFlowDatabase, dek: Dek) {
         database = opened
-        registerWalCheckpoint(opened)
+        openedGeneration++
+        walObserver = registerWalCheckpoint(opened)
         // **Before `destroy`, necessarily.** The DEK is zeroed on the next line
         // and is not retained anywhere else, so this is the only moment the
         // attachment key can be derived at all.
@@ -441,7 +502,18 @@ public class VaultSession @Inject constructor(
                 return@withContext RestoreOutcome.Failed
             }
 
-            val dek = when (val unlocked = dekManager.dekForRestore(words)) {
+            // Finishing a restore from Settings that was interrupted: the old
+            // vault's set-aside is completed *before* any wrap is read, so an
+            // old wrap still in place is never taken for this restore's
+            // (ADR-0033). And the Keystore key it needs is kept.
+            // Only a marker that already existed can say so, so this is a resume.
+            val replacing = restoreMarker.holds(REPLACE_MARKER_CONTENT)
+            if (replacing && !replaced.setAside()) {
+                _state.value = VaultState.RestoreInterrupted
+                return@withContext RestoreOutcome.Failed
+            }
+
+            val dek = when (val unlocked = dekManager.dekForRestore(words, keepKeystoreKey = replacing)) {
                 is UnlockResult.Success -> unlocked.dek
                 is UnlockResult.Failure -> {
                     _state.value = VaultState.RestoreInterrupted
@@ -516,10 +588,152 @@ public class VaultSession @Inject constructor(
     internal suspend fun finishRestore() {
         mutex.withLock {
             if (database != null && !withContext(io) { restoreMarker.exists() }) {
-                _state.value = VaultState.Unlocked
+                publish(VaultState.Unlocked)
             }
         }
     }
+
+    // ── Restore from Settings, over this vault (ADR-0033) ────────────────────
+
+    /**
+     * Opens [backup] under [seed] **in memory** and counts both sides, for the
+     * page the user types DELETE on. Writes nothing; refuses as a restore would.
+     *
+     * [words] are checked against this vault's phrase wrap, read-only
+     * (`DekManager.verifyPhrase`): when they do not open it, restoring changes
+     * which words the phone answers to, and the page says so.
+     */
+    internal suspend fun previewBackup(
+        words: List<String>,
+        seed: ByteArray,
+        backup: ByteArray,
+    ): RestorePreview = mutex.withLock {
+        withContext(io) {
+            val current = database ?: return@withContext RestorePreview.Refused(RestoreOutcome.Failed)
+            val read = DatabaseBackupManager.open(backup, seed)
+            val opened = read as? OpenedBackup.Ready
+                ?: return@withContext RestorePreview.Refused(read.toRestoreRefusal())
+            val phone = runCatching { DatabaseBackupManager(current).export().counts() }.getOrNull()
+                ?: return@withContext RestorePreview.Refused(RestoreOutcome.Failed)
+            RestorePreview.Ready(
+                backup = opened.counts.toLedgerCounts(),
+                phone = phone.toLedgerCounts(),
+                sameWords = dekManager.verifyPhrase(words) == PhraseVerification.Opens,
+            )
+        }
+    }
+
+    /**
+     * Restores [backup] over this vault (ADR-0033). The order is the design:
+     *
+     * 1. **Decrypt and parse in memory.** Any refusal returns with nothing
+     *    changed — the vault is still open and the app never noticed.
+     * 2. **The marker**, fsynced, saying this is a replace. From here a crash
+     *    lands on [VaultState.RestoreInterrupted], where the user can finish
+     *    or put back.
+     * 3. **Close and set aside** the vault: database, wraps, images, by rename.
+     * 4. **The DEK**, under the backup's words, wrapped under the Keystore key
+     *    that already exists — so the set-aside vault's wrap still opens.
+     * 5. **The rows**, as a first-run restore imports them.
+     *
+     * A failure at 3, 4 or 5 puts the old vault back and reopens it
+     * ([RestoreOutcome.RolledBack]). On success the vault is left open and
+     * [VaultState.Working], exactly as [restoreFromBackup] leaves it, for the
+     * images, the report and [finishRestore].
+     */
+    internal suspend fun replaceFromBackup(
+        words: List<String>,
+        seed: ByteArray,
+        backup: ByteArray,
+        backupTreeUri: String?,
+    ): RestoreOutcome = mutex.withLock {
+        withContext(io) {
+            val current = database
+            if (current == null || restoreMarker.exists()) return@withContext RestoreOutcome.Failed
+
+            val read = DatabaseBackupManager.open(backup, seed)
+            val opened = read as? OpenedBackup.Ready ?: return@withContext read.toRestoreRefusal()
+
+            // A backup chosen as a single file names no folder. Unlike a new
+            // install, this phone has one, and its grant is still good: the
+            // nightly backup keeps going there rather than stopping.
+            val treeUri = backupTreeUri
+                ?: runCatching { current.appMetaDao().value(KEY_BACKUP_TREE_URI) }.getOrNull()
+
+            _state.value = VaultState.Working
+            if (!writeRestoreMarker(restoreMarker, REPLACE_MARKER_CONTENT)) {
+                restoreMarker.delete()
+                publish(VaultState.Unlocked)
+                return@withContext RestoreOutcome.Failed
+            }
+            releaseDatabase()
+            if (!replaced.setAside()) return@withContext rollBack()
+
+            val dek = when (val unlocked = dekManager.dekForRestore(words, keepKeystoreKey = true)) {
+                is UnlockResult.Success -> unlocked.dek
+                is UnlockResult.Failure -> return@withContext rollBack()
+            }
+            when (val imported = openAndImport(dek, opened, treeUri)) {
+                is RestoreOutcome.Done -> imported
+                else -> {
+                    dek.destroy()
+                    rollBack()
+                }
+            }
+        }
+    }
+
+    /**
+     * A replace failed in this process: the old vault goes back where it was,
+     * the marker goes, and it opens as on any launch — through the Keystore
+     * key that was kept, so with no words. Should the put-back itself fail,
+     * the marker stays and the next launch offers it again.
+     */
+    private suspend fun rollBack(): RestoreOutcome {
+        releaseDatabase()
+        val returned = withContext(io) { replaced.returnAll() }
+        if (!returned) {
+            _state.value = VaultState.RestoreInterrupted
+            return RestoreOutcome.Failed
+        }
+        withContext(io) { restoreMarker.delete() }
+        openLocked()
+        return RestoreOutcome.RolledBack
+    }
+
+    /**
+     * An interrupted restore from Settings can be abandoned: the phone's vault
+     * is set aside, or — if the process died before the first move — still in
+     * place. Either way it can be had back without the backup's words.
+     */
+    internal suspend fun canPutBack(): Boolean = withContext(io) {
+        restoreMarker.holds(REPLACE_MARKER_CONTENT)
+    }
+
+    /**
+     * Abandons an interrupted restore from Settings and returns the vault it
+     * set aside (ADR-0033 e). What is removed in its place was written from
+     * the backup in this restore; the backup itself is untouched. The vault
+     * then opens as on any launch.
+     */
+    internal suspend fun putBackReplacedVault(): Boolean = mutex.withLock {
+        withContext(io) {
+            if (!restoreMarker.holds(REPLACE_MARKER_CONTENT)) return@withContext false
+            releaseDatabase()
+            if (!replaced.returnAll()) return@withContext false
+            restoreMarker.delete()
+            openLocked()
+            true
+        }
+    }
+
+    /** The vault a restore from Settings sets aside, beside the database it replaced. */
+    private val replaced: ReplacedVault
+        get() = ReplacedVault(
+            root = File(context.filesDir, databaseName + ReplacedVault.SUFFIX),
+            databaseFile = context.getDatabasePath(databaseName),
+            files = files,
+        )
 
     /**
      * Beside the database it describes, named after it, so an instrumented
@@ -647,5 +861,8 @@ public class VaultSession @Inject constructor(
 
         /** Its presence is the signal; the content only makes it non-empty. */
         private val RESTORE_MARKER_CONTENT: ByteArray = "restore-pending v1".toByteArray()
+
+        /** A restore from Settings: the same signal, and a vault set aside to put back (ADR-0033). */
+        private val REPLACE_MARKER_CONTENT: ByteArray = "replace-pending v1".toByteArray()
     }
 }

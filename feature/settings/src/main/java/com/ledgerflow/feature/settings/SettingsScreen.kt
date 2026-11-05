@@ -73,6 +73,7 @@ public fun SettingsSectionScreen(
     onAbout: (AboutLink) -> Unit,
     onEvent: (SettingsEvent) -> Unit,
     modifier: Modifier = Modifier,
+    onRestore: () -> Unit = {},
 ) {
     SettingsDialogs(state = state, onEvent = onEvent)
 
@@ -87,6 +88,7 @@ public fun SettingsSectionScreen(
         SettingsItem.Budgets to onBudgets,
         SettingsItem.BackUpNow to onBackUp,
         SettingsItem.Export to onExport,
+        SettingsItem.RestoreBackup to onRestore,
         SettingsItem.DeletedEntries to onDeletedEntries,
         // The one row that does not navigate: it opens the confirmation, and
         // the confirmation is the only thing that deletes (ADR-0023).
@@ -148,6 +150,10 @@ internal enum class SettingsItem {
     Budgets,
     BackUpNow,
     Export,
+
+    // ADR-0033: the backup, back over this phone's ledger. Below Back up now and
+    // Export, which must stay together (§16 Q23).
+    RestoreBackup,
     DeletedEntries,
     Receipts,
 
@@ -227,6 +233,7 @@ internal val SettingsSections: List<SettingsSection> = listOf(
         listOf(
             SettingsItem.BackUpNow,
             SettingsItem.Export,
+            SettingsItem.RestoreBackup,
             SettingsItem.DeletedEntries,
             SettingsItem.Receipts,
         ),
@@ -292,6 +299,7 @@ internal val SettingsItem.title: String
         SettingsItem.Budgets -> "Budgets"
         SettingsItem.BackUpNow -> "Back up now"
         SettingsItem.Export -> "Export"
+        SettingsItem.RestoreBackup -> "Restore from a backup"
         SettingsItem.DeletedEntries -> "Deleted entries"
         SettingsItem.Receipts -> "Receipts"
         SettingsItem.Theme -> "Theme"
@@ -340,6 +348,7 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.Budgets to { "Set a limit per category" },
     SettingsItem.BackUpNow to { backupSubtitle(it) },
     SettingsItem.Export to { "Save your data as an Excel workbook or CSV" },
+    SettingsItem.RestoreBackup to { "Replace this ledger with a backup" },
     SettingsItem.DeletedEntries to { deletedSubtitle(it) },
     SettingsItem.Receipts to { receiptsSubtitle(it) },
     SettingsItem.AppLock to { appLockSubtitle(it) },

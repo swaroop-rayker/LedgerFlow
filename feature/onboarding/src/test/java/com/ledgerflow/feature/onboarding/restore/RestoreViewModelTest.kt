@@ -1,8 +1,13 @@
 package com.ledgerflow.feature.onboarding.restore
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
+import com.ledgerflow.core.domain.backup.PreviewRestoreUseCase
+import com.ledgerflow.core.domain.backup.ReplaceVaultFromBackupUseCase
 import com.ledgerflow.core.domain.backup.RestoreFromBackupUseCase
+import com.ledgerflow.core.domain.backup.PutBackOutcome
 import com.ledgerflow.core.domain.backup.RestoreOutcome
+import com.ledgerflow.core.domain.backup.RestorePreview
 import com.ledgerflow.core.domain.backup.RestoreSource
 import com.ledgerflow.core.domain.vault.PhraseQr
 import com.ledgerflow.core.domain.vault.PhraseValidation
@@ -52,7 +57,13 @@ class RestoreViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = RestoreViewModel(RestoreFromBackupUseCase(validator, repository), repository, validator)
+    private fun viewModel() = RestoreViewModel(
+        RestoreFromBackupUseCase(validator, repository),
+        PreviewRestoreUseCase(validator, repository),
+        ReplaceVaultFromBackupUseCase(validator, repository),
+        repository,
+        validator,
+    )
 
     private fun RestoreViewModel.typeFullPhrase() {
         repeat(validator.wordCount) { onEvent(RestoreEvent.WordCommitted("abandon")) }
@@ -277,6 +288,179 @@ class RestoreViewModelTest {
         vm.onEvent(RestoreEvent.Left)
 
         assertThat(vm.state.value.entry.words).isEmpty()
+    }
+
+    // ── From Settings, over this phone's ledger (ADR-0033) ──────────────────
+
+    private fun replacing(): RestoreViewModel = viewModel().apply { setMode(RestoreMode.Replace) }
+
+    private suspend fun RestoreViewModel.toConfirmation(scope: kotlinx.coroutines.test.TestScope) {
+        chooseFolder()
+        scope.advanceUntilIdle()
+        typeFullPhrase()
+        onEvent(RestoreEvent.Submitted)
+        scope.advanceUntilIdle()
+    }
+
+    /** The words open the backup first; nothing is replaced by the first tap. */
+    @Test
+    fun fromSettings_continueOpensTheBackup_andShowsTheConfirmation_withoutReplacing() = runTest(dispatcher) {
+        val vm = replacing()
+
+        vm.toConfirmation(this)
+
+        assertThat(repository.previewCalls.single().first)
+            .isEqualTo(RestoreSource.InFolder("content://tree/backups", newest))
+        assertThat(repository.replaceCalls).isEmpty()
+        assertThat(repository.restoreCalls).isEmpty()
+        assertThat(vm.state.value.isConfirming).isTrue()
+        assertThat(vm.state.value.preview).isEqualTo(repository.previewResult)
+        assertWithMessage("the confirmation only reads the words")
+            .that(vm.state.value.entry.words).hasSize(validator.wordCount)
+    }
+
+    /** §7.3: Replace waits for DELETE. A keyboard's capital and stray spaces are forgiven; nothing else is. */
+    @Test
+    fun fromSettings_replaceWaitsForDeleteTyped() = runTest(dispatcher) {
+        val vm = replacing()
+        vm.toConfirmation(this)
+
+        listOf("", "DELET", "DELETED", "remove").forEach { typed ->
+            vm.onEvent(RestoreEvent.ConfirmationChanged(typed))
+            vm.onEvent(RestoreEvent.Replaced)
+            advanceUntilIdle()
+            assertWithMessage("\"$typed\"").that(vm.state.value.canReplace).isFalse()
+        }
+        assertThat(repository.replaceCalls).isEmpty()
+
+        listOf("DELETE", "Delete", " delete ").forEach { typed ->
+            vm.onEvent(RestoreEvent.ConfirmationChanged(typed))
+            assertWithMessage("\"$typed\"").that(vm.state.value.canReplace).isTrue()
+        }
+    }
+
+    @Test
+    fun fromSettings_replaceHandsOverWhatWasChosen_andForgetsTheWords() = runTest(dispatcher) {
+        val vm = replacing()
+        vm.toConfirmation(this)
+        vm.onEvent(RestoreEvent.ConfirmationChanged("DELETE"))
+
+        vm.onEvent(RestoreEvent.Replaced)
+        advanceUntilIdle()
+
+        val (source, words) = repository.replaceCalls.single()
+        assertThat(source).isEqualTo(RestoreSource.InFolder("content://tree/backups", newest))
+        assertThat(words).hasSize(validator.wordCount)
+        assertThat(vm.state.value.result).isEqualTo(done)
+        assertThat(vm.state.value.isDone).isTrue()
+        assertThat(vm.state.value.isConfirming).isFalse()
+        assertThat(vm.state.value.entry.words).isEmpty()
+    }
+
+    /** A backup that does not open never reaches the confirmation, and says why. */
+    @Test
+    fun fromSettings_aBackupThatDoesNotOpen_saysWhy_andAsksForNothing() = runTest(dispatcher) {
+        repository.previewResult = RestorePreview.Refused(RestoreOutcome.WrongPhrase)
+        val vm = replacing()
+
+        vm.toConfirmation(this)
+
+        assertThat(vm.state.value.isConfirming).isFalse()
+        assertThat(vm.state.value.result).isEqualTo(RestoreOutcome.WrongPhrase)
+        assertThat(vm.state.value.entry.words).hasSize(validator.wordCount)
+    }
+
+    /** A rollback returns to the words with its sentence: the phone is as it was. */
+    @Test
+    fun fromSettings_aRolledBackReplace_returnsToTheWords_andSaysNothingChanged() = runTest(dispatcher) {
+        repository.outcome = RestoreOutcome.RolledBack
+        val vm = replacing()
+        vm.toConfirmation(this)
+        vm.onEvent(RestoreEvent.ConfirmationChanged("DELETE"))
+
+        vm.onEvent(RestoreEvent.Replaced)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.isConfirming).isFalse()
+        assertThat(vm.state.value.result).isEqualTo(RestoreOutcome.RolledBack)
+        assertThat(RestoreOutcome.RolledBack.message()).contains("as it was")
+        assertThat(vm.state.value.entry.words).hasSize(validator.wordCount)
+    }
+
+    @Test
+    fun fromSettings_backFromTheConfirmation_keepsTheWords_andForgetsDelete() = runTest(dispatcher) {
+        val vm = replacing()
+        vm.toConfirmation(this)
+        vm.onEvent(RestoreEvent.ConfirmationChanged("DELETE"))
+
+        vm.onEvent(RestoreEvent.ConfirmationLeft)
+
+        assertThat(vm.state.value.isConfirming).isFalse()
+        assertThat(vm.state.value.confirmation).isEmpty()
+        assertThat(vm.state.value.entry.words).hasSize(validator.wordCount)
+    }
+
+    /** Leaving forgets the words (BUG30) and keeps which restore this is. */
+    @Test
+    fun fromSettings_leaving_forgetsTheWords_andStaysAReplace() = runTest(dispatcher) {
+        val vm = replacing()
+        vm.toConfirmation(this)
+
+        vm.onEvent(RestoreEvent.Left)
+
+        assertThat(vm.state.value.entry.words).isEmpty()
+        assertThat(vm.state.value.preview).isNull()
+        assertThat(vm.state.value.mode).isEqualTo(RestoreMode.Replace)
+    }
+
+    /** At first run the words still restore directly: there is nothing to replace. */
+    @Test
+    fun atFirstRun_submitRestores_andOpensNoConfirmation() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.chooseFolder()
+        advanceUntilIdle()
+        vm.typeFullPhrase()
+
+        vm.onEvent(RestoreEvent.Submitted)
+        advanceUntilIdle()
+
+        assertThat(repository.previewCalls).isEmpty()
+        assertThat(repository.restoreCalls).hasSize(1)
+    }
+
+    @Test
+    fun resuming_offersToPutBack_onlyWhenSomethingWasSetAside() = runTest(dispatcher) {
+        val nothingAside = viewModel().apply { setMode(RestoreMode.Resuming) }
+        advanceUntilIdle()
+        assertThat(nothingAside.state.value.canPutBack).isFalse()
+        nothingAside.onEvent(RestoreEvent.PutBack)
+        advanceUntilIdle()
+        assertThat(repository.putBackCalls).isEqualTo(0)
+
+        repository.setAside = true
+        val vm = viewModel().apply { setMode(RestoreMode.Resuming) }
+        advanceUntilIdle()
+        assertThat(vm.state.value.canPutBack).isTrue()
+
+        vm.onEvent(RestoreEvent.PutBack)
+        advanceUntilIdle()
+
+        assertThat(repository.putBackCalls).isEqualTo(1)
+        assertThat(vm.state.value.putBackFailed).isFalse()
+    }
+
+    @Test
+    fun resuming_aPutBackThatFails_saysSo() = runTest(dispatcher) {
+        repository.setAside = true
+        repository.putBackResult = PutBackOutcome.Failed
+        val vm = viewModel().apply { setMode(RestoreMode.Resuming) }
+        advanceUntilIdle()
+
+        vm.onEvent(RestoreEvent.PutBack)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.putBackFailed).isTrue()
+        assertThat(vm.state.value.isWorking).isFalse()
     }
 
     private companion object {

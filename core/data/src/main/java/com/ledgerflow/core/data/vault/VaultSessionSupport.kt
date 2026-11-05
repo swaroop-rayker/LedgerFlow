@@ -8,10 +8,12 @@ import com.ledgerflow.core.crypto.lfbk.LfbkContainer
 import com.ledgerflow.core.crypto.lfbk.LfbkFailure
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.WalCheckpointObserver
+import com.ledgerflow.core.database.backup.BackupCounts
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
 import com.ledgerflow.core.database.backup.OpenedBackup
 import com.ledgerflow.core.database.backup.RestoreResult
 import com.ledgerflow.core.database.entity.AppMetaEntity
+import com.ledgerflow.core.domain.backup.LedgerCounts
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.vault.PhraseValidation
 import com.ledgerflow.core.domain.vault.RecoveryReason
@@ -59,10 +61,23 @@ internal fun UnlockFailure.toPhraseOutcome(): VaultOutcome = when (this) {
  * `ProcessLifecycleOwner` observers must be added on the main thread, and
  * this runs on IO -- hence the explicit hop rather than a bare `addObserver`.
  */
-internal suspend fun registerWalCheckpoint(opened: LedgerFlowDatabase) {
+internal suspend fun registerWalCheckpoint(opened: LedgerFlowDatabase): WalCheckpointObserver {
     val observer = WalCheckpointObserver(opened)
     withContext(Dispatchers.Main) {
         ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+    }
+    return observer
+}
+
+/**
+ * The other half, for a database the session closes. Left registered, the
+ * observer's next `onStop` asks a closed Room for its writable database —
+ * which reopens the file at its old path. Across a restore from Settings that
+ * path is where the restored vault is being built (ADR-0033).
+ */
+internal suspend fun unregisterWalCheckpoint(observer: WalCheckpointObserver) {
+    withContext(Dispatchers.Main) {
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
     }
 }
 
@@ -72,9 +87,16 @@ internal suspend fun registerWalCheckpoint(opened: LedgerFlowDatabase) {
  * A wrap already on disk means an interrupted restore wrote it, and only its
  * words may finish the job; otherwise this is the first attempt and a new
  * DEK is made under these words.
+ *
+ * @param keepKeystoreKey a restore replacing a vault keeps the Keystore key
+ *   the set-aside vault's wrap was sealed under (ADR-0033 f).
  */
-internal fun DekManager.dekForRestore(words: List<String>): UnlockResult =
-    if (isInitialized()) unlockWithPhrase(words) else initialize(words)
+internal fun DekManager.dekForRestore(words: List<String>, keepKeystoreKey: Boolean = false): UnlockResult =
+    if (isInitialized()) {
+        unlockWithPhrase(words, keepKeystoreKey)
+    } else {
+        initialize(words, keepKeystoreKey)
+    }
 
 /** Why a restore did not get its DEK. Only different words have their own sentence. */
 internal fun UnlockFailure.toRestoreRefusal(): RestoreOutcome =
@@ -100,6 +122,10 @@ internal fun OpenedBackup.toRestoreRefusal(): RestoreOutcome = when (this) {
         -> RestoreOutcome.Damaged
     }
 }
+
+/** Database vocabulary in, domain vocabulary out: the two books and the Inbox, never a total. */
+internal fun BackupCounts.toLedgerCounts(): LedgerCounts =
+    LedgerCounts(expenses = expenses, income = income, inbox = inbox)
 
 /** The rows' half of the report; the caller adds the images'. */
 internal fun restoredReport(rows: Int): RestoreOutcome.Done = RestoreOutcome.Done(
@@ -130,6 +156,10 @@ internal suspend fun importRows(
     }
     return (result as? RestoreResult.Success)?.rowCount
 }
+
+/** This marker exists and says [content]: a restore from Settings rather than one at first run. */
+internal fun File.holds(content: ByteArray): Boolean =
+    runCatching { isFile && readBytes().contentEquals(content) }.getOrDefault(false)
 
 /** The marker, fsynced: its presence must survive the crash it exists for. */
 internal fun writeRestoreMarker(marker: File, content: ByteArray): Boolean = runCatching {

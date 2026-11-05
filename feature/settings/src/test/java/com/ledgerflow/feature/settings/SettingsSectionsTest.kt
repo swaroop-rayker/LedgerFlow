@@ -51,6 +51,8 @@ class SettingsSectionsTest {
         SettingsItem.Budgets to "budgets",
         SettingsItem.BackUpNow to "back up",
         SettingsItem.Export to "export",
+        // Opens the restore screen; replacing waits for DELETE there (ADR-0033).
+        SettingsItem.RestoreBackup to "restore",
         SettingsItem.DeletedEntries to "bin",
         // Opens the confirmation; deleting is the dialog's job (ADR-0023).
         SettingsItem.Receipts to "event ${SettingsEvent.ReceiptDeleteRequested}",
@@ -83,6 +85,8 @@ class SettingsSectionsTest {
             "Data" to listOf(
                 SettingsItem.BackUpNow,
                 SettingsItem.Export,
+                // V2-4 (ADR-0033): restore, below the two that make copies.
+                SettingsItem.RestoreBackup,
                 SettingsItem.DeletedEntries,
                 SettingsItem.Receipts,
             ),
@@ -191,6 +195,7 @@ class SettingsSectionsTest {
                     onDataPermissions = { opened += "data permissions" },
                     onAbout = { opened += "about $it" },
                     onEvent = { event -> opened += "event $event" },
+                    onRestore = { opened += "restore" },
                 )
             }
         }

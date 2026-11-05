@@ -34,8 +34,14 @@ public class DekManager(
      * blob. If the process dies midway, the recoverable factor is the one on
      * disk -- the reverse order would leave a DEK recoverable only by a
      * Keystore key that a factory reset destroys.
+     *
+     * @param keepKeystoreKey wrap under the Keystore key that already exists
+     *   rather than making a new one (ADR-0033 f). A restore that replaces a
+     *   vault sets the old one aside, and the old one's Keystore wrap only
+     *   opens again while the key it was sealed under survives. A key that
+     *   will not seal is replaced as usual.
      */
-    public fun initialize(mnemonic: List<String>): UnlockResult {
+    public fun initialize(mnemonic: List<String>, keepKeystoreKey: Boolean = false): UnlockResult {
         val validation = Bip39.validate(mnemonic)
         if (validation is MnemonicCheck.Invalid) {
             return UnlockResult.Failure(UnlockFailure.InvalidMnemonic(validation.error))
@@ -49,7 +55,7 @@ public class DekManager(
         }
         // Best-effort: a device with a broken Keystore is still fully usable
         // through the phrase, so this must not fail initialisation.
-        rewrapKeystore(dek)
+        rewrapKeystore(dek, keepExistingKey = keepKeystoreKey)
 
         return UnlockResult.Success(dek)
     }
@@ -83,8 +89,12 @@ public class DekManager(
      *
      * Validation runs before the KDF, so a mistyped word returns immediately
      * rather than after 2048 rounds of HMAC-SHA512 (CLAUDE.md §7).
+     *
+     * @param keepKeystoreKey as for [initialize]: a resumed restore that is
+     *   replacing a vault keeps the key the set-aside vault's wrap needs.
+     *   Recovery leaves it false — there the key is the thing that failed.
      */
-    public fun unlockWithPhrase(mnemonic: List<String>): UnlockResult {
+    public fun unlockWithPhrase(mnemonic: List<String>, keepKeystoreKey: Boolean = false): UnlockResult {
         val validation = Bip39.validate(mnemonic)
         if (validation is MnemonicCheck.Invalid) {
             return UnlockResult.Failure(UnlockFailure.InvalidMnemonic(validation.error))
@@ -92,7 +102,7 @@ public class DekManager(
 
         return when (val decoded = readBlob(KekId.PHRASE)) {
             is WrappedDekBlob.DecodeResult.Failure -> UnlockResult.Failure(decoded.reason)
-            is WrappedDekBlob.DecodeResult.Success -> unwrapWithPhrase(decoded.blob, mnemonic)
+            is WrappedDekBlob.DecodeResult.Success -> unwrapWithPhrase(decoded.blob, mnemonic, keepKeystoreKey)
         }
     }
 
@@ -136,24 +146,34 @@ public class DekManager(
     private fun unwrapWithPhrase(
         blob: WrappedDekBlob.Decoded,
         mnemonic: List<String>,
+        keepKeystoreKey: Boolean,
     ): UnlockResult {
         val kekB = KeyDerivation.kekB(Bip39.toSeed(mnemonic), blob.salt)
         val dekBytes = AesGcm.decrypt(kekB, blob.sealed, blob.aad)
             ?: return UnlockResult.Failure(UnlockFailure.AuthenticationFailed)
 
         val dek = Dek(dekBytes)
-        rewrapKeystore(dek)
+        rewrapKeystore(dek, keepExistingKey = keepKeystoreKey)
         return UnlockResult.Success(dek)
     }
 
     /**
-     * Regenerates KEK-A and re-wraps the DEK under it.
+     * Re-wraps the DEK under KEK-A, regenerating KEK-A first.
+     *
+     * With [keepExistingKey] the key already in the Keystore is tried first
+     * and kept if it seals (ADR-0033 f); a missing or invalidated key is
+     * replaced exactly as without it.
      *
      * Returns false rather than throwing: a device whose Keystore is broken
      * must still be usable via the phrase every launch. Degraded, not bricked.
      */
-    public fun rewrapKeystore(dek: Dek): Boolean {
+    public fun rewrapKeystore(dek: Dek, keepExistingKey: Boolean = false): Boolean {
+        if (keepExistingKey && keystoreKek.exists() && sealUnderKeystore(dek)) return true
         if (!keystoreKek.create()) return false
+        return sealUnderKeystore(dek)
+    }
+
+    private fun sealUnderKeystore(dek: Dek): Boolean {
         val aad = WrappedDekBlob.aad(KekId.KEYSTORE, EMPTY_SALT)
         val sealed = keystoreKek.seal(dek.bytes(), aad) ?: return false
         return store.write(KekId.KEYSTORE, WrappedDekBlob.encode(KekId.KEYSTORE, EMPTY_SALT, sealed))

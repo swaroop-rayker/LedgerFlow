@@ -3,7 +3,10 @@ package com.ledgerflow.feature.onboarding
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import androidx.compose.ui.unit.LayoutDirection
+import com.ledgerflow.core.domain.backup.LedgerCounts
 import com.ledgerflow.core.domain.backup.RestoreOutcome
+import com.ledgerflow.core.domain.backup.RestorePreview
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
@@ -21,6 +24,7 @@ import com.ledgerflow.feature.onboarding.notifications.NotificationAccessUiState
 import com.ledgerflow.feature.onboarding.recovery.RecoveryFailure
 import com.ledgerflow.feature.onboarding.recovery.RecoveryScreen
 import com.ledgerflow.feature.onboarding.recovery.RecoveryUiState
+import com.ledgerflow.feature.onboarding.restore.RestoreMode
 import com.ledgerflow.feature.onboarding.restore.RestoreScreen
 import com.ledgerflow.feature.onboarding.restore.RestoreUiState
 import com.ledgerflow.feature.onboarding.upgrade.UpgradeBlockedScreen
@@ -155,13 +159,13 @@ open class FirstRunScreensGoldensTest {
     /** A finished restore's report, as a success notice (E2). */
     @Test
     fun restoreDone_1x() = rule.captureScreenGolden("restore-done-1x", 1f) {
-        LfTheme { RestoreScreen(state = restoreDone, resuming = false, onEvent = {}, onBack = {}) }
+        LfTheme { RestoreScreen(state = restoreDone, onEvent = {}, onBack = {}) }
     }
 
     @Config(qualifiers = PHONE_2X)
     @Test
     fun restoreDone_2x() = rule.captureScreenGolden("restore-done-2x", 2f) {
-        LfTheme { RestoreScreen(state = restoreDone, resuming = false, onEvent = {}, onBack = {}) }
+        LfTheme { RestoreScreen(state = restoreDone, onEvent = {}, onBack = {}) }
     }
 
     /** BUG67's warning, a sheet over the step. */
@@ -220,13 +224,69 @@ open class FirstRunScreensGoldensTest {
 
     @Test
     fun restore_1x() = rule.captureScreenGolden("restore-choosing-1x", 1f) {
-        LfTheme { RestoreScreen(state = restore, resuming = false, onEvent = {}, onBack = {}) }
+        LfTheme { RestoreScreen(state = restore, onEvent = {}, onBack = {}) }
     }
 
     @Config(qualifiers = PHONE_2X)
     @Test
     fun restore_2x() = rule.captureScreenGolden("restore-choosing-2x", 2f) {
-        LfTheme { RestoreScreen(state = restore, resuming = false, onEvent = {}, onBack = {}) }
+        LfTheme { RestoreScreen(state = restore, onEvent = {}, onBack = {}) }
+    }
+
+    // ── From Settings, over this phone's ledger (ADR-0033) ─────────────────
+
+    /**
+     * The confirmation, mockup A: both sides' counts, the warning (words that
+     * change included) and DELETE half-typed, so Replace is still off. RTL as
+     * well: each count line is a name at the start and a figure at the end.
+     */
+    private val replaceConfirm = RestoreUiState(
+        mode = RestoreMode.Replace,
+        treeUri = "content://tree",
+        backups = listOf("ledgerflow-20261103-033000.lfbk"),
+        selectedBackup = "ledgerflow-20261103-033000.lfbk",
+        entry = PhraseEntry(requiredWordCount = 24),
+        preview = RestorePreview.Ready(
+            backup = LedgerCounts(expenses = 412, income = 38, inbox = 5),
+            phone = LedgerCounts(expenses = 430, income = 41, inbox = 9),
+            sameWords = false,
+        ),
+        confirmation = "DEL",
+    )
+
+    @Test
+    fun restoreReplaceConfirm_1x() = rule.captureScreenGolden("restore-replace-confirm-1x", 1f) {
+        LfTheme { RestoreScreen(state = replaceConfirm, onEvent = {}, onBack = {}) }
+    }
+
+    @Config(qualifiers = PHONE_2X)
+    @Test
+    fun restoreReplaceConfirm_2x() = rule.captureScreenGolden("restore-replace-confirm-2x", 2f) {
+        LfTheme { RestoreScreen(state = replaceConfirm, onEvent = {}, onBack = {}) }
+    }
+
+    @Test
+    fun restoreReplaceConfirm_1x_rtl() =
+        rule.captureScreenGolden("restore-replace-confirm-1x-rtl", 1f, LayoutDirection.Rtl) {
+            LfTheme { RestoreScreen(state = replaceConfirm, onEvent = {}, onBack = {}) }
+        }
+
+    /** An interrupted restore from Settings: finish it, or put back the ledger the phone had. */
+    private val resumingWithPutBack = RestoreUiState(
+        mode = RestoreMode.Resuming,
+        entry = PhraseEntry(requiredWordCount = 24),
+        canPutBack = true,
+    )
+
+    @Test
+    fun restorePutBack_1x() = rule.captureScreenGolden("restore-put-back-1x", 1f) {
+        LfTheme { RestoreScreen(state = resumingWithPutBack, onEvent = {}, onBack = null) }
+    }
+
+    @Config(qualifiers = PHONE_2X)
+    @Test
+    fun restorePutBack_2x() = rule.captureScreenGolden("restore-put-back-2x", 2f) {
+        LfTheme { RestoreScreen(state = resumingWithPutBack, onEvent = {}, onBack = null) }
     }
 
     @Test

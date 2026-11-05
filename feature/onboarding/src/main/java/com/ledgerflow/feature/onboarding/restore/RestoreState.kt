@@ -2,6 +2,7 @@ package com.ledgerflow.feature.onboarding.restore
 
 import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.domain.backup.RestoreOutcome
+import com.ledgerflow.core.domain.backup.RestorePreview
 import com.ledgerflow.core.domain.backup.RestoreSource
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.feature.onboarding.phrase.rejectionMessage
@@ -17,6 +18,8 @@ import com.ledgerflow.feature.onboarding.phrase.rejectionMessage
  */
 @Immutable
 public data class RestoreUiState(
+    /** Which of the three restores this is: first run, finishing one, or from Settings. */
+    val mode: RestoreMode = RestoreMode.FirstRun,
     /** The folder the user chose. Null until then, or when a single file was chosen instead. */
     val treeUri: String? = null,
     /** The `.lfbk` files in [treeUri], newest first. */
@@ -34,6 +37,17 @@ public data class RestoreUiState(
     val isWorking: Boolean = false,
     /** The last attempt's outcome, until superseded. A [RestoreOutcome.Done] is final. */
     val result: RestoreOutcome? = null,
+    /**
+     * From Settings: the backup opened and was counted, and the confirmation
+     * page is showing (ADR-0033 c). Null on the words page.
+     */
+    val preview: RestorePreview.Ready? = null,
+    /** What the user has typed on the confirmation page; Replace needs DELETE. */
+    val confirmation: String = "",
+    /** Finishing an interrupted restore from Settings: the vault it set aside can go back. */
+    val canPutBack: Boolean = false,
+    /** The last put-back did not work. Nothing was removed. */
+    val putBackFailed: Boolean = false,
 ) {
     /** Where the backup is, once one is chosen. */
     val source: RestoreSource?
@@ -46,6 +60,35 @@ public data class RestoreUiState(
     val isDone: Boolean get() = result is RestoreOutcome.Done
 
     val canSubmit: Boolean get() = source != null && entry.isComplete && !isWorking && !isDone
+
+    /** The confirmation page, between the words and the replace. */
+    val isConfirming: Boolean get() = preview != null && !isDone
+
+    /**
+     * DELETE, typed (§7.3). Case and surrounding spaces are forgiven — a
+     * keyboard capitalises the first letter of a field on its own — and
+     * nothing else is.
+     */
+    val isConfirmed: Boolean get() = confirmation.trim().equals(CONFIRMATION_WORD, ignoreCase = true)
+
+    val canReplace: Boolean get() = isConfirming && isConfirmed && !isWorking
+
+    public companion object {
+        /** The word §7.3 asks for before anything is destroyed. */
+        public const val CONFIRMATION_WORD: String = "DELETE"
+    }
+}
+
+/** Which restore the screen is doing. */
+public enum class RestoreMode {
+    /** At first run, instead of onboarding (ADR-0026). */
+    FirstRun,
+
+    /** A restore was interrupted; the screen is the only way on. */
+    Resuming,
+
+    /** From Settings, over this phone's ledger (ADR-0033). */
+    Replace,
 }
 
 public sealed interface RestoreEvent {
@@ -60,6 +103,21 @@ public sealed interface RestoreEvent {
     public data class WordCommitted(val word: String) : RestoreEvent
     public data class WordRemoved(val index: Int) : RestoreEvent
     public data object Submitted : RestoreEvent
+
+    /** The restore from Settings' own steps (ADR-0033), grouped so the ViewModel routes them in one place. */
+    public sealed interface FromSettings : RestoreEvent
+
+    /** The confirmation field changed. */
+    public data class ConfirmationChanged(val value: String) : FromSettings
+
+    /** Replace, tapped on the confirmation page with DELETE typed. */
+    public data object Replaced : FromSettings
+
+    /** Back from the confirmation page to the words, which are kept. */
+    public data object ConfirmationLeft : FromSettings
+
+    /** Abandon an interrupted restore from Settings and put back the ledger it set aside. */
+    public data object PutBack : FromSettings
 
     /** The report is read; open the restored ledger. */
     public data object Continued : RestoreEvent
@@ -123,6 +181,10 @@ internal fun RestoreOutcome.message(): String = when (this) {
 
     RestoreOutcome.Failed ->
         "The restore didn't finish. Your backup is untouched. Try again with the same words."
+
+    RestoreOutcome.RolledBack ->
+        "The restore didn't finish, so nothing changed: this phone's ledger is as it was, " +
+            "and your backup is untouched."
 }
 
 /**

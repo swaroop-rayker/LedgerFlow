@@ -65,7 +65,7 @@ class Bug29_BackWithTheKeyboardOpenStaysOnRestoreTest {
         composeRule.runOnUiThread { composeRule.activity.enableEdgeToEdge() }
         composeRule.setContent {
             LfTheme {
-                RestoreScreen(state = state, resuming = false, onEvent = { events += it }, onBack = { backs++ })
+                RestoreScreen(state = state, onEvent = { events += it }, onBack = { backs++ })
             }
         }
     }

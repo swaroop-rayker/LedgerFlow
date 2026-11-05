@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +28,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -35,6 +38,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ledgerflow.core.designsystem.component.LfActionAlignment
 import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfCard
@@ -42,12 +46,15 @@ import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.component.LfScaffold
 import com.ledgerflow.core.designsystem.component.LfScreenTitle
+import com.ledgerflow.core.designsystem.component.LfTextField
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfFormPage
 import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTheme
+import com.ledgerflow.core.domain.backup.LedgerCounts
 import com.ledgerflow.core.domain.backup.RestoreOutcome
+import com.ledgerflow.core.domain.backup.RestorePreview
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.ui.phrase.LfPhraseEntry
 import com.ledgerflow.core.ui.phrase.LfPhraseScanner
@@ -58,19 +65,21 @@ import java.util.TimeZone
 /**
  * The restore flow, wired to its ViewModel — the app shell's entry point.
  *
- * @param resuming a restore on this phone was interrupted; the screen is the
- *   only way on, so there is no back.
- * @param onBack returns to onboarding's first screen. Null when [resuming].
+ * @param mode which restore: at first run, finishing an interrupted one (the
+ *   screen is then the only way on, so there is no back), or from Settings.
+ * @param onBack returns to where the restore was opened from. Null when
+ *   finishing an interrupted one.
  */
 @Composable
-public fun RestoreRoute(resuming: Boolean, onBack: (() -> Unit)?) {
+public fun RestoreRoute(mode: RestoreMode, onBack: (() -> Unit)?) {
     val viewModel: RestoreViewModel = hiltViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    RestoreScreen(state = state, resuming = resuming, onEvent = viewModel::onEvent, onBack = onBack)
+    LaunchedEffect(mode) { viewModel.setMode(mode) }
+    RestoreScreen(state = state, onEvent = viewModel::onEvent, onBack = onBack)
 }
 
 /**
- * Restore from a backup (SPEC.md §7.3 step 3, §16 Q11).
+ * Restore from a backup (SPEC.md §7.3 step 3, §16 Q11; from Settings, ADR-0033).
  *
  * The one action is pinned, as on the Recovery and Back up now screens: at font
  * scale 2.0 the word chips push a scrolling button below the fold (BUG5).
@@ -78,7 +87,6 @@ public fun RestoreRoute(resuming: Boolean, onBack: (() -> Unit)?) {
 @Composable
 public fun RestoreScreen(
     state: RestoreUiState,
-    resuming: Boolean,
     onEvent: (RestoreEvent) -> Unit,
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -91,10 +99,16 @@ public fun RestoreScreen(
         )
         return
     }
+    val preview = state.preview
+    if (state.isConfirming && preview != null) {
+        ReplaceConfirmation(state, preview, onEvent, modifier)
+        return
+    }
 
     val closeKeyboard = rememberCloseKeyboard()
     val leave = onBack?.let { leavingVia(it, onEvent) }
     if (leave != null) RestoreBackHandler(state, leave, closeKeyboard)
+    val resuming = state.mode == RestoreMode.Resuming
 
     LfFormPage(
         title = if (resuming) "Finish restoring" else "Restore a backup",
@@ -106,7 +120,7 @@ public fun RestoreScreen(
         onBack = if (leave != null && !state.isDone) leave else null,
         backEnabled = !state.isWorking,
     ) {
-        RestoreBody(state, resuming, onEvent)
+        RestoreBody(state, onEvent)
     }
 }
 
@@ -115,14 +129,17 @@ public fun RestoreScreen(
  * explanation, the backup choice and the words.
  */
 @Composable
-private fun RestoreBody(state: RestoreUiState, resuming: Boolean, onEvent: (RestoreEvent) -> Unit) {
+private fun RestoreBody(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
         val result = state.result
         if (result is RestoreOutcome.Done) {
             ResultMessage(result)
             return@Column
         }
-        Explanation(resuming)
+        Explanation(state.mode)
+        if (state.mode == RestoreMode.Resuming && (state.canPutBack || state.putBackFailed)) {
+            PutBackChoice(state, onEvent)
+        }
         BackupChoice(state, onEvent)
         result?.let { ResultMessage(it) }
         LfPhraseEntry(
@@ -151,18 +168,154 @@ private fun RestoreBody(state: RestoreUiState, resuming: Boolean, onEvent: (Rest
  * owner's decision turns on, that no new phrase is issued.
  */
 @Composable
-private fun Explanation(resuming: Boolean) {
+private fun Explanation(mode: RestoreMode) {
     LfCard {
         Text(
-            text = if (resuming) {
-                "A restore on this phone didn't finish. Choose the backup again and type the " +
-                    "same 24 words. Nothing is opened until it's done."
-            } else {
-                "Your ledger comes back protected by the backup's own 24 words — you won't be " +
-                    "given new ones. They're used once and forgotten, never saved or sent."
+            text = when (mode) {
+                RestoreMode.Resuming ->
+                    "A restore on this phone didn't finish. Choose the backup again and type the " +
+                        "same 24 words. Nothing is opened until it's done."
+                RestoreMode.FirstRun ->
+                    "Your ledger comes back protected by the backup's own 24 words — you won't be " +
+                        "given new ones. They're used once and forgotten, never saved or sent."
+                RestoreMode.Replace ->
+                    "The backup replaces this phone's ledger. First its words open it, and you see " +
+                        "what's in it; nothing changes until you confirm. The words are used once " +
+                        "and forgotten, never saved or sent."
             },
             style = LfTheme.type.bodySmall,
             color = LfTheme.colors.text.secondary,
+        )
+    }
+}
+
+/**
+ * Finishing an interrupted restore from Settings: the other way on is back to
+ * the ledger the phone had (ADR-0033 e). Second to finishing, not instead of
+ * it, and plainly worded about what it removes.
+ */
+@Composable
+private fun PutBackChoice(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit) {
+    LfCard {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
+            Text(
+                text = if (state.putBackFailed) {
+                    "The ledger this phone had couldn't be put back. Nothing was removed. " +
+                        "Try again, or finish the restore."
+                } else {
+                    "Or go back to the ledger this phone had before the restore started. " +
+                        "What the restore had written so far is removed; the backup is untouched."
+                },
+                style = LfTheme.type.bodySmall,
+                color = if (state.putBackFailed) LfTheme.colors.status.danger else LfTheme.colors.text.secondary,
+            )
+            if (state.canPutBack) {
+                LfActionRow(alignment = LfActionAlignment.Start) {
+                    LfButton(
+                        text = "Put back my ledger",
+                        onClick = { onEvent(RestoreEvent.PutBack) },
+                        enabled = !state.isWorking,
+                        style = LfButtonStyle.Inline,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * From Settings, after the backup has opened (ADR-0033 c, mockup A): what is in
+ * the backup and what is on the phone, each book on its own line (Law 2), what
+ * is lost, and DELETE typed before Replace does anything (§7.3).
+ */
+@Composable
+private fun ReplaceConfirmation(
+    state: RestoreUiState,
+    preview: RestorePreview.Ready,
+    onEvent: (RestoreEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val leave = { onEvent(RestoreEvent.ConfirmationLeft) }
+    BackHandler(enabled = !state.isWorking, onBack = leave)
+    LfFormPage(
+        title = "Replace this phone's ledger?",
+        actionBar = {
+            LfActionBar {
+                LfButton(
+                    text = "Replace",
+                    onClick = { onEvent(RestoreEvent.Replaced) },
+                    enabled = state.canReplace,
+                    loading = state.isWorking,
+                    // The Warning emphasis's confirm, as in LfDialog: an
+                    // irreversible step is never the loudest button on screen.
+                    style = LfButtonStyle.Tonal,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        modifier = modifier,
+        onBack = leave,
+        backEnabled = !state.isWorking,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.sectionGap)) {
+            CountsCard(title = backupTitle(state), counts = preview.backup)
+            CountsCard(title = "On this phone now", counts = preview.phone)
+            LfNotice(
+                tone = LfNoticeTone.Warning,
+                title = "Anything on this phone that isn't in the backup is lost.",
+                body = replaceConsequence(preview.sameWords),
+            )
+            LfTextField(
+                value = state.confirmation,
+                onValueChange = { onEvent(RestoreEvent.ConfirmationChanged(it)) },
+                label = "Type ${RestoreUiState.CONFIRMATION_WORD} to replace",
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+            )
+        }
+    }
+}
+
+/** One side of the comparison: a heading and three counts, words left and figures right. */
+@Composable
+private fun CountsCard(title: String, counts: LedgerCounts) {
+    LfCard {
+        Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
+            Text(text = title, style = LfTheme.type.label, color = LfTheme.colors.text.primary)
+            CountLine("Expenses", counts.expenses)
+            CountLine("Income", counts.income)
+            CountLine("In the Inbox", counts.inbox)
+        }
+    }
+}
+
+@Composable
+private fun CountLine(label: String, count: Int) {
+    LfAdaptiveRow(
+        leading = { Text(text = label, style = LfTheme.type.bodySmall, color = LfTheme.colors.text.secondary) },
+        trailing = {
+            Text(text = count.toString(), style = LfTheme.type.figureLabel, color = LfTheme.colors.text.primary)
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/** "The backup, 3 Nov 2026, 3:00 AM" when its name carries the time; otherwise just the backup. */
+private fun backupTitle(state: RestoreUiState): String {
+    val name = state.selectedBackup ?: return "The backup"
+    val label = backupLabel(name)
+    return if (label == name) "The backup" else "The backup, $label"
+}
+
+/**
+ * What else changes. The words sentence appears only when they do change:
+ * the phone's Recovery Kit would quietly stop working otherwise (ADR-0033 d).
+ */
+internal fun replaceConsequence(sameWords: Boolean): String = buildString {
+    append("Entries, Inbox items and receipts added since the backup was made are gone once it's restored.")
+    if (!sameWords) {
+        append(
+            " This backup was made with different words. Afterwards only its words open your " +
+                "ledger, and this phone's Recovery Kit no longer does.",
         )
     }
 }
@@ -294,6 +447,9 @@ private fun SubmitBar(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit, on
             LfButton(
                 text = when {
                     state.source == null -> "Choose a backup"
+                    // From Settings the words only open the backup; Replace
+                    // is on the next page.
+                    state.entry.isComplete && state.mode == RestoreMode.Replace -> "Continue"
                     state.entry.isComplete -> "Restore"
                     else -> "${state.entry.remaining} words to go"
                 },
@@ -398,7 +554,6 @@ private fun RestoreChoosingPreview() {
                 selectedBackup = "ledgerflow-20260918-101500.lfbk",
                 entry = PhraseEntry(requiredWordCount = 24, draft = "aban", suggestions = listOf("abandon")),
             ),
-            resuming = false,
             onEvent = {},
             onBack = {},
         )
@@ -422,7 +577,32 @@ private fun RestoreDonePreview() {
                     imagesFailed = 0,
                 ),
             ),
-            resuming = false,
+            onEvent = {},
+            onBack = {},
+        )
+    }
+}
+
+@PreviewScreenSizes
+@PreviewFontScale
+@PreviewLightDark
+@Composable
+private fun RestoreReplaceConfirmPreview() {
+    LfTheme {
+        RestoreScreen(
+            state = RestoreUiState(
+                mode = RestoreMode.Replace,
+                treeUri = "content://tree",
+                backups = listOf("ledgerflow-20261103-033000.lfbk"),
+                selectedBackup = "ledgerflow-20261103-033000.lfbk",
+                entry = PhraseEntry(requiredWordCount = 24),
+                preview = RestorePreview.Ready(
+                    backup = LedgerCounts(expenses = 412, income = 38, inbox = 5),
+                    phone = LedgerCounts(expenses = 430, income = 41, inbox = 9),
+                    sameWords = false,
+                ),
+                confirmation = "DEL",
+            ),
             onEvent = {},
             onBack = {},
         )
