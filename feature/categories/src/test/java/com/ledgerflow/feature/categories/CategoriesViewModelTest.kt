@@ -1,5 +1,6 @@
 package com.ledgerflow.feature.categories
 
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.taxonomy.TaxonomyError
 import com.ledgerflow.core.domain.taxonomy.TaxonomyResult
@@ -66,7 +67,7 @@ class CategoriesViewModelTest {
      * `state` is a `stateIn(WhileSubscribed)`, so nothing flows until something
      * collects. Every test starts a collector and settles the scheduler.
      */
-    private fun viewModel(): Pair<CategoriesViewModel, CoroutineScope> {
+    private fun viewModel(handle: SavedStateHandle = SavedStateHandle()): Pair<CategoriesViewModel, CoroutineScope> {
         val vm = CategoriesViewModel(
             categories = categories,
             merchants = merchants,
@@ -79,6 +80,7 @@ class CategoriesViewModelTest {
             purgeCategory = PurgeHiddenCategoryUseCase(categories),
             purgeMerchant = PurgeHiddenMerchantUseCase(merchants),
             purgePaymentMethod = PurgeHiddenPaymentMethodUseCase(paymentMethods),
+            savedStateHandle = handle,
         )
         val scope = CoroutineScope(dispatcher)
         scope.launch { vm.state.collect {} }
@@ -87,6 +89,29 @@ class CategoriesViewModelTest {
     }
 
     private fun CategoriesViewModel.settle() = dispatcher.scheduler.advanceUntilIdle()
+
+    /** Analytics' "Categorise in Merchants" (V2-6): Organise opens on the merchants still to file. */
+    @Test
+    fun openedForUncategorisedMerchants_startsOnThatFilter() {
+        val handle = SavedStateHandle(
+            mapOf(CategoriesViewModel.VIEW_ARG to CategoriesViewModel.VIEW_UNCATEGORISED_MERCHANTS),
+        )
+        val (vm, scope) = viewModel(handle)
+
+        assertThat(vm.state.value.section).isEqualTo(TaxonomySection.Merchants)
+        assertThat(vm.state.value.merchantFilter).isEqualTo(MerchantFilter.Uncategorised)
+        scope.cancel()
+    }
+
+    /** From Settings, with no view named, it opens as it always did. */
+    @Test
+    fun openedPlainly_startsOnCategories() {
+        val (vm, scope) = viewModel()
+
+        assertThat(vm.state.value.section).isEqualTo(TaxonomySection.Categories)
+        assertThat(vm.state.value.merchantFilter).isEqualTo(MerchantFilter.All)
+        scope.cancel()
+    }
 
     /**
      * Say yes to the "are you sure?" that now precedes every delete.

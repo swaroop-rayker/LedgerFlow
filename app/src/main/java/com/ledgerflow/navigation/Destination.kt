@@ -70,9 +70,16 @@ public sealed interface Destination {
     @Serializable
     public data class Entry(val draftId: String? = null) : Destination
 
-    /** Reached from Settings > Organise. */
+    /**
+     * Reached from Settings > Organise, and from Analytics' "Categorise in
+     * Merchants" (V2-6), which opens it on [view] =
+     * `CategoriesViewModel.VIEW_UNCATEGORISED_MERCHANTS`. **The property name is
+     * a contract**, as [Inbox.filter] is: `CategoriesViewModel.VIEW_ARG` reads
+     * it by string, and `OrganiseViewArgumentTest` fails the build if the two
+     * drift. Null opens Organise as it always opened.
+     */
     @Serializable
-    public data object Categories : Destination
+    public data class Categories(val view: String? = null) : Destination
 
     /** Budget management (§5.7). Reached from Settings, like Categories. */
     @Serializable

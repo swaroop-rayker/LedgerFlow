@@ -333,6 +333,11 @@ public data class AnalyticsSnapshot(
      * that makes a netted figure impossible to write by accident.
      */
     val parallelBooks: List<ParallelBucket> = emptyList(),
+    /**
+     * A11 - the same spending by merchant category, regrouped from [merchants]
+     * (V2-6). Adds up to [total], Uncategorised and No merchant included.
+     */
+    val merchantCategories: MerchantCategoryBreakdown = MerchantCategoryBreakdown.Empty,
 ) {
     public val isEmpty: Boolean get() = total.minor == 0L && transactionCount == 0
 

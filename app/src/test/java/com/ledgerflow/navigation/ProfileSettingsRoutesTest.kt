@@ -73,7 +73,7 @@ class ProfileSettingsRoutesTest {
                 "Payment apps" to Destination.PaymentApps,
             ),
             SettingsPage.Organise to listOf(
-                "Categories & merchants" to Destination.Categories,
+                "Categories & merchants" to Destination.Categories(),
                 "Budgets" to Destination.Budgets,
             ),
             SettingsPage.Data to listOf(

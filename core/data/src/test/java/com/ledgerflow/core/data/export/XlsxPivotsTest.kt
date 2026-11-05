@@ -93,6 +93,49 @@ class XlsxPivotsTest {
         assertThat(XlsxPivots.monthlyTotals(emptyList(), emptyList()).rows).isEmpty()
     }
 
+    // ── Spending by merchant category (V2-6) ───────────────────────────────
+
+    /** Ranked by total; Uncategorised (unfiled, or filed under a hidden one) then No merchant last. */
+    @Test
+    fun byMerchantCategory_ranksFiled_thenUncategorised_thenNoMerchant() {
+        val sheet = XlsxPivots.byMerchantCategoryAndMonth(
+            buckets = listOf(
+                shop(SEP_3, "shell", 300),
+                shop(SEP_20, "bigbazaar", 900),
+                shop(OCT_1, "zepto", 200),
+                shop(OCT_1, "oldshop", 50),
+                shop(OCT_1, "", 70),
+            ),
+            merchantCategoryOf = mapOf(
+                "shell" to "fuel",
+                "bigbazaar" to "groceries",
+                "zepto" to null,
+                "oldshop" to "hidden-category",
+            ),
+            merchantCategoryNames = mapOf("fuel" to "Fuel", "groceries" to "Groceries"),
+        )
+
+        assertThat(sheet.name).isEqualTo(XlsxPivots.MERCHANT_CATEGORY_SHEET)
+        assertThat(sheet.header).containsExactly("Merchant category", "2026-09", "2026-10", "Total").inOrder()
+        assertThat(sheet.rows.map { it.label })
+            .containsExactly("Groceries", "Fuel", "Uncategorised", "No merchant", "Total").inOrder()
+        assertThat(sheet.rows.first { it.label == "Uncategorised" }.cells).containsExactly(null, 250L, 250L).inOrder()
+        // The rows add up to the book: nothing dropped for want of a category.
+        assertThat(sheet.rows.last().cells.last()).isEqualTo(1_520L)
+    }
+
+    @Test
+    fun byMerchantCategory_refusesTheIncomeBook() {
+        val stray = bucket(LedgerType.CREDIT, SEP_3, "", 10)
+        val failure = runCatching {
+            XlsxPivots.byMerchantCategoryAndMonth(listOf(stray), emptyMap(), emptyMap())
+        }.exceptionOrNull()
+        assertThat(failure).isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    private fun shop(day: Int, merchant: String, minor: Long) =
+        bucket(LedgerType.DEBIT, day, "c", minor).copy(merchantId = merchant)
+
     private fun debit(day: Int, category: String, minor: Long) = bucket(LedgerType.DEBIT, day, category, minor)
     private fun credit(day: Int, category: String, minor: Long) = bucket(LedgerType.CREDIT, day, category, minor)
 
