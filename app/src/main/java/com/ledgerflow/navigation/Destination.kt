@@ -123,6 +123,13 @@ public sealed interface Destination {
      * Settings > Data. Full-screen for the same reason as [BackUpNow]: it takes
      * the 24 words.
      */
+    /**
+     * Import a statement into the Inbox (V2-4, D8), reached from Settings > Data.
+     * Full-screen: three pages of its own, with nothing to wander off to.
+     */
+    @Serializable
+    public data object ImportStatement : Destination
+
     @Serializable
     public data object RestoreBackup : Destination
 

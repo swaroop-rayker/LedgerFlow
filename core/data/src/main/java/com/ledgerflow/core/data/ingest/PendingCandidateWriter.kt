@@ -61,6 +61,24 @@ public class PendingCandidateWriter @Inject constructor(
     public data class RawVerdict(val ruleId: String?)
 
     /**
+     * Who decides whether a candidate is a duplicate.
+     *
+     * Not a source check either (CLAUDE.md §0): it says *how* the caller
+     * observed the transaction. A live capture is compared by §3.1's capture
+     * window. A statement import (V2-4) captures every row in the same instant
+     * for payments made weeks apart, so the window would merge two ₹410 orders
+     * on different days; it compares the stated dates itself and hands the
+     * answer in.
+     */
+    public sealed interface Duplicates {
+        /** §3.1: other candidates captured within ±3 minutes, matched here. */
+        public data object CaptureWindow : Duplicates
+
+        /** Already decided by the caller: [of] is what this repeats, or null for nothing. */
+        public data class Decided(val of: String?) : Duplicates
+    }
+
+    /**
      * The one insert path, shared by every source (§3.1, §5.1, §5.3).
      *
      * Extracted when OCR arrived. Reimplementing the dedupe for receipts would
@@ -74,7 +92,9 @@ public class PendingCandidateWriter @Inject constructor(
         refId: String,
         candidate: PendingCandidate,
         verdict: RawVerdict?,
+        duplicates: Duplicates = Duplicates.CaptureWindow,
     ): PendingWriteOutcome {
+        if (duplicates is Duplicates.Decided) return writeDecided(database, refId, candidate, duplicates.of)
         val pendingDao = database.pendingTransactionDao()
 
         return runCatching {
@@ -196,6 +216,49 @@ public class PendingCandidateWriter @Inject constructor(
             // follows: a worker that throws is a crash in a background process.
             PendingWriteOutcome.Failed(throwable.message ?: throwable::class.java.name)
         }
+    }
+
+    /**
+     * [Duplicates.Decided]: the same insert and the same transaction, with the
+     * caller's answer in place of the window. Never a retroactive flip — the
+     * row it repeats is already in LedgerFlow, often already approved, and is
+     * not touched. The same reference twice is refused as for any capture.
+     */
+    private suspend fun writeDecided(
+        database: LedgerFlowDatabase,
+        refId: String,
+        candidate: PendingCandidate,
+        duplicateOf: String?,
+    ): PendingWriteOutcome = runCatching {
+        val pendingDao = database.pendingTransactionDao()
+        database.withTransaction {
+            pendingDao.idForRawRef(refId)?.let { return@withTransaction PendingWriteOutcome.AlreadyPending(it) }
+            val pendingId = ids.generate()
+            pendingDao.insert(
+                PendingTransactionEntity(
+                    id = pendingId,
+                    source = candidate.source,
+                    dedupeKey = candidate.dedupeKey,
+                    suppressedById = duplicateOf,
+                    rawRefId = refId,
+                    extractedJson = ExtractedTransactionJson.encode(candidate.extracted),
+                    confidence = candidate.confidence,
+                    status = PendingStatus.PENDING,
+                    needsManualFill = candidate.needsManualFill,
+                    createdAt = clock.nowMillis(),
+                    reviewedAt = null,
+                    approvedEntryId = null,
+                    nonTransactionKind = candidate.nonTransactionKind,
+                ),
+            )
+            if (duplicateOf == null) {
+                PendingWriteOutcome.Created(pendingId)
+            } else {
+                PendingWriteOutcome.Suppressed(pendingId, duplicateOf)
+            }
+        }
+    }.getOrElse { throwable ->
+        PendingWriteOutcome.Failed(throwable.message ?: throwable::class.java.name)
     }
 
     /**

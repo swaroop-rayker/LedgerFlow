@@ -1,0 +1,4 @@
+S No.	Transaction Date	Transaction Remarks	Amount (INR)	Dr / Cr	Balance (INR)
+1	2026-10-02	UPI/628812345678/Swiggy/swiggy@axis	410.00	DR	84590.00
+2	2026-10-03	NEFT-ACME LTD-SALARY	85000.00	CR	169590.00
+3	2026-10-30	REV-UPI/628812345678/Swiggy refund	410.00	CR	170000.00

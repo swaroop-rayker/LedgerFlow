@@ -463,6 +463,24 @@ public interface LedgerEntryDao {
     public fun observeCredits(): Flow<List<CreditEntryView>>
 
     /**
+     * Live debit entries of exactly this amount on these days, oldest first —
+     * a statement import's "already in LedgerFlow?" (V2-4). One query per book,
+     * through its view, so the two can never be asked together (Law 2).
+     */
+    @Query(
+        "SELECT id FROM debit_entries WHERE amount_minor = :amountMinor " +
+            "AND local_date BETWEEN :fromDay AND :toDay ORDER BY local_date, occurred_at",
+    )
+    public suspend fun debitIdsMatching(amountMinor: Long, fromDay: Int, toDay: Int): List<String>
+
+    /** The credit book's mirror of [debitIdsMatching]. */
+    @Query(
+        "SELECT id FROM credit_entries WHERE amount_minor = :amountMinor " +
+            "AND local_date BETWEEN :fromDay AND :toDay ORDER BY local_date, occurred_at",
+    )
+    public suspend fun creditIdsMatching(amountMinor: Long, fromDay: Int, toDay: Int): List<String>
+
+    /**
      * One book's entries, page by page, joined to the names the list shows.
      *
      * **Paged, not a `Flow<List<..>>`** (CLAUDE.md §8). The two `observeDebits`

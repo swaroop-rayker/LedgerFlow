@@ -16,6 +16,9 @@ import com.ledgerflow.core.data.backup.BackupFolderResolver
 import com.ledgerflow.core.data.backup.DefaultBackupRepository
 import com.ledgerflow.core.data.backup.DefaultRestoreRepository
 import com.ledgerflow.core.data.backup.SafBackupDocumentReader
+import com.ledgerflow.core.data.statement.DefaultStatementImportRepository
+import com.ledgerflow.core.data.statement.SafStatementDocumentSource
+import com.ledgerflow.core.data.statement.StatementDocumentSource
 import com.ledgerflow.core.data.backup.SafBackupFolderResolver
 import com.ledgerflow.core.data.export.DefaultExportRepository
 import com.ledgerflow.core.data.inbox.DefaultPendingRepository
@@ -41,6 +44,7 @@ import com.ledgerflow.core.domain.diagnostics.CrashReportRepository
 import com.ledgerflow.core.domain.diagnostics.IngestDiagnosticsRepository
 import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.backup.RestoreRepository
+import com.ledgerflow.core.domain.statement.StatementImportRepository
 import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
@@ -301,4 +305,12 @@ public interface IngestModule {
     /** A single picked `.lfbk`, read through SAF. A seam for the same reason as the folder's. */
     @Binds
     public fun backupDocumentReader(impl: SafBackupDocumentReader): BackupDocumentReader
+
+    /** Import a statement into the Inbox (V2-4, D8). */
+    @Binds
+    public fun statementImportRepository(impl: DefaultStatementImportRepository): StatementImportRepository
+
+    /** A picked statement, read through SAF; a seam so the import is tested against bytes. */
+    @Binds
+    public fun statementDocumentSource(impl: SafStatementDocumentSource): StatementDocumentSource
 }
