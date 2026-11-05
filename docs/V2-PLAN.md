@@ -1,7 +1,8 @@
 # Plan — LedgerFlow v2 (for general users)
 
-Status: **V2-1, V2-2 and five of V2-3's seven PRs merged (2026-10-25);
-the Night Vault redesign merged (2026-10-31).** Written 2026-09-30 from the
+Status: **V2-1, V2-2, V2-3 and V2-6 merged (V2-3 and V2-6 completed
+2026-11-05); the Night Vault redesign merged (2026-10-31). V2-4 is next.**
+Written 2026-09-30 from the
 owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 
 | Item | State |
@@ -20,10 +21,12 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-3 · Allowlist editor | Merged, PR #11 (`5c4ce8a`, 2026-10-25): §3.4; SPEC §9.3, §5.2, §16 Q4 |
 | V2-3 · App lock + screenshot block | Merged, PR #12 (`0cc93ea`, 2026-10-25): §3.5; SPEC §7.6, §9.3; platform `BiometricPrompt`, `USE_BIOMETRIC` pinned |
 | Night Vault redesign | Merged, PR #13 (`a5bc471`, 2026-10-31), squashed from `redesign/design-system`: `DESIGN_SYSTEM_PLAN.md` steps A–G plus the compact Organise layout; ADR-0031; `docs/DESIGN_SYSTEM.md` is the guide. Profile is the fourth tab and every Settings section is its own page (D7, amended). The new Organise screen has not been checked on the phone |
-| V2-3 · Hide amounts + Data permissions | Built on `claude/v2-3-hide-amounts` (§3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended). Not yet merged |
-| V2-3 · About | Built on `claude/v2-3-about`, stacked on #15 (§3.8; SPEC §9.3, §9.4). Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. The public contact email is still the owner's. Not yet merged |
+| BUG83 picker choice | Merged, PR #21 (`0866341`, 2026-11-01): the picker's chosen row is filled and ticked |
+| V2-3 · Hide amounts + Data permissions | Merged, PR #15 (`47f75bc`, 2026-11-05): §3.5; SPEC §9.3, §9.4, §9.6; ADR-0030 amended |
+| V2-3 · About | Merged, PR #17 (`764ff02`, 2026-11-05): §3.8; SPEC §9.3, §9.4. Owner, 2026-10-31: AboutLibraries' Gradle plugin for the licences (ADR-0032), hand-written What's new, drafted Terms. Still open: the public contact email (the owner's) and a review of the drafted Terms |
+| BUG81 RTL rows | PR #16, `claude/lfadaptiverow-rtl`. Not yet merged: since the V2-6 stack merged it conflicts with `main` in `LfEntryRow.kt`, SPEC.md and the two `ledger-expenses-rtl` goldens, which need re-recording and review |
 | LedgerFlow PIN | Decided (§3.5, 2026-10-25), not scheduled. Needs its own ADR at the next free number before any code; the owner places it in the order |
-| V2-6 · Merchant categories | Owner, 2026-10-31: four PRs (§5.5's note). PR 1, schema v13 and the data layer with BUG82: #18, stacked on #17. PR 2, Organise (filing merchants, merchants grouped by category, the Merchant categories page): #19, stacked on #18. PR 3, the merchant picker's browse by category: #20, stacked on #19. PR 4, Analytics by merchant category (A11), the merchant-category filter and the XLSX sheet: #22, stacked on #20. PR 5, a merchant's entries page: #23, stacked on #22. PR 6, the Ledger's merchant-category filter, built on `claude/v2-6-ledger-filter`, stacked on #23. Not yet merged |
+| V2-6 · Merchant categories | Merged 2026-11-05, six PRs (§5.5's note). PR 1, schema v13 and the data layer with BUG82: #18 (`2c8d1d2`). PR 2, Organise (filing merchants, merchants grouped by category, the Merchant categories page): #19 (`e884b6c`). PR 3, the merchant picker's browse by category: #20 (`f19d9a5`). PR 4, Analytics by merchant category (A11), the merchant-category filter and the XLSX sheet: #22 (`9c7dd1e`). PR 5, a merchant's entries page: #23 (`b316ec4`). PR 6, the Ledger's merchant-category filter: #24 (`b9d39bd`). The stack's top branch passed the full uncached gate before merging, and `main` after #24 has exactly its tree |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
