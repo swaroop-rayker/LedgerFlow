@@ -37,6 +37,18 @@ public class ObserveVaultStateUseCase @Inject constructor(
 }
 
 /**
+ * Which vault the app has ([VaultRepository.generation]), for the shell to
+ * rebuild itself and re-run its once-per-vault housekeeping when a restore
+ * from Settings replaces it (ADR-0033 h). Forwarding, for the same reason as
+ * [ObserveVaultStateUseCase].
+ */
+public class ObserveVaultGenerationUseCase @Inject constructor(
+    private val vault: VaultRepository,
+) {
+    public operator fun invoke(): StateFlow<Long> = vault.generation
+}
+
+/**
  * First run (SPEC.md §7.4), once the entire gate has been satisfied.
  *
  * Seeding the starter taxonomy belongs here rather than inside the vault: the

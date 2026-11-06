@@ -17,6 +17,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,7 @@ import com.ledgerflow.feature.onboarding.OnboardingViewModel
 import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
 import com.ledgerflow.feature.onboarding.recovery.RecoveryScreen
 import com.ledgerflow.feature.onboarding.recovery.RecoveryViewModel
+import com.ledgerflow.feature.onboarding.restore.RestoreMode
 import com.ledgerflow.feature.onboarding.restore.RestoreRoute
 import com.ledgerflow.feature.onboarding.upgrade.UpgradeBlockedScreen
 import com.ledgerflow.feature.onboarding.upgrade.UpgradingScreen
@@ -290,7 +292,7 @@ private fun LedgerFlowApp(
             // out of the restore they were in.
             var restoring by rememberSaveable { mutableStateOf(false) }
             if (restoring) {
-                RestoreRoute(resuming = false, onBack = { restoring = false })
+                RestoreRoute(mode = RestoreMode.FirstRun, onBack = { restoring = false })
             } else {
                 val viewModel: OnboardingViewModel = hiltViewModel()
                 // collectAsStateWithLifecycle, never bare collectAsState
@@ -308,7 +310,7 @@ private fun LedgerFlowApp(
 
         // The same screen and ViewModel as the branch above, with no way back:
         // an interrupted restore is finished, not abandoned into onboarding.
-        AppRoute.RestoreInterrupted -> RestoreRoute(resuming = true, onBack = null)
+        AppRoute.RestoreInterrupted -> RestoreRoute(mode = RestoreMode.Resuming, onBack = null)
 
         is AppRoute.Recovery -> {
             val viewModel: RecoveryViewModel = hiltViewModel()
@@ -325,6 +327,7 @@ private fun LedgerFlowApp(
 
         AppRoute.Ready -> {
             val prompt by appViewModel.notificationSetupPrompt.collectAsStateWithLifecycle()
+            val vault by appViewModel.vaultGeneration.collectAsStateWithLifecycle()
             ReadyRoute(
                 deepLink = deepLink,
                 prompt = prompt,
@@ -340,12 +343,18 @@ private fun LedgerFlowApp(
                     )
                 },
                 shell = {
-                    LedgerFlowShell(
-                        deepLink = deepLink,
-                        onDeepLinkHandled = onDeepLinkHandled,
-                        motionLevel = motionLevel,
-                        startScreen = startScreen,
-                    )
+                    // A different vault is a different app state: a restore
+                    // from Settings lands on a shell built afresh at Home, with
+                    // no screen or ViewModel left over from the vault it
+                    // replaced (ADR-0033 h). Same call site, so BUG59 holds.
+                    key(vault) {
+                        LedgerFlowShell(
+                            deepLink = deepLink,
+                            onDeepLinkHandled = onDeepLinkHandled,
+                            motionLevel = motionLevel,
+                            startScreen = startScreen,
+                        )
+                    }
                 },
             )
         }

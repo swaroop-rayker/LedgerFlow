@@ -2,6 +2,7 @@ package com.ledgerflow
 
 import com.google.common.truth.Truth.assertThat
 import com.ledgerflow.core.domain.ingest.NotificationSetupStore
+import com.ledgerflow.core.domain.usecase.ObserveVaultGenerationUseCase
 import com.ledgerflow.core.domain.usecase.ObserveVaultStateUseCase
 import com.ledgerflow.core.domain.usecase.OpenVaultOnLaunchUseCase
 import com.ledgerflow.core.domain.usecase.PurgeAbandonedDraftsUseCase
@@ -63,6 +64,7 @@ class AppViewModelTest {
 
     private fun viewModel(vault: FakeVaultRepository) = AppViewModel(
         observeVaultState = ObserveVaultStateUseCase(vault),
+        observeVaultGeneration = ObserveVaultGenerationUseCase(vault),
         openVaultOnLaunch = OpenVaultOnLaunchUseCase(vault),
         purgeAbandonedDrafts = PurgeAbandonedDraftsUseCase(drafts),
         seedIngestAllowlists = SeedIngestAllowlistsUseCase(ingest),
@@ -228,7 +230,31 @@ class AppViewModelTest {
         job.cancel()
     }
 
-    /** One sweep per process. `first` cancels the collection rather than subscribing. */
+    /**
+     * A restore from Settings hands the app a different vault (ADR-0033 h),
+     * and that vault gets the housekeeping too: a restored older backup needs
+     * the seeds a migrated vault gets, and its drafts their sweep.
+     */
+    @Test
+    fun housekeeping_runsAgain_whenARestoreHandsOverAnotherVault() = runTest(dispatcher) {
+        val vault = FakeVaultRepository(VaultState.Unlocked)
+        val subject = viewModel(vault)
+        val job = launch { subject.route.collect {} }
+        dispatcher.scheduler.advanceUntilIdle()
+        assertThat(drafts.purgeCalls).isEqualTo(1)
+        val generation = subject.vaultGeneration.value
+
+        vault.emit(VaultState.Working)
+        vault.handOverAnotherVault()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertThat(drafts.purgeCalls).isEqualTo(2)
+        assertThat(parsePassesRequested).isEqualTo(2)
+        assertThat(subject.vaultGeneration.value).isGreaterThan(generation)
+        job.cancel()
+    }
+
+    /** One sweep per vault: the same vault reopening is not a new one. */
     @Test
     fun purge_runsOnceEvenIfTheVaultReopens() = runTest(dispatcher) {
         val vault = FakeVaultRepository(VaultState.Unlocked)

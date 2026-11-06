@@ -7,7 +7,9 @@ import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.data.ingest.AttachmentBackup
 import com.ledgerflow.core.data.ingest.AttachmentRestoreReport
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.domain.backup.PutBackOutcome
 import com.ledgerflow.core.domain.backup.RestoreOutcome
+import com.ledgerflow.core.domain.backup.RestorePreview
 import com.ledgerflow.core.domain.backup.RestoreRepository
 import com.ledgerflow.core.domain.backup.RestoreSource
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,7 +38,8 @@ public class SafBackupDocumentReader @Inject constructor(
 }
 
 /**
- * Restoring a backup onto a new install (SPEC.md §7.3 step 3, §16 Q11).
+ * Restoring a backup: onto a new install (SPEC.md §7.3 step 3, §16 Q11), or
+ * from Settings over the phone's vault (ADR-0033).
  *
  * The vault half — refusing when a vault exists, decrypting before writing,
  * the marker, the wrap under the backup's phrase, the one-transaction import —
@@ -63,40 +66,70 @@ public class DefaultRestoreRepository @Inject constructor(
     }
 
     override suspend fun restore(source: RestoreSource, words: List<String>): RestoreOutcome =
-        withContext(io) {
-            val folder: BackupFolder?
-            val bytes: ByteArray?
-            when (source) {
-                is RestoreSource.InFolder -> {
-                    folder = folders.resolve(source.treeUri)
-                    bytes = folder?.read(source.fileName)
-                }
-                is RestoreSource.SingleFile -> {
-                    folder = null
-                    bytes = documents.read(source.documentUri)
-                }
-            }
-            if (bytes == null) return@withContext RestoreOutcome.SourceUnreadable
-            val treeUri = (source as? RestoreSource.InFolder)?.treeUri
+        restoreWith(source, words) { seed, bytes, treeUri ->
+            session.restoreFromBackup(words, seed, bytes, treeUri)
+        }
 
+    override suspend fun replace(source: RestoreSource, words: List<String>): RestoreOutcome =
+        restoreWith(source, words) { seed, bytes, treeUri ->
+            session.replaceFromBackup(words, seed, bytes, treeUri)
+        }
+
+    /**
+     * Either restore: read the backup, hand it to the session, and once its
+     * rows are in, the images beside it — then the marker goes.
+     */
+    private suspend fun restoreWith(
+        source: RestoreSource,
+        words: List<String>,
+        rowsFrom: suspend (seed: ByteArray, bytes: ByteArray, treeUri: String?) -> RestoreOutcome,
+    ): RestoreOutcome = withContext(io) {
+        val read = read(source) ?: return@withContext RestoreOutcome.SourceUnreadable
+        val seed = Bip39.toSeed(words)
+        try {
+            when (val rows = rowsFrom(seed, read.bytes, read.treeUri)) {
+                is RestoreOutcome.Done -> {
+                    val images = read.folder?.let { attachments.restoreAll(it, seed) }
+                        ?: attachments.reportWithoutFolder()
+                    session.completeRestore()
+                    rows.withImages(images)
+                }
+                else -> rows
+            }
+        } finally {
+            seed.fill(0)
+        }
+    }
+
+    override suspend fun preview(source: RestoreSource, words: List<String>): RestorePreview =
+        withContext(io) {
+            val read = read(source) ?: return@withContext RestorePreview.Refused(RestoreOutcome.SourceUnreadable)
             val seed = Bip39.toSeed(words)
             try {
-                when (val rows = session.restoreFromBackup(words, seed, bytes, treeUri)) {
-                    is RestoreOutcome.Done -> {
-                        val images = folder?.let { attachments.restoreAll(it, seed) }
-                            ?: attachments.reportWithoutFolder()
-                        session.completeRestore()
-                        rows.withImages(images)
-                    }
-                    else -> rows
-                }
+                session.previewBackup(words, seed, read.bytes)
             } finally {
                 seed.fill(0)
             }
         }
 
+    override suspend fun canPutBack(): Boolean = session.canPutBack()
+
+    override suspend fun putBack(): PutBackOutcome =
+        if (session.putBackReplacedVault()) PutBackOutcome.Done else PutBackOutcome.Failed
+
     override suspend fun finish() {
         session.finishRestore()
+    }
+
+    /** The backup's bytes, and the folder they came from when there is one. */
+    private class ReadBackup(val bytes: ByteArray, val folder: BackupFolder?, val treeUri: String?)
+
+    private fun read(source: RestoreSource): ReadBackup? = when (source) {
+        is RestoreSource.InFolder -> {
+            val folder = folders.resolve(source.treeUri)
+            folder?.read(source.fileName)?.let { ReadBackup(it, folder, source.treeUri) }
+        }
+        is RestoreSource.SingleFile -> documents.read(source.documentUri)?.let { ReadBackup(it, null, null) }
     }
 
     private fun RestoreOutcome.Done.withImages(images: AttachmentRestoreReport): RestoreOutcome.Done =

@@ -73,7 +73,6 @@ class Bug43_FirstRunChoiceRowsAreFullSizeTargetsTest {
                         selectedBackup = backups.first(),
                         entry = PhraseEntry(requiredWordCount = 24),
                     ),
-                    resuming = false,
                     onEvent = {},
                     onBack = {},
                 )

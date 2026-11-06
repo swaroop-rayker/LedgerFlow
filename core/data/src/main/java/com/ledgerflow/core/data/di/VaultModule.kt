@@ -32,6 +32,7 @@ import com.ledgerflow.core.data.taxonomy.DefaultPaymentMethodRepository
 import com.ledgerflow.core.data.vault.Bip39PhraseValidator
 import com.ledgerflow.core.data.vault.DefaultStorageMaintenance
 import com.ledgerflow.core.data.vault.RecoveryKitWriter
+import com.ledgerflow.core.data.vault.VaultFiles
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.BudgetRepository
@@ -84,7 +85,16 @@ public object CryptoModule {
     public fun wrappedDekStore(@ApplicationContext context: Context): WrappedDekStore =
         // The lambda matters: `context.filesDir` stats the data directory, and
         // this provider runs during graph construction on the main thread.
-        FileWrappedDekStore { File(context.filesDir, KEY_DIRECTORY) }
+        FileWrappedDekStore { File(context.filesDir, VaultFiles.KEY_DIRECTORY) }
+
+    /**
+     * The same key directory, and the receipts' directory, for the one thing
+     * that moves a whole vault: a restore from Settings sets it aside
+     * (ADR-0033 e).
+     */
+    @Provides
+    @Singleton
+    public fun vaultFiles(@ApplicationContext context: Context): VaultFiles = VaultFiles.forApp(context)
 
     @Provides
     @Singleton
@@ -98,7 +108,6 @@ public object CryptoModule {
         random: SecureRandom,
     ): DekManager = DekManager(store, keystoreKek, random)
 
-    private const val KEY_DIRECTORY = "keys"
 }
 
 /** Binds the domain ports to their `:core:data` implementations. */

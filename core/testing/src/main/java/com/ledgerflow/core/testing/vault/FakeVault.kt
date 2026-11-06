@@ -35,9 +35,24 @@ public class FakeVaultRepository(
     public var phraseAttempts: MutableList<List<String>> = mutableListOf()
     public var openOnLaunchCalls: Int = 0
 
+    private val _generation = MutableStateFlow(if (initial == VaultState.Unlocked) 1L else 0L)
+    override val generation: StateFlow<Long> = _generation
+
+    /**
+     * The first Unlocked hands the app its vault, as in `VaultSession`. The
+     * same vault reopening is not a new one; a replace from Settings, which
+     * hands over a different vault, is [handOverAnotherVault].
+     */
     public fun emit(next: VaultState) {
+        if (next == VaultState.Unlocked && _generation.value == 0L) _generation.value = 1L
         _state.value = next
         emitted += next
+    }
+
+    /** A different vault becomes the app's (ADR-0033 h). */
+    public fun handOverAnotherVault() {
+        _generation.value++
+        emit(VaultState.Unlocked)
     }
 
     override suspend fun openOnLaunch() {

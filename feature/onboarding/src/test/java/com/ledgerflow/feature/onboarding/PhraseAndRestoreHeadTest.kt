@@ -103,7 +103,6 @@ class PhraseAndRestoreHeadTest {
             LfTheme {
                 RestoreScreen(
                     state = RestoreUiState(entry = PhraseEntry(requiredWordCount = 24)),
-                    resuming = false,
                     onEvent = {},
                     onBack = { back++ },
                 )
@@ -119,7 +118,6 @@ class PhraseAndRestoreHeadTest {
             LfTheme {
                 RestoreScreen(
                     state = RestoreUiState(entry = PhraseEntry(requiredWordCount = 24), isWorking = true),
-                    resuming = false,
                     onEvent = {},
                     onBack = {},
                 )

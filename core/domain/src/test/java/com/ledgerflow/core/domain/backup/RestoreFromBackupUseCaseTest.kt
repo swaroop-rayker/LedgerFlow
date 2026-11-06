@@ -32,9 +32,21 @@ class RestoreFromBackupUseCaseTest {
             return RestoreOutcome.WrongPhrase
         }
         override suspend fun finish() = Unit
+        override suspend fun preview(source: RestoreSource, words: List<String>): RestorePreview {
+            calls++
+            return RestorePreview.Refused(RestoreOutcome.WrongPhrase)
+        }
+        override suspend fun replace(source: RestoreSource, words: List<String>): RestoreOutcome {
+            calls++
+            return RestoreOutcome.WrongPhrase
+        }
+        override suspend fun canPutBack(): Boolean = false
+        override suspend fun putBack(): PutBackOutcome = PutBackOutcome.Failed
     }
 
     private val useCase = RestoreFromBackupUseCase(validator, repository)
+    private val preview = PreviewRestoreUseCase(validator, repository)
+    private val replace = ReplaceVaultFromBackupUseCase(validator, repository)
     private val source = RestoreSource.SingleFile("content://backup")
     private val words = List(24) { "abandon" }
 
@@ -51,5 +63,33 @@ class RestoreFromBackupUseCaseTest {
     fun aValidPhrase_isHandedOn() = runTest {
         assertThat(useCase(source, words)).isEqualTo(RestoreOutcome.WrongPhrase)
         assertThat(repository.calls).isEqualTo(1)
+    }
+
+    // ── From Settings (ADR-0033): the same rule for the preview and the replace ──
+
+    @Test
+    fun preview_aBadChecksum_neverReachesTheRepository() = runTest {
+        verdict = PhraseValidation.ChecksumMismatch
+
+        assertThat(preview(source, words)).isEqualTo(
+            RestorePreview.Refused(RestoreOutcome.PhraseRejected(PhraseValidation.ChecksumMismatch)),
+        )
+        assertThat(repository.calls).isEqualTo(0)
+    }
+
+    @Test
+    fun replace_aBadChecksum_neverReachesTheRepository() = runTest {
+        verdict = PhraseValidation.ChecksumMismatch
+
+        assertThat(replace(source, words))
+            .isEqualTo(RestoreOutcome.PhraseRejected(PhraseValidation.ChecksumMismatch))
+        assertThat(repository.calls).isEqualTo(0)
+    }
+
+    @Test
+    fun previewAndReplace_aValidPhrase_isHandedOn() = runTest {
+        assertThat(preview(source, words)).isEqualTo(RestorePreview.Refused(RestoreOutcome.WrongPhrase))
+        assertThat(replace(source, words)).isEqualTo(RestoreOutcome.WrongPhrase)
+        assertThat(repository.calls).isEqualTo(2)
     }
 }

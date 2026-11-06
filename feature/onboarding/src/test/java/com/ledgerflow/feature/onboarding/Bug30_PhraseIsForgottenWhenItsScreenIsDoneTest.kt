@@ -1,6 +1,8 @@
 package com.ledgerflow.feature.onboarding
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.domain.backup.PreviewRestoreUseCase
+import com.ledgerflow.core.domain.backup.ReplaceVaultFromBackupUseCase
 import com.ledgerflow.core.domain.backup.RestoreFromBackupUseCase
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.usecase.InitializeVaultUseCase
@@ -70,7 +72,13 @@ class Bug30_PhraseIsForgottenWhenItsScreenIsDoneTest {
 
     private fun restoreViewModel(outcome: RestoreOutcome): RestoreViewModel {
         val repository = FakeRestoreRepository(outcome = outcome, backups = listOf(BACKUP))
-        return RestoreViewModel(RestoreFromBackupUseCase(validator, repository), repository, validator)
+        return RestoreViewModel(
+            RestoreFromBackupUseCase(validator, repository),
+            PreviewRestoreUseCase(validator, repository),
+            ReplaceVaultFromBackupUseCase(validator, repository),
+            repository,
+            validator,
+        )
     }
 
     private fun RestoreViewModel.chooseAndType() {

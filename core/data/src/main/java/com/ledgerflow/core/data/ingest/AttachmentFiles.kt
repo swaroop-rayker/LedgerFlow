@@ -57,7 +57,7 @@ public class AttachmentFiles @Inject constructor(
         directory().listFiles().orEmpty().filter { it.isFile && it.extension == EXTENSION }
 
     public companion object {
-        private const val DIRECTORY = "attachments"
+        internal const val DIRECTORY: String = "attachments"
 
         /**
          * Not `jpg` or `png`: the bytes are ciphertext, and naming a sealed
