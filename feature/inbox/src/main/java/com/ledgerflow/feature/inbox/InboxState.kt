@@ -3,6 +3,7 @@ package com.ledgerflow.feature.inbox
 import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingTransaction
+import com.ledgerflow.core.domain.statement.ImportBatch
 
 /**
  * The Inbox screen's whole state (SPEC.md §5.1). P2-6.
@@ -55,7 +56,18 @@ public data class InboxUiState(
 
     /** The `Warning` dialog. Never null while a purge is one tap away. */
     val confirmation: InboxConfirmation? = null,
+
+    /**
+     * Imports with rows still waiting, each an "Approve all" panel above the
+     * queue (V2-4, D8). Shown on Pending only: that is where the rows are.
+     */
+    val importBatches: List<ImportBatch> = emptyList(),
 ) {
+
+    /** The panels to draw: on the queue, for imports with something "Approve all" can take. */
+    val visibleImportBatches: List<ImportBatch>
+        get() = if (filter == InboxFilter.PENDING) importBatches.filter { it.ready > 0 } else emptyList()
+
 
     /**
      * Whether this filter's rows may be destroyed.
@@ -113,6 +125,14 @@ public sealed interface InboxConfirmation {
     /** Destroy everything the current filter lists. */
     @Immutable
     public data class EraseAll(val count: Int, val filter: InboxFilter) : InboxConfirmation
+
+    /**
+     * "Approve all" for one import (D8). Not a warning: nothing is destroyed,
+     * and every entry can be binned afterwards. It names the count and each
+     * book's total on its own line (Law 2), and approves exactly that many.
+     */
+    @Immutable
+    public data class ApproveImport(val batch: ImportBatch) : InboxConfirmation
 }
 
 /** What the undo snackbar needs: which row, and what to call it. */
@@ -176,4 +196,14 @@ public sealed interface InboxEvent {
     public data object EraseConfirmed : InboxEvent
 
     public data object EraseDismissed : InboxEvent
+
+    // ── Approve all, per import (V2-4, D8) ──────────────────────────────────
+
+    /** The panel's action. Opens the confirmation; approves nothing. */
+    public data class ApproveImportRequested(val fingerprint: String) : InboxEvent
+
+    /** The confirmation's Approve: the one tap that approves the batch. */
+    public data object ApproveImportConfirmed : InboxEvent
+
+    public data object ApproveImportDismissed : InboxEvent
 }

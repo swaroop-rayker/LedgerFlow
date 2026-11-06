@@ -3,6 +3,7 @@ package com.ledgerflow.core.domain.statement
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.model.Money
 import javax.inject.Inject
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Import a bank statement or a spreadsheet into the Inbox (V2-4,
@@ -31,6 +32,23 @@ public interface StatementImportRepository {
      * twice.
      */
     public suspend fun addToInbox(table: StatementTable, columns: StatementColumns): StatementImported
+
+    /**
+     * Each import that still has rows waiting in the Inbox, newest first, for
+     * the Inbox's "Approve all" panels (D8). Empty while the vault is closed.
+     */
+    public fun observeBatches(): Flow<List<ImportBatch>>
+
+    /** The rows of the import [fingerprint] still waiting, read fresh. */
+    public suspend fun waitingIn(fingerprint: String): ImportWaiting
+
+    /**
+     * Runs [block] as **one** database transaction: when it returns a failure,
+     * or throws, every write it made is undone. "Approve all" approves a batch
+     * all or nothing (D8), so a refusal half-way leaves no part of it in the
+     * ledger.
+     */
+    public suspend fun <T> allOrNothing(block: suspend () -> Result<T>): Result<T>
 }
 
 /** What opening a file came to. */

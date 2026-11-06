@@ -1,6 +1,8 @@
 package com.ledgerflow.core.testing.statement
 
 import com.ledgerflow.core.domain.statement.CheckedRow
+import com.ledgerflow.core.domain.statement.ImportBatch
+import com.ledgerflow.core.domain.statement.ImportWaiting
 import com.ledgerflow.core.domain.statement.StatementCheck
 import com.ledgerflow.core.domain.statement.StatementColumns
 import com.ledgerflow.core.domain.statement.StatementImportRepository
@@ -9,6 +11,8 @@ import com.ledgerflow.core.domain.statement.StatementLine
 import com.ledgerflow.core.domain.statement.StatementOpened
 import com.ledgerflow.core.domain.statement.StatementReading
 import com.ledgerflow.core.domain.statement.StatementTable
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * A [StatementImportRepository] that answers with what the test sets, reads
@@ -47,4 +51,23 @@ public class FakeStatementImportRepository(
         addCalls += table to columns
         return imported
     }
+
+    /** What the Inbox's "Approve all" panels show; set it to drive the screen. */
+    public val batches: MutableStateFlow<List<ImportBatch>> = MutableStateFlow(emptyList())
+
+    /** Each import's waiting rows, by fingerprint. */
+    public val waiting: MutableMap<String, ImportWaiting> = mutableMapOf()
+
+    /** How many [allOrNothing] blocks failed, and so would have been rolled back. */
+    public var rolledBack: Int = 0
+        private set
+
+    override fun observeBatches(): Flow<List<ImportBatch>> = batches
+
+    override suspend fun waitingIn(fingerprint: String): ImportWaiting =
+        waiting[fingerprint] ?: ImportWaiting(baseCurrency, emptyList())
+
+    /** Runs [block]; a fake cannot undo, so it counts the rollback a database would have made. */
+    override suspend fun <T> allOrNothing(block: suspend () -> Result<T>): Result<T> =
+        block().also { if (it.isFailure) rolledBack++ }
 }

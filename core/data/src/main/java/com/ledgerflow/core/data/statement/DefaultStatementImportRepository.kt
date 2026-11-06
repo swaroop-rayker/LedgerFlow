@@ -1,18 +1,27 @@
 package com.ledgerflow.core.data.statement
 
+import androidx.room.withTransaction
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.time.Clock
+import com.ledgerflow.core.common.time.LocalDates
+import com.ledgerflow.core.data.inbox.ReviewEditsJson
+import com.ledgerflow.core.data.inbox.toDomain
 import com.ledgerflow.core.data.ingest.ExtractedTransactionJson
 import com.ledgerflow.core.data.ingest.PendingCandidateWriter
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.entity.AppMetaEntity
+import com.ledgerflow.core.database.entity.PendingTransactionEntity
 import com.ledgerflow.core.domain.ingest.DedupeKey
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
 import com.ledgerflow.core.domain.ingest.PendingCandidate
 import com.ledgerflow.core.domain.ingest.PendingWriteOutcome
 import com.ledgerflow.core.domain.statement.CheckedRow
+import com.ledgerflow.core.domain.statement.ImportBatch
+import com.ledgerflow.core.domain.statement.ImportBatches
+import com.ledgerflow.core.domain.statement.ImportNote
+import com.ledgerflow.core.domain.statement.ImportWaiting
 import com.ledgerflow.core.domain.statement.StatementCheck
 import com.ledgerflow.core.domain.statement.StatementColumns
 import com.ledgerflow.core.domain.statement.StatementImportRepository
@@ -21,12 +30,16 @@ import com.ledgerflow.core.domain.statement.StatementLine
 import com.ledgerflow.core.domain.statement.StatementOpened
 import com.ledgerflow.core.domain.statement.StatementReading
 import com.ledgerflow.core.domain.statement.StatementTable
-import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.model.EntrySource
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 
 /**
@@ -114,6 +127,58 @@ public class DefaultStatementImportRepository @Inject constructor(
             )
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeBatches(): Flow<List<ImportBatch>> =
+        session.whenUnlocked().flatMapLatest { database ->
+            if (database == null) return@flatMapLatest flowOf(emptyList())
+            combine(
+                database.pendingTransactionDao().observeWaitingImports(),
+                database.appMetaDao().observeAll(),
+            ) { rows, meta ->
+                val values = meta.associate { it.key to it.value }
+                val base = values[AppMetaEntity.KEY_BASE_CURRENCY] ?: DEFAULT_CURRENCY
+                rows.groupBy { fingerprintOf(it.rawRefId) }
+                    .mapNotNull { (fingerprint, group) ->
+                        fingerprint ?: return@mapNotNull null
+                        ImportBatches.summarise(
+                            fingerprint = fingerprint,
+                            note = noteOf(values[BATCH_PREFIX + fingerprint]),
+                            waiting = ImportWaiting(base, group.map { it.toCandidate() }),
+                        )
+                    }
+                    .sortedByDescending { it.importedAt ?: 0L }
+            }
+        }
+
+    override suspend fun waitingIn(fingerprint: String): ImportWaiting = withContext(io) {
+        val database = session.requireDatabase()
+        val rows = database.pendingTransactionDao().waitingWithReference("$REF_PREFIX$fingerprint:")
+        ImportWaiting(
+            baseCurrency = baseCurrency(database),
+            rows = rows.map { it.toCandidate() },
+        )
+    }
+
+    /**
+     * One Room transaction around [block]. A failure it returns is rethrown
+     * inside the transaction as [RollBack], which is what makes Room undo the
+     * writes, and caught again outside it: the exception is the transaction's
+     * mechanism, not this method's answer.
+     */
+    override suspend fun <T> allOrNothing(block: suspend () -> Result<T>): Result<T> {
+        val database = session.requireDatabase()
+        return try {
+            Result.success(database.withTransaction { block().getOrElse { throw RollBack(it) } })
+        } catch (rolledBack: RollBack) {
+            Result.failure(rolledBack.reason)
+        }
+    }
+
+    private fun PendingTransactionEntity.toCandidate() = toDomain(ReviewEditsJson.decode(reviewDraftJson), null)
+
+    /** Carries a refusal out of a transaction so that Room rolls it back. */
+    private class RollBack(val reason: Throwable) : RuntimeException(reason)
+
     private suspend fun baseCurrency(database: LedgerFlowDatabase): String =
         database.appMetaDao().value(AppMetaEntity.KEY_BASE_CURRENCY) ?: DEFAULT_CURRENCY
 
@@ -186,5 +251,22 @@ public class DefaultStatementImportRepository @Inject constructor(
 
         fun referenceOf(table: StatementTable, line: StatementLine): String =
             "$REF_PREFIX${table.fingerprint}:${line.line}"
+
+        /** The file fingerprint in a row's `import:<fingerprint>:<line>`, or null for any other reference. */
+        fun fingerprintOf(reference: String?): String? =
+            reference?.removePrefix(REF_PREFIX)?.takeIf { it != reference }?.substringBeforeLast(':', "")
+                ?.takeIf { it.isNotEmpty() }
+
+        /** The batch note `<time>|<rows>|<name>`; a name may itself hold `|`. */
+        fun noteOf(value: String?): ImportNote? {
+            value ?: return null
+            val parts = value.split('|', limit = NOTE_PARTS)
+            return ImportNote(
+                fileName = parts.getOrNull(2)?.takeIf { it.isNotBlank() },
+                importedAt = parts[0].toLongOrNull(),
+            )
+        }
+
+        private const val NOTE_PARTS = 3
     }
 }

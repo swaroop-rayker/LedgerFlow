@@ -5,12 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.inbox.InboxError
 import com.ledgerflow.core.domain.inbox.InboxFilter
+import com.ledgerflow.core.domain.statement.ImportApproval
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
 import com.ledgerflow.core.domain.usecase.InboxException
 import com.ledgerflow.core.domain.usecase.MarkPendingAsTransactionUseCase
 import com.ledgerflow.core.domain.usecase.ObserveInboxCountsUseCase
-import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
 import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
 import com.ledgerflow.core.domain.usecase.ErasePendingUseCase
 import com.ledgerflow.core.domain.usecase.RestorePendingUseCase
@@ -40,13 +40,13 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 public class InboxViewModel @Inject constructor(
     observePending: ObservePendingUseCase,
-    observePendingCount: ObservePendingCountUseCase,
     observeCounts: ObserveInboxCountsUseCase,
     private val approvePending: ApprovePendingUseCase,
     private val discardPending: DiscardPendingUseCase,
     private val restorePending: RestorePendingUseCase,
     private val erasePending: ErasePendingUseCase,
     private val markAsTransaction: MarkPendingAsTransactionUseCase,
+    private val importBatches: ImportBatchActions,
     // Last and defaulted, so the tests that build this directly are untouched;
     // Hilt supplies the real one from the back stack entry.
     savedStateHandle: SavedStateHandle = SavedStateHandle(),
@@ -69,14 +69,16 @@ public class InboxViewModel @Inject constructor(
     public val state: StateFlow<InboxUiState> = combine(
         filter,
         filter.flatMapLatest(observePending::invoke),
-        observePendingCount(),
+        // The queue's count is the Pending chip's: one query (§5.1's badge
+        // counts the same rows), so the subtitle and the chip cannot disagree.
         observeCounts(),
+        importBatches.observe(),
         transient,
-    ) { selected, rows, count, counts, extra ->
+    ) { selected, rows, counts, batches, extra ->
         InboxUiState(
             filter = selected,
             rows = rows,
-            pendingCount = count,
+            pendingCount = counts[InboxFilter.PENDING] ?: 0,
             counts = counts,
             loading = false,
             undoableDiscard = extra.undoableDiscard,
@@ -88,6 +90,7 @@ public class InboxViewModel @Inject constructor(
             selected = extra.selected intersect rows.map { it.id }.toSet(),
             isWorking = extra.isWorking,
             confirmation = extra.confirmation,
+            importBatches = batches,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -158,7 +161,55 @@ public class InboxViewModel @Inject constructor(
             InboxEvent.EraseConfirmed,
             InboxEvent.EraseDismissed,
             -> onEraseEvent(event)
+
+            is InboxEvent.ApproveImportRequested,
+            InboxEvent.ApproveImportConfirmed,
+            InboxEvent.ApproveImportDismissed,
+            -> onImportEvent(event)
         }
+    }
+
+    /**
+     * "Approve all" per import (D8). Only [InboxEvent.ApproveImportConfirmed]
+     * approves anything; the panel's action opens the confirmation. `else` is
+     * unreachable: this is entered only through the group that lists its cases.
+     */
+    private fun onImportEvent(event: InboxEvent) {
+        when (event) {
+            is InboxEvent.ApproveImportRequested -> {
+                // From the assembled state, which the screen is collecting:
+                // the panel the user tapped is the batch the dialog names.
+                val batch = state.value.importBatches.firstOrNull { it.fingerprint == event.fingerprint }
+                if (batch != null && batch.ready > 0) {
+                    transient.update { it.copy(confirmation = InboxConfirmation.ApproveImport(batch)) }
+                }
+            }
+
+            InboxEvent.ApproveImportConfirmed -> approveImport()
+
+            InboxEvent.ApproveImportDismissed -> transient.update { it.copy(confirmation = null) }
+
+            else -> Unit
+        }
+    }
+
+    /**
+     * D8's one confirmed tap. Approves exactly the count the dialog named:
+     * if the batch changed meanwhile, nothing is approved and the user is told.
+     */
+    private fun approveImport() {
+        val confirmation = transient.value.confirmation as? InboxConfirmation.ApproveImport ?: return
+        transient.update { it.copy(confirmation = null, isWorking = true) }
+        viewModelScope.launch {
+            val outcome = importBatches.approveAll(confirmation.batch.fingerprint, confirmation.batch.ready)
+            transient.update { it.copy(isWorking = false, message = outcome.asMessage()) }
+        }
+    }
+
+    private fun ImportApproval.asMessage(): String = when (this) {
+        is ImportApproval.Approved -> if (count == 1) "1 added to your ledger." else "$count added to your ledger."
+        is ImportApproval.Changed -> "Nothing approved: this import changed. Check it and approve again."
+        is ImportApproval.Refused -> "Nothing approved. " + InboxException(error).asMessage()
     }
 
     /**
@@ -236,7 +287,9 @@ public class InboxViewModel @Inject constructor(
      * now" would destroy a set the user was never shown.
      */
     private fun erase() {
-        val confirmation = transient.value.confirmation ?: return
+        val confirmation = transient.value.confirmation
+            ?.takeUnless { it is InboxConfirmation.ApproveImport }
+            ?: return
         val ids = transient.value.selected.toList()
         transient.update { it.copy(confirmation = null, isWorking = true) }
 
@@ -244,6 +297,8 @@ public class InboxViewModel @Inject constructor(
             val erased = when (confirmation) {
                 is InboxConfirmation.EraseSelected -> erasePending.selected(ids)
                 is InboxConfirmation.EraseAll -> erasePending.all(confirmation.filter)
+                // Not an erase; `approveImport` handles it. Unreachable from here.
+                is InboxConfirmation.ApproveImport -> 0
             }
             transient.update {
                 it.copy(

@@ -148,6 +148,13 @@ public data class ApprovalEdits(
      * review screen clears one when the user chooses the other.
      */
     val lineItems: List<NewLineItem> = emptyList(),
+    /**
+     * False for "Approve all" on an import (D8): the merchant is [merchantId]
+     * or none, never one created from the text read. A bank's narration
+     * carries a reference number, so creating from it would add a merchant
+     * per row; and with nobody choosing, there is no alias to learn.
+     */
+    val createMerchant: Boolean = true,
 )
 
 /**
@@ -223,7 +230,7 @@ public class ApprovePendingUseCase @Inject constructor(
      * repository refuses quietly, and the entry is what the user asked for.
      */
     private suspend fun learnMerchant(candidate: PendingTransaction, edits: ApprovalEdits, request: ApprovalRequest) {
-        if (edits.merchantId == null && edits.merchantName == null) return
+        if (!edits.createMerchant || (edits.merchantId == null && edits.merchantName == null)) return
         val merchantId = request.assignment.merchantId ?: return
         val read = candidate.extracted.merchantRaw?.trim()?.takeIf { it.isNotEmpty() } ?: return
         merchants.rememberAlias(merchantId, read)
@@ -312,9 +319,10 @@ public class ApprovePendingUseCase @Inject constructor(
         // the row we were handed the id of.
         edits.merchantId?.let { return it }
 
+        // "Approve all" creates none (D8): no name, so no merchant.
         val name = (edits.merchantName ?: candidate.extracted.merchantRaw)
             ?.trim()
-            ?.takeIf { it.isNotEmpty() }
+            ?.takeIf { it.isNotEmpty() && edits.createMerchant }
             ?: return null
 
         return when (val result = merchants.createOrGet(name, edits.categoryId)) {
