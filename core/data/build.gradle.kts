@@ -72,3 +72,18 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("committedRoomSchemas")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
+
+/**
+ * `StatementCorpusTest` reads `testdata/statements/` as plain files (V2-4
+ * Import). Declared so adding or editing a fixture re-runs it, for the reason
+ * above: a corpus that does not run when it changes specifies nothing.
+ */
+tasks.withType<Test>().configureEach {
+    inputs.files(
+        rootProject.fileTree(rootProject.projectDir) {
+            include("testdata/statements/**")
+        },
+    )
+        .withPropertyName("statementCorpus")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}

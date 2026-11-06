@@ -243,6 +243,7 @@ internal fun SettingsSectionRoute(
         onDeletedEntries = { navigate(Destination.DeletedEntries) },
         onBackUp = { navigate(Destination.BackUpNow) },
         onRestore = { navigate(Destination.RestoreBackup) },
+        onImport = { navigate(Destination.ImportStatement) },
         onNotificationAccess = { navigate(Destination.NotificationAccess) },
         onDiagnostics = { navigate(Destination.Diagnostics) },
         onPaymentApps = { navigate(Destination.PaymentApps) },

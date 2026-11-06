@@ -432,6 +432,25 @@ public interface PendingTransactionDao {
     ): List<PendingTransactionEntity>
 
     /**
+     * Every candidate still waiting in a dedupe bucket, whenever it was
+     * captured — for a statement import (V2-4), whose rows are captured
+     * together today and describe payments made weeks ago, so §3.1's capture
+     * window cannot see them. The import compares the stated dates itself.
+     * Pending only: an approved candidate is found through its ledger entry
+     * (and not at all once that entry is binned), and a discarded one is not
+     * "already in LedgerFlow".
+     */
+    @Query(
+        "SELECT * FROM pending_transaction " +
+            "WHERE dedupe_key = :key AND suppressed_by_id IS NULL AND status = 'PENDING'",
+    )
+    public suspend fun waitingInBucket(key: String): List<PendingTransactionEntity>
+
+    /** The candidate an entry was approved from, if it came from one. */
+    @Query("SELECT id FROM pending_transaction WHERE approved_entry_id = :entryId LIMIT 1")
+    public suspend fun idApprovedAs(entryId: String): String?
+
+    /**
      * Marks one candidate as the loser of a dedupe (§3.1).
      *
      * Scoped to `status = 'PENDING'`, and that predicate is load-bearing rather

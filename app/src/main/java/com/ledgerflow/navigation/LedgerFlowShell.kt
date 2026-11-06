@@ -61,6 +61,7 @@ import com.ledgerflow.feature.ledger.LedgerViewModel
 import com.ledgerflow.feature.ocr.capture.OcrCaptureScreen
 import com.ledgerflow.feature.ocr.capture.OcrCaptureViewModel
 import com.ledgerflow.feature.onboarding.notifications.NotificationAccessRoute
+import com.ledgerflow.feature.export.importing.ImportRoute
 import com.ledgerflow.feature.onboarding.restore.RestoreMode
 import com.ledgerflow.feature.onboarding.restore.RestoreRoute
 import com.ledgerflow.feature.settings.allowlist.AllowlistScreen
@@ -414,6 +415,7 @@ private fun NavGraphBuilder.fullScreenDestinations(navController: NavHostControl
         BackupNowScreen(state = state, onEvent = viewModel::onEvent, onBack = { navController.popBackStack() })
     }
     restoreDestination(navController)
+    importDestination(navController)
     composable<Destination.Export> { ExportRoute(onBack = navController::popBackStack) }
     composable<Destination.PaymentApps> {
         val viewModel: AllowlistViewModel = hiltViewModel()
@@ -581,6 +583,7 @@ private val Destination.label: String
         Destination.DeletedEntries -> "Deleted"
         Destination.BackUpNow -> "Back up"
         Destination.RestoreBackup -> "Restore"
+        Destination.ImportStatement -> "Import"
         is Destination.Inbox -> "Inbox"
         Destination.Diagnostics -> "Diagnostics"
         Destination.PaymentApps -> "Payment apps"
@@ -630,5 +633,23 @@ private fun AnalyticsUiState.merchantEntries(id: String, name: String): Destinat
 private fun NavGraphBuilder.restoreDestination(navController: NavHostController) {
     composable<Destination.RestoreBackup> {
         RestoreRoute(mode = RestoreMode.Replace, onBack = { navController.popBackStack() })
+    }
+}
+
+/**
+ * Import a statement into the Inbox (V2-4, D8). "Open the Inbox" replaces the
+ * import rather than stacking on it: back from the Inbox returns to Settings,
+ * not to a finished import.
+ */
+private fun NavGraphBuilder.importDestination(navController: NavHostController) {
+    composable<Destination.ImportStatement> {
+        ImportRoute(
+            onLeave = { navController.popBackStack() },
+            onOpenInbox = {
+                navController.navigate(Destination.Inbox()) {
+                    popUpTo<Destination.ImportStatement> { inclusive = true }
+                }
+            },
+        )
     }
 }
