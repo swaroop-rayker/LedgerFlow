@@ -1,31 +1,34 @@
 package com.ledgerflow.feature.inbox
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
 import com.ledgerflow.core.domain.inbox.InboxFilter
 import com.ledgerflow.core.domain.inbox.PendingTransaction
 import com.ledgerflow.core.domain.ingest.ExtractedDirection
 import com.ledgerflow.core.domain.ingest.ExtractedTransaction
-import com.ledgerflow.core.domain.analytics.NoOpBudgetAlertTrigger
+import com.ledgerflow.core.domain.statement.ApproveImportBatchUseCase
+import com.ledgerflow.core.domain.statement.ObserveImportBatchesUseCase
 import com.ledgerflow.core.domain.usecase.ApprovePendingUseCase
 import com.ledgerflow.core.domain.usecase.ApproveTransactionUseCase
 import com.ledgerflow.core.domain.usecase.DiscardPendingUseCase
-import com.ledgerflow.core.domain.usecase.ObserveInboxCountsUseCase
-import com.ledgerflow.core.domain.usecase.ObservePendingCountUseCase
-import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
 import com.ledgerflow.core.domain.usecase.ErasePendingUseCase
 import com.ledgerflow.core.domain.usecase.MarkPendingAsTransactionUseCase
+import com.ledgerflow.core.domain.usecase.ObserveInboxCountsUseCase
+import com.ledgerflow.core.domain.usecase.ObservePendingUseCase
 import com.ledgerflow.core.domain.usecase.RestorePendingUseCase
 import com.ledgerflow.core.model.EntrySource
 import com.ledgerflow.core.model.Money
 import com.ledgerflow.core.model.PendingStatus
 import com.ledgerflow.core.testing.inbox.FakePendingRepository
 import com.ledgerflow.core.testing.ledger.FakeLedgerRepository
+import com.ledgerflow.core.testing.statement.FakeStatementImportRepository
+import com.ledgerflow.core.testing.taxonomy.FakeCategoryRepository
 import com.ledgerflow.core.testing.taxonomy.FakeMerchantRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -58,6 +61,7 @@ class InboxEraseConfirmationTest {
 
     private val pending = FakePendingRepository()
     private val merchants = FakeMerchantRepository()
+    private val imports = FakeStatementImportRepository()
     private val ledger = FakeLedgerRepository()
 
     private fun discarded(id: String) = PendingTransaction(
@@ -94,7 +98,6 @@ class InboxEraseConfirmationTest {
 
     private fun newViewModel() = InboxViewModel(
         observePending = ObservePendingUseCase(pending),
-        observePendingCount = ObservePendingCountUseCase(pending),
         observeCounts = ObserveInboxCountsUseCase(pending),
         approvePending = ApprovePendingUseCase(
             pending,
@@ -105,6 +108,19 @@ class InboxEraseConfirmationTest {
         restorePending = RestorePendingUseCase(pending),
         erasePending = ErasePendingUseCase(pending),
         markAsTransaction = MarkPendingAsTransactionUseCase(pending),
+        importBatches = ImportBatchActions(
+            observe = ObserveImportBatchesUseCase(imports),
+            approveAll = ApproveImportBatchUseCase(
+                imports,
+                ApprovePendingUseCase(
+                    pending,
+                    merchants,
+                    ApproveTransactionUseCase(ledger, NoOpBudgetAlertTrigger),
+                ),
+                merchants,
+                FakeCategoryRepository(),
+            ),
+        ),
     )
 
     private fun ids(): Set<String> = pending.snapshot().keys

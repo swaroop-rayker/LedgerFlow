@@ -131,7 +131,13 @@ public fun InboxScreen(
         }
     }
 
-    state.confirmation?.let { EraseConfirmationDialog(it, onEvent) }
+    when (val confirmation = state.confirmation) {
+        is InboxConfirmation.ApproveImport -> ApproveImportDialog(confirmation.batch, onEvent)
+        is InboxConfirmation.EraseSelected,
+        is InboxConfirmation.EraseAll,
+        -> EraseConfirmationDialog(confirmation, onEvent)
+        null -> Unit
+    }
 
     // The header is pinned: the filters are what the queue is read through.
     LfDetailPage(
@@ -187,6 +193,21 @@ private fun LazyListScope.candidateRows(
     onEvent: (InboxEvent) -> Unit,
     onReview: (String) -> Unit,
 ) {
+    // Imports waiting above the queue (D8), each its own panel, scrolling
+    // with the list rather than pinned: chrome is charged to the queue.
+    items(
+        items = state.visibleImportBatches,
+        key = { "import:${it.fingerprint}" },
+        contentType = { "importBatch" },
+    ) { batch ->
+        ImportBatchPanel(
+            batch = batch,
+            enabled = !state.isWorking,
+            onEvent = onEvent,
+            modifier = Modifier.padding(bottom = LfTheme.space.itemGap),
+        )
+    }
+
     // One panel for the queue, its rows drawing their own slices (step F5),
     // as the Ledger's days do: a list to scan, not a stack of cards.
     itemsIndexed(
@@ -327,6 +348,9 @@ private fun EraseConfirmationDialog(
                 "Everything under ${confirmation.filter.label()} is destroyed for good. " +
                 "This cannot be undone. The captured messages themselves are kept."
         }
+
+        // Drawn by `ApproveImportDialog`; never routed here.
+        is InboxConfirmation.ApproveImport -> return
     }
 
     LfDialog(

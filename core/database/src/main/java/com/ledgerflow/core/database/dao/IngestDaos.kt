@@ -525,6 +525,27 @@ public interface PendingTransactionDao {
     public fun observePending(): Flow<List<PendingTransactionEntity>>
 
     /**
+     * The queue's imported rows (V2-4, D8), for the Inbox's "Approve all"
+     * panels. An import's rows carry the reference `import:<fingerprint>:<line>`.
+     */
+    @Query(
+        "SELECT * FROM pending_transaction " +
+            "WHERE raw_ref_id LIKE 'import:%' AND status = 'PENDING' AND suppressed_by_id IS NULL " +
+            "AND non_transaction_kind IS NULL " +
+            "ORDER BY created_at DESC",
+    )
+    public fun observeWaitingImports(): Flow<List<PendingTransactionEntity>>
+
+    /** The same rows for one import, [prefix] being `import:<fingerprint>:`. */
+    @Query(
+        "SELECT * FROM pending_transaction " +
+            "WHERE substr(raw_ref_id, 1, length(:prefix)) = :prefix " +
+            "AND status = 'PENDING' AND suppressed_by_id IS NULL AND non_transaction_kind IS NULL " +
+            "ORDER BY created_at",
+    )
+    public suspend fun waitingWithReference(prefix: String): List<PendingTransactionEntity>
+
+    /**
      * BUG58's "Not transactions": recognised OTPs, balance notices, reminders,
      * offers and failed payments that are still awaiting the user.
      *

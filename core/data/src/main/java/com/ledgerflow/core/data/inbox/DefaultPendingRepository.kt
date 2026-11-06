@@ -320,26 +320,30 @@ public class DefaultPendingRepository @Inject constructor(
             editedCategoryName = edits?.categoryId?.let(categoryNames::get),
         )
     }
-
-    /** A single row, where one lookup is cheaper than loading the taxonomy. */
-    private fun PendingTransactionEntity.toDomain(
-        edits: ReviewEdits?,
-        editedMerchantName: String?,
-        editedCategoryName: String? = null,
-    ) = PendingTransaction(
-        id = id,
-        source = source,
-        extracted = ExtractedTransactionJson.decode(extractedJson) ?: ExtractedTransaction(),
-        confidence = confidence,
-        status = status,
-        needsManualFill = needsManualFill,
-        suppressedById = suppressedById,
-        createdAt = createdAt,
-        reviewedAt = reviewedAt,
-        approvedEntryId = approvedEntryId,
-        edits = edits,
-        editedMerchantName = editedMerchantName,
-        editedCategoryName = editedCategoryName,
-        nonTransactionKind = nonTransactionKind,
-    )
 }
+
+/**
+ * A single row, where one lookup is cheaper than loading the taxonomy. Also
+ * how the import's "Approve all" reads its rows (D8), so the Inbox and the
+ * batch see one candidate the same way.
+ */
+internal fun PendingTransactionEntity.toDomain(
+    edits: ReviewEdits?,
+    editedMerchantName: String?,
+    editedCategoryName: String? = null,
+): PendingTransaction = PendingTransaction(
+    id = id,
+    source = source,
+    extracted = ExtractedTransactionJson.decode(extractedJson) ?: ExtractedTransaction(),
+    confidence = confidence,
+    status = status,
+    needsManualFill = needsManualFill,
+    suppressedById = suppressedById,
+    createdAt = createdAt,
+    reviewedAt = reviewedAt,
+    approvedEntryId = approvedEntryId,
+    edits = edits,
+    editedMerchantName = editedMerchantName,
+    editedCategoryName = editedCategoryName,
+    nonTransactionKind = nonTransactionKind,
+)
