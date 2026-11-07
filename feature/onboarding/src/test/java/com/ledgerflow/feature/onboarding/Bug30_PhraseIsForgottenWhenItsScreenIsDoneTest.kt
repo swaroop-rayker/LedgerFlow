@@ -20,6 +20,7 @@ import com.ledgerflow.feature.onboarding.recovery.RecoveryEvent
 import com.ledgerflow.feature.onboarding.recovery.RecoveryViewModel
 import com.ledgerflow.feature.onboarding.restore.RestoreEvent
 import com.ledgerflow.feature.onboarding.restore.RestoreViewModel
+import com.ledgerflow.feature.onboarding.restore.driveActions
 import java.security.SecureRandom
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +79,7 @@ class Bug30_PhraseIsForgottenWhenItsScreenIsDoneTest {
             ReplaceVaultFromBackupUseCase(validator, repository),
             repository,
             validator,
+            driveActions(),
         )
     }
 

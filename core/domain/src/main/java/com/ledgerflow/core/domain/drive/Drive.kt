@@ -66,6 +66,9 @@ public interface DriveFiles {
     /** The folder [name] under [parentId] (the Drive root when null), made if missing. */
     public suspend fun folder(token: String, name: String, parentId: String?): DriveCall<String>
 
+    /** The folder [name] under [parentId], or null when there is none. Never creates one. */
+    public suspend fun findFolder(token: String, name: String, parentId: String?): DriveCall<String?>
+
     /** Every file the app made in [folderId]. */
     public suspend fun list(token: String, folderId: String): DriveCall<List<RemoteFile>>
 
@@ -73,6 +76,9 @@ public interface DriveFiles {
     public suspend fun upload(token: String, folderId: String, name: String, bytes: ByteArray): DriveCall<RemoteFile>
 
     public suspend fun delete(token: String, fileId: String): DriveCall<Unit>
+
+    /** A file's bytes, exactly as stored (restore from Drive, ADR-0034 §7). */
+    public suspend fun download(token: String, fileId: String): DriveCall<ByteArray>
 }
 
 /**

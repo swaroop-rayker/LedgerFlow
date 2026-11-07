@@ -301,7 +301,7 @@ private fun CountLine(label: String, count: Int) {
 
 /** "The backup, 3 Nov 2026, 3:00 AM" when its name carries the time; otherwise just the backup. */
 private fun backupTitle(state: RestoreUiState): String {
-    val name = state.selectedBackup ?: return "The backup"
+    val name = state.drive?.staged ?: state.selectedBackup ?: return "The backup"
     val label = backupLabel(name)
     return if (label == name) "The backup" else "The backup, $label"
 }
@@ -345,6 +345,8 @@ private fun BackupChoice(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit)
         onEvent(RestoreEvent.SingleFileChosen(uri?.toString()))
     }
 
+    DriveLaunchers(state.drive, onEvent)
+
     LfCard {
         Column(verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap)) {
             Text(
@@ -352,7 +354,8 @@ private fun BackupChoice(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit)
                 style = LfTheme.type.label,
                 color = LfTheme.colors.text.primary,
             )
-            ChosenBackup(state, onEvent)
+            val drive = state.drive
+            if (drive != null) DriveBackups(drive, state.isWorking, onEvent) else ChosenBackup(state, onEvent)
             LfActionRow(alignment = LfActionAlignment.Start) {
                 LfButton(
                     text = if (state.treeUri == null) "Choose backup folder" else "Choose another folder",
@@ -365,6 +368,13 @@ private fun BackupChoice(state: RestoreUiState, onEvent: (RestoreEvent) -> Unit)
                     // A `.lfbk` has no registered type, so the picker cannot filter for it.
                     onClick = { filePicker.launch(arrayOf("*/*")) },
                     enabled = !state.isWorking,
+                    style = LfButtonStyle.Inline,
+                )
+                // ADR-0034 §7: the copies Drive backup made.
+                LfButton(
+                    text = "From Google Drive",
+                    onClick = { onEvent(RestoreEvent.Drive.Requested) },
+                    enabled = !state.isWorking && state.drive?.downloading == null,
                     style = LfButtonStyle.Inline,
                 )
             }

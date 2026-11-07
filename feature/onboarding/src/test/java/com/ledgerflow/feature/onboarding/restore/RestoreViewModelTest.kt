@@ -63,6 +63,7 @@ class RestoreViewModelTest {
         ReplaceVaultFromBackupUseCase(validator, repository),
         repository,
         validator,
+        driveActions(),
     )
 
     private fun RestoreViewModel.typeFullPhrase() {

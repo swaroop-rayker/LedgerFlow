@@ -4,8 +4,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.id.Uuid7Generator
+import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.crypto.DekManager
 import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.PhraseVerification
@@ -13,6 +13,7 @@ import com.ledgerflow.core.crypto.UnlockResult
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.lfbk.LfbkContainer
+import com.ledgerflow.core.data.drive.DriveRestoreFolder
 import com.ledgerflow.core.data.ingest.AttachmentBackup
 import com.ledgerflow.core.data.ingest.AttachmentFiles
 import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
@@ -121,6 +122,7 @@ class RestoreFromBackupTest {
             attachments = AttachmentBackup(AttachmentFiles(context), session, Dispatchers.IO),
             folders = BackupFolderResolver { uri -> if (uri == TREE) FileBackupFolder(folder) else null },
             documents = BackupDocumentReader { uri -> File(uri).takeIf { it.isFile }?.readBytes() },
+            staged = DriveRestoreFolder(File(context.filesDir, "drive-restore-test"), Dispatchers.IO),
             io = Dispatchers.IO,
         )
     }

@@ -19,6 +19,7 @@ import com.ledgerflow.core.data.diagnostics.DefaultCrashReportRepository
 import com.ledgerflow.core.data.diagnostics.DefaultIngestDiagnosticsRepository
 import com.ledgerflow.core.data.drive.DefaultDriveStatusStore
 import com.ledgerflow.core.data.drive.DefaultLocalBackupFiles
+import com.ledgerflow.core.data.drive.DriveRestoreFolder
 import com.ledgerflow.core.data.export.DefaultExportRepository
 import com.ledgerflow.core.data.inbox.DefaultPendingRepository
 import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
@@ -46,6 +47,7 @@ import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.backup.RestoreRepository
 import com.ledgerflow.core.domain.diagnostics.CrashReportRepository
 import com.ledgerflow.core.domain.diagnostics.IngestDiagnosticsRepository
+import com.ledgerflow.core.domain.drive.DriveRestoreStaging
 import com.ledgerflow.core.domain.drive.DriveStatusStore
 import com.ledgerflow.core.domain.drive.LocalBackupFiles
 import com.ledgerflow.core.domain.export.ExportRepository
@@ -325,4 +327,8 @@ public interface IngestModule {
     /** Drive backup's switch and last outcome, in `app_meta` (ADR-0034 §5, as amended). */
     @Binds
     public fun driveStatusStore(impl: DefaultDriveStatusStore): DriveStatusStore
+
+    /** Where a backup downloaded from Drive waits to be restored (ADR-0034 §7). */
+    @Binds
+    public fun driveRestoreStaging(impl: DriveRestoreFolder): DriveRestoreStaging
 }

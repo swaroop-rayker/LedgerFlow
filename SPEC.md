@@ -1094,8 +1094,15 @@ Every network call is in `:core:drive`; `bannedApiCheck` and
 `HttpDriveFilesTest`, `GoogleDriveViewModelTest`; goldens `drive-*`. A network failure never touches the local backup.
 Turning it on first opens Android's account picker (no permission, no
 profile scope); the chosen account is kept, every pass asks for its token, and
-turning off revokes its grant, stops uploads and leaves the files on Drive. Restore from Drive
-follows in a later PR, through the existing restore. **Nothing is decrypted to
+turning off revokes its grant, stops uploads and leaves the files on Drive. **Restore from
+Drive** (V2-4, ADR-0034 §7): "From Google Drive" on the restore screen, beside
+the folder and the single file. Account picker and sign-in come first; then
+"LedgerFlow backups" is found (never created) and listed in the Backup panel. A
+tap downloads the backup and its receipts, MD5-checked, into
+`filesDir/drive-restore/`, which the existing restore reads
+(`RestoreSource.Staged`, no backup folder set). It is emptied after the
+restore, on leaving, or when a folder or file is chosen instead.
+`DriveRestoreUseCasesTest`, `RestoreFromDriveTest`; goldens `restore-drive-*`. **Nothing is decrypted to
 be uploaded, and nothing on the phone or on Drive can open a backup without the
 phrase.**
 

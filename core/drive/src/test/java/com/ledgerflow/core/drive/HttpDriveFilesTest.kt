@@ -119,6 +119,27 @@ class HttpDriveFilesTest {
         assertThat(seen.last().query).contains("pageToken=p2")
     }
 
+    /** Restore looks without leaving a trace: no folder found means null, not a new folder. */
+    @Test
+    fun findFolder_answersNullAndCreatesNothing() = runBlocking<Unit> {
+        answers += Answer(200, """{"files":[]}""")
+
+        assertThat(drive.findFolder("tok", "LedgerFlow backups", null)).isEqualTo(DriveCall.Ok(null))
+        assertThat(seen.map { it.method }).containsExactly("GET")
+    }
+
+    @Test
+    fun aDownload_returnsTheBytesExactly() = runBlocking<Unit> {
+        answers += Answer(200, "sealed-bytes")
+
+        val got = drive.download("tok", "f1") as DriveCall.Ok
+
+        assertThat(got.value.decodeToString()).isEqualTo("sealed-bytes")
+        assertThat(seen.single().path).isEqualTo("/drive/v3/files/f1")
+        assertThat(seen.single().query).isEqualTo("alt=media")
+        assertThat(seen.single().auth).isEqualTo("Bearer tok")
+    }
+
     @Test
     fun aDelete_withNoBody_isOk() = runBlocking<Unit> {
         answers += Answer(204)

@@ -1,9 +1,12 @@
 package com.ledgerflow.feature.onboarding.restore
 
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.compose.runtime.Immutable
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.backup.RestorePreview
 import com.ledgerflow.core.domain.backup.RestoreSource
+import com.ledgerflow.core.domain.drive.DriveBackupListing
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.feature.onboarding.phrase.rejectionMessage
 
@@ -48,10 +51,13 @@ public data class RestoreUiState(
     val canPutBack: Boolean = false,
     /** The last put-back did not work. Nothing was removed. */
     val putBackFailed: Boolean = false,
+    /** Restoring from Google Drive (ADR-0034 §7): non-null once "From Google Drive" was tapped. */
+    val drive: DriveRestoreState? = null,
 ) {
     /** Where the backup is, once one is chosen. */
     val source: RestoreSource?
         get() = when {
+            drive != null -> drive.staged?.let(RestoreSource::Staged)
             singleFileUri != null -> RestoreSource.SingleFile(singleFileUri)
             treeUri != null && selectedBackup != null -> RestoreSource.InFolder(treeUri, selectedBackup)
             else -> null
@@ -59,7 +65,8 @@ public data class RestoreUiState(
 
     val isDone: Boolean get() = result is RestoreOutcome.Done
 
-    val canSubmit: Boolean get() = source != null && entry.isComplete && !isWorking && !isDone
+    val canSubmit: Boolean
+        get() = source != null && entry.isComplete && !isWorking && !isDone && drive?.downloading == null
 
     /** The confirmation page, between the words and the replace. */
     val isConfirming: Boolean get() = preview != null && !isDone
@@ -78,6 +85,31 @@ public data class RestoreUiState(
         public const val CONFIRMATION_WORD: String = "DELETE"
     }
 }
+
+/**
+ * Restoring from Google Drive: which account, what Drive holds, and the
+ * backup downloaded into the staging folder, once one is picked.
+ */
+@Immutable
+public data class DriveRestoreState(
+    /** The account chosen in Android's account picker. */
+    val account: String? = null,
+    /** The account picker, to open once. */
+    val choosingAccount: Boolean = false,
+    /** Google's consent sheet, to launch once. */
+    val consent: PendingIntent? = null,
+    /** Signing in or listing. */
+    val looking: Boolean = false,
+    /** What Drive holds, once listed. */
+    val listing: DriveBackupListing.Found? = null,
+    /** The backup being downloaded, and how far: files done of total. */
+    val downloading: String? = null,
+    val progress: Pair<Int, Int>? = null,
+    /** The backup downloaded and verified, ready to restore. */
+    val staged: String? = null,
+    /** Why there is nothing to pick, or the download failed. */
+    val problem: String? = null,
+)
 
 /** Which restore the screen is doing. */
 public enum class RestoreMode {
@@ -121,6 +153,25 @@ public sealed interface RestoreEvent {
 
     /** The report is read; open the restored ledger. */
     public data object Continued : RestoreEvent
+
+    /** Restoring from Google Drive (ADR-0034 §7), grouped so the ViewModel routes them in one place. */
+    public sealed interface Drive : RestoreEvent {
+        /** "From Google Drive": opens the account picker. */
+        public data object Requested : Drive
+
+        public data object AccountPickerLaunched : Drive
+
+        /** The account picker's answer; null when dismissed. */
+        public data class AccountChosen(val account: String?) : Drive
+
+        public data object ConsentLaunched : Drive
+
+        /** Google's consent sheet's result; null data when dismissed. */
+        public data class ConsentReturned(val data: Intent?) : Drive
+
+        /** A Drive backup tapped: it downloads, with its receipts. */
+        public data class BackupPicked(val fileName: String) : Drive
+    }
 
     /**
      * The user went back to onboarding (BUG30). The ViewModel outlives the

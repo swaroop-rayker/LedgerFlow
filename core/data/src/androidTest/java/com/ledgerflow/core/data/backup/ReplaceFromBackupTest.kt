@@ -13,6 +13,7 @@ import com.ledgerflow.core.crypto.UnlockResult
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.lfbk.LfbkContainer
+import com.ledgerflow.core.data.drive.DriveRestoreFolder
 import com.ledgerflow.core.data.ingest.AttachmentBackup
 import com.ledgerflow.core.data.ingest.AttachmentFiles
 import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
@@ -145,6 +146,7 @@ class ReplaceFromBackupTest {
             attachments = AttachmentBackup(AttachmentFiles(context), session, Dispatchers.IO),
             folders = BackupFolderResolver { uri -> if (uri == TREE) FileBackupFolder(folder) else null },
             documents = BackupDocumentReader { uri -> File(uri).takeIf { it.isFile }?.readBytes() },
+            staged = DriveRestoreFolder(File(context.filesDir, "drive-restore-test"), Dispatchers.IO),
             io = Dispatchers.IO,
         )
     }
