@@ -9,17 +9,16 @@ import com.ledgerflow.core.crypto.keystore.KeystoreKek
 import com.ledgerflow.core.data.analytics.DefaultAnalyticsRepository
 import com.ledgerflow.core.data.analytics.DefaultBudgetRepository
 import com.ledgerflow.core.data.analytics.DefaultRollupRepository
-import com.ledgerflow.core.data.diagnostics.DefaultCrashReportRepository
-import com.ledgerflow.core.data.diagnostics.DefaultIngestDiagnosticsRepository
 import com.ledgerflow.core.data.backup.BackupDocumentReader
 import com.ledgerflow.core.data.backup.BackupFolderResolver
 import com.ledgerflow.core.data.backup.DefaultBackupRepository
 import com.ledgerflow.core.data.backup.DefaultRestoreRepository
 import com.ledgerflow.core.data.backup.SafBackupDocumentReader
-import com.ledgerflow.core.data.statement.DefaultStatementImportRepository
-import com.ledgerflow.core.data.statement.SafStatementDocumentSource
-import com.ledgerflow.core.data.statement.StatementDocumentSource
 import com.ledgerflow.core.data.backup.SafBackupFolderResolver
+import com.ledgerflow.core.data.diagnostics.DefaultCrashReportRepository
+import com.ledgerflow.core.data.diagnostics.DefaultIngestDiagnosticsRepository
+import com.ledgerflow.core.data.drive.DefaultDriveStatusStore
+import com.ledgerflow.core.data.drive.DefaultLocalBackupFiles
 import com.ledgerflow.core.data.export.DefaultExportRepository
 import com.ledgerflow.core.data.inbox.DefaultPendingRepository
 import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
@@ -28,6 +27,9 @@ import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
 import com.ledgerflow.core.data.ledger.DefaultLedgerRepository
 import com.ledgerflow.core.data.ledger.DefaultMerchantEntriesRepository
+import com.ledgerflow.core.data.statement.DefaultStatementImportRepository
+import com.ledgerflow.core.data.statement.SafStatementDocumentSource
+import com.ledgerflow.core.data.statement.StatementDocumentSource
 import com.ledgerflow.core.data.taxonomy.DefaultCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantCategoryRepository
 import com.ledgerflow.core.data.taxonomy.DefaultMerchantRepository
@@ -40,11 +42,12 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.BudgetRepository
 import com.ledgerflow.core.domain.analytics.RollupRepository
-import com.ledgerflow.core.domain.diagnostics.CrashReportRepository
-import com.ledgerflow.core.domain.diagnostics.IngestDiagnosticsRepository
 import com.ledgerflow.core.domain.backup.BackupRepository
 import com.ledgerflow.core.domain.backup.RestoreRepository
-import com.ledgerflow.core.domain.statement.StatementImportRepository
+import com.ledgerflow.core.domain.diagnostics.CrashReportRepository
+import com.ledgerflow.core.domain.diagnostics.IngestDiagnosticsRepository
+import com.ledgerflow.core.domain.drive.DriveStatusStore
+import com.ledgerflow.core.domain.drive.LocalBackupFiles
 import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
@@ -53,6 +56,7 @@ import com.ledgerflow.core.domain.ingest.RawIngestRepository
 import com.ledgerflow.core.domain.ledger.DraftRepository
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.ledger.MerchantEntriesRepository
+import com.ledgerflow.core.domain.statement.StatementImportRepository
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
 import com.ledgerflow.core.domain.taxonomy.MerchantCategoryReader
 import com.ledgerflow.core.domain.taxonomy.MerchantCategoryRepository
@@ -313,4 +317,12 @@ public interface IngestModule {
     /** A picked statement, read through SAF; a seam so the import is tested against bytes. */
     @Binds
     public fun statementDocumentSource(impl: SafStatementDocumentSource): StatementDocumentSource
+
+    /** What Drive copies: the backup folder's sealed files, read only (ADR-0034). */
+    @Binds
+    public fun localBackupFiles(impl: DefaultLocalBackupFiles): LocalBackupFiles
+
+    /** Drive backup's switch and last outcome, in `app_meta` (ADR-0034 §5, as amended). */
+    @Binds
+    public fun driveStatusStore(impl: DefaultDriveStatusStore): DriveStatusStore
 }
