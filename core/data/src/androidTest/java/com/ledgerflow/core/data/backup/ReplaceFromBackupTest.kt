@@ -13,6 +13,7 @@ import com.ledgerflow.core.crypto.UnlockResult
 import com.ledgerflow.core.crypto.bip39.Bip39
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.lfbk.LfbkContainer
+import com.ledgerflow.core.data.drive.DefaultDriveStatusStore
 import com.ledgerflow.core.data.drive.DriveRestoreFolder
 import com.ledgerflow.core.data.ingest.AttachmentBackup
 import com.ledgerflow.core.data.ingest.AttachmentFiles
@@ -25,6 +26,7 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.backup.BackupPayload
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
+import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.domain.backup.LedgerCounts
 import com.ledgerflow.core.domain.backup.PutBackOutcome
 import com.ledgerflow.core.domain.backup.RestoreOutcome
@@ -252,6 +254,25 @@ class ReplaceFromBackupTest {
         val preview = restores.preview(RestoreSource.InFolder(TREE, UNDER_PHONE_WORDS), phoneWords)
 
         assertThat((preview as RestorePreview.Ready).sameWords).isTrue()
+    }
+
+    /**
+     * BUG87: a replace kept the backup's Google Drive setting, which for a
+     * backup made before Drive was turned on is Off. Drive is about this phone
+     * and its Google grant, so the phone's setting now survives a replace.
+     */
+    @Test
+    fun Bug87_aReplace_keepsThisPhonesGoogleDriveSetting() = runTest {
+        val meta = session.requireDatabase().appMetaDao()
+        meta.put(AppMetaEntity(DefaultDriveStatusStore.KEY_ENABLED, "true"))
+        meta.put(AppMetaEntity(DefaultDriveStatusStore.KEY_ACCOUNT, "me@example.com"))
+
+        assertThat(restores.replace(fromFolder, sourceWords)).isInstanceOf(RestoreOutcome.Done::class.java)
+
+        val after = rows().appMeta.associate { it.key to it.value }
+        assertThat(after[DefaultDriveStatusStore.KEY_ENABLED]).isEqualTo("true")
+        assertThat(after[DefaultDriveStatusStore.KEY_ACCOUNT]).isEqualTo("me@example.com")
+        assertThat(after[AppMetaEntity.KEY_LAST_BACKUP_AT]).isNotNull()
     }
 
     /** A backup from a single file names no folder: the phone keeps its own, and its nightly backup with it. */

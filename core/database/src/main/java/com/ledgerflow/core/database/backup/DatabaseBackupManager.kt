@@ -57,6 +57,9 @@ public sealed interface OpenedBackup {
     public class Ready internal constructor(internal val payload: BackupPayload) : OpenedBackup {
         /** Rows it will insert — the figure a restore reports. */
         public val rowCount: Int get() = payload.rowCount
+
+        /** When the backup was made: after a restore, that is the last backup there is. */
+        public val createdAt: Long get() = payload.createdAt
     }
 
     public data class Failure(val reason: LfbkFailure) : OpenedBackup

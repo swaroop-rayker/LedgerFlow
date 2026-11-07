@@ -521,7 +521,8 @@ public class VaultSession @Inject constructor(
                 }
             }
 
-            when (val imported = openAndImport(dek, opened, backupTreeUri)) {
+            val carried = listOfNotNull(nightlyKeyRow(seed))
+            when (val imported = openAndImport(dek, opened, backupTreeUri, carried)) {
                 is RestoreOutcome.Done -> imported
                 else -> {
                     dek.destroy()
@@ -535,6 +536,7 @@ public class VaultSession @Inject constructor(
         dek: Dek,
         opened: OpenedBackup.Ready,
         backupTreeUri: String?,
+        carried: List<AppMetaEntity>,
     ): RestoreOutcome {
         // A restore creates the file, so nothing is normally pending; an
         // interrupted one resumed by a newer build is the case this covers.
@@ -562,7 +564,7 @@ public class VaultSession @Inject constructor(
                 opened.rowCount
             } else {
                 DatabaseCanary.write(handle)
-                importRows(handle, opened, backupTreeUri, KEY_BACKUP_TREE_URI)
+                importRows(handle, opened, backupTreeUri, KEY_BACKUP_TREE_URI, carried)
             }
         }.getOrNull()
 
@@ -659,6 +661,10 @@ public class VaultSession @Inject constructor(
             // nightly backup keeps going there rather than stopping.
             val treeUri = backupTreeUri
                 ?: runCatching { current.appMetaDao().value(KEY_BACKUP_TREE_URI) }.getOrNull()
+            // Drive's setting is about this phone and its Google grant, so it
+            // stays with the phone (owner, 2026-11-07); the nightly key comes
+            // from the words that open the backup.
+            val carried = driveRowsOf(current) + listOfNotNull(nightlyKeyRow(seed))
 
             _state.value = VaultState.Working
             if (!writeRestoreMarker(restoreMarker, REPLACE_MARKER_CONTENT)) {
@@ -673,7 +679,7 @@ public class VaultSession @Inject constructor(
                 is UnlockResult.Success -> unlocked.dek
                 is UnlockResult.Failure -> return@withContext rollBack()
             }
-            when (val imported = openAndImport(dek, opened, treeUri)) {
+            when (val imported = openAndImport(dek, opened, treeUri, carried)) {
                 is RestoreOutcome.Done -> imported
                 else -> {
                     dek.destroy()

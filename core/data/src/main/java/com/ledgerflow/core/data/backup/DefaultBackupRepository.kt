@@ -330,7 +330,7 @@ public class DefaultBackupRepository @Inject constructor(
             .apply { timeZone = TimeZone.getTimeZone("UTC") }
             .format(Date(millis)) + ".lfbk"
 
-    private companion object {
+    internal companion object {
         /** §8 BUG4(d). */
         const val KEEP = 5
 

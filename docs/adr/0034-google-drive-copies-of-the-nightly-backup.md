@@ -192,6 +192,11 @@ screen is left or a folder or file is chosen instead.
 `:feature:onboarding`, which holds the restore screen, joins `:feature:settings`
 and `:app` as the modules allowed to depend on `:core:drive`.
 
+**A restore over this phone's ledger keeps this phone's Drive setting** (owner,
+2026-11-07, §8 BUG87): enabled, the account, and the last attempt and copy. They
+describe this phone and its Google grant, not the ledger. A first-run restore on
+a new phone still takes the backup's setting, and then shows "Sign in again".
+
 ### 8. What the owner sets up (once, outside the code)
 
 1. A Google Cloud project, with the **Google Drive API** enabled.

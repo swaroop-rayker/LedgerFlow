@@ -275,6 +275,21 @@ test stopped reading the constant it tests), and never re-aiming each turn a
 test red. **What to read each morning without a cable overnight:** the
 WorkManager record's `run_attempt_count` and `stop_reason` (`TESTING.md` D12).
 
+### Amended 2026-11-07 — a restore enrols too, by the owner (§8 BUG87)
+
+Enrolment happened only in Back up now, after its first backup succeeded. That
+first backup is sealed before the key is stored, so it never carries the key.
+A ledger restored from it came back with nightly backups off, and so did the
+Google Drive copies (ADR-0034), until the user backed up again with the words.
+
+A restore now stores the public key for the words it was given, in the import's
+own transaction. That is the same proof Back up now enrols on: the words have
+just opened this backup and now wrap this vault's DEK. As before, only the
+public half is stored; the private half is derived at restore and never kept.
+A key the backup carried is replaced by the one these words derive, which is
+the same key unless the phrase was rotated, and then these words are the right
+ones.
+
 ## Consequences
 
 - **The phone can no longer prove a backup opens.** This is a real weakening of

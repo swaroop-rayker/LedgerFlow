@@ -4,8 +4,11 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.ledgerflow.core.crypto.DekManager
 import com.ledgerflow.core.crypto.UnlockFailure
 import com.ledgerflow.core.crypto.UnlockResult
+import com.ledgerflow.core.crypto.kem.BackupSealKem
 import com.ledgerflow.core.crypto.lfbk.LfbkContainer
 import com.ledgerflow.core.crypto.lfbk.LfbkFailure
+import com.ledgerflow.core.data.backup.DefaultBackupRepository
+import com.ledgerflow.core.data.drive.DefaultDriveStatusStore
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.WalCheckpointObserver
 import com.ledgerflow.core.database.backup.BackupCounts
@@ -142,6 +145,7 @@ internal suspend fun importRows(
     opened: OpenedBackup.Ready,
     backupTreeUri: String?,
     backupTreeUriKey: String,
+    carried: List<AppMetaEntity> = emptyList(),
 ): Int? {
     val result = DatabaseBackupManager(handle).restore(opened) {
         val meta = handle.appMetaDao()
@@ -153,6 +157,14 @@ internal suspend fun importRows(
         } else {
             meta.remove(backupTreeUriKey)
         }
+        // The backup just restored is a backup that exists (owner, 2026-11-07):
+        // a backup is sealed before its own time is recorded, so it carries the
+        // one before it, or none for a first backup.
+        val recorded = meta.value(AppMetaEntity.KEY_LAST_BACKUP_AT)?.toLongOrNull() ?: 0L
+        meta.put(AppMetaEntity(AppMetaEntity.KEY_LAST_BACKUP_AT, maxOf(recorded, opened.createdAt).toString()))
+        // What the restore keeps or adds over the backup's own rows: the
+        // nightly key, and on a replace this phone's Drive setting.
+        carried.forEach { meta.put(it) }
     }
     return (result as? RestoreResult.Success)?.rowCount
 }
@@ -169,3 +181,29 @@ internal fun writeRestoreMarker(marker: File, content: ByteArray): Boolean = run
         stream.fd.sync()
     }
 }.isSuccess
+
+/**
+ * The nightly backups' public key for [seed] (ADR-0027), as a row to carry into
+ * a restored vault. The words were just proved to open this backup, which is
+ * the same proof Back up now enrols on (owner, 2026-11-07); without it a
+ * restored first backup has no key, and nightly backups stay off until the
+ * user backs up again. Null if the key cannot be derived: the restore goes on.
+ */
+internal fun nightlyKeyRow(seed: ByteArray): AppMetaEntity? =
+    runCatching { BackupSealKem.publicKey(seed) }.getOrNull()
+        ?.let { key -> AppMetaEntity(DefaultBackupRepository.KEY_SEAL_PUBLIC_KEY, key.toHex()) }
+
+private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+/** Google Drive's setting on this phone, kept across a replace (owner, 2026-11-07). */
+internal suspend fun driveRowsOf(current: LedgerFlowDatabase): List<AppMetaEntity> {
+    val keys = setOf(
+        DefaultDriveStatusStore.KEY_ENABLED,
+        DefaultDriveStatusStore.KEY_ACCOUNT,
+        DefaultDriveStatusStore.KEY_LAST_AT,
+        DefaultDriveStatusStore.KEY_LAST_OUTCOME,
+        DefaultDriveStatusStore.KEY_LAST_COPIED_AT,
+    )
+    return runCatching { current.appMetaDao().all().filter { it.key in keys } }.getOrDefault(emptyList())
+}
+
