@@ -223,6 +223,13 @@ class CopyBackupsToDriveUseCaseTest {
         override suspend fun folder(token: String, name: String, parentId: String?) =
             answer(token) { folderId(parentId, name) }
 
+        override suspend fun findFolder(token: String, name: String, parentId: String?) =
+            answer(token) { folderIds[parentId to name] }
+
+        override suspend fun download(token: String, fileId: String) = answer(token) {
+            folders.values.flatMap { it.values }.first { it.first == fileId }.second
+        }
+
         override suspend fun list(token: String, folderId: String) = answer(token) {
             folders[folderId].orEmpty().map { (name, file) -> RemoteFile(file.first, name, md5(file.second), null) }
         }

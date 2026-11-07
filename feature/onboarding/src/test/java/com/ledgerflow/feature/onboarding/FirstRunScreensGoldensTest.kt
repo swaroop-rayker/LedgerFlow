@@ -7,6 +7,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.ledgerflow.core.domain.backup.LedgerCounts
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.backup.RestorePreview
+import com.ledgerflow.core.domain.drive.DriveBackupListing
+import com.ledgerflow.core.domain.drive.RemoteFile
 import com.ledgerflow.core.domain.vault.PhraseEntry
 import com.ledgerflow.core.domain.vault.RecoveryReason
 import com.ledgerflow.core.domain.vault.UpgradeBlockReason
@@ -24,6 +26,7 @@ import com.ledgerflow.feature.onboarding.notifications.NotificationAccessUiState
 import com.ledgerflow.feature.onboarding.recovery.RecoveryFailure
 import com.ledgerflow.feature.onboarding.recovery.RecoveryScreen
 import com.ledgerflow.feature.onboarding.recovery.RecoveryUiState
+import com.ledgerflow.feature.onboarding.restore.DriveRestoreState
 import com.ledgerflow.feature.onboarding.restore.RestoreMode
 import com.ledgerflow.feature.onboarding.restore.RestoreScreen
 import com.ledgerflow.feature.onboarding.restore.RestoreUiState
@@ -111,6 +114,23 @@ open class FirstRunScreensGoldensTest {
         backups = listOf("ledgerflow-20260918-101500.lfbk", "ledgerflow-20260911-093000.lfbk"),
         selectedBackup = "ledgerflow-20260918-101500.lfbk",
         entry = PhraseEntry(requiredWordCount = 24, draft = "aban", suggestions = listOf("abandon")),
+    )
+
+    /** Restore from Google Drive (ADR-0034 §7): Drive's backups in the Backup panel, one downloading. */
+    private val restoreFromDrive = RestoreUiState(
+        drive = DriveRestoreState(
+            account = "swaroop@example.com",
+            listing = DriveBackupListing.Found(
+                backups = listOf(
+                    RemoteFile("b2", "ledgerflow-20261107-030200.lfbk", null, 2_400_000),
+                    RemoteFile("b1", "ledgerflow-20261106-030100.lfbk", null, 2_390_000),
+                ),
+                receipts = List(40) { RemoteFile("r$it", "r$it.lfba", null, 250_000) },
+            ),
+            downloading = "ledgerflow-20261107-030200.lfbk",
+            progress = 12 to 41,
+        ),
+        entry = PhraseEntry(requiredWordCount = 24),
     )
 
     private val lowStorage = UpgradeBlockReason.InsufficientStorage(
@@ -231,6 +251,17 @@ open class FirstRunScreensGoldensTest {
     @Test
     fun restore_2x() = rule.captureScreenGolden("restore-choosing-2x", 2f) {
         LfTheme { RestoreScreen(state = restore, onEvent = {}, onBack = {}) }
+    }
+
+    @Test
+    fun restoreFromDrive_1x() = rule.captureScreenGolden("restore-drive-1x", 1f) {
+        LfTheme { RestoreScreen(state = restoreFromDrive, onEvent = {}, onBack = {}) }
+    }
+
+    @Config(qualifiers = PHONE_2X)
+    @Test
+    fun restoreFromDrive_2x() = rule.captureScreenGolden("restore-drive-2x", 2f) {
+        LfTheme { RestoreScreen(state = restoreFromDrive, onEvent = {}, onBack = {}) }
     }
 
     // ── From Settings, over this phone's ledger (ADR-0033) ─────────────────

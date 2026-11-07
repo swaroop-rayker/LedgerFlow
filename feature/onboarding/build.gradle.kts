@@ -27,6 +27,10 @@ android {
 }
 
 dependencies {
+    // Restore from Google Drive (ADR-0034 §7): the sign-in the restore screen
+    // starts. :core:drive is the only module that touches a network.
+    implementation(project(":core:drive"))
+
     // The shared screenshot harness and its accessibility checks (P5 step 4).
     testImplementation(libs.androidx.compose.ui.test.manifest)
 

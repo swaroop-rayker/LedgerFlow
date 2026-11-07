@@ -54,7 +54,8 @@ plugins {
  *   and `:core:common` (its one AndroidX carve-out, ADR-0014, is a library);
  * - no `:core:*` module depends on a `:feature:*` module or on `:app`;
  * - nothing outside tests depends on `:core:testing`;
- * - only `:feature:settings` and `:app` depend on `:core:drive`, the one module
+ * - only `:feature:settings`, `:feature:onboarding` (restore from Drive) and
+ *   `:app` depend on `:core:drive`, the one module
  *   that touches a network (ADR-0034), and `:core:drive` depends on no
  *   `:core:data`, `:core:database` or `:core:crypto`: it is handed bytes, never
  *   the vault or a key.
@@ -95,8 +96,9 @@ tasks.register("moduleDependencyRuleCheck") {
                 from.startsWith(":core:") && (to.startsWith(":feature:") || to == ":app") ->
                     "core modules never depend on features or the app"
                 to == ":core:testing" -> ":core:testing is for tests only"
-                to == ":core:drive" && from !in setOf(":feature:settings", ":app") ->
-                    ":core:drive (the network, ADR-0034) is used by :feature:settings and :app only"
+                to == ":core:drive" && from !in setOf(":feature:settings", ":feature:onboarding", ":app") ->
+                    ":core:drive (the network, ADR-0034) is used by :feature:settings, " +
+                        ":feature:onboarding (restore from Drive) and :app only"
                 from == ":core:drive" && to in setOf(":core:data", ":core:database", ":core:crypto") ->
                     ":core:drive is handed bytes, never the vault, the database or a key (ADR-0034)"
                 else -> null

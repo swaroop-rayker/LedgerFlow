@@ -39,15 +39,43 @@ public class HttpDriveFiles internal constructor(
     @Inject
     public constructor(@IoDispatcher io: CoroutineDispatcher) : this(GOOGLE_APIS, io)
 
-    override suspend fun folder(token: String, name: String, parentId: String?): DriveCall<String> {
+    override suspend fun folder(token: String, name: String, parentId: String?): DriveCall<String> =
+        when (val found = findFolder(token, name, parentId)) {
+            is DriveCall.Ok -> found.value?.let { DriveCall.Ok(it) } ?: createFolder(token, name, parentId ?: "root")
+            is DriveCall.Unauthorized -> found
+            is DriveCall.Failed -> found
+        }
+
+    override suspend fun findFolder(token: String, name: String, parentId: String?): DriveCall<String?> {
         val parent = parentId ?: "root"
         val query = "name = '${name.quoted()}' and mimeType = '$FOLDER_MIME' " +
             "and '$parent' in parents and trashed = false"
-        return when (val found = request(token, "GET", "/drive/v3/files?q=${query.encoded()}&fields=files(id)")) {
-            is DriveCall.Ok -> found.value.files().firstOrNull()?.let { DriveCall.Ok(it.string("id")) }
-                ?: createFolder(token, name, parent)
-            is DriveCall.Unauthorized -> found
-            is DriveCall.Failed -> found
+        return request(token, "GET", "/drive/v3/files?q=${query.encoded()}&fields=files(id)")
+            .map { page -> page.files().firstOrNull()?.string("id") }
+    }
+
+    override suspend fun download(token: String, fileId: String): DriveCall<ByteArray> = withContext(io) {
+        try {
+            val connection = (URL("$base/drive/v3/files/$fileId?alt=media").openConnection() as HttpURLConnection)
+                .apply {
+                    connectTimeout = TIMEOUT_MS
+                    readTimeout = TIMEOUT_MS
+                    setRequestProperty("Authorization", "Bearer $token")
+                }
+            try {
+                when (val code = connection.responseCode) {
+                    in OK_CODES -> DriveCall.Ok(connection.inputStream.use { it.readBytes() })
+                    HttpURLConnection.HTTP_UNAUTHORIZED -> DriveCall.Unauthorized
+                    else -> DriveCall.Failed(
+                        retryable = code == TOO_MANY_REQUESTS || code >= SERVER_ERROR,
+                        reason = "HTTP $code",
+                    )
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (failure: IOException) {
+            DriveCall.Failed(retryable = true, reason = failure.javaClass.simpleName)
         }
     }
 

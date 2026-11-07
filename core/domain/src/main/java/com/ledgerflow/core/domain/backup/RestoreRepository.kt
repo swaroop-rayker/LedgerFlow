@@ -111,6 +111,14 @@ public sealed interface RestoreSource {
      * rows come back and every receipt image is reported as not found.
      */
     public data class SingleFile(val documentUri: String) : RestoreSource
+
+    /**
+     * A backup downloaded from Google Drive into the private staging folder,
+     * with its receipt images beside it (ADR-0034 §7). Restores like
+     * [InFolder], except that it sets no backup folder: the staging folder is
+     * emptied once the restore is done.
+     */
+    public data class Staged(val fileName: String) : RestoreSource
 }
 
 /** What a restore did — each one a sentence the screen owes the user. */

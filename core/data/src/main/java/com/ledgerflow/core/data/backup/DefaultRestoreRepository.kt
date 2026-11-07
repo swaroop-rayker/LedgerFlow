@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.crypto.bip39.Bip39
+import com.ledgerflow.core.data.drive.DriveRestoreFolder
 import com.ledgerflow.core.data.ingest.AttachmentBackup
 import com.ledgerflow.core.data.ingest.AttachmentRestoreReport
 import com.ledgerflow.core.data.vault.VaultSession
@@ -56,6 +57,8 @@ public class DefaultRestoreRepository @Inject constructor(
     private val attachments: AttachmentBackup,
     private val folders: BackupFolderResolver,
     private val documents: BackupDocumentReader,
+    /** A backup downloaded from Google Drive, waiting to be restored (ADR-0034 §7). */
+    private val staged: DriveRestoreFolder,
     @param:IoDispatcher private val io: CoroutineDispatcher,
 ) : RestoreRepository {
 
@@ -92,6 +95,8 @@ public class DefaultRestoreRepository @Inject constructor(
                     val images = read.folder?.let { attachments.restoreAll(it, seed) }
                         ?: attachments.reportWithoutFolder()
                     session.completeRestore()
+                    // A Drive download has done its job: nothing of it stays.
+                    if (source is RestoreSource.Staged) staged.clear()
                     rows.withImages(images)
                 }
                 else -> rows
@@ -119,6 +124,7 @@ public class DefaultRestoreRepository @Inject constructor(
 
     override suspend fun finish() {
         session.finishRestore()
+        staged.clear()
     }
 
     /** The backup's bytes, and the folder they came from when there is one. */
@@ -130,6 +136,10 @@ public class DefaultRestoreRepository @Inject constructor(
             folder?.read(source.fileName)?.let { ReadBackup(it, folder, source.treeUri) }
         }
         is RestoreSource.SingleFile -> documents.read(source.documentUri)?.let { ReadBackup(it, null, null) }
+        // No tree URI: the staging folder must not become this install's backup folder.
+        is RestoreSource.Staged -> staged.folder().let { folder ->
+            folder.read(source.fileName)?.let { ReadBackup(it, folder, null) }
+        }
     }
 
     private fun RestoreOutcome.Done.withImages(images: AttachmentRestoreReport): RestoreOutcome.Done =

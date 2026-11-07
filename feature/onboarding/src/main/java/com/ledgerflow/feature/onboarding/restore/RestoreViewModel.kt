@@ -42,12 +42,16 @@ public class RestoreViewModel @Inject constructor(
     private val replaceVault: ReplaceVaultFromBackupUseCase,
     private val restores: RestoreRepository,
     private val validator: RecoveryPhraseValidator,
+    driveActions: DriveRestoreActions,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
         RestoreUiState(entry = PhraseEntry(requiredWordCount = validator.wordCount)),
     )
     public val state: StateFlow<RestoreUiState> = _state.asStateFlow()
+
+    /** Restore from Google Drive (ADR-0034 §7): its steps, over [RestoreUiState.drive]. */
+    private val drive = DriveRestoreFlow(driveActions, viewModelScope, _state)
 
     /**
      * Which restore this is, from the route. Not a reset: at first run the
@@ -66,14 +70,26 @@ public class RestoreViewModel @Inject constructor(
             is RestoreEvent.FolderChosen -> event.treeUri?.let(::chooseFolder)
             is RestoreEvent.BackupSelected -> selectBackup(event.fileName)
             is RestoreEvent.SingleFileChosen -> event.documentUri?.let(::chooseSingleFile)
-            is RestoreEvent.DraftChanged -> updateEntry { it.withDraft(event.value, validator) }
-            is RestoreEvent.WordCommitted -> updateEntry { it.commit(event.word) }
-            is RestoreEvent.WordRemoved -> updateEntry { it.remove(event.index) }
+            is RestoreEvent.DraftChanged,
+            is RestoreEvent.WordCommitted,
+            is RestoreEvent.WordRemoved,
+            -> typed(event)
             RestoreEvent.Submitted -> submit()
             is RestoreEvent.FromSettings -> fromSettings(event)
             RestoreEvent.Continued -> if (_state.value.isDone) viewModelScope.launch { restores.finish() }
             RestoreEvent.Left -> leave()
             is RestoreEvent.Scanner -> scanner(event)
+            is RestoreEvent.Drive -> drive.onEvent(event)
+        }
+    }
+
+    /** The words, typed: the same [PhraseEntry] steps "Back up now" uses. */
+    private fun typed(event: RestoreEvent) {
+        when (event) {
+            is RestoreEvent.DraftChanged -> updateEntry { it.withDraft(event.value, validator) }
+            is RestoreEvent.WordCommitted -> updateEntry { it.commit(event.word) }
+            is RestoreEvent.WordRemoved -> updateEntry { it.remove(event.index) }
+            else -> Unit
         }
     }
 
@@ -96,6 +112,7 @@ public class RestoreViewModel @Inject constructor(
      */
     private fun leave() {
         if (_state.value.isWorking) return
+        drive.forget()
         _state.value = RestoreUiState(
             mode = _state.value.mode,
             entry = PhraseEntry(requiredWordCount = validator.wordCount),
@@ -103,6 +120,7 @@ public class RestoreViewModel @Inject constructor(
     }
 
     private fun chooseFolder(treeUri: String) {
+        drive.forget()
         viewModelScope.launch {
             val backups = restores.listBackups(treeUri)
             _state.update {
@@ -126,6 +144,7 @@ public class RestoreViewModel @Inject constructor(
     }
 
     private fun chooseSingleFile(documentUri: String) {
+        drive.forget()
         _state.update {
             it.copy(
                 singleFileUri = documentUri,

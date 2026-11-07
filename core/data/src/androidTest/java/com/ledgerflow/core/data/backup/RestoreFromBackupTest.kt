@@ -4,15 +4,17 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.id.Uuid7Generator
+import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.crypto.DekManager
 import com.ledgerflow.core.crypto.FileWrappedDekStore
 import com.ledgerflow.core.crypto.PhraseVerification
 import com.ledgerflow.core.crypto.UnlockResult
 import com.ledgerflow.core.crypto.bip39.Bip39
+import com.ledgerflow.core.crypto.kem.BackupSealKem
 import com.ledgerflow.core.crypto.keystore.AndroidKeystoreKek
 import com.ledgerflow.core.crypto.lfbk.LfbkContainer
+import com.ledgerflow.core.data.drive.DriveRestoreFolder
 import com.ledgerflow.core.data.ingest.AttachmentBackup
 import com.ledgerflow.core.data.ingest.AttachmentFiles
 import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
@@ -22,6 +24,7 @@ import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.backup.BackupPayload
 import com.ledgerflow.core.database.backup.DatabaseBackupManager
+import com.ledgerflow.core.database.entity.AppMetaEntity
 import com.ledgerflow.core.domain.backup.RestoreOutcome
 import com.ledgerflow.core.domain.backup.RestoreSource
 import com.ledgerflow.core.domain.ingest.AttachmentOutcome
@@ -121,6 +124,7 @@ class RestoreFromBackupTest {
             attachments = AttachmentBackup(AttachmentFiles(context), session, Dispatchers.IO),
             folders = BackupFolderResolver { uri -> if (uri == TREE) FileBackupFolder(folder) else null },
             documents = BackupDocumentReader { uri -> File(uri).takeIf { it.isFile }?.readBytes() },
+            staged = DriveRestoreFolder({ File(context.filesDir, "drive-restore-test") }, Dispatchers.IO),
             io = Dispatchers.IO,
         )
     }
@@ -145,10 +149,15 @@ class RestoreFromBackupTest {
 
     private fun assertMetaCarriedOver(actual: BackupPayload, backupTreeUri: String?) {
         val folderKey = VaultSession.KEY_BACKUP_TREE_URI
-        assertThat(actual.appMeta.filterNot { it.key == folderKey })
-            .containsExactlyElementsIn(expected.appMeta.filterNot { it.key == folderKey })
+        // What the restore adds over the backup's own rows (BUG87), checked on their own.
+        val added = setOf(folderKey, AppMetaEntity.KEY_LAST_BACKUP_AT, DefaultBackupRepository.KEY_SEAL_PUBLIC_KEY)
+        assertThat(actual.appMeta.filterNot { it.key in added })
+            .containsExactlyElementsIn(expected.appMeta.filterNot { it.key in added })
         assertThat(actual.appMeta.firstOrNull { it.key == folderKey }?.value).isEqualTo(backupTreeUri)
     }
+
+    private fun metaValue(payload: BackupPayload, key: String): String? =
+        payload.appMeta.firstOrNull { it.key == key }?.value
 
     /** Nothing of a vault exists: no wrap, no database, no marker. */
     private fun assertNothingWritten() {
@@ -345,6 +354,24 @@ class RestoreFromBackupTest {
         } finally {
             lone.delete()
         }
+    }
+
+
+    /**
+     * BUG87 (found 2026-11-07 running TESTING D18): a restored first backup
+     * left Home saying "No backup yet" and nightly backups off. A backup is
+     * sealed before its own time and the nightly key are recorded, so neither
+     * is inside it. The restore now records the backup's own time and the
+     * nightly key for the words that opened it.
+     */
+    @Test
+    fun Bug87_aRestoredBackup_isTheLastBackup_andNightlyBackupsAreOn() = runTest {
+        assertThat(restores.restore(fromFolder, sourceWords)).isInstanceOf(RestoreOutcome.Done::class.java)
+
+        val meta = restored()
+        assertThat(metaValue(meta, AppMetaEntity.KEY_LAST_BACKUP_AT)?.toLongOrNull()).isNotNull()
+        assertThat(metaValue(meta, DefaultBackupRepository.KEY_SEAL_PUBLIC_KEY))
+            .isEqualTo(BackupSealKem.publicKey(Bip39.toSeed(sourceWords)).joinToString("") { "%02x".format(it) })
     }
 
     private companion object {

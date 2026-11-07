@@ -174,12 +174,28 @@ Drive is the existing folder restore, reading a different place.
   where the library offers it. **Files already on Drive are left there**,
   because they are the user's, and the screen says so and how to delete them.
 
-### 7. Restore from Drive (later PR)
+### 7. Restore from Drive (built 2026-11-07)
 
-First run and Settings > Restore gain **From Google Drive**: sign in, list the
-`.lfbk` files in "LedgerFlow backups", download the chosen one and its
-receipts to app storage (`filesDir`, Law 5), then hand them to the existing
-restore (ADR-0026, ADR-0033), unchanged. The phrase is typed as it is today.
+The restore screen, at first run and from Settings, gains **From Google Drive**
+beside "Choose a folder" and "Use a single file" (owner's placement A). It opens
+Android's account picker, then signs in for `drive.file`. It **finds** "LedgerFlow
+backups" without ever creating it, and lists its backups newest first in the
+same Backup panel. **A tap downloads** the backup and every receipt sidecar
+(owner: download on pick), each checked against Drive's MD5, into
+`filesDir/drive-restore/` (Law 5), shaped like a backup folder. Any failure
+empties it, so a half-downloaded backup can never be restored. The restore
+reads it as `RestoreSource.Staged`: the existing restore (ADR-0026, ADR-0033),
+unchanged, with the phrase typed as today. A staged restore sets no backup
+folder. The staging folder is emptied once the restore is done, and when the
+screen is left or a folder or file is chosen instead.
+
+`:feature:onboarding`, which holds the restore screen, joins `:feature:settings`
+and `:app` as the modules allowed to depend on `:core:drive`.
+
+**A restore over this phone's ledger keeps this phone's Drive setting** (owner,
+2026-11-07, §8 BUG87): enabled, the account, and the last attempt and copy. They
+describe this phone and its Google grant, not the ledger. A first-run restore on
+a new phone still takes the backup's setting, and then shows "Sign in again".
 
 ### 8. What the owner sets up (once, outside the code)
 
