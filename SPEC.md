@@ -19,7 +19,7 @@ A production-grade, offline-first, encrypted personal ledger for Android that in
 |---|---|---|
 | **P1** | **Human-in-the-loop.** No automated source ever commits to the ledger. Everything lands in an Inbox as `PENDING`. | Schema-level: `ledger_entry` rows can only be created via `ApproveTransactionUseCase`. Enforced by a lint rule + instrumentation test. |
 | **P2** | **Ledger isolation.** DEBIT and CREDIT are two disjoint ledgers. They never net, sum, or offset each other. | Every DAO query carries a mandatory `ledger` param. A test asserts zero queries return mixed-ledger rows. |
-| **P3** | **Offline-first, zero-cloud.** Nothing the app computes touches a network; all OCR/parsing is on-device. | The OCR model ships *inside* the APK, so recognition cannot reach a server. `EXPECTED_MERGED_PERMISSIONS` pins the packaged permission set per variant, and `OcrRunsWithoutNetworkTest` runs recognition with the radio off. **`INTERNET` is declared from P4** — ML Kit merges it transitively and it could not be removed without removing the recogniser (ADR-0021). |
+| **P3** | **Offline-first; the cloud holds ciphertext only.** Nothing the app computes touches a network; all OCR/parsing is on-device. The one thing that may leave the phone is a backup already encrypted on it, copied to the user's own Google Drive when they turn that on (ADR-0034); every network call lives in `:core:drive`. | The OCR model ships *inside* the APK, so recognition cannot reach a server. `EXPECTED_MERGED_PERMISSIONS` pins the packaged permission set per variant, and `OcrRunsWithoutNetworkTest` runs recognition with the radio off. **`INTERNET` is declared from P4** — ML Kit merges it transitively and it could not be removed without removing the recogniser (ADR-0021). |
 | **P4** | **Data is sacred.** Losing user data is a P0 incident, not a bug. Undecryptable data == lost data. | Multi-wrapped encryption key + mandatory 24-word recovery phrase (§7). |
 | **P5** | **Money is integers.** All amounts are `Long` minor units (paise/cents). Floating-point money is a build failure. | Custom lint rule bans `Float`/`Double` in `:core:model`. |
 | **P6** | **Every migration is reversible-by-backup.** No destructive migration ships. Ever. | `fallbackToDestructiveMigration()` is banned in release source sets. |
@@ -1074,6 +1074,22 @@ due. After three interrupted attempts in a night (WorkManager's own
 `runAttemptCount`) it gives up until tomorrow. Existing installs move to the aimed schedule (unique
 name `nightly-backup-0300`) on their next cold start, which cancels the old
 `nightly-backup`.
+
+**Google Drive keeps a copy (ADR-0034, accepted 2026-11-07; built in V2-4).**
+Opt-in from Settings > Data > **Google Drive**. After each successful nightly
+pass, a separate `DriveUploadWorker` (any network, the owner's choice; retried
+with backoff) copies the files that pass wrote, **byte for byte and already
+sealed**: the `.lfbk` and the receipt sidecars. They go to "LedgerFlow backups/"
+and its "receipts/" folder in the user's own Drive. Sign-in is Play services'
+`AuthorizationClient` with the `drive.file` scope only, and LedgerFlow stores no
+token. Calls go to Drive's REST API over `HttpsURLConnection` (no Google API
+client). Each upload is checked against Drive's `md5Checksum` before
+`lastDriveUploadAt` moves. Drive keeps the newest five `.lfbk`, and receipts
+mirror the phone's folder. A network failure never touches the local backup.
+Turning it off stops uploads and leaves the files on Drive. Restore from Drive
+follows in a later PR, through the existing restore. **Nothing is decrypted to
+be uploaded, and nothing on the phone or on Drive can open a backup without the
+phrase.**
 
 **The `.lfba` sidecar container** (ADR-0023, `LfbaContainer`). Same shape as the
 `.lfbk` header and for the same three reasons — explicit `kdfParamsLen`, the
@@ -2196,6 +2212,7 @@ ADRs live in `docs/adr/NNNN-title.md`. Required before implementation:
 | 0025 | How do backups get triggered, when the app never holds the phrase? | ✅ **Part 1 Accepted** — manual "Back up now" that asks for the 24 words each time, checked against the vault before sealing (§16 Q23). **Part 2 Proposed** — nightly backups sealed to a phrase-derived public key; not decided, not built |
 | 0026 | How is a backup restored, and under which phrase? | ✅ **Accepted** — at first run only, from a link on onboarding's first screen; folder then list (or a single file); the backup is proven to open before anything is written; a fresh DEK wrapped under **the backup's own phrase**; never over an existing vault; a marker file written before the wrap routes an interrupted restore back to itself. Closes Q11 (§5.9, §7.3, §7.4) |
 | 0031 | What does the app look like after the design-system work? | ✅ **Accepted** — **Night Vault** (Phase 2's direction B): graphite and bone, coral and mint for money only, amber for attention, pink for problems; Inter for words and IBM Plex Mono for numbers and dates; shapes, sizes and components from the owner's reference samples. Applied from design-system step F2. §9.1–§9.2 |
+| 0034 | Google Drive backup, and what Law 6 means once something leaves the phone (V2-PLAN D1) | ✅ **Accepted** (owner, 2026-11-07) — **option B**, Drive's API with Google sign-in: the nightly `.lfbk` and receipt sidecars, already sealed, copied to the user's own Drive (`drive.file` only, any network, newest five kept, restore from Drive later); every network call in `:core:drive`, checked by `bannedApiCheck`; Law 6 reworded |
 
 **ADR-0003 is not reopened.** The kickoff listed it as a blocking decision, but §14 has it Accepted and §7.2 specifies it. The *design* — multi-wrapped DEK, phrase-primary — is settled and stays settled. What was genuinely open is the **library and implementation** choice underneath it, which is a different decision with different trade-offs (binary size, native dependencies, maintenance status) and therefore gets its own record: **ADR-0010**. Amending an accepted ADR to smuggle in a new decision is how decision logs stop being trustworthy.
 
