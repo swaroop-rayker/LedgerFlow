@@ -187,8 +187,14 @@ restore (ADR-0026, ADR-0033), unchanged. The phrase is typed as it is today.
 2. The OAuth consent screen: External, app name, the owner's email, scope
    `drive.file`. Then set it to **In production**: in *Testing*, Google expires
    a grant after 7 days and the user would be asked to sign in again every week.
-3. Android OAuth clients for `com.ledgerflow` (the release key's SHA-1) and
-   `com.ledgerflow.debug` (the debug key's SHA-1).
+3. An Android OAuth client per package and signing key, four in all (corrected
+   2026-11-07; the draft named only the `smsFull` two):
+   - `com.ledgerflow.playsafe.debug` and `com.ledgerflow.debug`: the debug
+     key's SHA-1;
+   - `com.ledgerflow`: the owner's release key's SHA-1;
+   - `com.ledgerflow.playsafe`: Google Play's app-signing key's SHA-1 (Play
+     Console, App integrity), plus the upload key's for a locally signed
+     release build.
 
 No client ID or secret goes into the code or the repository: an Android client
 is matched by package name and signing certificate. Until the clients exist,
