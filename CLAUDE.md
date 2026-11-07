@@ -11,7 +11,7 @@ These are settled. Do not relitigate them, do not "helpfully" suggest alternativ
 | | Decision |
 |---|---|
 | **Stack** | Native Kotlin + Jetpack Compose. Not Flutter. Not XML Views. |
-| **Currency** | One base currency per install (default INR), chosen at onboarding. `amount_minor` is **always** base currency. Foreign spend stores `original_amount_minor` + `original_currency` + `fx_rate_micro`, all user-entered. **No FX lookup and no conversion engine** — rates are user-entered, never fetched. (The app does declare `INTERNET` from P4; see Law 6. It is not used for this, or for anything else we write.) |
+| **Currency** | One base currency per install (default INR), chosen at onboarding. `amount_minor` is **always** base currency. Foreign spend stores `original_amount_minor` + `original_currency` + `fx_rate_micro`, all user-entered. **No FX lookup and no conversion engine** — rates are user-entered, never fetched. (The app does declare `INTERNET` from P4; see Law 6. It is not used for this: the only network code is `:core:drive`'s copy of the encrypted backup to the user's Drive, ADR-0034.) |
 | **Recovery** | 24-word BIP-39 phrase is mandatory and primary. It wraps the DEK *and* encrypts `.lfbk` backups. The optional passphrase wrap (KEK-C) is **dropped** — ADR-0011. Two factors: Keystore and phrase. Do not reintroduce a user-chosen secret anywhere on the key path; it would silently downgrade the scheme to whatever the user typed. |
 | **Ingest** | SMS **and** notification listening are co-equal first-class sources, both shipped in P2, sharing one rule engine and one dedupe layer. Notification ingest is in **both** product flavours; SMS is `smsFull` only. |
 
@@ -34,8 +34,9 @@ Dev environment: **Windows 11 + Android Studio**, testing on a physical device (
 3. **Money is `Long` minor units.** No `Float` or `Double` for a monetary amount, and no currency arithmetic outside `Money`. Ever. The ban is on *money*, not on floating point generally — parser `confidence`, Jaro-Winkler scores and σ/μ ratios are legitimately real-valued, and the CI check is correspondingly scoped to money-shaped identifiers in `core/model` (`amount`, `price`, `total`, `balance`).
 4. **No destructive migrations.** `fallbackToDestructiveMigration()` is banned. Every schema change ships an explicit `Migration` + a `MigrationTest` + an updated committed schema JSON.
 5. **Persistent data lives in `filesDir`/`databases/`.** Never `cacheDir`, never external storage. `cacheDir` is for decoded-image scratch only.
-6. **Nothing this app computes touches a network.** All parsing, OCR and analytics are on-device, and no user data is ever sent anywhere. If you think *your* code needs the network, you're wrong — raise it as an ADR instead.
-   **The `INTERNET` permission is no longer the way this is checked** — ADR-0021. From the commit that adds bundled ML Kit, release declares it: the recognizer drags in `transport-backend-cct` (Google's telemetry uploader), R8 refuses to build without those classes, and the owner chose to accept the permission rather than strip it. Recognition itself stays local *structurally* — the model ships inside the APK, so a receipt is never uploaded to be read. What replaces the grep is `EXPECTED_MERGED_PERMISSIONS` in `app/build.gradle.kts`, which pins the packaged permission set per variant and fails on a **second** unexpected entry, plus `OcrRunsWithoutNetworkTest`. Adding a dependency that merges a new permission is now a deliberate act with a pin to update.
+6. **Nothing this app computes touches a network.** All parsing, OCR, analytics and encryption are on-device. No user data leaves the phone **except files already encrypted on it, copied to the user's own Google Drive when they turn that on** (ADR-0034, owner 2026-11-07): the sealed `.lfbk` and receipt sidecars, byte for byte, with the `drive.file` scope only. **Every network call lives in `:core:drive`**, and `bannedApiCheck` fails on a JDK network API anywhere else. `:core:drive` is handed bytes and names and never sees the vault, the database or a key. If you think *other* code needs the network, you're wrong: raise it as an ADR instead.
+   **The `INTERNET` permission is not how this is checked** (ADR-0021). From the commit that adds bundled ML Kit, release declares it: the recognizer drags in `transport-backend-cct` (Google's telemetry uploader), R8 refuses to build without those classes, and the owner chose to accept the permission rather than strip it. Recognition itself stays local *structurally* — the model ships inside the APK, so a receipt is never uploaded to be read. What replaces the grep is `EXPECTED_MERGED_PERMISSIONS` in `app/build.gradle.kts`, which pins the packaged permission set per variant and fails on a **second** unexpected entry, plus `OcrRunsWithoutNetworkTest`, plus the module rule above. Adding a dependency that merges a new permission is now a deliberate act with a pin to update.
+
 7. **Every bug fixed gets a named regression test.** Name it after the bug (`Bug6_DraftSurvivesProcessDeathTest`). The suite only grows.
 
 ---
@@ -58,6 +59,7 @@ LedgerFlow/
 ├─ app/
 ├─ core/
 │  ├─ model  common  crypto  database  datastore  domain  data  designsystem  ui  testing
+│  │  drive          ← the only module that touches a network (ADR-0034; from V2-4's build PR)
 ├─ feature/
 │  ├─ onboarding  dashboard  inbox  entry  ledger  analytics  budget
 │  ├─ categories  ingest  ocr  export  settings
@@ -336,6 +338,14 @@ The DEK is multi-wrapped by two factors: Android Keystore (KEK-A) and the 24-wor
 - **A suppressed duplicate never notifies** (§5.1, P2-7). "Retained and visible" and "announced" are different promises: one payment fires a bank SMS *and* a payment-app notification, and buzzing twice is the dedupe layer defeated through a different surface. `ParseCapturedMessages` posts on a `Created` outcome only — and *cancels* `supersededPendingId`, because the sparse message usually lands first, is correctly announced as the only candidate there is, and then loses. `SuppressedCandidateDoesNotNotifyTest` guards both halves.
 - **Anything reachable with no Activity alive must open the vault itself.** Capture adapters, `ParseIngestWorker` and the `[Approve]`/`[Discard]` notification actions all run in a process with no UI, and `VaultSession.requireDatabase()` *throws* there. Both ingest and pending repositories route through `openForBackgroundWork()` — no new wrap, no new key material, the same `openOnLaunch()` the UI calls, which §7 permits by forbidding `setUserAuthenticationRequired(true)` on the DEK-wrapping key. The failure mode is the reason this is written down: the throw lands in a `runCatching` and comes back as a clean `false`, so the action reports success and does nothing (BUG13, and BUG12's `d88ca85` before it). **If you add a repository method a background caller can reach, it opens the vault or it lies.** And if it is a *capture* entry point -- where a message arrives and is lost if not written now -- it opens it through `openForCapture()`, which reports a refused vault to Home's capture-gap window (BUG50, §16 Q16). A worker path that will retry uses plain `openVault()` and reports nothing.
 
+### `:core:drive` (Google Drive, ADR-0034)
+- **It uploads only what the nightly pass has already sealed and verified,** byte for byte. Never decrypt to upload, never encrypt again, never upload a database file, a draft, a log or anything computed.
+- **`drive.file` is the only scope.** A wider one (`drive`, `drive.readonly`, `drive.appdata`) or a profile, email or ID-token request is a superseding ADR, not a code change.
+- **LedgerFlow stores no Google token.** Each pass asks `AuthorizationClient` again; when it answers with a consent intent, the background pass stops and Settings says "Sign in again". It never opens UI from a worker.
+- **A Drive failure never touches the local backup.** The upload is its own worker after the nightly pass, and `lastBackupAt` never waits for it.
+- **An upload isn't done until Drive's `md5Checksum` matches the local file.** Only then does `lastDriveUploadAt` move, and only then are older backups deleted on Drive.
+- **Turning Drive off never deletes the user's files on Drive.**
+
 ### Destroying ledger data
 `PurgeDeletedEntriesUseCase` is the only thing in the app that removes a
 committed `ledger_entry` row from the file, and the only irreversible operation
@@ -433,6 +443,7 @@ Targets live in `SPEC.md` §11. Practical rules while coding:
 | Summing mixed currencies in analytics | `amount_minor` is always base currency — there is nothing to mix |
 | Encrypting `.lfbk` with any user-chosen secret | phrase-derived key only |
 | `if (source == SMS)` outside an adapter | source-agnostic pipeline |
+| A network call outside `:core:drive` | raise an ADR (Law 6, ADR-0034) |
 | Reading a notification before the allowlist check | filter first, then touch the body |
 | Shipping only `smsFull` | both flavours build and test on every PR |
 
