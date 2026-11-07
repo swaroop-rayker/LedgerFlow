@@ -51,15 +51,29 @@ internal class PlayServicesDriveAccess @Inject constructor(
 }
 
 /**
- * Turning Drive backup on, from the screen (ADR-0034 §6): the same request,
- * but when Play services needs consent the screen launches its intent and
- * hands the result back through [complete].
+ * Turning Drive backup on and off, from the screen (ADR-0034 §6): the same
+ * request as [DriveAccess.token], but when Play services needs consent the
+ * screen launches its intent and hands the result back through [complete].
  */
-public class DriveSignIn @Inject constructor(
-    @param:ApplicationContext private val context: Context,
-) {
+public interface DriveSignIn {
+    public suspend fun begin(): DriveSignInStep
 
-    public suspend fun begin(): DriveSignInStep {
+    /** The consent sheet's result. Null data, or a refusal, means the user said no. */
+    public fun complete(data: Intent?): DriveSignInStep
+
+    /**
+     * Tells Google to drop this app's Drive grant for [account]. Best effort,
+     * and nothing on Drive is deleted. Without the account, Play services
+     * cannot be told which grant; the switch still goes off.
+     */
+    public suspend fun revoke(account: String?)
+}
+
+internal class PlayServicesDriveSignIn @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+) : DriveSignIn {
+
+    override suspend fun begin(): DriveSignInStep {
         if (!hasPlayServices(context)) return DriveSignInStep.Unavailable(DriveUnavailable.NoPlayServices)
         return when (val answer = authorize(context)) {
             is Authorization.Granted -> DriveSignInStep.Granted(answer.account)
@@ -68,12 +82,7 @@ public class DriveSignIn @Inject constructor(
         }
     }
 
-    /**
-     * Turning off: tells Google to drop this app's Drive grant for [account].
-     * Best effort, and nothing on Drive is deleted (ADR-0034 §6). Without the
-     * account, Play services cannot be told which grant; the switch still goes off.
-     */
-    public suspend fun revoke(account: String?) {
+    override suspend fun revoke(account: String?) {
         account ?: return
         val request = RevokeAccessRequest.builder()
             .setAccount(Account(account, GOOGLE_ACCOUNT_TYPE))
@@ -82,8 +91,7 @@ public class DriveSignIn @Inject constructor(
         runCatching { Identity.getAuthorizationClient(context).revokeAccess(request).await() }
     }
 
-    /** The consent sheet's result. Null data, or a refusal, means the user said no. */
-    public fun complete(data: Intent?): DriveSignInStep {
+    override fun complete(data: Intent?): DriveSignInStep {
         val result = runCatching {
             Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data)
         }.getOrElse { failure ->

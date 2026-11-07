@@ -133,6 +133,10 @@ public sealed interface Destination {
     @Serializable
     public data object RestoreBackup : Destination
 
+    /** Google Drive keeps a copy of the nightly backup (ADR-0034), from Data. */
+    @Serializable
+    public data object GoogleDrive : Destination
+
     /**
      * The approval queue, reached from the centre action's dial (§9.3) — and
      * from the diagnostics screen, which opens it on the Suppressed filter.

@@ -49,7 +49,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * up, and the whole point is that this happens without being thought about.
  * Writing one file is small work. No network constraint exists because no
  * network is used — the folder may be a cloud provider's, and syncing it is
- * that provider's business, not this app's (Law 6).
+ * that provider's business, not this app's (Law 6). The copy to Google Drive
+ * (ADR-0034) is [DriveUploadWorker]'s, queued once this pass has written.
  *
  * **Aimed at 03:00, decided by Android** (ADR-0027, amended 2026-09-23). A
  * periodic request of one day, whose next run each pass points at the next
@@ -92,6 +93,8 @@ public class NightlyBackupWorker @AssistedInject constructor(
                     "Nightly backup: ${outcome.rows} rows, ${outcome.imagesWritten} images written, " +
                         "${outcome.imagesFailed} images failed, ${outcome.olderBackupsRemoved} rotated out.",
                 )
+                // Its own worker, so the network never touches this pass (ADR-0034 §5).
+                DriveUploadWorker.enqueue(applicationContext)
                 Result.success()
             }
 

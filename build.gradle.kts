@@ -53,7 +53,11 @@ plugins {
  * - `:core:model` depends on no project; `:core:domain` only on `:core:model`
  *   and `:core:common` (its one AndroidX carve-out, ADR-0014, is a library);
  * - no `:core:*` module depends on a `:feature:*` module or on `:app`;
- * - nothing outside tests depends on `:core:testing`.
+ * - nothing outside tests depends on `:core:testing`;
+ * - only `:feature:settings` and `:app` depend on `:core:drive`, the one module
+ *   that touches a network (ADR-0034), and `:core:drive` depends on no
+ *   `:core:data`, `:core:database` or `:core:crypto`: it is handed bytes, never
+ *   the vault or a key.
  *
  * Read from each project's *declared* dependencies once every project is
  * evaluated, and captured as plain strings so the configuration cache can store
@@ -91,6 +95,10 @@ tasks.register("moduleDependencyRuleCheck") {
                 from.startsWith(":core:") && (to.startsWith(":feature:") || to == ":app") ->
                     "core modules never depend on features or the app"
                 to == ":core:testing" -> ":core:testing is for tests only"
+                to == ":core:drive" && from !in setOf(":feature:settings", ":app") ->
+                    ":core:drive (the network, ADR-0034) is used by :feature:settings and :app only"
+                from == ":core:drive" && to in setOf(":core:data", ":core:database", ":core:crypto") ->
+                    ":core:drive is handed bytes, never the vault, the database or a key (ADR-0034)"
                 else -> null
             }
             why?.let { "$from -> $to ($configuration): $it" }
@@ -105,7 +113,7 @@ tasks.register("moduleDependencyRuleCheck") {
 
 tasks.register("bannedApiCheck") {
     group = "verification"
-    description = "Fails on `!!` and cacheDir outside tests (CLAUDE.md §2 Laws 5 and 7)."
+    description = "Fails on `!!`, cacheDir, and network code outside :core:drive (CLAUDE.md §2 Laws 5-7)."
 
     val sourceRoots = subprojects
         .filter { it.buildFile.exists() }
@@ -117,6 +125,13 @@ tasks.register("bannedApiCheck") {
         // `!!` inside a string or a doubled negation is not matched.
         val bangBang = Regex("""[\w)\]]!!""")
         val cacheDir = Regex("""\.cacheDir\b""")
+        // Law 6 (ADR-0034): the JDK's ways onto a network, anywhere but
+        // :core:drive. Imports and qualified names both, and `openConnection(`
+        // for a URL reached some other way.
+        val network = Regex(
+            """\bjava\.net\.(URL|HttpURLConnection|URLConnection|Socket|DatagramSocket)\b|""" +
+                """\bjavax\.net\.ssl\.HttpsURLConnection\b|\bokhttp3\.|\.openConnection\s*\(""",
+        )
         val violations = mutableListOf<String>()
 
         sourceRoots.forEach { root ->
@@ -128,8 +143,13 @@ tasks.register("bannedApiCheck") {
                         file.name.endsWith("Test.kt") || "/build/" in path
                 }
                 .forEach { file ->
+                    val mayNetwork = "/core/drive/src/main/" in file.invariantSeparatorsPath
                     file.readLines().forEachIndexed { index, line ->
                         val code = line.substringBefore("//")
+                        if (!mayNetwork && network.containsMatchIn(code)) {
+                            violations += "${file.path}:${index + 1}: network code lives in :core:drive " +
+                                "only -- Law 6 / ADR-0034"
+                        }
                         if (bangBang.containsMatchIn(code)) {
                             violations += "${file.path}:${index + 1}: `!!` is banned outside tests " +
                                 "(use requireNotNull(x) { \"why\" }) -- Law 7 / BUG7"

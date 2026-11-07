@@ -17,4 +17,7 @@ internal interface DriveModule {
 
     @Binds
     fun driveFiles(impl: HttpDriveFiles): DriveFiles
+
+    @Binds
+    fun driveSignIn(impl: PlayServicesDriveSignIn): DriveSignIn
 }

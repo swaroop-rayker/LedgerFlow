@@ -86,5 +86,10 @@ dependencies {
     // the repository rather than reaching for a static.
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
+
+    // Google Drive backup (ADR-0034): the sign-in the Drive page starts, and
+    // the bindings the upload worker's use case runs on. :core:drive is the only
+    // module that touches a network, and this is one of the two allowed to use it.
+    implementation(project(":core:drive"))
     ksp(libs.androidx.hilt.compiler)
 }

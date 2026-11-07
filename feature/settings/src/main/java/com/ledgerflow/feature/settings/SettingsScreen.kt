@@ -28,6 +28,7 @@ import com.ledgerflow.core.designsystem.component.LfScreenTitle
 import com.ledgerflow.core.designsystem.component.LfSegmentedControl
 import com.ledgerflow.core.designsystem.component.LfSwitchRow
 import com.ledgerflow.core.designsystem.format.DisplayDates
+import com.ledgerflow.feature.settings.drive.driveSentence
 import com.ledgerflow.core.designsystem.format.DisplayLocale
 import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.pattern.LfPanel
@@ -75,6 +76,7 @@ public fun SettingsSectionScreen(
     modifier: Modifier = Modifier,
     onRestore: () -> Unit = {},
     onImport: () -> Unit = {},
+    onGoogleDrive: () -> Unit = {},
 ) {
     SettingsDialogs(state = state, onEvent = onEvent)
 
@@ -88,6 +90,7 @@ public fun SettingsSectionScreen(
         SettingsItem.Categories to onCategories,
         SettingsItem.Budgets to onBudgets,
         SettingsItem.BackUpNow to onBackUp,
+        SettingsItem.GoogleDrive to onGoogleDrive,
         SettingsItem.Export to onExport,
         SettingsItem.ImportStatement to onImport,
         SettingsItem.RestoreBackup to onRestore,
@@ -152,6 +155,10 @@ internal enum class SettingsItem {
     Budgets,
     BackUpNow,
     Export,
+
+    // ADR-0034: a copy of each nightly backup in the user's own Google Drive.
+    // Below Export: Back up now and Export stay together (§16 Q23).
+    GoogleDrive,
 
     // V2-4 (D8): a statement into the Inbox. With Export, its mirror.
     ImportStatement,
@@ -238,6 +245,7 @@ internal val SettingsSections: List<SettingsSection> = listOf(
         listOf(
             SettingsItem.BackUpNow,
             SettingsItem.Export,
+            SettingsItem.GoogleDrive,
             SettingsItem.ImportStatement,
             SettingsItem.RestoreBackup,
             SettingsItem.DeletedEntries,
@@ -304,6 +312,7 @@ internal val SettingsItem.title: String
         SettingsItem.Categories -> "Categories & merchants"
         SettingsItem.Budgets -> "Budgets"
         SettingsItem.BackUpNow -> "Back up now"
+        SettingsItem.GoogleDrive -> "Google Drive"
         SettingsItem.Export -> "Export"
         SettingsItem.ImportStatement -> "Import"
         SettingsItem.RestoreBackup -> "Restore from a backup"
@@ -354,6 +363,7 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.Categories to { "Organise how spending is grouped" },
     SettingsItem.Budgets to { "Set a limit per category" },
     SettingsItem.BackUpNow to { backupSubtitle(it) },
+    SettingsItem.GoogleDrive to { driveSentence(it.drive) },
     SettingsItem.Export to { "Save your data as an Excel workbook or CSV" },
     SettingsItem.ImportStatement to { "Add a bank statement to the Inbox" },
     SettingsItem.RestoreBackup to { "Replace this ledger with a backup" },

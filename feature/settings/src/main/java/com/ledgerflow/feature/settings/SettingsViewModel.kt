@@ -12,6 +12,8 @@ import com.ledgerflow.core.domain.appearance.AppearancePreferences
 import com.ledgerflow.core.domain.appearance.StartScreen
 import com.ledgerflow.core.domain.appearance.ThemePreference
 import com.ledgerflow.core.domain.backup.BackupRepository
+import com.ledgerflow.core.domain.drive.DriveStatus
+import com.ledgerflow.core.domain.drive.ObserveDriveStatusUseCase
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
@@ -154,6 +156,9 @@ public data class SettingsUiState(
      */
     val nightlyBackupsEnabled: Boolean = false,
 
+    /** Google Drive backup (ADR-0034): the Data row's sentence. */
+    val drive: DriveStatus = DriveStatus(enabled = false, lastAttempt = null, lastCopiedAt = null),
+
     /** Settings > Appearance (V2-PLAN §3.2), as stored outside the vault (ADR-0030). */
     val appearance: AppearancePreferences = AppearancePreferences(),
 
@@ -206,7 +211,7 @@ public class SettingsViewModel @Inject constructor(
     private val ledger: LedgerRepository,
     private val getCaptureHealth: GetNotificationCaptureHealthUseCase,
     private val attachments: AttachmentRepository,
-    backups: BackupRepository,
+    backupStatus: BackupStatusSources,
     device: DevicePreferences,
     private val budgetAlertChannel: BudgetAlertChannel,
     allowlist: PackageAllowlistRepository,
@@ -280,8 +285,9 @@ public class SettingsViewModel @Inject constructor(
     }
         // Joined second rather than as a sixth argument: `combine` is typed
         // to five, and the array form would give up the types.
-        .combine(backups.lastBackupAt()) { state, last -> state.copy(lastBackupAt = last) }
-        .combine(backups.nightlyBackupsEnabled()) { state, nightly ->
+        .combine(backupStatus.backups.lastBackupAt()) { state, last -> state.copy(lastBackupAt = last) }
+        .combine(backupStatus.drive()) { state, drive -> state.copy(drive = drive) }
+        .combine(backupStatus.backups.nightlyBackupsEnabled()) { state, nightly ->
             state.copy(nightlyBackupsEnabled = nightly)
         }
         .combine(appearanceStore.preferences) { state, appearance -> state.copy(appearance = appearance) }
@@ -402,3 +408,12 @@ public class SettingsViewModel @Inject constructor(
         private const val STOP_TIMEOUT_MS = 5_000L
     }
 }
+
+/**
+ * Where the Data rows' backup sentences come from: the phone's backups and the
+ * copy on Google Drive (ADR-0034), handed over as one dependency.
+ */
+public class BackupStatusSources @Inject constructor(
+    public val backups: BackupRepository,
+    public val drive: ObserveDriveStatusUseCase,
+)

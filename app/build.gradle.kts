@@ -366,6 +366,10 @@ dependencies {
     // Here for the same reason :core:data is: this is where a port meets its
     // implementation. Nothing above :app knows either exists.
     implementation(project(":core:datastore"))
+    // The only module that touches a network (ADR-0034, Law 6): Google Drive
+    // copies of the nightly backup. Bound here like the two stores above;
+    // :feature:settings uses it too, for the sign-in its Drive page starts.
+    implementation(project(":core:drive"))
     implementation(project(":feature:onboarding"))
     implementation(project(":feature:dashboard"))
     implementation(project(":feature:entry"))

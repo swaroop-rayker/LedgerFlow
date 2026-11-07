@@ -583,6 +583,7 @@ private val Destination.label: String
         Destination.DeletedEntries -> "Deleted"
         Destination.BackUpNow -> "Back up"
         Destination.RestoreBackup -> "Restore"
+        Destination.GoogleDrive -> "Google Drive"
         Destination.ImportStatement -> "Import"
         is Destination.Inbox -> "Inbox"
         Destination.Diagnostics -> "Diagnostics"
