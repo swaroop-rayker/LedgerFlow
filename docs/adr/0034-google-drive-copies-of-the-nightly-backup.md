@@ -134,7 +134,7 @@ with a bearer token:
 | Delete an old backup | `DELETE /drive/v3/files/<id>` |
 
 **Layout on Drive:** "LedgerFlow backups/" holds the `.lfbk` files under the
-names the phone gives them, and "LedgerFlow backups/receipts/" holds the
+names the phone gives them, and "LedgerFlow backups/attachments/" holds the
 sidecars under theirs. This mirrors the phone's folder, so a later restore from
 Drive is the existing folder restore, reading a different place.
 
@@ -158,10 +158,10 @@ Drive is the existing folder restore, reading a different place.
   uploaded are kept and older ones deleted (owner's choice (d)). A sidecar is
   deleted from Drive when the phone's folder no longer has it, so Drive mirrors
   the phone.
-- **Status lives outside the vault** (ADR-0030): enabled, account,
-  `lastDriveUploadAt`, the last outcome and a reason. Settings > Data > Google
-  Drive shows "Last copied to Drive: …", "Waiting for a connection", "Sign in
-  again", or the failure, worded like the nightly backup's.
+- **Status lives in the vault**, beside the nightly backup's own (amended while
+  building; see below): enabled, the account, the last attempt and its outcome,
+  and when everything last arrived. Settings > Data > Google Drive shows
+  "Copied …", "Sign in again", or the failure, worded like the nightly backup's.
 
 ### 6. Turning it on and off
 
@@ -237,3 +237,44 @@ The paragraph on `INTERNET` and `EXPECTED_MERGED_PERMISSIONS` stays, with
   - The guard tests named above.
   - A device check against a real Drive account in `TESTING.md`, because no CI
     runner signs in to Google.
+
+## Amended while building (2026-11-07)
+
+Found or decided while the sign-in and upload PR was built, each against the
+code rather than the draft:
+
+- **Status in the vault, not outside it** (owner, 2026-11-07). §5 said ADR-0030's
+  device store, but that store admits only what must be read before the vault
+  opens, and Drive's status is read by a worker that opens the vault anyway.
+  It is in `app_meta` (`driveEnabled`, `driveLastAttemptAt`, `driveLastOutcome`,
+  `driveLastCopiedAt`, `driveAccount`), beside `lastNightlyBackupOutcome`. It
+  travels in a `.lfbk`, so a restore onto a new phone remembers Drive was on and
+  shows "Sign in again" (the grant is per device).
+- **The sidecars' folder is `attachments/`**, the name the phone's backup folder
+  already uses (ADR-0023), not `receipts/`: Drive mirrors the phone exactly, so
+  a restore from Drive is the existing folder restore.
+- **One backup per pass.** Each pass uploads the phone's newest `.lfbk` if Drive
+  lacks it, and every sidecar Drive lacks; rotation keeps Drive's newest five.
+  The first copy is therefore the newest backup and the receipts, not five
+  backups.
+- **Turning off revokes for the account last used**, which is why the account is
+  kept: `revokeAccess` needs one. Without it the switch still goes off.
+- **The boundary is held by `moduleDependencyRuleCheck`**, not a separate test:
+  `:core:drive` may not depend on `:core:data`, `:core:database` or
+  `:core:crypto`, so it cannot even compile a reference to the vault or a key,
+  and only `:feature:settings` and `:app` may depend on it. `bannedApiCheck`
+  fails on `java.net.URL`, `HttpURLConnection`, `URLConnection`, `Socket`,
+  `HttpsURLConnection`, `okhttp3` or `.openConnection(` outside
+  `core/drive/src/main/`; a planted import was caught.
+- **Measured:** `play-services-auth` 22.0.0 (25 Aug 2026) merges **no**
+  permission in any of the four variants, so `EXPECTED_MERGED_PERMISSIONS` is
+  unchanged. The playSafe arm64 release split grows by **82 KiB** after R8
+  (43.65 to 43.73 MiB, budget 50).
+- **The Internet permission's sentence and the privacy policy changed with it:**
+  Data permissions says "Only for Google Drive backup, if you turn it on", and
+  the policy describes Drive backup, what Google can see, and that the copies
+  stay in Drive after turning off. The Play Console's Data safety answers are
+  the owner's to update before a Play release.
+- **Still to confirm on the phone:** that Drive does not offer itself in the
+  folder picker (option A's premise), and a real sign-in and upload once the
+  owner's OAuth clients exist (`TESTING.md` D17).
