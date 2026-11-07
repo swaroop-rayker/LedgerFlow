@@ -31,10 +31,12 @@ D1 asked how a copy gets off the phone. Two options were put to the owner on
 | Dependency | None | `play-services-auth` |
 | Owner setup | None | A Google Cloud project and OAuth clients |
 
-Option A cannot be made automatic. Drive's document provider offers single-file
-saves but does not appear in the folder picker (`ACTION_OPEN_DOCUMENT_TREE`),
-which is what the nightly pass writes into. This is to be confirmed on the SM-S721B
-before the build PR and recorded here. **The owner chose B.**
+The draft said option A could not be made automatic, because Drive's document
+provider did not appear in the folder picker (`ACTION_OPEN_DOCUMENT_TREE`) that
+the nightly pass writes into. **That was asserted from memory and is false on
+the SM-S721B** (checked 2026-11-07; see *Amended while building*): a folder
+inside My Drive can be chosen as the backup folder. **The owner chose B**, and
+kept it once the premise was found false.
 
 ## Decisions (owner, 2026-11-07)
 
@@ -275,6 +277,20 @@ code rather than the draft:
   the policy describes Drive backup, what Google can see, and that the copies
   stay in Drive after turning off. The Play Console's Data safety answers are
   the owner's to update before a Play release.
-- **Still to confirm on the phone:** that Drive does not offer itself in the
-  folder picker (option A's premise), and a real sign-in and upload once the
-  owner's OAuth clients exist (`TESTING.md` D17).
+- **Option A's premise was false** (checked on the SM-S721B, Android 17,
+  2026-11-07). Drive's document root reports `FLAG_SUPPORTS_IS_CHILD` and
+  `FLAG_SUPPORTS_CREATE`, and the system folder picker lists Drive once per
+  account. Drive's root and My Drive say "Can't use this folder", as every root
+  does, but any folder inside My Drive can be chosen. With the owner's approval
+  the playSafe copy's backup folder was set to a new "LedgerFlow backups" in My
+  Drive. A Back up now wrote `ledgerflow-20261107-080018.lfbk` there and passed
+  its read-back check, and the owner saw the file on drive.google.com. The
+  unattended nightly pass into that folder was not tested: WorkManager will not
+  run the 03:00 pass early, and the clock was not changed.
+- **The owner kept B anyway** (2026-11-07), with the finding in hand. B copies
+  automatically whatever folder the user picks, and its status ("Copied …",
+  "Sign in again") is shown in the app; the folder route leaves both to the
+  Drive app. The folder route stays open to any user who simply picks a Drive
+  folder, and nothing in B prevents it.
+- **Still to confirm on the phone:** a real sign-in and upload once the owner's
+  OAuth clients exist (`TESTING.md` D17).
