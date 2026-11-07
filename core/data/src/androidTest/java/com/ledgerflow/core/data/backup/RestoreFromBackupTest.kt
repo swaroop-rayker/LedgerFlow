@@ -122,7 +122,7 @@ class RestoreFromBackupTest {
             attachments = AttachmentBackup(AttachmentFiles(context), session, Dispatchers.IO),
             folders = BackupFolderResolver { uri -> if (uri == TREE) FileBackupFolder(folder) else null },
             documents = BackupDocumentReader { uri -> File(uri).takeIf { it.isFile }?.readBytes() },
-            staged = DriveRestoreFolder(File(context.filesDir, "drive-restore-test"), Dispatchers.IO),
+            staged = DriveRestoreFolder({ File(context.filesDir, "drive-restore-test") }, Dispatchers.IO),
             io = Dispatchers.IO,
         )
     }

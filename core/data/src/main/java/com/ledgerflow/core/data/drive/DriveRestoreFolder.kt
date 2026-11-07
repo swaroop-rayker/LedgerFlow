@@ -25,17 +25,24 @@ import kotlinx.coroutines.withContext
  */
 @Singleton
 public class DriveRestoreFolder internal constructor(
-    private val directory: File,
+    locate: () -> File,
     private val io: CoroutineDispatcher,
 ) : DriveRestoreStaging {
+
+    /**
+     * Found on first use, not at construction (BUG86): Hilt builds this on the
+     * main thread with the restore screen, and `filesDir` is a disk read that
+     * StrictMode's `penaltyDeath` turns into a crash. Every use is on [io].
+     */
+    private val directory: File by lazy(locate)
 
     @Inject
     public constructor(
         @ApplicationContext context: Context,
         @IoDispatcher io: CoroutineDispatcher,
-    ) : this(File(context.filesDir, DIRECTORY), io)
+    ) : this({ File(context.filesDir, DIRECTORY) }, io)
 
-    /** The staging folder as a backup folder, for the restore to read. */
+    /** The staging folder as a backup folder, for the restore to read. Call it on [io]. */
     public fun folder(): BackupFolder {
         directory.mkdirs()
         return FileBackupFolder(directory)
