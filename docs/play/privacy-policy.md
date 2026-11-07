@@ -1,6 +1,6 @@
 # LedgerFlow privacy policy
 
-Last updated: 2 October 2026
+Last updated: 7 November 2026
 
 LedgerFlow is a personal expense tracker for Android. This policy covers both
 versions: the one on Google Play (`com.ledgerflow.playsafe`), and the one on
@@ -18,9 +18,10 @@ Everything you put into LedgerFlow stays on your phone:
 - your backups and exports.
 
 The database is encrypted on the phone. Text recognition, message parsing and
-all analysis run on the phone. LedgerFlow has no account, no sign-in, no cloud
-sync and no server, and it never uploads your financial data, messages or
-receipts.
+all analysis run on the phone. LedgerFlow has no account and no server. It
+never uploads your financial data, messages or receipts in a form anyone else
+can read. The one thing that can leave your phone is an encrypted backup, and
+only to your own Google Drive, only if you turn that on (see below).
 
 ## Notifications LedgerFlow reads
 
@@ -49,8 +50,10 @@ are device information (such as model and Android version), app information
 metrics, the image format and size used, and error codes. They are sent over
 HTTPS, and Google states it does not share them with third parties. They
 never include your receipts, entries or messages. Google describes this at
-https://developers.google.com/ml-kit/android-data-disclosure. LedgerFlow
-itself sends nothing.
+https://developers.google.com/ml-kit/android-data-disclosure.
+
+Apart from Google Drive backup, described next, LedgerFlow itself sends
+nothing.
 
 ## Backups and your recovery phrase
 
@@ -58,6 +61,18 @@ Backups are encrypted with a key derived from the 24-word recovery phrase you
 write down at setup, and saved to a folder you choose. LedgerFlow does not
 store your phrase and cannot recover it. Where your backups go after that, for
 example a cloud folder you picked, is governed by that service.
+
+**Google Drive backup** is off until you turn it on in Settings > Data >
+Google Drive and sign in with your Google account. Then, after each nightly
+backup, LedgerFlow copies the backup file and your receipt images to a folder
+called "LedgerFlow backups" in your own Drive. They are encrypted on your phone
+before they leave it, and opening them needs your 24-word phrase, which
+LedgerFlow never has and never sends. Google can see the file names, their
+sizes and when they were uploaded, and that you use LedgerFlow, but not what is
+inside them. LedgerFlow asks only to see the files it creates in your Drive,
+never anything else there, and keeps the newest five backups. Uploads may use
+mobile data. Turning it off stops the uploads; the copies already in your
+Drive stay there until you delete them.
 
 ## Permissions
 
@@ -67,8 +82,8 @@ example a cloud folder you picked, is governed by that service.
   when a budget reaches a threshold.
 - **Notification access** (granted in Android's settings): to read payment
   notifications, as described above.
-- **Internet**: present because of the ML Kit library described above.
-  LedgerFlow does not use it.
+- **Internet**: used only for Google Drive backup, if you turn it on. It is
+  also brought in by the ML Kit library described above.
 - **Receive SMS** (Galaxy Store and repository version only, not the Google
   Play version): to receive bank transaction messages, as described above.
 
@@ -79,8 +94,8 @@ LedgerFlow is not directed at children under 13.
 ## Deleting your data
 
 Uninstalling LedgerFlow, or clearing its storage, deletes everything it holds
-on your phone. Backups you saved elsewhere are yours to delete. LedgerFlow
-holds no copy anywhere else.
+on your phone. Backups you saved elsewhere, including copies in your Google
+Drive, are yours to delete. LedgerFlow holds no copy anywhere else.
 
 ## Changes and contact
 

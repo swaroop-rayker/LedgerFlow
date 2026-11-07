@@ -51,6 +51,10 @@ splashscreen = "1.2.0"
 # :app's EXPECTED_MERGED_PERMISSIONS so a SECOND unexpected permission still
 # fails the build.
 mlkitText = "16.0.1"
+# Google Drive backup (ADR-0034): Play services' AuthorizationClient, for a
+# drive.file access token. The only Google sign-in piece; Drive itself is four
+# REST calls over HttpsURLConnection in :core:drive, no Google API client.
+playServicesAuth = "22.0.0"
 # OpenCV, for camera-capture perspective correction only (ADR-0024).
 opencv = "4.14.0"
 camerax = "1.5.0"
@@ -96,6 +100,7 @@ benchmark = "1.4.1"
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 fastexcel = { group = "org.dhatim", name = "fastexcel", version.ref = "fastexcel" }

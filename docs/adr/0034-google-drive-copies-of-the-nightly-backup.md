@@ -31,10 +31,12 @@ D1 asked how a copy gets off the phone. Two options were put to the owner on
 | Dependency | None | `play-services-auth` |
 | Owner setup | None | A Google Cloud project and OAuth clients |
 
-Option A cannot be made automatic. Drive's document provider offers single-file
-saves but does not appear in the folder picker (`ACTION_OPEN_DOCUMENT_TREE`),
-which is what the nightly pass writes into. This is to be confirmed on the SM-S721B
-before the build PR and recorded here. **The owner chose B.**
+The draft said option A could not be made automatic, because Drive's document
+provider did not appear in the folder picker (`ACTION_OPEN_DOCUMENT_TREE`) that
+the nightly pass writes into. **That was asserted from memory and is false on
+the SM-S721B** (checked 2026-11-07; see *Amended while building*): a folder
+inside My Drive can be chosen as the backup folder. **The owner chose B**, and
+kept it once the premise was found false.
 
 ## Decisions (owner, 2026-11-07)
 
@@ -134,7 +136,7 @@ with a bearer token:
 | Delete an old backup | `DELETE /drive/v3/files/<id>` |
 
 **Layout on Drive:** "LedgerFlow backups/" holds the `.lfbk` files under the
-names the phone gives them, and "LedgerFlow backups/receipts/" holds the
+names the phone gives them, and "LedgerFlow backups/attachments/" holds the
 sidecars under theirs. This mirrors the phone's folder, so a later restore from
 Drive is the existing folder restore, reading a different place.
 
@@ -158,10 +160,10 @@ Drive is the existing folder restore, reading a different place.
   uploaded are kept and older ones deleted (owner's choice (d)). A sidecar is
   deleted from Drive when the phone's folder no longer has it, so Drive mirrors
   the phone.
-- **Status lives outside the vault** (ADR-0030): enabled, account,
-  `lastDriveUploadAt`, the last outcome and a reason. Settings > Data > Google
-  Drive shows "Last copied to Drive: …", "Waiting for a connection", "Sign in
-  again", or the failure, worded like the nightly backup's.
+- **Status lives in the vault**, beside the nightly backup's own (amended while
+  building; see below): enabled, the account, the last attempt and its outcome,
+  and when everything last arrived. Settings > Data > Google Drive shows
+  "Copied …", "Sign in again", or the failure, worded like the nightly backup's.
 
 ### 6. Turning it on and off
 
@@ -185,8 +187,14 @@ restore (ADR-0026, ADR-0033), unchanged. The phrase is typed as it is today.
 2. The OAuth consent screen: External, app name, the owner's email, scope
    `drive.file`. Then set it to **In production**: in *Testing*, Google expires
    a grant after 7 days and the user would be asked to sign in again every week.
-3. Android OAuth clients for `com.ledgerflow` (the release key's SHA-1) and
-   `com.ledgerflow.debug` (the debug key's SHA-1).
+3. An Android OAuth client per package and signing key, four in all (corrected
+   2026-11-07; the draft named only the `smsFull` two):
+   - `com.ledgerflow.playsafe.debug` and `com.ledgerflow.debug`: the debug
+     key's SHA-1;
+   - `com.ledgerflow`: the owner's release key's SHA-1;
+   - `com.ledgerflow.playsafe`: Google Play's app-signing key's SHA-1 (Play
+     Console, App integrity), plus the upload key's for a locally signed
+     release build.
 
 No client ID or secret goes into the code or the repository: an Android client
 is matched by package name and signing certificate. Until the clients exist,
@@ -237,3 +245,72 @@ The paragraph on `INTERNET` and `EXPECTED_MERGED_PERMISSIONS` stays, with
   - The guard tests named above.
   - A device check against a real Drive account in `TESTING.md`, because no CI
     runner signs in to Google.
+
+## Amended while building (2026-11-07)
+
+Found or decided while the sign-in and upload PR was built, each against the
+code rather than the draft:
+
+- **Status in the vault, not outside it** (owner, 2026-11-07). §5 said ADR-0030's
+  device store, but that store admits only what must be read before the vault
+  opens, and Drive's status is read by a worker that opens the vault anyway.
+  It is in `app_meta` (`driveEnabled`, `driveLastAttemptAt`, `driveLastOutcome`,
+  `driveLastCopiedAt`, `driveAccount`), beside `lastNightlyBackupOutcome`. It
+  travels in a `.lfbk`, so a restore onto a new phone remembers Drive was on and
+  shows "Sign in again" (the grant is per device).
+- **The sidecars' folder is `attachments/`**, the name the phone's backup folder
+  already uses (ADR-0023), not `receipts/`: Drive mirrors the phone exactly, so
+  a restore from Drive is the existing folder restore.
+- **One backup per pass.** Each pass uploads the phone's newest `.lfbk` if Drive
+  lacks it, and every sidecar Drive lacks; rotation keeps Drive's newest five.
+  The first copy is therefore the newest backup and the receipts, not five
+  backups.
+- **The account is chosen in Android's account picker, before Google's sheet**
+  (owner's request, 2026-11-07). On the phone, Play services granted access
+  without naming the account, so the page could not show it and Turn off could
+  not revoke (`revokeAccess` needs an account). Turn on and Sign in again now
+  open `AccountManager.newChooseAccountIntent` (Google accounts only; no
+  permission, no profile or email scope), pass the chosen account to
+  `AuthorizationRequest.setAccount`, and keep it in `app_meta` (`driveAccount`).
+  The nightly pass asks for that account's token, so a phone with several
+  Google accounts never uses the wrong one, and Turn off revokes exactly that
+  grant. Asking Google for the email scope instead was rejected: it would break
+  §3's `drive.file`-only rule.
+- **The boundary is held by `moduleDependencyRuleCheck`**, not a separate test:
+  `:core:drive` may not depend on `:core:data`, `:core:database` or
+  `:core:crypto`, so it cannot even compile a reference to the vault or a key,
+  and only `:feature:settings` and `:app` may depend on it. `bannedApiCheck`
+  fails on `java.net.URL`, `HttpURLConnection`, `URLConnection`, `Socket`,
+  `HttpsURLConnection`, `okhttp3` or `.openConnection(` outside
+  `core/drive/src/main/`; a planted import was caught.
+- **Measured:** `play-services-auth` 22.0.0 (25 Aug 2026) merges **no**
+  permission in any of the four variants, so `EXPECTED_MERGED_PERMISSIONS` is
+  unchanged. The playSafe arm64 release split grows by **82 KiB** after R8
+  (43.65 to 43.73 MiB, budget 50).
+- **The Internet permission's sentence and the privacy policy changed with it:**
+  Data permissions says "Only for Google Drive backup, if you turn it on", and
+  the policy describes Drive backup, what Google can see, and that the copies
+  stay in Drive after turning off. The Play Console's Data safety answers are
+  the owner's to update before a Play release.
+- **Option A's premise was false** (checked on the SM-S721B, Android 17,
+  2026-11-07). Drive's document root reports `FLAG_SUPPORTS_IS_CHILD` and
+  `FLAG_SUPPORTS_CREATE`, and the system folder picker lists Drive once per
+  account. Drive's root and My Drive say "Can't use this folder", as every root
+  does, but any folder inside My Drive can be chosen. With the owner's approval
+  the playSafe copy's backup folder was set to a new "LedgerFlow backups" in My
+  Drive. A Back up now wrote `ledgerflow-20261107-080018.lfbk` there and passed
+  its read-back check, and the owner saw the file on drive.google.com. The
+  unattended nightly pass into that folder was not tested: WorkManager will not
+  run the 03:00 pass early, and the clock was not changed.
+- **The owner kept B anyway** (2026-11-07), with the finding in hand. B copies
+  automatically whatever folder the user picks, and its status ("Copied …",
+  "Sign in again") is shown in the app; the folder route leaves both to the
+  Drive app. The folder route stays open to any user who simply picks a Drive
+  folder, and nothing in B prevents it.
+- **D17 passed on the SM-S721B** (2026-11-07, playSafe debug, consent screen in
+  Testing with the owner as test user): the first copy reached Drive; a copy
+  queued offline finished once the network was back; deleting the app's access
+  in the Google account gave "Sign in again", which restored it; Turn off kept
+  the files; and, after the account-picker change, Turn off removed LedgerFlow
+  from the account's third-party connections. Publishing the consent screen
+  waits on a hosted home page and privacy policy (GitHub Pages proposed).

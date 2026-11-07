@@ -51,6 +51,8 @@ class SettingsSectionsTest {
         SettingsItem.Budgets to "budgets",
         SettingsItem.BackUpNow to "back up",
         SettingsItem.Export to "export",
+        // ADR-0034: its own page, where turning on asks Google.
+        SettingsItem.GoogleDrive to "google drive",
         // Opens the restore screen; replacing waits for DELETE there (ADR-0033).
         SettingsItem.RestoreBackup to "restore",
         SettingsItem.ImportStatement to "import",
@@ -86,6 +88,8 @@ class SettingsSectionsTest {
             "Data" to listOf(
                 SettingsItem.BackUpNow,
                 SettingsItem.Export,
+                // V2-4 (ADR-0034): the off-phone copy, below the pair §16 Q23 keeps together.
+                SettingsItem.GoogleDrive,
                 SettingsItem.ImportStatement,
                 // V2-4 (ADR-0033): restore, below the two that make copies.
                 SettingsItem.RestoreBackup,
@@ -199,6 +203,7 @@ class SettingsSectionsTest {
                     onEvent = { event -> opened += "event $event" },
                     onRestore = { opened += "restore" },
                     onImport = { opened += "import" },
+                    onGoogleDrive = { opened += "google drive" },
                 )
             }
         }

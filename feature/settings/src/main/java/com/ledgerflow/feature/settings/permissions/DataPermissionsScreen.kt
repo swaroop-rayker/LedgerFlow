@@ -49,7 +49,7 @@ internal fun permissionWhy(kind: PermissionKind): String = when (kind) {
     PermissionKind.RECEIVE_SMS -> "Reads bank and card messages for your Inbox."
     PermissionKind.CAMERA -> "Scans receipts and recovery QR codes, on this phone."
     PermissionKind.POST_NOTIFICATIONS -> "Tells you when a payment waits or a budget nears its limit."
-    PermissionKind.INTERNET -> "Brought in by Google's on-phone text reader. LedgerFlow does not use it."
+    PermissionKind.INTERNET -> "Only for Google Drive backup, if you turn it on. Google's text reader also asks for it."
     PermissionKind.BIOMETRIC -> "Used by App lock only, through your phone's prompt."
     PermissionKind.BACKGROUND_WORK -> "Processes captured messages and runs backups while closed."
     PermissionKind.UNEXPLAINED -> "LedgerFlow does not say why it holds this. Please report it."

@@ -38,6 +38,8 @@ import com.ledgerflow.feature.settings.SettingsPage
 import com.ledgerflow.feature.settings.SettingsSectionScreen
 import com.ledgerflow.feature.settings.SettingsUiState
 import com.ledgerflow.feature.settings.SettingsViewModel
+import com.ledgerflow.feature.settings.drive.GoogleDriveScreen
+import com.ledgerflow.feature.settings.drive.GoogleDriveViewModel
 import com.ledgerflow.feature.settings.permissions.DataPermissionsScreen
 import com.ledgerflow.feature.settings.permissions.DataPermissionsViewModel
 import com.ledgerflow.feature.settings.permissions.openPermissionSettings
@@ -119,6 +121,12 @@ internal fun NavGraphBuilder.profileAndSettingsDestinations(navController: NavHo
  * Android's own settings, so the page is re-read on every resume.
  */
 internal fun NavGraphBuilder.securityDestinations(navController: NavHostController) {
+    // Data > Google Drive (ADR-0034). Here, with the other plain Settings pages.
+    composable<Destination.GoogleDrive> {
+        val viewModel: GoogleDriveViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        GoogleDriveScreen(state = state, onEvent = viewModel::onEvent, onBack = navController::popBackStack)
+    }
     composable<Destination.DataPermissions> {
         val viewModel: DataPermissionsViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -243,6 +251,7 @@ internal fun SettingsSectionRoute(
         onDeletedEntries = { navigate(Destination.DeletedEntries) },
         onBackUp = { navigate(Destination.BackUpNow) },
         onRestore = { navigate(Destination.RestoreBackup) },
+        onGoogleDrive = { navigate(Destination.GoogleDrive) },
         onImport = { navigate(Destination.ImportStatement) },
         onNotificationAccess = { navigate(Destination.NotificationAccess) },
         onDiagnostics = { navigate(Destination.Diagnostics) },
