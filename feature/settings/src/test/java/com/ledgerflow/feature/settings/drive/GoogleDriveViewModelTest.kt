@@ -18,7 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -66,17 +65,40 @@ class GoogleDriveViewModelTest {
         return vm
     }
 
+    /** Turn on asks which account first, then asks Google for that account's grant, and keeps it. */
     @Test
-    fun aGrantedSignIn_turnsItOn_andQueuesTheFirstCopy() = runTest(dispatcher) {
-        signIn.next = DriveSignInStep.Granted("me@example.com")
+    fun aGrantedSignIn_turnsItOn_forTheChosenAccount_andQueuesTheFirstCopy() = runTest(dispatcher) {
+        signIn.next = DriveSignInStep.Granted
         val vm = viewModel()
 
         vm.onEvent(GoogleDriveEvent.TurnOn)
         advanceUntilIdle()
+        assertThat(vm.state.value.choosingAccount).isTrue()
+        assertThat(signIn.begun).isEmpty()
 
+        vm.onEvent(GoogleDriveEvent.AccountPickerLaunched)
+        vm.onEvent(GoogleDriveEvent.AccountChosen("me@example.com"))
+        advanceUntilIdle()
+
+        assertThat(signIn.begun).containsExactly("me@example.com")
+        assertThat(vm.state.value.choosingAccount).isFalse()
         assertThat(vm.state.value.status.enabled).isTrue()
+        assertThat(store.account).isEqualTo("me@example.com")
         assertThat(queued).isEqualTo(1)
         assertThat(vm.state.value.message).startsWith("Drive backup is on")
+    }
+
+    @Test
+    fun dismissingTheAccountPicker_leavesItOff() = runTest(dispatcher) {
+        val vm = viewModel()
+
+        vm.onEvent(GoogleDriveEvent.TurnOn)
+        vm.onEvent(GoogleDriveEvent.AccountChosen(null))
+        advanceUntilIdle()
+
+        assertThat(signIn.begun).isEmpty()
+        assertThat(store.enabled).isFalse()
+        assertThat(vm.state.value.message).isEqualTo("Drive backup stays off.")
     }
 
     @Test
@@ -90,18 +112,20 @@ class GoogleDriveViewModelTest {
         signIn.next = DriveSignInStep.NeedsConsent(intent)
         val vm = viewModel()
 
-        vm.onEvent(GoogleDriveEvent.TurnOn)
+        vm.onEvent(GoogleDriveEvent.AccountChosen("me@example.com"))
         advanceUntilIdle()
         assertThat(vm.state.value.consent).isSameInstanceAs(intent)
         assertThat(store.enabled).isFalse()
 
         vm.onEvent(GoogleDriveEvent.ConsentLaunched)
-        signIn.completion = DriveSignInStep.Granted(null)
+        signIn.completion = DriveSignInStep.Granted
         vm.onEvent(GoogleDriveEvent.ConsentReturned(Intent()))
         advanceUntilIdle()
 
         assertThat(vm.state.value.consent).isNull()
         assertThat(store.enabled).isTrue()
+        // The account chosen before the consent sheet is the one kept.
+        assertThat(store.account).isEqualTo("me@example.com")
     }
 
     @Test
@@ -122,7 +146,7 @@ class GoogleDriveViewModelTest {
         signIn.next = DriveSignInStep.Unavailable(DriveUnavailable.NotConfigured)
         val vm = viewModel()
 
-        vm.onEvent(GoogleDriveEvent.TurnOn)
+        vm.onEvent(GoogleDriveEvent.AccountChosen("me@example.com"))
         advanceUntilIdle()
 
         assertThat(store.enabled).isFalse()
@@ -133,7 +157,8 @@ class GoogleDriveViewModelTest {
     @Test
     fun turningOff_asksFirst_thenRevokes() = runTest(dispatcher) {
         store.enabled = true
-        store.attempt = DriveAttempt(1L, DriveOutcome.Copied(1, 0, 1, 0), "me@example.com")
+        store.account = "me@example.com"
+        store.attempt = DriveAttempt(1L, DriveOutcome.Copied(1, 0, 1, 0))
         val vm = viewModel()
         advanceUntilIdle()
 
@@ -163,7 +188,7 @@ class GoogleDriveViewModelTest {
     @Test
     fun aGrantThatNeedsConsentAgain_offersSignIn() = runTest(dispatcher) {
         store.enabled = true
-        store.attempt = DriveAttempt(1L, DriveOutcome.NeedsSignIn, null)
+        store.attempt = DriveAttempt(1L, DriveOutcome.NeedsSignIn)
         val vm = viewModel()
         advanceUntilIdle()
 
@@ -172,22 +197,29 @@ class GoogleDriveViewModelTest {
     }
 
     private class FakeStore : DriveStatusStore {
-        private val state = MutableStateFlow(Triple(false, null as DriveAttempt?, null as Long?))
+        private val state = MutableStateFlow(DriveStatus(enabled = false, lastAttempt = null, lastCopiedAt = null))
         var enabled: Boolean
-            get() = state.value.first
+            get() = state.value.enabled
             set(value) {
-                state.value = state.value.copy(first = value)
+                state.value = state.value.copy(enabled = value)
             }
         var attempt: DriveAttempt?
-            get() = state.value.second
+            get() = state.value.lastAttempt
             set(value) {
-                state.value = state.value.copy(second = value)
+                state.value = state.value.copy(lastAttempt = value)
+            }
+        var account: String?
+            get() = state.value.account
+            set(value) {
+                state.value = state.value.copy(account = value)
             }
 
-        override fun observe(): Flow<DriveStatus> = state.map { (on, last, copied) -> DriveStatus(on, last, copied) }
+        override fun observe(): Flow<DriveStatus> = state
         override suspend fun enabled() = enabled
-        override suspend fun setEnabled(enabled: Boolean) {
+        override suspend fun account() = account
+        override suspend fun setEnabled(enabled: Boolean, account: String?) {
             this.enabled = enabled
+            account?.let { this.account = it }
         }
         override suspend fun record(attempt: DriveAttempt) {
             this.attempt = attempt
@@ -197,8 +229,12 @@ class GoogleDriveViewModelTest {
     private class FakeSignIn : DriveSignIn {
         var next: DriveSignInStep = DriveSignInStep.Declined
         var completion: DriveSignInStep = DriveSignInStep.Declined
+        val begun = mutableListOf<String>()
         val revoked = mutableListOf<String?>()
-        override suspend fun begin() = next
+        override suspend fun begin(account: String): DriveSignInStep {
+            begun += account
+            return next
+        }
         override fun complete(data: Intent?) = completion
         override suspend fun revoke(account: String?) {
             revoked += account

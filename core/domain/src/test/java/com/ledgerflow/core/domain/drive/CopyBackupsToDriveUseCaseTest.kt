@@ -38,7 +38,17 @@ class CopyBackupsToDriveUseCaseTest {
         assertThat(drive.names(drive.receipts())).containsExactly("r1.lfba", "r2.lfba")
         // Byte for byte, as sealed on the phone.
         assertThat(drive.content(drive.root(), "ledgerflow-20261107-030200.lfbk")).isEqualTo(bytes(1))
-        assertThat(status.recorded.single()).isEqualTo(DriveAttempt(NOW, outcome, "me@example.com"))
+        assertThat(status.recorded.single()).isEqualTo(DriveAttempt(NOW, outcome))
+    }
+
+    /** The account the user chose when turning on, not whichever one Play services finds. */
+    @Test
+    fun theTokenIsAskedForTheChosenAccount() = runBlocking<Unit> {
+        status.chosen = "me@example.com"
+
+        copy()
+
+        assertThat(access.askedFor.toSet()).containsExactly("me@example.com")
     }
 
     @Test
@@ -142,11 +152,14 @@ class CopyBackupsToDriveUseCaseTest {
 
     private class FakeStatus(enabled: Boolean) : DriveStatusStore {
         var enabledNow = enabled
+        var chosen: String? = null
         val recorded = mutableListOf<DriveAttempt>()
-        override fun observe(): Flow<DriveStatus> = MutableStateFlow(DriveStatus(enabledNow, null, null))
+        override fun observe(): Flow<DriveStatus> = MutableStateFlow(DriveStatus(enabledNow, null, null, chosen))
         override suspend fun enabled() = enabledNow
-        override suspend fun setEnabled(enabled: Boolean) {
+        override suspend fun account() = chosen
+        override suspend fun setEnabled(enabled: Boolean, account: String?) {
             enabledNow = enabled
+            account?.let { chosen = it }
         }
         override suspend fun record(attempt: DriveAttempt) {
             recorded += attempt
@@ -156,10 +169,12 @@ class CopyBackupsToDriveUseCaseTest {
     private class FakeAccess : DriveAccess {
         var consent = true
         var asked = 0
+        val askedFor = mutableListOf<String?>()
         val forgotten = mutableListOf<String>()
-        override suspend fun token(): DriveToken {
+        override suspend fun token(account: String?): DriveToken {
             asked++
-            return if (consent) DriveToken.Granted("t$asked", "me@example.com") else DriveToken.NeedsSignIn
+            askedFor += account
+            return if (consent) DriveToken.Granted("t$asked") else DriveToken.NeedsSignIn
         }
         override suspend fun forget(token: String) {
             forgotten += token

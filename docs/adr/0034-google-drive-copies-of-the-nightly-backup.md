@@ -265,8 +265,17 @@ code rather than the draft:
   lacks it, and every sidecar Drive lacks; rotation keeps Drive's newest five.
   The first copy is therefore the newest backup and the receipts, not five
   backups.
-- **Turning off revokes for the account last used**, which is why the account is
-  kept: `revokeAccess` needs one. Without it the switch still goes off.
+- **The account is chosen in Android's account picker, before Google's sheet**
+  (owner's request, 2026-11-07). On the phone, Play services granted access
+  without naming the account, so the page could not show it and Turn off could
+  not revoke (`revokeAccess` needs an account). Turn on and Sign in again now
+  open `AccountManager.newChooseAccountIntent` (Google accounts only; no
+  permission, no profile or email scope), pass the chosen account to
+  `AuthorizationRequest.setAccount`, and keep it in `app_meta` (`driveAccount`).
+  The nightly pass asks for that account's token, so a phone with several
+  Google accounts never uses the wrong one, and Turn off revokes exactly that
+  grant. Asking Google for the email scope instead was rejected: it would break
+  §3's `drive.file`-only rule.
 - **The boundary is held by `moduleDependencyRuleCheck`**, not a separate test:
   `:core:drive` may not depend on `:core:data`, `:core:database` or
   `:core:crypto`, so it cannot even compile a reference to the vault or a key,
@@ -298,5 +307,10 @@ code rather than the draft:
   "Sign in again") is shown in the app; the folder route leaves both to the
   Drive app. The folder route stays open to any user who simply picks a Drive
   folder, and nothing in B prevents it.
-- **Still to confirm on the phone:** a real sign-in and upload once the owner's
-  OAuth clients exist (`TESTING.md` D17).
+- **D17 passed on the SM-S721B** (2026-11-07, playSafe debug, consent screen in
+  Testing with the owner as test user): the first copy reached Drive; a copy
+  queued offline finished once the network was back; deleting the app's access
+  in the Google account gave "Sign in again", which restored it; Turn off kept
+  the files; and, after the account-picker change, Turn off removed LedgerFlow
+  from the account's third-party connections. Publishing the consent screen
+  waits on a hosted home page and privacy policy (GitHub Pages proposed).

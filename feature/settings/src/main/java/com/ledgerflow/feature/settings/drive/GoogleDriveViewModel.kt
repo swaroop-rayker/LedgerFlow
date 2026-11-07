@@ -29,6 +29,11 @@ public data class GoogleDriveUiState(
     val status: DriveStatus = DriveStatus(enabled = false, lastAttempt = null, lastCopiedAt = null),
     /** Signing in or turning off: the actions wait. */
     val isWorking: Boolean = false,
+    /**
+     * Android's account picker, to open once; [GoogleDriveEvent.AccountPickerLaunched]
+     * clears it. [status]'s account, if any, is offered first.
+     */
+    val choosingAccount: Boolean = false,
     /** Google's consent sheet, to launch once; [GoogleDriveEvent.ConsentLaunched] clears it. */
     val consent: PendingIntent? = null,
     val confirmingOff: Boolean = false,
@@ -39,7 +44,13 @@ public data class GoogleDriveUiState(
 }
 
 public sealed interface GoogleDriveEvent {
+    /** Turn on, or sign in again: opens the account picker first. */
     public data object TurnOn : GoogleDriveEvent
+
+    public data object AccountPickerLaunched : GoogleDriveEvent
+
+    /** The account picker's answer: the chosen account's name, or null when dismissed. */
+    public data class AccountChosen(val account: String?) : GoogleDriveEvent
 
     public data object ConsentLaunched : GoogleDriveEvent
 
@@ -70,10 +81,12 @@ public class WorkManagerDriveCopyQueue @Inject constructor(
 }
 
 /**
- * Turning on asks Play services for the `drive.file` grant: silently when it
- * stands, through Google's consent sheet when it does not. Only a granted
- * answer turns the switch on, and then the first copy is queued at once
- * rather than waiting for the night. Turning off stops uploads and revokes the
+ * Turning on first asks which Google account, through Android's own account
+ * picker (no permission, no profile scope), then asks Play services for that
+ * account's `drive.file` grant: silently when it stands, through Google's
+ * consent sheet when it does not. Only a granted answer turns the switch on,
+ * keeping the account, and then the first copy is queued at once rather than
+ * waiting for the night. Turning off stops uploads and revokes that account's
  * grant; **the files already on Drive are left there** (ADR-0034 §6).
  */
 @HiltViewModel
@@ -86,13 +99,18 @@ public class GoogleDriveViewModel @Inject constructor(
 
     private val local = MutableStateFlow(GoogleDriveUiState())
 
+    /** The account being signed in, between the picker and Google's answer. */
+    private var signingIn: String? = null
+
     public val state: StateFlow<GoogleDriveUiState> = combine(observeStatus(), local) { status, extra ->
         extra.copy(status = status)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), GoogleDriveUiState())
 
     public fun onEvent(event: GoogleDriveEvent) {
         when (event) {
-            GoogleDriveEvent.TurnOn -> work { settle(signIn.begin()) }
+            GoogleDriveEvent.TurnOn -> local.update { it.copy(choosingAccount = true) }
+            GoogleDriveEvent.AccountPickerLaunched -> local.update { it.copy(choosingAccount = false) }
+            is GoogleDriveEvent.AccountChosen -> chosen(event.account)
             GoogleDriveEvent.ConsentLaunched -> local.update { it.copy(consent = null) }
             is GoogleDriveEvent.ConsentReturned -> work { settle(signIn.complete(event.data)) }
             GoogleDriveEvent.CopyNow -> {
@@ -102,7 +120,7 @@ public class GoogleDriveViewModel @Inject constructor(
             GoogleDriveEvent.TurnOffRequested -> local.update { it.copy(confirmingOff = true) }
             GoogleDriveEvent.TurnOffDismissed -> local.update { it.copy(confirmingOff = false) }
             GoogleDriveEvent.TurnOffConfirmed -> {
-                val account = state.value.status.lastAttempt?.account
+                val account = state.value.status.account
                 local.update { it.copy(confirmingOff = false) }
                 work {
                     setEnabled(false)
@@ -114,10 +132,19 @@ public class GoogleDriveViewModel @Inject constructor(
         }
     }
 
+    private fun chosen(account: String?) {
+        if (account == null) {
+            if (!state.value.status.enabled) post("Drive backup stays off.")
+            return
+        }
+        signingIn = account
+        work { settle(signIn.begin(account)) }
+    }
+
     private suspend fun settle(step: DriveSignInStep) {
         when (step) {
-            is DriveSignInStep.Granted -> {
-                setEnabled(true)
+            DriveSignInStep.Granted -> {
+                setEnabled(true, signingIn)
                 copies.enqueue()
                 post("Drive backup is on. The first copy starts when there's a connection.")
             }

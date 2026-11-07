@@ -85,16 +85,20 @@ public class DefaultDriveStatusStore @Inject constructor(
         session.openForBackgroundWork()?.appMetaDao()?.value(KEY_ENABLED) == TRUE
     }
 
-    override suspend fun setEnabled(enabled: Boolean): Unit = withContext(io) {
+    override suspend fun account(): String? = withContext(io) {
+        session.openForBackgroundWork()?.appMetaDao()?.value(KEY_ACCOUNT)
+    }
+
+    override suspend fun setEnabled(enabled: Boolean, account: String?): Unit = withContext(io) {
         val meta = session.openForBackgroundWork()?.appMetaDao() ?: return@withContext
         meta.put(AppMetaEntity(KEY_ENABLED, if (enabled) TRUE else FALSE))
+        account?.let { meta.put(AppMetaEntity(KEY_ACCOUNT, it)) }
     }
 
     override suspend fun record(attempt: DriveAttempt): Unit = withContext(io) {
         val meta = session.openForBackgroundWork()?.appMetaDao() ?: return@withContext
         meta.put(AppMetaEntity(KEY_LAST_AT, attempt.at.toString()))
         meta.put(AppMetaEntity(KEY_LAST_OUTCOME, attempt.outcome.record()))
-        attempt.account?.let { meta.put(AppMetaEntity(KEY_ACCOUNT, it)) }
         if (attempt.outcome is DriveOutcome.Copied) meta.put(AppMetaEntity(KEY_LAST_COPIED_AT, attempt.at.toString()))
     }
 
@@ -110,11 +114,12 @@ public class DefaultDriveStatusStore @Inject constructor(
         fun statusOf(values: Map<String, String>): DriveStatus {
             val at = values[KEY_LAST_AT]?.toLongOrNull()
             val outcome = values[KEY_LAST_OUTCOME]?.let(DriveOutcome::parse)
-            val attempt = if (at != null && outcome != null) DriveAttempt(at, outcome, values[KEY_ACCOUNT]) else null
+            val attempt = if (at != null && outcome != null) DriveAttempt(at, outcome) else null
             return DriveStatus(
                 enabled = values[KEY_ENABLED] == TRUE,
                 lastAttempt = attempt,
                 lastCopiedAt = values[KEY_LAST_COPIED_AT]?.toLongOrNull(),
+                account = values[KEY_ACCOUNT],
             )
         }
     }

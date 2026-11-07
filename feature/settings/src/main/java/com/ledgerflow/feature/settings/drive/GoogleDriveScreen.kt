@@ -1,5 +1,7 @@
 package com.ledgerflow.feature.settings.drive
 
+import android.accounts.Account
+import android.accounts.AccountManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,6 +47,7 @@ public fun GoogleDriveScreen(
     modifier: Modifier = Modifier,
 ) {
     val snackbar = remember { SnackbarHostState() }
+    AccountPicker(state, onEvent)
     ConsentLauncher(state, onEvent)
     state.message?.let { message ->
         LaunchedEffect(message) {
@@ -106,7 +109,7 @@ private fun StatusPanel(state: GoogleDriveUiState, onEvent: (GoogleDriveEvent) -
 @Composable
 private fun DetailsPanel(state: GoogleDriveUiState, onEvent: (GoogleDriveEvent) -> Unit) {
     LfPanel {
-        Fact("Account", state.status.lastAttempt?.account ?: "Your Google account")
+        Fact("Account", state.status.account ?: "Your Google account")
         LfDivider()
         Fact("Uses", "Any network, mobile data included")
         LfDivider()
@@ -168,6 +171,36 @@ private fun TurnOffDialog(onEvent: (GoogleDriveEvent) -> Unit) {
     )
 }
 
+/**
+ * Android's own account picker, Google accounts only, opened once per request.
+ * It needs no permission and grants nothing: it only says which account the
+ * consent sheet is for, so the app knows which grant to use and to revoke.
+ */
+@Composable
+private fun AccountPicker(state: GoogleDriveUiState, onEvent: (GoogleDriveEvent) -> Unit) {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        onEvent(GoogleDriveEvent.AccountChosen(result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)))
+    }
+    if (!state.choosingAccount) return
+    val current = state.status.account
+    LaunchedEffect(Unit) {
+        launcher.launch(
+            AccountManager.newChooseAccountIntent(
+                current?.let { Account(it, GOOGLE_ACCOUNT_TYPE) },
+                null,
+                arrayOf(GOOGLE_ACCOUNT_TYPE),
+                null,
+                null,
+                null,
+                null,
+            ),
+        )
+        onEvent(GoogleDriveEvent.AccountPickerLaunched)
+    }
+}
+
+private const val GOOGLE_ACCOUNT_TYPE = "com.google"
+
 /** Launches Google's consent sheet once per request, and hands back its answer. */
 @Composable
 private fun ConsentLauncher(state: GoogleDriveUiState, onEvent: (GoogleDriveEvent) -> Unit) {
@@ -191,8 +224,9 @@ private fun GoogleDriveScreenPreview() {
             state = GoogleDriveUiState(
                 status = DriveStatus(
                     enabled = true,
-                    lastAttempt = DriveAttempt(PREVIEW_AT, DriveOutcome.Copied(1, 2, 3_100_000, 0), "you@gmail.com"),
+                    lastAttempt = DriveAttempt(PREVIEW_AT, DriveOutcome.Copied(1, 2, 3_100_000, 0)),
                     lastCopiedAt = PREVIEW_AT,
+                    account = "you@gmail.com",
                 ),
             ),
             onEvent = {},

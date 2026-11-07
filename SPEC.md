@@ -1092,7 +1092,9 @@ backup's (owner, 2026-11-07), so a restored phone shows "Sign in again".
 Every network call is in `:core:drive`; `bannedApiCheck` and
 `moduleDependencyRuleCheck` hold that. `CopyBackupsToDriveUseCaseTest`,
 `HttpDriveFilesTest`, `GoogleDriveViewModelTest`; goldens `drive-*`. A network failure never touches the local backup.
-Turning it off stops uploads and leaves the files on Drive. Restore from Drive
+Turning it on first opens Android's account picker (no permission, no
+profile scope); the chosen account is kept, every pass asks for its token, and
+turning off revokes its grant, stops uploads and leaves the files on Drive. Restore from Drive
 follows in a later PR, through the existing restore. **Nothing is decrypted to
 be uploaded, and nothing on the phone or on Drive can open a backup without the
 phrase.**

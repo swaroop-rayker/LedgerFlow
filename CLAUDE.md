@@ -341,6 +341,7 @@ The DEK is multi-wrapped by two factors: Android Keystore (KEK-A) and the 24-wor
 ### `:core:drive` (Google Drive, ADR-0034)
 - **It uploads only what the nightly pass has already sealed and verified,** byte for byte. Never decrypt to upload, never encrypt again, never upload a database file, a draft, a log or anything computed.
 - **`drive.file` is the only scope.** A wider one (`drive`, `drive.readonly`, `drive.appdata`) or a profile, email or ID-token request is a superseding ADR, not a code change.
+- **The Google account is the one the user picked** (Android's account picker, before the consent sheet), kept in `app_meta` and passed to every authorization and to the revoke. Never let Play services guess among the phone's accounts, and never ask for the email scope to learn it.
 - **LedgerFlow stores no Google token.** Each pass asks `AuthorizationClient` again; when it answers with a consent intent, the background pass stops and Settings says "Sign in again". It never opens UI from a worker.
 - **A Drive failure never touches the local backup.** The upload is its own worker after the nightly pass, and `lastBackupAt` never waits for it.
 - **An upload isn't done until Drive's `md5Checksum` matches the local file.** Only then does `lastDriveUploadAt` move, and only then are older backups deleted on Drive.

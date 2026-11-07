@@ -102,16 +102,13 @@ public class CopyBackupsToDriveUseCase @Inject constructor(
 
     public suspend operator fun invoke(): DriveOutcome {
         if (!status.enabled()) return DriveOutcome.Off
-        var account: String? = null
-        val outcome = when (val token = access.token()) {
-            is DriveToken.Granted -> {
-                account = token.account
-                copyWith(token)
-            }
+        val account = status.account()
+        val outcome = when (val token = access.token(account)) {
+            is DriveToken.Granted -> copyWith(token, account)
             DriveToken.NeedsSignIn -> DriveOutcome.NeedsSignIn
             is DriveToken.Unavailable -> DriveOutcome.Unavailable(token.reason)
         }
-        status.record(DriveAttempt(clock.nowMillis(), outcome, account))
+        status.record(DriveAttempt(clock.nowMillis(), outcome))
         return outcome
     }
 
@@ -120,11 +117,11 @@ public class CopyBackupsToDriveUseCase @Inject constructor(
      * services may hand back a token Drive has already expired. A second refusal
      * means the grant itself is gone.
      */
-    private suspend fun copyWith(token: DriveToken.Granted): DriveOutcome {
+    private suspend fun copyWith(token: DriveToken.Granted, account: String?): DriveOutcome {
         val files = local.snapshot()?.takeIf { it.backups.isNotEmpty() } ?: return DriveOutcome.NothingToCopy
         Pass(token.accessToken).run(files)?.let { return it }
         access.forget(token.accessToken)
-        val again = access.token() as? DriveToken.Granted ?: return DriveOutcome.NeedsSignIn
+        val again = access.token(account) as? DriveToken.Granted ?: return DriveOutcome.NeedsSignIn
         return Pass(again.accessToken).run(files) ?: DriveOutcome.NeedsSignIn
     }
 

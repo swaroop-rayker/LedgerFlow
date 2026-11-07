@@ -13,18 +13,20 @@ import kotlinx.coroutines.flow.Flow
 public interface DriveAccess {
 
     /**
-     * A Drive access token for the `drive.file` scope, asked of Play services
-     * afresh each time: LedgerFlow stores none. Never shows UI, so it can run in
-     * a worker; when consent is needed it answers [DriveToken.NeedsSignIn].
+     * A Drive access token for the `drive.file` scope, for [account] (the one the
+     * user chose when turning Drive on; null on an install from before that was
+     * kept). Asked of Play services afresh each time: LedgerFlow stores none.
+     * Never shows UI, so it can run in a worker; when consent is needed it
+     * answers [DriveToken.NeedsSignIn].
      */
-    public suspend fun token(): DriveToken
+    public suspend fun token(account: String?): DriveToken
 
     /** Tells Play services a token was refused, so the next [token] is a new one. */
     public suspend fun forget(token: String)
 }
 
 public sealed interface DriveToken {
-    public data class Granted(val accessToken: String, val account: String?) : DriveToken
+    public data class Granted(val accessToken: String) : DriveToken
 
     /** Consent is needed again (revoked, account removed): only the screen can ask. */
     public data object NeedsSignIn : DriveToken
@@ -111,7 +113,14 @@ public interface DriveStatusStore {
 
     public suspend fun enabled(): Boolean
 
-    public suspend fun setEnabled(enabled: Boolean)
+    /** The Google account Drive backup uses, as the user chose it; null if none was kept. */
+    public suspend fun account(): String?
+
+    /**
+     * Turns Drive backup on or off. [account] is kept when given; turning off
+     * keeps the last one, so "Sign in again" can offer it.
+     */
+    public suspend fun setEnabled(enabled: Boolean, account: String? = null)
 
     public suspend fun record(attempt: DriveAttempt)
 }
@@ -123,10 +132,12 @@ public data class DriveStatus(
     val lastAttempt: DriveAttempt?,
     /** When everything last arrived, verified. */
     val lastCopiedAt: Long?,
+    /** The Google account Drive backup uses, as the user chose it. */
+    val account: String? = null,
 )
 
-/** One upload pass, as recorded. [account] only when Play services said which. */
-public data class DriveAttempt(val at: Long, val outcome: DriveOutcome, val account: String? = null)
+/** One upload pass, as recorded. */
+public data class DriveAttempt(val at: Long, val outcome: DriveOutcome)
 
 /** The Google Drive page and the Data row's subtitle. */
 public class ObserveDriveStatusUseCase @Inject constructor(private val store: DriveStatusStore) {
@@ -138,5 +149,6 @@ public class ObserveDriveStatusUseCase @Inject constructor(private val store: Dr
  * they are the user's (ADR-0034 §6).
  */
 public class SetDriveEnabledUseCase @Inject constructor(private val store: DriveStatusStore) {
-    public suspend operator fun invoke(enabled: Boolean): Unit = store.setEnabled(enabled)
+    public suspend operator fun invoke(enabled: Boolean, account: String? = null): Unit =
+        store.setEnabled(enabled, account)
 }

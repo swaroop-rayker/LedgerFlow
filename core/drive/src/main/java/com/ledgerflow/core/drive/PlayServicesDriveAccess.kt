@@ -5,7 +5,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
-import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.ClearTokenRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.identity.RevokeAccessRequest
@@ -33,10 +32,10 @@ internal class PlayServicesDriveAccess @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) : DriveAccess {
 
-    override suspend fun token(): DriveToken {
+    override suspend fun token(account: String?): DriveToken {
         if (!hasPlayServices(context)) return DriveToken.Unavailable(DriveUnavailable.NoPlayServices)
-        return when (val answer = authorize(context)) {
-            is Authorization.Granted -> DriveToken.Granted(answer.accessToken, answer.account)
+        return when (val answer = authorize(context, account)) {
+            is Authorization.Granted -> DriveToken.Granted(answer.accessToken)
             // A worker cannot show Google's consent sheet; the screen will.
             is Authorization.NeedsConsent -> DriveToken.NeedsSignIn
             is Authorization.Refused -> DriveToken.Unavailable(answer.reason)
@@ -56,7 +55,12 @@ internal class PlayServicesDriveAccess @Inject constructor(
  * screen launches its intent and hands the result back through [complete].
  */
 public interface DriveSignIn {
-    public suspend fun begin(): DriveSignInStep
+    /**
+     * Asks for the grant for [account], the Google account the user just chose
+     * in Android's account picker. Naming it is what lets turning off revoke
+     * exactly that grant, and the nightly pass use exactly that account.
+     */
+    public suspend fun begin(account: String): DriveSignInStep
 
     /** The consent sheet's result. Null data, or a refusal, means the user said no. */
     public fun complete(data: Intent?): DriveSignInStep
@@ -73,10 +77,10 @@ internal class PlayServicesDriveSignIn @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) : DriveSignIn {
 
-    override suspend fun begin(): DriveSignInStep {
+    override suspend fun begin(account: String): DriveSignInStep {
         if (!hasPlayServices(context)) return DriveSignInStep.Unavailable(DriveUnavailable.NoPlayServices)
-        return when (val answer = authorize(context)) {
-            is Authorization.Granted -> DriveSignInStep.Granted(answer.account)
+        return when (val answer = authorize(context, account)) {
+            is Authorization.Granted -> DriveSignInStep.Granted
             is Authorization.NeedsConsent -> DriveSignInStep.NeedsConsent(answer.intent)
             is Authorization.Refused -> DriveSignInStep.Unavailable(answer.reason)
         }
@@ -98,7 +102,7 @@ internal class PlayServicesDriveSignIn @Inject constructor(
             return DriveSignInStep.Unavailable(reasonOf(failure))
         }
         return if (result.accessToken != null) {
-            DriveSignInStep.Granted(accountOf(result))
+            DriveSignInStep.Granted
         } else {
             DriveSignInStep.Declined
         }
@@ -107,7 +111,7 @@ internal class PlayServicesDriveSignIn @Inject constructor(
 
 /** Where turning Drive on stands. */
 public sealed interface DriveSignInStep {
-    public data class Granted(val account: String?) : DriveSignInStep
+    public data object Granted : DriveSignInStep
 
     /** Launch [intent] (an `IntentSenderRequest`) and pass its result to [DriveSignIn.complete]. */
     public data class NeedsConsent(val intent: PendingIntent) : DriveSignInStep
@@ -118,7 +122,7 @@ public sealed interface DriveSignInStep {
 }
 
 private sealed interface Authorization {
-    data class Granted(val accessToken: String, val account: String?) : Authorization
+    data class Granted(val accessToken: String) : Authorization
 
     data class NeedsConsent(val intent: PendingIntent) : Authorization
 
@@ -128,9 +132,14 @@ private sealed interface Authorization {
 private const val DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 private const val GOOGLE_ACCOUNT_TYPE = "com.google"
 
-private suspend fun authorize(context: Context): Authorization {
+/**
+ * The `drive.file` grant, for [account] when it is known: Play services then
+ * neither guesses among the phone's Google accounts nor asks which.
+ */
+private suspend fun authorize(context: Context, account: String?): Authorization {
     val request = AuthorizationRequest.builder()
         .setRequestedScopes(listOf(Scope(DRIVE_FILE_SCOPE)))
+        .apply { account?.let { setAccount(Account(it, GOOGLE_ACCOUNT_TYPE)) } }
         .build()
     val result = runCatching { Identity.getAuthorizationClient(context).authorize(request).await() }
         .getOrElse { failure -> return Authorization.Refused(reasonOf(failure)) }
@@ -138,15 +147,10 @@ private suspend fun authorize(context: Context): Authorization {
     val intent = result.pendingIntent
     return when {
         result.hasResolution() && intent != null -> Authorization.NeedsConsent(intent)
-        token != null -> Authorization.Granted(token, accountOf(result))
+        token != null -> Authorization.Granted(token)
         else -> Authorization.Refused(DriveUnavailable.Failed)
     }
 }
-
-/** The account's email, when Play services says which; never asked for separately (no profile scope). */
-@Suppress("DEPRECATION") // The only way the authorization result names its account.
-private fun accountOf(result: AuthorizationResult): String? =
-    runCatching { result.toGoogleSignInAccount()?.email }.getOrNull()
 
 /**
  * `DEVELOPER_ERROR` is Google refusing this package and signing key: no OAuth

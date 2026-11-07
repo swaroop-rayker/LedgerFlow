@@ -38,16 +38,18 @@ open class GoogleDriveScreenGoldensTest {
     private val copied = GoogleDriveUiState(
         status = DriveStatus(
             enabled = true,
-            lastAttempt = DriveAttempt(AT, DriveOutcome.Copied(1, 2, 3_100_000, 0), "swaroop@example.com"),
+            lastAttempt = DriveAttempt(AT, DriveOutcome.Copied(1, 2, 3_100_000, 0)),
             lastCopiedAt = AT,
+            account = "swaroop@example.com",
         ),
     )
 
     private val signInAgain = GoogleDriveUiState(
         status = DriveStatus(
             enabled = true,
-            lastAttempt = DriveAttempt(AT, DriveOutcome.NeedsSignIn, "swaroop@example.com"),
+            lastAttempt = DriveAttempt(AT, DriveOutcome.NeedsSignIn),
             lastCopiedAt = AT - DAY * 4,
+            account = "swaroop@example.com",
         ),
     )
 
