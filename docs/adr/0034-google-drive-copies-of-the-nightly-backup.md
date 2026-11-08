@@ -164,6 +164,9 @@ Drive is the existing folder restore, reading a different place.
   deleted from Drive when the phone's folder no longer has it, so Drive mirrors
   the phone. *Amended by ADR-0035 §4: only when no receipt row names it
   either, so a receipt removed from the phone keeps its Drive copy.*
+  *Amended 2026-11-08 (BUG89): a sidecar Drive has is uploaded again when the
+  folder's copy differs from it in size, as it does after a re-seal under the
+  same name; the new copy is verified before the old one is deleted.*
 - **Status lives in the vault**, beside the nightly backup's own (amended while
   building; see below): enabled, the account, the last attempt and its outcome,
   and when everything last arrived. Settings > Data > Google Drive shows

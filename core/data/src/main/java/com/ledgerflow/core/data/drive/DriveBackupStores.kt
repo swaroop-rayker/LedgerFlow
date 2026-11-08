@@ -40,11 +40,14 @@ public class DefaultLocalBackupFiles @Inject constructor(
 
     override suspend fun snapshot(): LocalBackupSet? = withContext(io) {
         val folder = folder() ?: return@withContext null
+        val receipts = folder.subfolder(LocalBackupFiles.ATTACHMENTS)
         LocalBackupSet(
             backups = folder.list().filter { BackupNames.WRITTEN.matches(it) }.sortedDescending(),
-            attachments = folder.subfolder(LocalBackupFiles.ATTACHMENTS)?.list().orEmpty()
+            attachments = receipts?.list().orEmpty()
                 .filter { DriveLayout.ATTACHMENT_NAME.matches(it) }
                 .sorted(),
+            attachmentSizes = receipts?.sizes().orEmpty()
+                .filterKeys { DriveLayout.ATTACHMENT_NAME.matches(it) },
         )
     }
 

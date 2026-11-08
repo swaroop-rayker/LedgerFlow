@@ -182,6 +182,13 @@ now" needs the 24 words, and the app never holds them.
   names it (`ReceiptsRepository.idsIn(All)`).
 - The nightly pass reports a removed receipt with no folder copy as
   `removedFromPhone`, not as unreadable.
+- **BUG89, found on the phone before merge.** "Back up now" sealed receipt
+  copies to the phrase, the nightly pass re-sealed them under the same name, and
+  Drive kept the old copy, so condition 3 could never hold for those receipts.
+  The owner chose both fixes:
+  - once the install has a nightly key, "Back up now" seals to it, still
+    verified with the words;
+  - the Drive copy uploads again any sidecar whose size has changed.
 - On the owner's phone, the backup folder chosen in the system picker is itself
   a Google Drive folder. That is a second off-phone copy, and the rule is the
   same.

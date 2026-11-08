@@ -99,7 +99,16 @@ public interface LocalBackupFiles {
     }
 }
 
-public data class LocalBackupSet(val backups: List<String>, val attachments: List<String>)
+public data class LocalBackupSet(
+    val backups: List<String>,
+    val attachments: List<String>,
+    /**
+     * Each receipt copy's size, where the folder can say it. A copy whose Drive
+     * file differs in size has been re-sealed since it was uploaded, and is
+     * uploaded again (BUG89).
+     */
+    val attachmentSizes: Map<String, Long> = emptyMap(),
+)
 
 public sealed interface LocalBackupFile {
     public val name: String

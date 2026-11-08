@@ -33,6 +33,13 @@ public interface BackupFolder {
     /** Names of the plain files directly in this folder. */
     public fun list(): List<String>
 
+    /**
+     * Each plain file's size in bytes, where the folder can say it (V2-5,
+     * BUG89): the Drive copy re-uploads a receipt whose copy here changed. A
+     * folder that cannot answer reports none, and nothing is re-uploaded.
+     */
+    public fun sizes(): Map<String, Long> = emptyMap()
+
     public fun exists(name: String): Boolean
 
     /** The whole file, or null if it is absent or unreadable. */
@@ -84,6 +91,9 @@ public class FileBackupFolder(private val directory: File) : BackupFolder {
         directory.listFiles().orEmpty().filter { it.isFile }.map { it.name }
 
     override fun exists(name: String): Boolean = File(directory, name).isFile
+
+    override fun sizes(): Map<String, Long> =
+        directory.listFiles().orEmpty().filter { it.isFile }.associate { it.name to it.length() }
 
     override fun read(name: String): ByteArray? =
         runCatching { File(directory, name).takeIf { it.isFile }?.readBytes() }.getOrNull()

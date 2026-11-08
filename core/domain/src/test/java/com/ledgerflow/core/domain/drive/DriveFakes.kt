@@ -46,11 +46,15 @@ internal class FakeAccess : DriveAccess {
     }
 }
 
-internal class FakeLocal(val backups: Map<String, ByteArray>, val attachments: Map<String, ByteArray>) :
+internal class FakeLocal(val backups: Map<String, ByteArray>, var attachments: Map<String, ByteArray>) :
     LocalBackupFiles {
     var reachable = true
     override suspend fun snapshot() = if (reachable) {
-        LocalBackupSet(backups.keys.sortedDescending(), attachments.keys.sorted())
+        LocalBackupSet(
+            backups.keys.sortedDescending(),
+            attachments.keys.sorted(),
+            attachments.mapValues { it.value.size.toLong() },
+        )
     } else {
         null
     }
@@ -96,7 +100,9 @@ internal class FakeDrive : DriveFiles {
     }
 
     override suspend fun list(token: String, folderId: String) = answer(token) {
-        folders[folderId].orEmpty().map { (name, file) -> RemoteFile(file.first, name, md5(file.second), null) }
+        folders[folderId].orEmpty().map { (name, file) ->
+            RemoteFile(file.first, name, md5(file.second), file.second.size.toLong())
+        }
     }
 
     override suspend fun upload(token: String, folderId: String, name: String, bytes: ByteArray) = answer(token) {

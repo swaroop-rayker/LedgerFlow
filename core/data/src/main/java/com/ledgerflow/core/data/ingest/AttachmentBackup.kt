@@ -4,6 +4,7 @@ import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.crypto.lfbk.LfbaContainer
 import com.ledgerflow.core.crypto.lfbk.LfbaResult
 import com.ledgerflow.core.data.backup.BackupFolder
+import com.ledgerflow.core.data.backup.DefaultBackupRepository
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.entity.AttachmentEntity
 import java.io.File
@@ -107,8 +108,26 @@ public class AttachmentBackup @Inject constructor(
      * @param seed the BIP-39 seed. **Never a passphrase** (CLAUDE.md §0) — this
      *   folder travels with the `.lfbk`.
      */
-    public suspend fun writeAll(backupFolder: BackupFolder, seed: ByteArray): AttachmentBackupReport =
-        writeAllWith(backupFolder, PhraseSeal(seed))
+    public suspend fun writeAll(backupFolder: BackupFolder, seed: ByteArray): AttachmentBackupReport {
+        // Once this install has a nightly key, "Back up now" seals the way the
+        // nightly pass does (owner, 2026-11-08; ADR-0035, BUG89): one format in
+        // the folder, so the nightly pass never re-seals a copy under the same
+        // name and leaves Google Drive holding the old one. Verified here by a
+        // full decrypt with the words in hand, stronger than the nightly check.
+        val publicKey = enrolledPublicKey()
+        return writeAllWith(backupFolder, publicKey?.let { EnrolledPhraseSeal(seed, it) } ?: PhraseSeal(seed))
+    }
+
+    private suspend fun enrolledPublicKey(): ByteArray? = withContext(io) {
+        val database = session.openForBackgroundWork() ?: return@withContext null
+        runCatching { database.appMetaDao().value(DefaultBackupRepository.KEY_SEAL_PUBLIC_KEY)?.fromHex() }
+            .getOrNull()
+    }
+
+    private fun String.fromHex(): ByteArray? = runCatching {
+        check(length % 2 == 0) { "odd-length hex" }
+        chunked(2).map { it.toInt(HEX_RADIX).toByte() }.toByteArray()
+    }.getOrNull()
 
     /**
      * The nightly path (ADR-0027): every image sealed to [publicKeyBytes], with
@@ -359,6 +378,31 @@ public class AttachmentBackup @Inject constructor(
     }
 
     /**
+     * "Back up now" on an install with a nightly key: sealed to that key, as the
+     * nightly pass seals, and verified by opening the file that landed with the
+     * words in hand. A copy in the older phrase format is not current, so the
+     * first such backup re-seals it once.
+     */
+    private class EnrolledPhraseSeal(private val seed: ByteArray, private val publicKeyBytes: ByteArray) : ImageSeal {
+        override fun seal(plaintext: ByteArray, attachmentId: String): ByteArray =
+            LfbaContainer.writeSealed(plaintext, publicKeyBytes, attachmentId)
+
+        override fun isCurrent(headerBytes: ByteArray): Boolean =
+            LfbaContainer.sealedTo(headerBytes, publicKeyBytes)
+
+        override fun verifyLanded(
+            landed: ByteArray,
+            written: ByteArray,
+            attachmentId: String,
+            expected: ByteArray,
+        ): Boolean = landed.contentEquals(written) &&
+            when (val read = LfbaContainer.read(landed, seed, attachmentId)) {
+                is LfbaResult.Failure -> false
+                is LfbaResult.Success -> read.image.contentEquals(expected)
+            }
+    }
+
+    /**
      * Without it: the bytes that landed are compared with the bytes that were
      * sealed, and the header must still parse as sealed to this install's key.
      * It cannot prove the file opens — that needs the words (ADR-0027).
@@ -410,5 +454,7 @@ public class AttachmentBackup @Inject constructor(
          * plus a 256-byte attachment id, well under 512.
          */
         private const val HEADER_PROBE_BYTES = 512
+
+        private const val HEX_RADIX = 16
     }
 }
