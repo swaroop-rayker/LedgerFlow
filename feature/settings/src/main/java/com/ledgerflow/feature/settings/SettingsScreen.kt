@@ -77,6 +77,7 @@ public fun SettingsSectionScreen(
     onRestore: () -> Unit = {},
     onImport: () -> Unit = {},
     onGoogleDrive: () -> Unit = {},
+    onReceipts: () -> Unit = {},
 ) {
     SettingsDialogs(state = state, onEvent = onEvent)
 
@@ -95,9 +96,8 @@ public fun SettingsSectionScreen(
         SettingsItem.ImportStatement to onImport,
         SettingsItem.RestoreBackup to onRestore,
         SettingsItem.DeletedEntries to onDeletedEntries,
-        // The one row that does not navigate: it opens the confirmation, and
-        // the confirmation is the only thing that deletes (ADR-0023).
-        SettingsItem.Receipts to { onEvent(SettingsEvent.ReceiptDeleteRequested) },
+        // Its own page (V2-5): browse, open, select and delete there.
+        SettingsItem.Receipts to onReceipts,
         // Four options do not fit a row's control (they would stack into a
         // column four buttons tall), so this one opens a short picker.
         SettingsItem.DateOrder to { onEvent(SettingsEvent.DateOrderRequested) },
@@ -407,45 +407,6 @@ internal fun deletedSubtitle(state: SettingsUiState): String = when {
 }
 
 /**
- * The mis-tap guard on deleting every receipt image (ADR-0023).
- *
- * Three things it has to do, each decided by the bin's erase first:
- *
- * - **Name the count**, because a dialog that only asks "are you sure?" is one
- *   people learn to tap through.
- * - **Say it cannot be undone**, in those words.
- * - **Say plainly that nothing else holds a copy.** It used to say "Export
- *   first if you want to keep them" — but the export is CSV, and the
- *   attachment CSV is metadata only (ADR-0023), so following that advice kept
- *   no photograph at all. A sentence promising a durability the app does not
- *   have is exactly what the purge dialog and the pre-migration snapshot are
- *   forbidden to say (ADR-0019). Since "Back up now" (§16 Q23) copies the
- *   photos into the backup folder, the sentence says exactly that much: this
- *   phone keeps no other copy, and photos included in a backup stay in that
- *   folder. **It does not say they can be restored.** Revisited when restore
- *   shipped (ADR-0026) and kept: restore rebuilds a whole vault on a fresh
- *   install, so it is no way to get a deleted photo back on this phone, and
- *   offering it as one would be the durability promise this rule forbids.
- *
- * And one thing specific to this dialog: it says the **entries survive**.
- * Deleting a photograph is not deleting a purchase, and a user who thought
- * otherwise would never tap it — or would tap it and be horrified.
- */
-@Composable
-private fun DeleteReceiptsDialog(state: SettingsUiState, onEvent: (SettingsEvent) -> Unit) {
-    LfDialog(
-        title = deleteReceiptsTitle(state),
-        body = deleteReceiptsBody(state),
-        confirmText = "Delete",
-        // Warning emphasis also stops an outside tap from standing in for an
-        // answer, which on an irreversible action would defeat the point.
-        emphasis = LfDialogEmphasis.Warning,
-        onConfirm = { onEvent(SettingsEvent.ReceiptDeleteConfirmed) },
-        onDismiss = { onEvent(SettingsEvent.ReceiptDeleteDismissed) },
-    )
-}
-
-/**
  * What the backup row says about itself (§16 Q23).
  *
  * **The never-backed-up case says what that means**, not merely "never": the
@@ -468,22 +429,6 @@ internal fun backupSubtitle(state: SettingsUiState, locale: Locale = DisplayLoca
     }
 }
 
-/** The delete dialog's title, with the count named (see [DeleteReceiptsDialog]). */
-internal fun deleteReceiptsTitle(state: SettingsUiState): String {
-    val count = state.receipts.count
-    return if (count == 1) "Delete 1 receipt image?" else "Delete $count receipt images?"
-}
-
-/**
- * The delete dialog's body. Separate from the composable so the promise it
- * makes — or refuses to make — is pinned by a test rather than by review.
- */
-internal fun deleteReceiptsBody(state: SettingsUiState): String =
-    "This frees ${formatSize(state.receipts.bytes)} and cannot be undone. " +
-        "Your entries and their amounts are untouched — only the photographs go. " +
-        "This phone keeps no other copy. Photos included in a backup made with " +
-        "“Back up now” stay in that backup folder."
-
 /**
  * What the receipts row says about itself (ADR-0023).
  *
@@ -499,9 +444,10 @@ internal fun receiptsSubtitle(state: SettingsUiState): String = when {
     !state.isLoaded -> "Images kept with your scanned receipts"
     state.receipts.count == 0 ->
         "No images yet. Receipts you scan are kept here, encrypted."
-    state.receipts.count == 1 -> "1 image, ${formatSize(state.receipts.bytes)}. Tap to delete."
-    else ->
-        "${state.receipts.count} images, ${formatSize(state.receipts.bytes)}. Tap to delete."
+    // The row opens the Receipts page (V2-5), so it names the size and no
+    // longer tells the user to tap to delete.
+    state.receipts.count == 1 -> "1 image, ${formatSize(state.receipts.bytes)}"
+    else -> "${state.receipts.count} images, ${formatSize(state.receipts.bytes)}"
 }
 
 /**
@@ -632,13 +578,9 @@ private fun InfoRow(title: String, subtitle: String) {
     }
 }
 
-/** The dialogs a row can open: the receipts confirmation and the two pickers. */
+/** The dialogs a row can open: the two pickers. */
 @Composable
 private fun SettingsDialogs(state: SettingsUiState, onEvent: (SettingsEvent) -> Unit) {
-    if (state.confirmingReceiptDelete) {
-        DeleteReceiptsDialog(state = state, onEvent = onEvent)
-    }
-
     if (state.choosingDateOrder) {
         OptionsDialog(
             title = "Date order",

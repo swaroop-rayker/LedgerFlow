@@ -66,19 +66,8 @@ public interface AttachmentRepository {
      */
     public suspend fun usage(): AttachmentUsage
 
-    /**
-     * Deletes every stored image. Irreversible.
-     *
-     * **Rows and files, in that order, and the entries survive.** An
-     * `attachment` row exists to say an image is there; with the image gone
-     * the row would be a promise the app cannot keep, and every surface that
-     * draws one would have to distinguish "no receipt" from "receipt we lost".
-     * The `ledger_entry` it belonged to is untouched — deleting a photograph
-     * is not deleting a purchase.
-     *
-     * @return how many images were removed.
-     */
-    public suspend fun deleteAll(): Int
+    // Deleting moved to `ReceiptsRepository` (V2-5), which also removes the
+    // backup folder's copy (BUG88).
 }
 
 /** What the Settings row reports. */

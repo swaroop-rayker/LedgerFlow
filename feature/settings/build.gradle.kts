@@ -92,4 +92,9 @@ dependencies {
     // module that touches a network, and this is one of the two allowed to use it.
     implementation(project(":core:drive"))
     ksp(libs.androidx.hilt.compiler)
+
+    // The Receipts page's list (V2-5): the Android half of Paging 3 (ADR-0014),
+    // as :feature:ledger uses it; paging-testing reads the ViewModel's pages.
+    implementation(libs.androidx.paging.compose)
+    testImplementation(libs.androidx.paging.testing)
 }

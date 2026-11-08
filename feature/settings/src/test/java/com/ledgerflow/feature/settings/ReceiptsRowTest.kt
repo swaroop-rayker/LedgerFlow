@@ -5,21 +5,16 @@ import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import org.junit.Test
 
 /**
- * The "Receipts" row and its delete dialog (ADR-0023).
+ * The "Receipts" row (ADR-0023, V2-5).
  *
- * The row is the ADR's whole answer to unbounded growth — show the number
- * rather than delete on a timer — so the subtitle's figures are the substance,
- * not decoration. The dialog guards the only irreversible action on receipt
- * images, and **what it promises is the load-bearing part**: it used to tell
- * the user to "export first if you want to keep them", which kept no
- * photograph, because the export is CSV and carries metadata only.
+ * The row makes growth visible, so the subtitle's figures are the substance.
+ * Since V2-5 it opens the Receipts page, where deleting is; its dialogs are
+ * tested there (`ReceiptsTextTest`).
  */
 class ReceiptsRowTest {
 
     private fun state(count: Int, bytes: Long, loaded: Boolean = true) =
         SettingsUiState(receipts = AttachmentUsage(count = count, bytes = bytes), isLoaded = loaded)
-
-    // ─── The row ────────────────────────────────────────────────────────────
 
     @Test
     fun beforeTheUsageArrives_saysWhatTheRowIsForRatherThanGuessing() {
@@ -37,51 +32,12 @@ class ReceiptsRowTest {
 
     @Test
     fun oneImage_readsAsSingularWithItsSize() {
-        assertThat(receiptsSubtitle(state(count = 1, bytes = 250_000)))
-            .isEqualTo("1 image, 250 kB. Tap to delete.")
+        assertThat(receiptsSubtitle(state(count = 1, bytes = 250_000))).isEqualTo("1 image, 250 kB")
     }
 
+    /** The row opens a page now: it no longer says "Tap to delete". */
     @Test
     fun severalImages_readAsPluralWithTheirSize() {
-        assertThat(receiptsSubtitle(state(count = 12, bytes = 3_400_000)))
-            .isEqualTo("12 images, 3 MB. Tap to delete.")
-    }
-
-    // ─── The delete dialog ──────────────────────────────────────────────────
-
-    @Test
-    fun theTitle_namesTheCount() {
-        assertThat(deleteReceiptsTitle(state(count = 1, bytes = 1))).isEqualTo("Delete 1 receipt image?")
-        assertThat(deleteReceiptsTitle(state(count = 7, bytes = 1))).isEqualTo("Delete 7 receipt images?")
-    }
-
-    /**
-     * **The promises it must not make.** The CSV export carries no photograph,
-     * so it must not be offered as a way to keep them. And although "Back up
-     * now" copies the photos into the backup folder, the only restore
-     * (ADR-0026) rebuilds a whole vault on a fresh install — no way to get a
-     * deleted photo back on this phone — so the dialog must not promise recovery
-     * either: only what is true, that this phone keeps no other copy and a
-     * backup's copies stay in its folder.
-     */
-    @Test
-    fun theBody_promisesNeitherAnExportNorARestore() {
-        val body = deleteReceiptsBody(state(count = 3, bytes = 900_000))
-
-        assertThat(body).doesNotContain("Export")
-        assertThat(body).doesNotContain("export")
-        assertThat(body.lowercase()).doesNotContain("restore")
-        assertThat(body).contains("keeps no other copy")
-        assertThat(body).contains("stay in that backup folder")
-    }
-
-    /** Irreversible, said in those words; and the entries survive. */
-    @Test
-    fun theBody_saysItIsIrreversibleAndThatEntriesSurvive() {
-        val body = deleteReceiptsBody(state(count = 3, bytes = 900_000))
-
-        assertThat(body).contains("cannot be undone")
-        assertThat(body).contains("entries and their amounts are untouched")
-        assertThat(body).contains("900 kB")
+        assertThat(receiptsSubtitle(state(count = 12, bytes = 3_400_000))).isEqualTo("12 images, 3 MB")
     }
 }

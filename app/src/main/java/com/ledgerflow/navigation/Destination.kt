@@ -137,6 +137,20 @@ public sealed interface Destination {
     @Serializable
     public data object GoogleDrive : Destination
 
+    /** Data > Receipts (V2-5): browse by period, select and delete. */
+    @Serializable
+    public data object Receipts : Destination
+
+    /**
+     * One receipt's image and what it belongs to (V2-5).
+     *
+     * **The property name is a contract**, as [Entry.draftId] is:
+     * `ReceiptViewModel.ATTACHMENT_ID_ARG` reads it by string, and
+     * `ReceiptArgumentTest` fails the build if the two drift.
+     */
+    @Serializable
+    public data class Receipt(val attachmentId: String) : Destination
+
     /**
      * The approval queue, reached from the centre action's dial (§9.3) — and
      * from the diagnostics screen, which opens it on the Suppressed filter.

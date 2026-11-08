@@ -584,6 +584,8 @@ private val Destination.label: String
         Destination.BackUpNow -> "Back up"
         Destination.RestoreBackup -> "Restore"
         Destination.GoogleDrive -> "Google Drive"
+        Destination.Receipts -> "Receipts"
+        is Destination.Receipt -> "Receipt"
         Destination.ImportStatement -> "Import"
         is Destination.Inbox -> "Inbox"
         Destination.Diagnostics -> "Diagnostics"

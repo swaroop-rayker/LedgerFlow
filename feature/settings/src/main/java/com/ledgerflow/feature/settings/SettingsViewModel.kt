@@ -40,14 +40,6 @@ import kotlinx.coroutines.launch
 /** Everything the Settings tab asks its ViewModel to do. */
 public sealed interface SettingsEvent {
 
-    /** Opens the confirmation. Does not delete anything by itself. */
-    public data object ReceiptDeleteRequested : SettingsEvent
-
-    /** Irreversible (ADR-0023). */
-    public data object ReceiptDeleteConfirmed : SettingsEvent
-
-    public data object ReceiptDeleteDismissed : SettingsEvent
-
     /** Appearance (V2-3). Applies at once; the activity follows the store. */
     public sealed interface AppearanceEvent : SettingsEvent
 
@@ -121,13 +113,9 @@ public data class SettingsUiState(
      * Receipt images on disk (ADR-0023).
      *
      * The ADR declines a timed purge and makes growth **visible** instead, so
-     * this row is the whole of that decision's user-facing half — and, until
-     * a viewer exists, the only way to remove an image at all.
+     * this row is its user-facing half. It opens the Receipts page (V2-5).
      */
     val receipts: AttachmentUsage = AttachmentUsage(count = 0, bytes = 0L),
-
-    /** True while the irreversible confirmation is up. */
-    val confirmingReceiptDelete: Boolean = false,
 
     /**
      * Whether notification capture is working (SPEC.md §5.2).
@@ -266,21 +254,17 @@ public class SettingsViewModel @Inject constructor(
      */
     private val receipts = MutableStateFlow(AttachmentUsage(count = 0, bytes = 0L))
 
-    private val confirmingDelete = MutableStateFlow(false)
-
     public val state: StateFlow<SettingsUiState> = combine(
         ledger.observeDeletedCount(LedgerType.DEBIT),
         ledger.observeDeletedCount(LedgerType.CREDIT),
         captureHealth,
         receipts,
-        confirmingDelete,
-    ) { debits, credits, health, images, confirming ->
+    ) { debits, credits, health, images ->
         SettingsUiState(
             deletedCount = debits + credits,
             isLoaded = true,
             captureHealth = health,
             receipts = images,
-            confirmingReceiptDelete = confirming,
         )
     }
         // Joined second rather than as a sixth argument: `combine` is typed
@@ -328,22 +312,6 @@ public class SettingsViewModel @Inject constructor(
 
     public fun onEvent(event: SettingsEvent) {
         when (event) {
-            // The row opens the confirmation rather than doing anything, even
-            // at zero: a destructive control that is sometimes inert teaches
-            // people to tap it without reading.
-            SettingsEvent.ReceiptDeleteRequested -> confirmingDelete.value = true
-
-            SettingsEvent.ReceiptDeleteDismissed -> confirmingDelete.value = false
-
-            SettingsEvent.ReceiptDeleteConfirmed -> viewModelScope.launch {
-                attachments.deleteAll()
-                confirmingDelete.value = false
-                // Re-measured rather than assumed to be zero: a failed unlink
-                // must show as a file still there, not as a clean slate the
-                // app merely hoped for.
-                receipts.value = attachments.usage()
-            }
-
             is SettingsEvent.AppearanceEvent -> onAppearance(event)
 
             is SettingsEvent.RegionEvent -> onRegion(event)
