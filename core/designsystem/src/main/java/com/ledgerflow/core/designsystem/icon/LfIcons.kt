@@ -65,6 +65,9 @@ public object LfIcons {
     public val Selected: ImageVector by lazy { lucide("Selected", LfLucide.Check) }
     public val Delete: ImageVector by lazy { lucide("Delete", LfLucide.Trash) }
 
+    /** A stored receipt image, on the Receipts page's rows (V2-5). */
+    public val Receipt: ImageVector by lazy { lucide("Receipt", LfLucide.Receipt) }
+
     private fun lucide(name: String, paths: List<String>, autoMirror: Boolean = false): ImageVector =
         ImageVector.Builder(
             name = "Lf$name",

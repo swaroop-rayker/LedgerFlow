@@ -40,6 +40,10 @@ import com.ledgerflow.feature.settings.SettingsUiState
 import com.ledgerflow.feature.settings.SettingsViewModel
 import com.ledgerflow.feature.settings.drive.GoogleDriveScreen
 import com.ledgerflow.feature.settings.drive.GoogleDriveViewModel
+import com.ledgerflow.feature.settings.receipts.ReceiptScreen
+import com.ledgerflow.feature.settings.receipts.ReceiptViewModel
+import com.ledgerflow.feature.settings.receipts.ReceiptsScreen
+import com.ledgerflow.feature.settings.receipts.ReceiptsViewModel
 import com.ledgerflow.feature.settings.permissions.DataPermissionsScreen
 import com.ledgerflow.feature.settings.permissions.DataPermissionsViewModel
 import com.ledgerflow.feature.settings.permissions.openPermissionSettings
@@ -126,6 +130,34 @@ internal fun NavGraphBuilder.securityDestinations(navController: NavHostControll
         val viewModel: GoogleDriveViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
         GoogleDriveScreen(state = state, onEvent = viewModel::onEvent, onBack = navController::popBackStack)
+    }
+    // Data > Receipts and one receipt (V2-5, ADR-0035).
+    composable<Destination.Receipts> {
+        val viewModel: ReceiptsViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        // The phone's figure is a measurement of files, re-read on the way back
+        // from a receipt that was deleted there.
+        LifecycleResumeEffect(Unit) {
+            viewModel.refresh()
+            onPauseOrDispose { }
+        }
+        ReceiptsScreen(
+            state = state,
+            receipts = viewModel.receipts,
+            onEvent = viewModel::onEvent,
+            onOpen = { id -> navController.navigate(Destination.Receipt(id)) },
+            onBack = navController::popBackStack,
+        )
+    }
+    composable<Destination.Receipt> {
+        val viewModel: ReceiptViewModel = hiltViewModel()
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        ReceiptScreen(
+            state = state,
+            onEvent = viewModel::onEvent,
+            onReviewInInbox = { pendingId -> navController.navigate(Destination.InboxReview(pendingId)) },
+            onBack = navController::popBackStack,
+        )
     }
     composable<Destination.DataPermissions> {
         val viewModel: DataPermissionsViewModel = hiltViewModel()
@@ -252,6 +284,7 @@ internal fun SettingsSectionRoute(
         onBackUp = { navigate(Destination.BackUpNow) },
         onRestore = { navigate(Destination.RestoreBackup) },
         onGoogleDrive = { navigate(Destination.GoogleDrive) },
+        onReceipts = { navigate(Destination.Receipts) },
         onImport = { navigate(Destination.ImportStatement) },
         onNotificationAccess = { navigate(Destination.NotificationAccess) },
         onDiagnostics = { navigate(Destination.Diagnostics) },

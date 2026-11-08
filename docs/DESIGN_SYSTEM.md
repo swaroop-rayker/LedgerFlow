@@ -139,6 +139,9 @@ somewhere else takes `onBack`: the back arrow and the title on one line.
   page long enough to be lazy; the `Secondary` tone for an answer under its
   question. `LfExpandableRow` is that question: stateless, it says whether
   it is open.
+- **Images.** `LfZoomableImage` draws a bitmap at the width given and zooms
+  it (pinch, or double-tap); one finger scrolls the page until it is zoomed
+  (V2-5, a receipt's page).
 - **Amounts.** `LfMaskedAmount` for a read-only figure that can be hidden
   (Hide amounts on Home); a figure inside a sentence uses `AmountMask` for the
   same dots. A block of hidden figures is the tap that shows them

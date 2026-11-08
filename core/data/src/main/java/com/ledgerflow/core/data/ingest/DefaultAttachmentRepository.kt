@@ -155,24 +155,8 @@ public class DefaultAttachmentRepository @Inject constructor(
         AttachmentUsage(count = present.size, bytes = present.sumOf { it.length() })
     }
 
-    /**
-     * Everything, rows first.
-     *
-     * **Rows before files**, which is the opposite order from the purge and
-     * deliberately so. There the database is the record and a file outliving
-     * its row by a crash is recoverable garbage; here the *user asked for the
-     * images to be gone*, and a row outliving its file would leave every
-     * surface drawing a receipt it cannot load. Interrupted halfway, this
-     * leaves orphaned files that the next run of the same action removes —
-     * `files.all()` enumerates the directory rather than the table.
-     */
-    override suspend fun deleteAll(): Int = withContext(io) {
-        val database = session.openForBackgroundWork() ?: return@withContext 0
-        runCatching {
-            database.attachmentDao().all().forEach { database.attachmentDao().deleteById(it.id) }
-            files.all().count { it.delete() }
-        }.getOrDefault(0)
-    }
+    // Deleting is `DefaultReceiptsRepository`'s (V2-5): rows before files,
+    // and the backup folder's copy with them (BUG88).
 
     private fun sha256(bytes: ByteArray): String = LocalAttachmentSeal.sha256(bytes)
 

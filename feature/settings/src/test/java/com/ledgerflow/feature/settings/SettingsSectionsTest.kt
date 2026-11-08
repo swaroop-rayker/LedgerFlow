@@ -57,8 +57,8 @@ class SettingsSectionsTest {
         SettingsItem.RestoreBackup to "restore",
         SettingsItem.ImportStatement to "import",
         SettingsItem.DeletedEntries to "bin",
-        // Opens the confirmation; deleting is the dialog's job (ADR-0023).
-        SettingsItem.Receipts to "event ${SettingsEvent.ReceiptDeleteRequested}",
+        // Its own page (V2-5): browse, open, select and delete there.
+        SettingsItem.Receipts to "receipts",
         // Opens its picker; picking is the dialog's job.
         SettingsItem.DateOrder to "event ${SettingsEvent.DateOrderRequested}",
         SettingsItem.LockAfter to "event ${SettingsEvent.LockAfterRequested}",
@@ -204,6 +204,7 @@ class SettingsSectionsTest {
                     onRestore = { opened += "restore" },
                     onImport = { opened += "import" },
                     onGoogleDrive = { opened += "google drive" },
+                    onReceipts = { opened += "receipts" },
                 )
             }
         }

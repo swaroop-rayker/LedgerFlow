@@ -23,6 +23,7 @@ import com.ledgerflow.core.database.dao.PackageAllowlistDao
 import com.ledgerflow.core.database.dao.ParserRuleDao
 import com.ledgerflow.core.database.dao.PaymentMethodDao
 import com.ledgerflow.core.database.dao.PendingTransactionDao
+import com.ledgerflow.core.database.dao.ReceiptDao
 import com.ledgerflow.core.database.dao.SenderAllowlistDao
 import com.ledgerflow.core.database.dao.SmsRawDao
 import com.ledgerflow.core.database.entity.AppMetaEntity
@@ -143,6 +144,9 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
 
     // v11 — OCR (SPEC.md §5.3). Declared with the schema; first written at P4.
     public abstract fun attachmentDao(): AttachmentDao
+
+    /** V2-5 — the Receipts page's reads and delete. A DAO over `attachment`, no table. */
+    public abstract fun receiptDao(): ReceiptDao
 
     public abstract fun itemCategoryMemoryDao(): ItemCategoryMemoryDao
 

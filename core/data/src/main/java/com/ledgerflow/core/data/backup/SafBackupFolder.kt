@@ -157,6 +157,14 @@ public class SafBackupFolder(
         return deleteUri(uri)
     }
 
+    /** The folder is listed once, not once per name: each SAF lookup lists the whole folder. */
+    override fun deleteEach(names: Collection<String>): Int {
+        val wanted = names.toSet()
+        return children()
+            .filter { !it.isDirectory && it.name in wanted }
+            .count { deleteUri(DocumentsContract.buildDocumentUriUsingTree(treeUri, it.id)) }
+    }
+
     private fun deleteUri(uri: Uri): Boolean =
         runCatching { DocumentsContract.deleteDocument(resolver, uri) }.getOrDefault(false)
 

@@ -52,6 +52,17 @@ public interface BackupFolder {
     /** @return true if [name] is gone afterwards, including if it was never there. */
     public fun delete(name: String): Boolean
 
+    /**
+     * Deletes those of [names] that are here (V2-5, BUG88).
+     *
+     * @return how many were here and are now gone; a name that was never here
+     *   is not counted.
+     */
+    public fun deleteEach(names: Collection<String>): Int {
+        val present = list().toSet()
+        return names.count { it in present && delete(it) }
+    }
+
     /** A child folder, created if it does not exist; null if it cannot be. */
     public fun subfolder(name: String): BackupFolder?
 
