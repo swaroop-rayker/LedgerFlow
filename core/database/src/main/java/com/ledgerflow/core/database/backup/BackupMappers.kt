@@ -300,6 +300,7 @@ internal fun toAttachmentRow(row: AttachmentEntity) = AttachmentRow(
     sha256 = row.sha256,
     bytes = row.bytes,
     createdAt = row.createdAt,
+    removedFromPhoneAt = row.removedFromPhoneAt,
 )
 
 internal fun toAttachment(row: AttachmentRow) = AttachmentEntity(
@@ -310,6 +311,7 @@ internal fun toAttachment(row: AttachmentRow) = AttachmentEntity(
     sha256 = row.sha256,
     bytes = row.bytes,
     createdAt = row.createdAt,
+    removedFromPhoneAt = row.removedFromPhoneAt,
 )
 
 internal fun toItemCategoryMemoryRow(row: ItemCategoryMemoryEntity) = ItemCategoryMemoryRow(

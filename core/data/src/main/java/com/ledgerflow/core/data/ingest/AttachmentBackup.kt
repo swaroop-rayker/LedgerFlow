@@ -29,6 +29,11 @@ public data class AttachmentBackupReport(
     val unreadableLocally: Int = 0,
     /** Sealed correctly and could not be written: no space, no permission. */
     val failed: Int = 0,
+    /**
+     * Removed from the phone on purpose (ADR-0035) and with no current copy in
+     * this folder: expected, not a fault, and not counted as unreadable.
+     */
+    val removedFromPhone: Int = 0,
 )
 
 /** What one restore pass recovered, and what it could not. */
@@ -160,7 +165,11 @@ public class AttachmentBackup @Inject constructor(
             ?.let { runCatching { it.readBytes() }.getOrNull() }
             ?.let { LocalAttachmentSeal.open(key, it) }
             ?.takeIf { LocalAttachmentSeal.sha256(it) == row.sha256 }
-            ?: return report.copy(unreadableLocally = report.unreadableLocally + 1)
+            ?: return if (row.removedFromPhoneAt != null && !local.isFile) {
+                report.copy(removedFromPhone = report.removedFromPhone + 1)
+            } else {
+                report.copy(unreadableLocally = report.unreadableLocally + 1)
+            }
 
         val sealed = seal.seal(plaintext, row.id)
         return if (writeVerified(directory, target, sealed, seal, row.id, plaintext)) {
@@ -189,7 +198,14 @@ public class AttachmentBackup @Inject constructor(
 
             try {
                 database.attachmentDao().all().fold(AttachmentRestoreReport()) { report, row ->
-                    restoreOne(row, directory, key, seed, report)
+                    val next = restoreOne(row, directory, key, seed, report)
+                    // On the phone again (ADR-0035 §3): a restore brings back
+                    // every receipt it finds, removed ones included, and the
+                    // mark goes with it. Durability before space.
+                    if (row.removedFromPhoneAt != null && files.resolve(row.filePath).isFile) {
+                        database.receiptDao().clearRemovedFromPhone(row.id)
+                    }
+                    next
                 }
             } finally {
                 key.fill(0)

@@ -68,6 +68,9 @@ public object LfIcons {
     /** A stored receipt image, on the Receipts page's rows (V2-5). */
     public val Receipt: ImageVector by lazy { lucide("Receipt", LfLucide.Receipt) }
 
+    /** A receipt removed from the phone, kept in the Google Drive backup (V2-5, ADR-0035). */
+    public val InDriveBackup: ImageVector by lazy { lucide("InDriveBackup", LfLucide.Cloud) }
+
     private fun lucide(name: String, paths: List<String>, autoMirror: Boolean = false): ImageVector =
         ImageVector.Builder(
             name = "Lf$name",

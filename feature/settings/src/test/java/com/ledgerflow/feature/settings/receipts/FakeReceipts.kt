@@ -11,6 +11,14 @@ import com.ledgerflow.core.domain.receipts.ReceiptImage
 import com.ledgerflow.core.domain.receipts.ReceiptListItem
 import com.ledgerflow.core.domain.receipts.ReceiptPeriod
 import com.ledgerflow.core.domain.receipts.ReceiptsRepository
+import com.ledgerflow.core.domain.drive.DriveAttempt
+import com.ledgerflow.core.domain.drive.DriveStatus
+import com.ledgerflow.core.domain.drive.DriveStatusStore
+import com.ledgerflow.core.domain.receipts.ReceiptBackupCopies
+import com.ledgerflow.core.domain.receipts.ReceiptFiling
+import com.ledgerflow.core.domain.receipts.RemoveReceiptsFromPhoneUseCase
+import com.ledgerflow.core.testing.drive.FakeDriveAccess
+import com.ledgerflow.core.testing.drive.FakeDriveFiles
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -62,10 +70,53 @@ internal class FakeReceipts(
 
     override suspend fun read(attachmentId: String): ByteArray? = null
 
-    override suspend fun usage(): AttachmentUsage =
-        AttachmentUsage(count = rows.value.size, bytes = rows.value.sumOf { it.bytes })
+    override suspend fun usage(): AttachmentUsage = rows.value.filter { it.removedFromPhoneAt == null }
+        .let { onPhone -> AttachmentUsage(count = onPhone.size, bytes = onPhone.sumOf { it.bytes }) }
+
+    override fun observeRemoved(): Flow<ReceiptCount> = rows.map { list ->
+        list.filter { it.removedFromPhoneAt != null }.let { ReceiptCount(it.size, it.sumOf { row -> row.bytes }) }
+    }
+
+    override suspend fun removeFromPhone(id: String): Boolean {
+        val row = rows.value.firstOrNull { it.id == id } ?: return false
+        if (row.removedFromPhoneAt != null || row.filing is ReceiptFiling.InInbox) return false
+        rows.value = rows.value.map { if (it.id == id) it.copy(removedFromPhoneAt = REMOVED_AT) else it }
+        return true
+    }
+
+    // ── What "Remove from phone" checks (ADR-0035 §1), in memory ────────────
+
+    var driveOn = true
+    val drive = FakeDriveFiles()
+    private val sealed = mutableMapOf<String, ByteArray>()
+
+    /** As after a nightly pass and a Drive copy: the folder's sealed copy, and the same on Drive. */
+    fun backedUp(id: String) {
+        val bytes = id.toByteArray()
+        sealed[id] = bytes
+        drive.receipt("$id.lfba", bytes)
+    }
+
+    private val status = object : DriveStatusStore {
+        override fun observe(): Flow<DriveStatus> =
+            flowOf(DriveStatus(enabled = driveOn, lastAttempt = null, lastCopiedAt = null))
+        override suspend fun enabled() = driveOn
+        override suspend fun account(): String? = null
+        override suspend fun setEnabled(enabled: Boolean, account: String?) = Unit
+        override suspend fun record(attempt: DriveAttempt) = Unit
+    }
+
+    private val copiesInFolder = object : ReceiptBackupCopies {
+        override suspend fun sealedCopy(id: String) = sealed[id]
+    }
+
+    /** The real use case over these fakes. */
+    fun removeUseCase(): RemoveReceiptsFromPhoneUseCase =
+        RemoveReceiptsFromPhoneUseCase(status, FakeDriveAccess(), drive, copiesInFolder, this)
 
     companion object {
+        const val REMOVED_AT = 1_794_100_000_000L
+
         fun empty(): Flow<PagingData<ReceiptListItem>> = flowOf(PagingData.empty())
     }
 }

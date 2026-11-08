@@ -150,6 +150,22 @@ class OlderSchemaBackupRestoresTest {
         assertThat(payload.merchantAliases.single().merchantId).isEqualTo("m-zepto")
     }
 
+    /**
+     * A v13 backup's receipts carry no `removedFromPhoneAt` (V2-5, ADR-0035).
+     * They restore as on the phone, exactly as `MIGRATION_13_14` leaves a
+     * migrated v13 database, and every other column comes through.
+     */
+    @Test
+    fun aV13Backup_restores_withEveryReceiptOnThePhone() {
+        assertThat(restore(V13, schemaVersion = 13)).isInstanceOf(RestoreResult.Success::class.java)
+
+        val receipt = restored().attachments.single()
+        assertThat(receipt.id).isEqualTo("att-1")
+        assertThat(receipt.entryId).isEqualTo("e-1")
+        assertThat(receipt.bytes).isEqualTo(412_000L)
+        assertThat(receipt.removedFromPhoneAt).isNull()
+    }
+
     private companion object {
         /** The six tables v1 had, in v1's row shapes (unchanged since). */
         const val CORE = """
@@ -206,5 +222,11 @@ class OlderSchemaBackupRestoresTest {
         /** v12 = v9's rows as v12 wrote them: no `merchantCategories`, no `merchantCategoryId`. */
         val V12 = """{"schemaVersion": 12, "createdAt": 1755000000000, $CORE, $V7_ADDITIONS,
             "budgets": [], "attachments": [], "itemCategoryMemory": []}"""
+
+        /** v13: one receipt as v13 wrote it, with no `removedFromPhoneAt`. */
+        val V13 = """{"schemaVersion": 13, "createdAt": 1755000000000, $CORE, $V7_ADDITIONS,
+            "budgets": [], "itemCategoryMemory": [], "merchantCategories": [],
+            "attachments": [{"id": "att-1", "entryId": "e-1", "filePath": "att-1.lfa",
+                "mime": "image/png", "sha256": "hash-1", "bytes": 412000, "createdAt": 1755000000000}]}"""
     }
 }

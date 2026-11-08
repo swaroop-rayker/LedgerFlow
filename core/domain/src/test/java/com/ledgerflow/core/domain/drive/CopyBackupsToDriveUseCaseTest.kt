@@ -1,7 +1,6 @@
 package com.ledgerflow.core.domain.drive
 
 import com.google.common.truth.Truth.assertThat
-import java.security.MessageDigest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -18,6 +17,7 @@ class CopyBackupsToDriveUseCaseTest {
     private val status = FakeStatus(enabled = true)
     private val access = FakeAccess()
     private val drive = FakeDrive()
+    private val receipts = FakeReceipts()
     private val local = FakeLocal(
         backups = mapOf(
             "ledgerflow-20261107-030200.lfbk" to bytes(1),
@@ -25,7 +25,7 @@ class CopyBackupsToDriveUseCaseTest {
         ),
         attachments = mapOf("r1.lfba" to bytes(3), "r2.lfba" to bytes(4)),
     )
-    private val copy = CopyBackupsToDriveUseCase(status, access, drive, local) { NOW }
+    private val copy = CopyBackupsToDriveUseCase(status, access, drive, local, receipts) { NOW }
 
     @Test
     fun aPass_uploadsTheNewestBackupAndEveryMissingReceipt_andRecordsIt() = runBlocking<Unit> {
@@ -118,6 +118,28 @@ class CopyBackupsToDriveUseCaseTest {
         assertThat(outcome.removed).isEqualTo(3)
     }
 
+    /**
+     * ADR-0035 §4: a receipt removed from the phone, after the user picked a
+     * new backup folder, is in no folder; Drive's copy is its last and stays
+     * while its row names it. One no row names still goes.
+     */
+    @Test
+    fun rotation_keepsAReceiptsCopy_whileItsRowNamesIt_evenIfTheFolderLacksIt() = runBlocking<Unit> {
+        receipts.rows["removed"] = com.ledgerflow.core.domain.receipts.ReceiptListItem(
+            id = "removed",
+            capturedAt = 0,
+            bytes = 1,
+            filing = com.ledgerflow.core.domain.receipts.ReceiptFiling.NotFiled,
+            removedFromPhoneAt = 1,
+        )
+        drive.put(drive.receipts(), "removed.lfba", bytes(7))
+        drive.put(drive.receipts(), "deleted.lfba", bytes(8))
+
+        copy()
+
+        assertThat(drive.names(drive.receipts())).containsExactly("r1.lfba", "r2.lfba", "removed.lfba")
+    }
+
     @Test
     fun whileOff_nothingIsAskedOrRecorded() = runBlocking<Unit> {
         status.enabledNow = false
@@ -148,110 +170,9 @@ class CopyBackupsToDriveUseCaseTest {
         outcomes.forEach { assertThat(DriveOutcome.parse(it.record())).isEqualTo(it) }
     }
 
-    // ── Fakes ───────────────────────────────────────────────────────────────
-
-    private class FakeStatus(enabled: Boolean) : DriveStatusStore {
-        var enabledNow = enabled
-        var chosen: String? = null
-        val recorded = mutableListOf<DriveAttempt>()
-        override fun observe(): Flow<DriveStatus> = MutableStateFlow(DriveStatus(enabledNow, null, null, chosen))
-        override suspend fun enabled() = enabledNow
-        override suspend fun account() = chosen
-        override suspend fun setEnabled(enabled: Boolean, account: String?) {
-            enabledNow = enabled
-            account?.let { chosen = it }
-        }
-        override suspend fun record(attempt: DriveAttempt) {
-            recorded += attempt
-        }
-    }
-
-    private class FakeAccess : DriveAccess {
-        var consent = true
-        var asked = 0
-        val askedFor = mutableListOf<String?>()
-        val forgotten = mutableListOf<String>()
-        override suspend fun token(account: String?): DriveToken {
-            asked++
-            askedFor += account
-            return if (consent) DriveToken.Granted("t$asked") else DriveToken.NeedsSignIn
-        }
-        override suspend fun forget(token: String) {
-            forgotten += token
-        }
-    }
-
-    private class FakeLocal(val backups: Map<String, ByteArray>, val attachments: Map<String, ByteArray>) :
-        LocalBackupFiles {
-        var reachable = true
-        override suspend fun snapshot() = if (reachable) {
-            LocalBackupSet(backups.keys.sortedDescending(), attachments.keys.sorted())
-        } else {
-            null
-        }
-        override suspend fun read(file: LocalBackupFile) = when (file) {
-            is LocalBackupFile.Backup -> backups[file.name]
-            is LocalBackupFile.Attachment -> attachments[file.name]
-        }
-    }
-
-    /** Folders by id, each a map of name to (id, bytes). Only what `drive.file` would show. */
-    private class FakeDrive : DriveFiles {
-        private val folders = mutableMapOf<String, MutableMap<String, Pair<String, ByteArray>>>()
-        private val folderIds = mutableMapOf<Pair<String?, String>, String>()
-        private var nextId = 0
-        var refuse: Set<String> = emptySet()
-        var corrupt: String? = null
-        var uploads = 0
-        var calls = 0
-
-        fun root() = folderId(null, DriveLayout.FOLDER)
-        fun receipts() = folderId(root(), LocalBackupFiles.ATTACHMENTS)
-        fun names(folder: String) = folders[folder].orEmpty().keys
-        fun content(folder: String, name: String) = folders[folder]?.get(name)?.second
-        fun put(folder: String, name: String, bytes: ByteArray) {
-            folders.getOrPut(folder) { mutableMapOf() }[name] = "id${nextId++}" to bytes
-        }
-
-        private fun folderId(parent: String?, name: String) = folderIds.getOrPut(parent to name) { "folder${nextId++}" }
-
-        private fun <T> answer(token: String, value: () -> T): DriveCall<T> {
-            calls++
-            return if (token in refuse) DriveCall.Unauthorized else DriveCall.Ok(value())
-        }
-
-        override suspend fun folder(token: String, name: String, parentId: String?) =
-            answer(token) { folderId(parentId, name) }
-
-        override suspend fun findFolder(token: String, name: String, parentId: String?) =
-            answer(token) { folderIds[parentId to name] }
-
-        override suspend fun download(token: String, fileId: String) = answer(token) {
-            folders.values.flatMap { it.values }.first { it.first == fileId }.second
-        }
-
-        override suspend fun list(token: String, folderId: String) = answer(token) {
-            folders[folderId].orEmpty().map { (name, file) -> RemoteFile(file.first, name, md5(file.second), null) }
-        }
-
-        override suspend fun upload(token: String, folderId: String, name: String, bytes: ByteArray) = answer(token) {
-            uploads++
-            put(folderId, name, bytes)
-            val id = checkNotNull(folders[folderId]?.get(name)).first
-            RemoteFile(id, name, if (name == corrupt) "0000" else md5(bytes), bytes.size.toLong())
-        }
-
-        override suspend fun delete(token: String, fileId: String) = answer(token) {
-            folders.values.forEach { files -> files.entries.removeAll { it.value.first == fileId } }
-        }
-    }
-
     private companion object {
         const val NOW = 1_794_000_000_000L
 
         fun bytes(seed: Int) = byteArrayOf(seed.toByte())
-
-        fun md5(bytes: ByteArray) =
-            MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02x".format(it) }
     }
 }

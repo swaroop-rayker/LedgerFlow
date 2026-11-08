@@ -35,12 +35,14 @@ internal class ReceiptsTestRig(name: String) {
     lateinit var receipts: DefaultReceiptsRepository
         private set
 
+    /** The app's resolver, standing in: the folder while it is reachable. */
+    val resolver = BackupFolderResolver { uri -> if (uri == TREE && folderReachable) FileBackupFolder(folder) else null }
+
     suspend fun open() {
         vault.open()
         folder.deleteRecursively()
         folder.mkdirs()
         vault.database.appMetaDao().put(AppMetaEntity(VaultSession.KEY_BACKUP_TREE_URI, TREE))
-        val resolver = BackupFolderResolver { uri -> if (uri == TREE && folderReachable) FileBackupFolder(folder) else null }
         receipts = DefaultReceiptsRepository(
             vault.session,
             vault.attachmentFiles,

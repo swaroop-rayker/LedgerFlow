@@ -108,6 +108,30 @@ open class ReceiptsGoldensTest {
         rows = emptyList(),
     )
 
+    /** ADR-0035: one receipt removed from the phone, its hollow tile, and the summary's line. */
+    private val withRemoved = previewReceipts.mapIndexed { index, row ->
+        if (index == 0) row.copy(removedFromPhoneAt = REMOVED_AT) else row
+    }
+    private val withRemovedState = previewReceiptsState.copy(
+        removed = com.ledgerflow.core.domain.receipts.ReceiptCount(count = 1, bytes = 412_000),
+    )
+
+    @Test fun removed_1x() = page("receipts-removed-1x", 1f, state = withRemovedState, rows = withRemoved)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun removed_2x() = page("receipts-removed-2x", 2f, state = withRemovedState, rows = withRemoved)
+
+    @Test fun removeDialog_1x() = withDialog(
+        "receipts-remove-1x",
+        1f,
+        state = previewReceiptsState.copy(
+            selecting = true,
+            selected = setOf("r1", "r2"),
+            selectedBytes = 680_000,
+            confirmation = ReceiptsConfirmation.RemoveSelected(count = 2, bytes = 680_000),
+        ),
+    )
+
     @Test fun deleteDialog_1x() = withDialog("receipts-delete-1x", 1f)
 
     @Config(qualifiers = PHONE_2X)
@@ -160,6 +184,17 @@ open class ReceiptsGoldensTest {
         1f,
         ReceiptUiState(receipt = previewReceipts[0], image = ReceiptPicture.Shown(fakeReceipt()), copies = copies),
         LayoutDirection.Rtl,
+    )
+
+    /** ADR-0035: removed from the phone; Delete is its only action. */
+    @Test fun receiptRemoved_1x() = receipt(
+        "receipt-removed-1x",
+        1f,
+        ReceiptUiState(
+            receipt = previewReceipts[0].copy(removedFromPhoneAt = REMOVED_AT),
+            image = ReceiptPicture.RemovedFromPhone(REMOVED_AT),
+            copies = copies,
+        ),
     )
 
     @Test fun receiptUnavailable_1x() = receipt(
@@ -241,6 +276,8 @@ open class ReceiptsGoldensTest {
     private companion object {
         val DONE = LoadState.NotLoading(endOfPaginationReached = true)
         const val FONT_SCALE_PHONE = 1.15f
+        /** 9 Nov 2026, the morning after a nightly copy. */
+        const val REMOVED_AT = 1_794_200_000_000L
         const val RECEIPT_W = 480
         const val RECEIPT_H = 720
         const val MARGIN = 40

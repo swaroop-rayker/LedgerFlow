@@ -12,6 +12,8 @@ import com.ledgerflow.core.domain.receipts.ReceiptCopies
 import com.ledgerflow.core.domain.receipts.ReceiptImage
 import com.ledgerflow.core.domain.receipts.ReceiptListItem
 import com.ledgerflow.core.domain.receipts.ReceiptsRepository
+import com.ledgerflow.core.domain.receipts.RemovalOutcome
+import com.ledgerflow.core.domain.receipts.RemoveReceiptsFromPhoneUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
@@ -30,10 +32,23 @@ public data class ReceiptUiState(
     val image: ReceiptPicture = ReceiptPicture.Loading,
     val copies: ReceiptCopies? = null,
     val confirmingDelete: Boolean = false,
+    val confirmingRemove: Boolean = false,
     val working: Boolean = false,
+    /** Why a removal left it on the phone, or that it was removed. */
+    val message: String? = null,
     /** Deleted here, or no longer exists: the page closes itself. */
     val gone: Boolean = false,
-)
+) {
+    /**
+     * Offered for an image on the phone, while Google Drive backup is on, and
+     * never for one still waiting in the Inbox (ADR-0035 §2).
+     */
+    val canRemoveFromPhone: Boolean
+        get() = image is ReceiptPicture.Shown &&
+            copies?.drive == true &&
+            receipt?.removedFromPhoneAt == null &&
+            receipt?.filing !is com.ledgerflow.core.domain.receipts.ReceiptFiling.InInbox
+}
 
 /** The image as the page draws it. */
 public sealed interface ReceiptPicture {
@@ -43,12 +58,19 @@ public sealed interface ReceiptPicture {
 
     /** Missing or damaged on this phone (ADR-0023's honest degradation). */
     public data object Unavailable : ReceiptPicture
+
+    /** Removed from this phone on purpose at [at]; Google Drive keeps a copy (ADR-0035). */
+    public data class RemovedFromPhone(val at: Long) : ReceiptPicture
 }
 
 public sealed interface ReceiptEvent {
     public data object DeleteRequested : ReceiptEvent
     public data object DeleteDismissed : ReceiptEvent
     public data object DeleteConfirmed : ReceiptEvent
+    public data object RemoveRequested : ReceiptEvent
+    public data object RemoveDismissed : ReceiptEvent
+    public data object RemoveConfirmed : ReceiptEvent
+    public data object MessageDismissed : ReceiptEvent
 }
 
 /**
@@ -58,6 +80,7 @@ public sealed interface ReceiptEvent {
 @HiltViewModel
 public class ReceiptViewModel @Inject constructor(
     private val receipts: ReceiptsRepository,
+    private val removeFromPhone: RemoveReceiptsFromPhoneUseCase,
     @param:IoDispatcher private val io: CoroutineDispatcher,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -78,6 +101,7 @@ public class ReceiptViewModel @Inject constructor(
             val picture = when (val image = receipts.image(id)) {
                 is ReceiptImage.Available -> decode(image.bytes)
                 ReceiptImage.Unavailable -> ReceiptPicture.Unavailable
+                is ReceiptImage.RemovedFromPhone -> ReceiptPicture.RemovedFromPhone(image.at)
             }
             local.update { it.copy(image = picture) }
         }
@@ -92,6 +116,30 @@ public class ReceiptViewModel @Inject constructor(
                 val deletion = receipts.delete(setOf(id))
                 local.update { it.copy(working = false, gone = deletion.deleted > 0) }
             }
+            ReceiptEvent.RemoveRequested -> local.update { it.copy(confirmingRemove = true) }
+            ReceiptEvent.RemoveDismissed -> local.update { it.copy(confirmingRemove = false) }
+            ReceiptEvent.RemoveConfirmed -> viewModelScope.launch { remove() }
+            ReceiptEvent.MessageDismissed -> local.update { it.copy(message = null) }
+        }
+    }
+
+    /**
+     * Checks Drive and removes this one receipt (ADR-0035). On success the page
+     * shows where it is now; otherwise it stays, and the message says why.
+     */
+    private suspend fun remove() {
+        local.update { it.copy(confirmingRemove = false, working = true) }
+        val outcome = removeFromPhone(setOf(id))
+        val gone = outcome is RemovalOutcome.Checked && outcome.removed == 1
+        val refreshed = if (gone) receipts.receipt(id) else null
+        local.update { state ->
+            state.copy(
+                working = false,
+                receipt = refreshed ?: state.receipt,
+                image = refreshed?.removedFromPhoneAt?.let(ReceiptPicture::RemovedFromPhone) ?: state.image,
+                // The new state says it on its own; a notice is for when it stayed.
+                message = if (gone) null else ReceiptsText.removed(outcome),
+            )
         }
     }
 

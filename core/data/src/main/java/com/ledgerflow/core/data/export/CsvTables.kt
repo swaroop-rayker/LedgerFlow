@@ -89,6 +89,8 @@ internal object CsvTables {
         header = listOf(
             "id", "entry_id", "file_path", "mime", "sha256", "bytes",
             "created_at", "created_at_iso",
+            // v14 (ADR-0035): empty while the image is on the phone.
+            "removed_from_phone_at", "removed_from_phone_at_iso",
         ),
         rows = payload.attachments.map { row ->
             listOf(
@@ -100,6 +102,8 @@ internal object CsvTables {
                 row.bytes.toString(),
                 row.createdAt.toString(),
                 CsvWriter.timestamp(row.createdAt),
+                row.removedFromPhoneAt?.toString(),
+                row.removedFromPhoneAt?.let(CsvWriter::timestamp),
             )
         },
     )

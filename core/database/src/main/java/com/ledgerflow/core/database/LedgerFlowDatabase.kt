@@ -227,8 +227,13 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * rebuild of a table other tables point at (`ledger_entry`,
          * `merchant_alias`); foreign keys are off while migrations run, and
          * `MigrationV12ToV13Test` holds that both survive. See `MIGRATION_12_13`.
+         *
+         * v14 adds `attachment.removed_from_phone_at` — V2-5, ADR-0035: when a
+         * receipt left the phone because Google Drive holds a checked copy; its
+         * row stays. Every existing row keeps `NULL`. A rebuild of one table;
+         * see `MIGRATION_13_14`.
          */
-        public const val VERSION: Int = 13
+        public const val VERSION: Int = 14
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

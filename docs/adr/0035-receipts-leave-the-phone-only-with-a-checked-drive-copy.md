@@ -170,6 +170,22 @@ now" needs the 24 words, and the app never holds them.
   now exist only in backups, and that deleting them on Drive's website deletes
   them.
 
+## As built (2026-11-08, "Remove from phone")
+
+- The check is `RemoveReceiptsFromPhoneUseCase` in `:core:domain`. It reaches
+  Drive only through the `:core:drive` ports, and the backup folder through
+  `ReceiptBackupCopies` in `:core:data`. It finds Drive's folders and never
+  creates them.
+- The Inbox rule is enforced in the `UPDATE` statement itself
+  (`ReceiptDao.markRemovedFromPhone`), so no caller can skip it.
+- The Drive copy pass keeps a sidecar if the folder has it or any receipt row
+  names it (`ReceiptsRepository.idsIn(All)`).
+- The nightly pass reports a removed receipt with no folder copy as
+  `removedFromPhone`, not as unreadable.
+- On the owner's phone, the backup folder chosen in the system picker is itself
+  a Google Drive folder. That is a second off-phone copy, and the rule is the
+  same.
+
 ## Consequences
 
 - **Gained:** receipts stop growing without limit on the phone, without

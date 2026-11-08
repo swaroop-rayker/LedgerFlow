@@ -1,16 +1,21 @@
 package com.ledgerflow.feature.settings.receipts
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewFontScale
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -28,6 +33,7 @@ import com.ledgerflow.core.designsystem.component.LfSkeletonList
 import com.ledgerflow.core.designsystem.component.LfZoomableImage
 import com.ledgerflow.core.designsystem.format.DisplayDates
 import com.ledgerflow.core.designsystem.format.MoneyFormat
+import com.ledgerflow.core.designsystem.icon.LfIcons
 import com.ledgerflow.core.designsystem.pattern.LfActionBar
 import com.ledgerflow.core.designsystem.pattern.LfDetailPage
 import com.ledgerflow.core.designsystem.pattern.LfPageSpacing
@@ -58,6 +64,7 @@ public fun ReceiptScreen(
 ) {
     LaunchedEffect(state.gone) { if (state.gone) onBack() }
     if (state.confirmingDelete) DeleteOneDialog(state, onEvent)
+    if (state.confirmingRemove) RemoveOneDialog(state, onEvent)
 
     val receipt = state.receipt
     LfDetailPage(
@@ -65,6 +72,16 @@ public fun ReceiptScreen(
         subtitle = receipt?.let { "${DisplayDates.mediumDateTime(it.capturedAt)} · ${formatSize(it.bytes)}" },
         modifier = modifier,
         onBack = onBack,
+        notices = state.message?.let { message ->
+            {
+                LfNotice(
+                    tone = LfNoticeTone.Info,
+                    title = message,
+                    actionLabel = "OK",
+                    onAction = { onEvent(ReceiptEvent.MessageDismissed) },
+                )
+            }
+        },
         actionBar = receipt?.let { { Actions(state, onEvent, onReviewInInbox) } },
         spacing = LfPageSpacing.None,
     ) {
@@ -91,6 +108,39 @@ private fun Picture(picture: ReceiptPicture) {
             tone = LfNoticeTone.Warning,
             title = ReceiptsText.IMAGE_UNAVAILABLE_TITLE,
             body = ReceiptsText.IMAGE_UNAVAILABLE_BODY,
+        )
+        is ReceiptPicture.RemovedFromPhone -> RemovedFromPhone(picture.at)
+    }
+}
+
+/**
+ * Where a removed receipt is (ADR-0035): an outline where the image was, the
+ * cloud, and how to see it again. No "download": the phone cannot open the
+ * Drive copy, which is sealed to the 24 words (ADR-0027).
+ */
+@Composable
+private fun RemovedFromPhone(at: Long) {
+    val colors = LfTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(LfTheme.borders.hairline, colors.border.strong, LfTheme.shapes.container)
+            .padding(LfTheme.space.cardInset),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(LfTheme.space.inlineGap),
+    ) {
+        Icon(imageVector = LfIcons.InDriveBackup, contentDescription = null, tint = colors.text.secondary)
+        Text(
+            text = ReceiptsText.REMOVED_TITLE,
+            style = LfTheme.type.body,
+            color = colors.text.primary,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = ReceiptsText.removedBody(DisplayDates.medium(at)),
+            style = LfTheme.type.bodySmall,
+            color = colors.text.secondary,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -159,8 +209,9 @@ private fun FactRow(title: String, trailing: (@Composable () -> Unit)? = null) {
 
 /**
  * The trailing edge, inline (CLAUDE.md §5). "Review in Inbox" for a receipt
- * still waiting there; "Remove from phone" joins these with schema v14
- * (ADR-0035 PR 3).
+ * still waiting there. "Remove from phone" before Delete, the less destructive
+ * first (CLAUDE.md §7), for an image on the phone while Google Drive backup is
+ * on, and never for an Inbox candidate's (ADR-0035 §2).
  */
 @Composable
 private fun Actions(state: ReceiptUiState, onEvent: (ReceiptEvent) -> Unit, onReviewInInbox: (String) -> Unit) {
@@ -172,6 +223,15 @@ private fun Actions(state: ReceiptUiState, onEvent: (ReceiptEvent) -> Unit, onRe
                     text = "Review in Inbox",
                     style = LfButtonStyle.Inline,
                     onClick = { onReviewInInbox(it.pendingId) },
+                )
+            }
+            if (state.canRemoveFromPhone) {
+                LfButton(
+                    text = "Remove from phone",
+                    style = LfButtonStyle.Inline,
+                    enabled = !state.working,
+                    loading = state.working,
+                    onClick = { onEvent(ReceiptEvent.RemoveRequested) },
                 )
             }
             LfButton(
@@ -195,6 +255,17 @@ private fun DeleteOneDialog(state: ReceiptUiState, onEvent: (ReceiptEvent) -> Un
         emphasis = LfDialogEmphasis.Warning,
         onConfirm = { onEvent(ReceiptEvent.DeleteConfirmed) },
         onDismiss = { onEvent(ReceiptEvent.DeleteDismissed) },
+    )
+}
+
+@Composable
+private fun RemoveOneDialog(state: ReceiptUiState, onEvent: (ReceiptEvent) -> Unit) {
+    LfDialog(
+        title = ReceiptsText.removeTitle(count = 1, bytes = state.receipt?.bytes ?: 0L),
+        body = ReceiptsText.removeBody(count = 1),
+        confirmText = "Remove",
+        onConfirm = { onEvent(ReceiptEvent.RemoveConfirmed) },
+        onDismiss = { onEvent(ReceiptEvent.RemoveDismissed) },
     )
 }
 

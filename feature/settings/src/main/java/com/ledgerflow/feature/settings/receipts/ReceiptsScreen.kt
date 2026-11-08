@@ -1,6 +1,7 @@
 package com.ledgerflow.feature.settings.receipts
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,9 +36,13 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
+import com.ledgerflow.core.designsystem.component.LfActionAlignment
+import com.ledgerflow.core.designsystem.component.LfActionRow
 import com.ledgerflow.core.designsystem.component.LfAdaptiveRow
 import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
+import com.ledgerflow.core.designsystem.component.LfChip
+import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDialogEmphasis
 import com.ledgerflow.core.designsystem.component.LfDivider
@@ -45,10 +50,6 @@ import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
-import com.ledgerflow.core.designsystem.component.LfActionAlignment
-import com.ledgerflow.core.designsystem.component.LfActionRow
-import com.ledgerflow.core.designsystem.component.LfChip
-import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.lfGroupPosition
 import com.ledgerflow.core.designsystem.component.lfGroupSlice
 import com.ledgerflow.core.designsystem.format.DisplayDates
@@ -113,8 +114,11 @@ internal fun ReceiptsContent(
     modifier: Modifier = Modifier,
 ) {
     state.confirmation?.let { DeleteDialog(it, state.copies, onEvent) }
-    // One painter for every row (CLAUDE.md §8), not one per row.
-    val glyph = rememberVectorPainter(LfIcons.Receipt)
+    // One painter of each for every row (CLAUDE.md §8), not one per row.
+    val glyphs = RowGlyphs(
+        onPhone = rememberVectorPainter(LfIcons.Receipt),
+        removed = rememberVectorPainter(LfIcons.InDriveBackup),
+    )
 
     LfDetailPage(
         title = "Receipts",
@@ -128,7 +132,7 @@ internal fun ReceiptsContent(
     ) {
         summary(state)
         periodAndCount(state, onEvent)
-        receiptRows(state, items, glyph, onEvent, onOpen)
+        receiptRows(state, items, glyphs, onEvent, onOpen)
         deleteAll(state, onEvent)
     }
 }
@@ -141,6 +145,15 @@ private fun LazyListScope.summary(state: ReceiptsUiState) {
                 value = state.onPhone?.let { ReceiptsText.countLine(it.count, it.bytes) },
                 detail = "Encrypted in LedgerFlow's own storage",
             )
+            // Only once something has left the phone (ADR-0035): a line that
+            // always read "0" would be noise about a feature most never use.
+            state.removed?.takeIf { it.count > 0 }?.let { removed ->
+                LfDivider()
+                Fact(
+                    title = "Removed, in Drive only",
+                    value = ReceiptsText.countLine(removed.count, removed.bytes),
+                )
+            }
             LfDivider()
             Fact(title = "Copies", value = state.copies?.let(ReceiptsText::copies))
         }
@@ -225,7 +238,7 @@ private fun LazyListScope.periodAndCount(state: ReceiptsUiState, onEvent: (Recei
 private fun LazyListScope.receiptRows(
     state: ReceiptsUiState,
     items: LazyPagingItems<ReceiptListItem>,
-    glyph: Painter,
+    glyphs: RowGlyphs,
     onEvent: (ReceiptsEvent) -> Unit,
     onOpen: (String) -> Unit,
 ) {
@@ -245,7 +258,7 @@ private fun LazyListScope.receiptRows(
         ReceiptRow(
             receipt = receipt,
             position = lfGroupPosition(index, items.itemCount),
-            glyph = glyph,
+            glyphs = glyphs,
             selected = if (state.selecting) selected else null,
             onClick = {
                 if (state.selecting) {
@@ -284,7 +297,7 @@ private fun NoReceipts(period: ReceiptPeriod, onEvent: (ReceiptsEvent) -> Unit) 
 private fun ReceiptRow(
     receipt: ReceiptListItem,
     position: LfGroupPosition,
-    glyph: Painter,
+    glyphs: RowGlyphs,
     /** Null when not selecting; otherwise whether this row is ticked. */
     selected: Boolean?,
     onClick: () -> Unit,
@@ -293,7 +306,9 @@ private fun ReceiptRow(
     val colors = LfTheme.colors
     val title = ReceiptsText.title(receipt.filing)
     val captured = remember(receipt.capturedAt) { capturedDay(receipt.capturedAt) }
-    val detail = "$captured · ${formatSize(receipt.bytes)}"
+    val removed = receipt.removedFromPhoneAt != null
+    // A removed receipt takes no space here, so its size gives way to where it is.
+    val detail = "$captured · ${if (removed) ReceiptsText.IN_DRIVE_BACKUP else formatSize(receipt.bytes)}"
     val filed = receipt.filing as? ReceiptFiling.Filed
     val spoken = spokenRow(title, filed, captured, receipt, selected)
 
@@ -325,7 +340,7 @@ private fun ReceiptRow(
         horizontalArrangement = Arrangement.spacedBy(space.itemGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Leading(selected, glyph)
+        Leading(selected, if (removed) glyphs.removed else glyphs.onPhone, removed)
         // The name beside its amount, or the amount below it when both will
         // not fit (LfAdaptiveRow, BUG81): at 2.0 the name is never cut to a
         // few letters to keep the amount on its line.
@@ -340,9 +355,15 @@ private fun ReceiptRow(
     }
 }
 
-/** The receipt tile, or the check box while selecting. */
+/** The two tiles' icons, made once per list and handed to every row. */
+private class RowGlyphs(val onPhone: Painter, val removed: Painter)
+
+/**
+ * The receipt tile, or the check box while selecting. A removed receipt's tile
+ * is hollow, an outline with a cloud: there is nothing of it on the phone.
+ */
 @Composable
-private fun Leading(selected: Boolean?, glyph: Painter) {
+private fun Leading(selected: Boolean?, glyph: Painter, removed: Boolean) {
     val colors = LfTheme.colors
     if (selected != null) {
         Checkbox(
@@ -354,7 +375,13 @@ private fun Leading(selected: Boolean?, glyph: Painter) {
         Box(
             modifier = Modifier
                 .size(LfLayout.categoryTileSize)
-                .background(colors.surface.overlay, LfTheme.shapes.tile),
+                .then(
+                    if (removed) {
+                        Modifier.border(LfTheme.borders.hairline, colors.border.strong, LfTheme.shapes.tile)
+                    } else {
+                        Modifier.background(colors.surface.overlay, LfTheme.shapes.tile)
+                    },
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(painter = glyph, contentDescription = null, tint = colors.text.muted)
@@ -398,8 +425,12 @@ private fun spokenRow(
     }
     val amount = filed?.let { MoneyFormat.spokenDirectional(it.amount.minor, it.currency, it.ledger) }
     val status = ReceiptsText.status(receipt.filing)
-    return listOfNotNull(tick, title, amount, status, "captured $captured", formatSize(receipt.bytes))
-        .joinToString(", ")
+    val where = if (receipt.removedFromPhoneAt != null) {
+        "removed from this phone, in Drive backup"
+    } else {
+        formatSize(receipt.bytes)
+    }
+    return listOfNotNull(tick, title, amount, status, "captured $captured", where).joinToString(", ")
 }
 
 /** "6 Nov": the day it was captured, in the user's date order. */
@@ -434,6 +465,17 @@ private fun SelectionBar(state: ReceiptsUiState, onEvent: (ReceiptsEvent) -> Uni
     LfSelectionBar(label = "$count selected · ${formatSize(state.selectedBytes)}") {
         LfButton(text = "Cancel", style = LfButtonStyle.Text, onClick = { onEvent(ReceiptsEvent.SelectionCancelled) })
         LfButton(text = "Select all", style = LfButtonStyle.Text, onClick = { onEvent(ReceiptsEvent.SelectAll) })
+        // The less destructive answer first (CLAUDE.md §7), and only while
+        // Google Drive backup is on: without it there is no copy to check.
+        if (state.canRemoveFromPhone) {
+            LfButton(
+                text = "Remove from phone",
+                style = LfButtonStyle.Inline,
+                enabled = count > 0 && !state.working,
+                loading = state.working,
+                onClick = { onEvent(ReceiptsEvent.RemoveSelectedRequested) },
+            )
+        }
         LfButton(
             text = "Delete",
             style = LfButtonStyle.Inline,
@@ -455,6 +497,18 @@ private fun DeleteDialog(
     copies: ReceiptCopies?,
     onEvent: (ReceiptsEvent) -> Unit,
 ) {
+    // Removal is not irreversible: Drive keeps a copy. A plain question, not a
+    // Warning, that still says the 24 words are needed to see them again.
+    if (confirmation is ReceiptsConfirmation.RemoveSelected) {
+        LfDialog(
+            title = ReceiptsText.removeTitle(confirmation.count, confirmation.bytes),
+            body = ReceiptsText.removeBody(confirmation.count),
+            confirmText = "Remove",
+            onConfirm = { onEvent(ReceiptsEvent.ConfirmationAccepted) },
+            onDismiss = { onEvent(ReceiptsEvent.ConfirmationDismissed) },
+        )
+        return
+    }
     // Nothing on the phone: say so, with one answer and nothing to confirm.
     if (confirmation.count == 0) {
         LfDialog(

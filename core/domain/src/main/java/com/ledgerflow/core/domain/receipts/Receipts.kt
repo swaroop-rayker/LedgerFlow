@@ -46,6 +46,33 @@ public interface ReceiptsRepository {
 
     /** [delete] for every receipt there is. */
     public suspend fun deleteAll(): ReceiptDeletion
+
+    /** Receipts removed from the phone and kept only in backups (ADR-0035), for the summary. */
+    public fun observeRemoved(): Flow<ReceiptCount>
+
+    /**
+     * Removes [id]'s image from this phone and keeps its row (ADR-0035 §3): the
+     * column is set first, then the file is unlinked. Only the use case calls
+     * this, after it has checked Google Drive's copy; the repository itself
+     * refuses a receipt still waiting in the Inbox, or one already removed.
+     *
+     * @return true when the receipt is now removed from the phone.
+     */
+    public suspend fun removeFromPhone(id: String): Boolean
+}
+
+/**
+ * The backup folder's copy of a receipt, as the Drive check needs it (ADR-0035 §1).
+ * Implemented in `:core:data`, which holds the folder and the seal.
+ */
+public interface ReceiptBackupCopies {
+
+    /**
+     * The bytes of `attachments/<id>.lfba` in the backup folder, **only if** that
+     * file is sealed to this install's nightly key; null when the folder cannot
+     * be reached, the file is not there, or it is sealed to something else.
+     */
+    public suspend fun sealedCopy(id: String): ByteArray?
 }
 
 /**
@@ -78,6 +105,8 @@ public data class ReceiptListItem(
     /** The image's size. */
     val bytes: Long,
     val filing: ReceiptFiling,
+    /** When it left the phone (ADR-0035), or null while it is on the phone. */
+    val removedFromPhoneAt: Long? = null,
 )
 
 /** What a receipt belongs to. */
@@ -124,6 +153,9 @@ public sealed interface ReceiptImage {
 
     /** The file is missing or does not open: honest degradation (ADR-0023). */
     public data object Unavailable : ReceiptImage
+
+    /** Removed from this phone on purpose (ADR-0035); Google Drive keeps a copy. */
+    public data class RemovedFromPhone(val at: Long) : ReceiptImage
 }
 
 /** What a delete did. */

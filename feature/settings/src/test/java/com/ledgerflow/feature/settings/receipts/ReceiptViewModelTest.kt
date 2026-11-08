@@ -27,7 +27,12 @@ class ReceiptViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun viewModel(id: String) =
-        ReceiptViewModel(receipts, dispatcher, SavedStateHandle(mapOf(ReceiptViewModel.ATTACHMENT_ID_ARG to id)))
+        ReceiptViewModel(
+            receipts,
+            receipts.removeUseCase(),
+            dispatcher,
+            SavedStateHandle(mapOf(ReceiptViewModel.ATTACHMENT_ID_ARG to id)),
+        )
 
     /** A file that is missing or does not open is said, not drawn as a blank (ADR-0023). */
     @Test
@@ -52,6 +57,35 @@ class ReceiptViewModelTest {
 
         assertThat(receipts.deletedIds).containsExactly(setOf("r2"))
         assertThat(vm.state.value.gone).isTrue()
+    }
+
+    /** ADR-0035: with a checked Drive copy it leaves the phone, and the page shows where it is now. */
+    @Test
+    fun removing_withACheckedCopy_showsItInTheDriveBackup() = runTest(dispatcher) {
+        receipts.backedUp("r1")
+        val vm = viewModel("r1")
+        advanceUntilIdle()
+        vm.onEvent(ReceiptEvent.RemoveRequested)
+        assertThat(vm.state.value.confirmingRemove).isTrue()
+
+        vm.onEvent(ReceiptEvent.RemoveConfirmed)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.image).isEqualTo(ReceiptPicture.RemovedFromPhone(FakeReceipts.REMOVED_AT))
+        assertThat(vm.state.value.message).isNull()
+        assertThat(vm.state.value.gone).isFalse()
+    }
+
+    /** Not copied to Drive yet: it stays, and the page says why. */
+    @Test
+    fun removing_withoutACopy_staysAndSaysWhy() = runTest(dispatcher) {
+        val vm = viewModel("r1")
+        advanceUntilIdle()
+        vm.onEvent(ReceiptEvent.RemoveConfirmed)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.image).isEqualTo(ReceiptPicture.Unavailable)
+        assertThat(vm.state.value.message).contains("not in Google Drive yet")
     }
 
     @Test
