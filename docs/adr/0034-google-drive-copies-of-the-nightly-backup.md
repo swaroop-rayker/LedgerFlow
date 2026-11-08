@@ -8,6 +8,9 @@
   file already encrypted on it" (wording under *Law 6, rewritten*). **ADR-0021**
   stands; its line "the `INTERNET` permission is not used for anything we write"
   stops being true and is replaced by the module rule below.
+- **Amended by:** **ADR-0035** (2026-11-08), §5's receipt rule: a sidecar
+  leaves Drive only when the phone's folder lacks it **and** no receipt row
+  names it.
 - **Settles:** `docs/V2-PLAN.md` decision **D1**. The plan reserved ADR-0029 for
   it; that number went to the SQLCipher key (BUG56), and 0034 is the next free.
 - **Spec sections touched:** `SPEC.md` §5.9, §7, §9.3, §16; `docs/V2-PLAN.md` §1
@@ -159,7 +162,8 @@ Drive is the existing folder restore, reading a different place.
 - **Rotation after verification:** the five newest `.lfbk` files the app
   uploaded are kept and older ones deleted (owner's choice (d)). A sidecar is
   deleted from Drive when the phone's folder no longer has it, so Drive mirrors
-  the phone.
+  the phone. *Amended by ADR-0035 §4: only when no receipt row names it
+  either, so a receipt removed from the phone keeps its Drive copy.*
 - **Status lives in the vault**, beside the nightly backup's own (amended while
   building; see below): enabled, the account, the last attempt and its outcome,
   and when everything last arrived. Settings > Data > Google Drive shows
