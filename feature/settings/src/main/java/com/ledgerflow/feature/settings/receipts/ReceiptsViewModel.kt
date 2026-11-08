@@ -153,6 +153,11 @@ public class ReceiptsViewModel @Inject constructor(
 
     private suspend fun delete() {
         val confirmation = local.value.confirmation ?: return
+        // "No receipts to delete" has only OK; there is nothing to confirm.
+        if (confirmation.count == 0) {
+            local.update { it.copy(confirmation = null) }
+            return
+        }
         local.update { it.copy(confirmation = null, working = true) }
         val deletion = when (confirmation) {
             is ReceiptsConfirmation.DeleteSelected -> receiptsRepository.delete(local.value.selected)

@@ -455,6 +455,18 @@ private fun DeleteDialog(
     copies: ReceiptCopies?,
     onEvent: (ReceiptsEvent) -> Unit,
 ) {
+    // Nothing on the phone: say so, with one answer and nothing to confirm.
+    if (confirmation.count == 0) {
+        LfDialog(
+            title = ReceiptsText.NOTHING_TO_DELETE_TITLE,
+            body = ReceiptsText.NOTHING_TO_DELETE_BODY,
+            confirmText = "OK",
+            dismissText = null,
+            onConfirm = { onEvent(ReceiptsEvent.ConfirmationDismissed) },
+            onDismiss = { onEvent(ReceiptsEvent.ConfirmationDismissed) },
+        )
+        return
+    }
     LfDialog(
         title = ReceiptsText.deleteTitle(
             count = confirmation.count,

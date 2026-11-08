@@ -95,6 +95,23 @@ class ReceiptsViewModelTest {
         assertThat(receipts.deletedAll).isEqualTo(1)
     }
 
+    /** Owner, 2026-11-08: with nothing on the phone it says so, and nothing is deleted. */
+    @Test
+    fun deleteAll_withNothingOnThePhone_deletesNothing() = runTest(dispatcher) {
+        receipts.rows.value = emptyList()
+        val vm = viewModel()
+        vm.onEvent(ReceiptsEvent.DeleteAllRequested)
+        advanceUntilIdle()
+        assertThat(vm.state.value.confirmation).isEqualTo(ReceiptsConfirmation.DeleteAll(count = 0, bytes = 0))
+
+        vm.onEvent(ReceiptsEvent.ConfirmationAccepted)
+        advanceUntilIdle()
+
+        assertThat(receipts.deletedAll).isEqualTo(0)
+        assertThat(vm.state.value.confirmation).isNull()
+        assertThat(vm.state.value.message).isNull()
+    }
+
     @Test
     fun selectAll_takesTheWholePeriod_notOnlyTheLoadedRows() = runTest(dispatcher) {
         val vm = viewModel()

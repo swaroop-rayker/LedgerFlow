@@ -113,6 +113,19 @@ open class ReceiptsGoldensTest {
     @Config(qualifiers = PHONE_2X)
     @Test fun deleteDialog_2x() = withDialog("receipts-delete-2x", 2f)
 
+    /** Delete all with nothing on the phone: says so, with only OK (owner, 2026-11-08). */
+    @Test fun nothingToDelete_1x() = withDialog(
+        "receipts-nothing-to-delete-1x",
+        1f,
+        state = previewReceiptsState.copy(
+            period = ReceiptPeriod.All,
+            count = null,
+            onPhone = com.ledgerflow.core.domain.ingest.AttachmentUsage(count = 0, bytes = 0),
+            confirmation = ReceiptsConfirmation.DeleteAll(count = 0, bytes = 0),
+        ),
+        rows = emptyList(),
+    )
+
     private fun receipt(
         name: String,
         fontScale: Float,
@@ -183,7 +196,17 @@ open class ReceiptsGoldensTest {
      * screen is captured, with the zone pinned to UTC as `InboxImportGoldensTest` does.
      */
     @OptIn(ExperimentalRoborazziApi::class)
-    private fun withDialog(name: String, fontScale: Float) {
+    private fun withDialog(
+        name: String,
+        fontScale: Float,
+        state: ReceiptsUiState = previewReceiptsState.copy(
+            selecting = true,
+            selected = setOf("r1", "r2"),
+            selectedBytes = 680_000,
+            confirmation = ReceiptsConfirmation.DeleteSelected(count = 2, bytes = 680_000),
+        ),
+        rows: List<ReceiptListItem> = previewReceipts,
+    ) {
         if (fontScale != 1f) RuntimeEnvironment.setFontScale(fontScale)
         val hostZone = TimeZone.getDefault()
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
@@ -193,14 +216,9 @@ open class ReceiptsGoldensTest {
                     LfTheme {
                         LfScaffold {
                             ReceiptsContent(
-                                state = previewReceiptsState.copy(
-                                    selecting = true,
-                                    selected = setOf("r1", "r2"),
-                                    selectedBytes = 680_000,
-                                    confirmation = ReceiptsConfirmation.DeleteSelected(count = 2, bytes = 680_000),
-                                ),
+                                state = state,
                                 items = flowOf(
-                                    PagingData.from(previewReceipts, sourceLoadStates = LoadStates(DONE, DONE, DONE)),
+                                    PagingData.from(rows, sourceLoadStates = LoadStates(DONE, DONE, DONE)),
                                 ).collectAsLazyPagingItems(),
                                 onEvent = {},
                                 onOpen = {},

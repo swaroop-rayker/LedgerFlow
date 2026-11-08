@@ -95,6 +95,15 @@ internal object ReceiptsText {
 
     const val NOTHING_DELETED: String = "Nothing was deleted. Try again."
 
+    /**
+     * Delete all with nothing on the phone (owner, 2026-11-08). The row still
+     * answers, as the Settings row always did: a destructive control that is
+     * sometimes inert teaches people to tap it without reading. But it says
+     * there is nothing, rather than "Delete all 0 receipts (0 bytes)?".
+     */
+    const val NOTHING_TO_DELETE_TITLE: String = "No receipts to delete"
+    const val NOTHING_TO_DELETE_BODY: String = "There are no receipt images on this phone."
+
     const val IMAGE_UNAVAILABLE_TITLE: String = "This image can't be opened"
     /**
      * No promise of a restore: restoring replaces the whole ledger (ADR-0033),
