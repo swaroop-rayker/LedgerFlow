@@ -1,7 +1,8 @@
 # Plan — LedgerFlow v2 (for general users)
 
-Status: **V2-1, V2-2, V2-3 and V2-6 merged (V2-3 and V2-6 completed
-2026-11-05); the Night Vault redesign merged (2026-10-31). V2-4 is next.**
+Status: **V2-1, V2-2, V2-3, V2-4 and V2-6 merged (V2-4 completed
+2026-11-07); the Night Vault redesign merged (2026-10-31). V2-5 is next: D5
+decided 2026-11-08 (ADR-0035).**
 Written 2026-09-30 from the
 owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 
@@ -32,7 +33,8 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-4 · Import into the Inbox | Built on `claude/v2-4-import`, stacked on Restore from Settings (§3.6, D8; SPEC §5.9, §9.3; TESTING D15). Owner, 2026-11-05: option A (three pages: the file, which column is which, check and add); rows already in LedgerFlow kept suppressed; CSV and `.xlsx` only, no library; amounts in the base currency unless a currency column says otherwise; a category column is not used. No schema change: a row's reference carries its file, so "Approve all" can find a batch. Merged 2026-11-06 (#28) |
 | V2-4 · Approve all per import | Built on `claude/v2-4-approve-all` (D8; SPEC §5.9, §5.1; TESTING D16). Owner, 2026-11-06: placement A (a panel per import above the Inbox's Pending queue); no merchant created (an existing one by name or alias, its category only in the row's book; the text as the note). One confirmed tap per batch, one transaction, the confirmed count or nothing. No schema change. Merged 2026-11-06 (#29) |
 | V2-4 · Google Drive backup | Built on `claude/v2-4-drive` (ADR-0034, D1; SPEC §5.9, P3; TESTING D17). Owner, 2026-11-07: option B (Drive's API, `play-services-auth` 22.0.0, `drive.file` only); the newest backup and the receipts, any network, newest five on Drive; layout A (Data > Google Drive, its own page); status in the vault. Adds no permission, 82 KiB to the release split. D17 passed on the SM-S721B. Merged 2026-11-07 (#31) |
-| V2-4 · Restore from Drive | Built on `claude/v2-4-drive-restore` (ADR-0034 §7; SPEC §5.9; TESTING D18). Owner, 2026-11-07: placement A ("From Google Drive" beside the folder and the single file); download the backup and its receipts when it is picked. Staged in `filesDir/drive-restore/` and restored by the existing restore. Not yet merged |
+| V2-4 · Restore from Drive | Built on `claude/v2-4-drive-restore` (ADR-0034 §7; SPEC §5.9; TESTING D18). Owner, 2026-11-07: placement A ("From Google Drive" beside the folder and the single file); download the backup and its receipts when it is picked. Staged in `filesDir/drive-restore/` and restored by the existing restore, with BUG86 and BUG87. Merged 2026-11-07 (#32) |
+| V2-5 decisions | Owner, 2026-11-08: **D5 option A** (ADR-0035, superseding ADR-0023's "No auto-purge" and amending ADR-0034 §5). A receipt leaves the phone only when Google Drive holds a checked copy, checked in the same pass; its row stays (schema v14, `attachment.removed_from_phone_at`). A manual "Remove from phone" beside Delete; removal by age off until turned on, 30/90/365 days with 90 preselected. BUG88 fixed: Delete also removes the backup-folder copy. PRs in order: this ADR → Receipts page (with BUG88) → v14 and "Remove from phone" → removal by age |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -42,8 +44,8 @@ design-system's visual direction (Night Vault, 2026-10-28), and ADR-0032 the
 licences list generated at build time (V2-3 About, 2026-10-31), and ADR-0033
 restore from Settings (V2-4, 2026-11-05), so D1, D2 and the LedgerFlow PIN
 take the next free numbers, 0034 and up.
-Schema v12 is BUG58's, so merchant categories (§5.5) become v13 and V2-7's
-tables v14 and later.
+Schema v12 is BUG58's, so merchant categories (§5.5) become v13. V2-5's
+receipt column (ADR-0035) takes v14, so V2-7's tables are v15 and later.
 
 v1 was built for one user and one phone. v2 is for general users, adds
 opt-in network features, and **keeps the privacy promise**: no LedgerFlow
@@ -64,7 +66,7 @@ starts.
 | D2 | Currency converter with real-time rates | Locked decision: *rates are user-entered, never fetched* | **Split.** The ledger rule stays: an entry's `fx_rate_micro` is what the user enters. A **utility** converter may fetch a public rate table (e.g. ECB reference rates), sending nothing but the request, cached, clearly labelled "indicative". Optionally it may *suggest* a rate the user confirms on the entry form. Needs ADR-0030 superseding the §0 line. |
 | D3 | Account: profile, email, phone, sign-in/out, delete account, account type | Law 6; privacy; there is no backend | **No LedgerFlow accounts.** "Account" becomes a **local profile** (name, photo) stored in the vault, plus the Google account linked for Drive (D1), shown as "Signed in to Google Drive as …" with sign-out. "Delete account" = erase this install's data (with the purge-style `Warning` confirmation) and unlink Drive. Email/phone are not collected: nothing would use them, and a field that stores PII for no purpose is a liability. **2026-10-25:** the owner's reference samples include sign-up, login, reset-password and verification-code screens. They are drawn on the design canvas and mapped in `DESIGN_SYSTEM_PLAN.md` §5.6 as "waits on D3"; none is built while this row stands. |
 | D4 | Change default currency after onboarding | Locked decision: one base currency per install; `amount_minor` is always base | Base currency stays fixed once data exists (changing it would silently relabel every amount). Settings shows it read-only, with symbol, number format (lakh/western grouping) and date format as the adjustable parts. A future "start a new book in another currency" is a separate design. |
-| D5 | Receipts auto-delete after a period | ADR-0023 declined a timed purge | Owner reverses ADR-0023's decision explicitly (superseding ADR), or v2 ships "select and delete" + a reminder instead of silent auto-deletion. Recommendation: allow auto-delete **only of receipts already backed up** to a verified backup, never of the only copy. |
+| D5 | Receipts auto-delete after a period | ADR-0023 declined a timed purge | Owner reverses ADR-0023's decision explicitly (superseding ADR), or v2 ships "select and delete" + a reminder instead of silent auto-deletion. Recommendation: allow auto-delete **only of receipts already backed up** to a verified backup, never of the only copy. **Decided 2026-11-08, ADR-0035** (option A): nothing recorded per receipt that it was backed up, and a deleted row is unrestorable once five backups rotate, so a receipt is **removed from the phone** (file only, row kept) when Google Drive holds a checked copy, by hand or after 30/90/365 days (off until turned on). A backup folder on the phone does not count. Delete stays, and now removes the backup-folder copy too (BUG88). |
 | D6 | Ghost Inbox entries (BUG-B below) | §5.1 / CLAUDE.md §7: never silently drop a financial SMS | Recognised non-transactions (OTP, balance, statement, promo) are **retained and visible** under a new Inbox filter ("Not transactions"), not deleted and not in the main queue. That keeps the guarantee's substance (nothing lost) while ending the noise. **Confirmed by the owner, 2026-10-20** — built as BUG58. |
 | D7 | Settings as a sixth bottom-bar slot | Material's 3–5 destinations; CLAUDE.md compactness brief | Five slots are already used (Home, Ledger, +, Analytics, More). **Recommend: Settings replaces More in the bar, and More's contents move** — tools (goals, recurring, debts, utilities) into a "Tools" section reached from Home/More-as-a-screen, or keep More and put Settings behind a gear in every tab header. Owner picks. **Decided 2026-10-21: Settings replaces More** (gear, fourth tab). Every row More had moved to Settings; Diagnostics, the one tool, is its Tools section rather than a screen of one row (V2-2). **Amended 2026-10-25 (owner): Profile replaces Settings as the fourth tab** (Home · Ledger · + · Analytics · Profile). Settings and Account live inside Profile, and every Settings section becomes its own page. Built by the redesign's step D4 (`DESIGN_SYSTEM_PLAN.md` §7), which updates SPEC §9.3 in the same commit. **Built 2026-10-27:** Profile holds Organise, Data and Settings (owner, after the device check: Export had two rows, BUG65), with no profile header until §3.1 can store one; the Settings index lists the other five sections, with each one's value where one value says it, and each of the seven sections is its own page. |
 | D8 | Import (Excel/CSV) | Law 1: nothing reaches the ledger without a tap | Imported rows land in the Inbox as `IMPORT` candidates (the source already exists), approvable in bulk with one confirmed tap per batch. Owner confirms "bulk approve" satisfies Law 1. **Confirmed by the owner, 2026-11-05**, under five rules: import writes candidates only, through the normal dedupe; "Approve all" covers one import batch and never SMS or notification candidates; its confirmation names the count and each book's total separately (Law 2); only complete rows qualify, the rest stay for one-by-one review; every row goes through `ApproveTransactionUseCase`, as one transaction. A batch id on the candidate may need schema v14, shown to the owner before it is built. **Not needed** (Import, 2026-11-05): an imported row's `raw_ref_id` is `import:<file fingerprint>:<line>`, and the batch is noted in `app_meta`. |
@@ -300,7 +302,9 @@ files, sync status, last upload), Export (CSV exists; XLSX from P5) and
 ### 3.7 Receipts (per D5)
 Browse receipts by period (Today / Week / Month / all), multi-select delete,
 delete all (warning with count and size), storage location and size, and
-auto-delete as decided in D5.
+auto-delete as decided in D5. **Per ADR-0035:** "Remove from phone" (Drive keeps
+a checked copy; seen again only after a restore with the 24 words) offered
+before Delete, and removal by age after a Drive pass.
 
 ### 3.8 About
 Version and build, What's new (from Conventional Commit release notes), Help
@@ -536,9 +540,9 @@ BUG82, found on the way: a merge did not re-sum the daily summaries.
 | V2-2 | Settings destination and restructure (moves only, no new features) | D7 |
 | V2-3 | Appearance, Currency & region, Notifications, Allowlist editor, App lock + screenshot block (all merged); Hide amounts + Data permissions, About | D4 |
 | V2-4 | Data & sync: Drive, Import (CSV/XLSX), Restore entry | D1, D8; P5 XLSX |
-| V2-5 | Receipts management | D5 |
+| V2-5 | Receipts management; schema v14 | D5, decided 2026-11-08 (ADR-0035) |
 | V2-6 | Merchant categories (schema v13): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; seed list confirmed 2026-10-31 |
-| V2-7 | More: recurring, goals, debts, utilities (schema v14+) | D2 for converter |
+| V2-7 | More: recurring, goals, debts, utilities (schema v15+) | D2 for converter |
 | V2-8 | Recommended additions the owner picks; Play listing for v2 | owner |
 
 `docs/PERF-120HZ-PLAN.md` runs alongside from V2-1 (its transition work is

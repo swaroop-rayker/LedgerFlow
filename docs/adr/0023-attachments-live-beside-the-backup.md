@@ -3,7 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-09-08
 - **Deciders:** Swaroop (owner; decision delegated to the engineer), lead engineer
-- **Supersedes / Superseded by:** none. **Closes `SPEC.md` §16 Q5** and adds the
+- **Supersedes / Superseded by:** **superseded in part by ADR-0035** (2026-11-08):
+  its "No auto-purge" paragraph. A receipt may now leave the phone when Google
+  Drive holds a checked copy; the rest of this ADR stands. **Closes `SPEC.md` §16 Q5** and adds the
   `attachment` table to §6.1's shipped schema.
 - **Spec sections touched:** `SPEC.md` §5.3, §5.9, §6.1, §7.1, §7.2, §16 Q5;
   `CLAUDE.md` §2 Law 5, §7 (backup writer)
@@ -120,6 +122,9 @@ now does it and prints the figure.
 
 The storage saving is unchanged, and so is the record's honesty: the stored
 copy is the same frame, downscaled, rather than a different capture.
+
+*Superseded by ADR-0035 (2026-11-08): a receipt may be removed from the phone,
+by hand or by age, when Google Drive holds a checked copy; its row stays.*
 
 **No auto-purge.** D-09's 90-day rule exists because a raw message body is the
 most sensitive text the app holds *and it rides inside a `.lfbk` that can leave
