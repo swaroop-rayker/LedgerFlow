@@ -45,7 +45,10 @@ import com.ledgerflow.core.designsystem.component.LfEmptyState
 import com.ledgerflow.core.designsystem.component.LfGroupPosition
 import com.ledgerflow.core.designsystem.component.LfNotice
 import com.ledgerflow.core.designsystem.component.LfNoticeTone
-import com.ledgerflow.core.designsystem.component.LfSegmentedControl
+import com.ledgerflow.core.designsystem.component.LfActionAlignment
+import com.ledgerflow.core.designsystem.component.LfActionRow
+import com.ledgerflow.core.designsystem.component.LfChip
+import com.ledgerflow.core.designsystem.component.LfChipStyle
 import com.ledgerflow.core.designsystem.component.lfGroupPosition
 import com.ledgerflow.core.designsystem.component.lfGroupSlice
 import com.ledgerflow.core.designsystem.format.DisplayDates
@@ -176,13 +179,23 @@ private fun Fact(title: String, value: String?, detail: String? = null) {
 
 private fun LazyListScope.periodAndCount(state: ReceiptsUiState, onEvent: (ReceiptsEvent) -> Unit) {
     item(key = "period", contentType = "period") {
-        val periods = ReceiptPeriod.entries
-        LfSegmentedControl(
-            options = periods.map(ReceiptsText::periodLabel),
-            selectedIndex = periods.indexOf(state.period),
-            onSelect = { onEvent(ReceiptsEvent.PeriodSelected(periods[it])) },
+        // Chips, not a segmented control (owner, 2026-11-08). Four segments
+        // need 72 dp each times the font scale, which a 360 dp phone gives
+        // only at exactly 1.0: at the owner's 1.15 the control stacked into a
+        // column a third of the screen tall. Chips stay one short line and,
+        // at large text, wrap as whole chips (BUG9).
+        LfActionRow(
+            alignment = LfActionAlignment.Start,
             modifier = Modifier.padding(bottom = LfTheme.space.itemGap),
-        )
+        ) {
+            ReceiptPeriod.entries.forEach { period ->
+                LfChip(
+                    label = ReceiptsText.periodLabel(period),
+                    style = if (period == state.period) LfChipStyle.Selected else LfChipStyle.Assist,
+                    onClick = { onEvent(ReceiptsEvent.PeriodSelected(period)) },
+                )
+            }
+        }
     }
     item(key = "count", contentType = "count") {
         // The count on the leading edge and Select on the trailing one. The

@@ -80,6 +80,13 @@ open class ReceiptsGoldensTest {
 
     @Test fun page_1x_rtl() = page("receipts-1x-rtl", 1f, direction = LayoutDirection.Rtl)
 
+    /**
+     * The owner's phone runs text at 1.15. There a segmented control of four
+     * stacked into a column a third of the screen tall, which neither 1x nor 2x
+     * showed as a problem; the period is chips now, and this holds them to one line.
+     */
+    @Test fun page_115() = page("receipts-1.15x", FONT_SCALE_PHONE)
+
     @Test fun selecting_1x() = page(
         "receipts-selecting-1x",
         1f,
@@ -215,6 +222,7 @@ open class ReceiptsGoldensTest {
 
     private companion object {
         val DONE = LoadState.NotLoading(endOfPaginationReached = true)
+        const val FONT_SCALE_PHONE = 1.15f
         const val RECEIPT_W = 480
         const val RECEIPT_H = 720
         const val MARGIN = 40
