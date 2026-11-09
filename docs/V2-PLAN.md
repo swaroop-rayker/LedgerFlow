@@ -1,7 +1,8 @@
 # Plan — LedgerFlow v2 (for general users)
 
 Status: **V2-1 to V2-6 merged (V2-5 completed 2026-11-09, ADR-0035); the
-Night Vault redesign merged (2026-10-31). V2-7 is next.**
+Night Vault redesign merged (2026-10-31). V2-7 started 2026-11-09: decisions
+and ADR-0036 (D2).**
 Written 2026-09-30 from the
 owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 
@@ -37,7 +38,8 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-5 · Receipts page | Built on `claude/v2-5-receipts-page`, stacked on the ADR (§3.7; SPEC §9.3, §8 BUG88; TESTING E5, E6). Owner, 2026-11-08: layout A, a tap opening the receipt's image; no "Open entry", since no page shows one entry, so the receipt's page shows its entry's facts. The period is chips, not the mockup's segmented control, after the phone check (owner, 2026-11-08). No schema change. Merged 2026-11-08 (#34) |
 | V2-5 · Remove from phone | Built on `claude/v2-5-remove-from-phone` (ADR-0035 §1–§5; SPEC §9.3; TESTING E7). Owner, 2026-11-08: the v14 migration and the screens as shown (Remove from phone before Delete, only while Drive is on; a plain question naming the 24 words; a hollow cloud tile; "Removed, in Drive only"). Schema v14 (`attachment.removed_from_phone_at`), Drive keeps a sidecar a row names. BUG89 fixed before merge (E7 on the SM-S721B). Merged 2026-11-09 (#35) |
 | V2-5 · Removal by age | Built on `claude/v2-5-removal-by-age` (ADR-0035 §6; SPEC §9.3; TESTING E8). Owner, 2026-11-08: the design as shown (the row above Delete all; Off / 30 / 90 / 365, 90 preselected; asked once from Off; runs after each full Drive copy; "Last removed on …"; the Drive page's "kept only in your backups"). No schema change. Merged 2026-11-09 (#36); V2-5 complete |
-| BUG90 purge and receipts | Built on `claude/bug90-purge-backup-copy`: purging an entry from the bin also removes its receipt's backup-folder copy (SPEC §8 BUG90; CLAUDE.md §7). Not yet merged |
+| BUG90 purge and receipts | Built on `claude/bug90-purge-backup-copy`: purging an entry from the bin also removes its receipt's backup-folder copy (SPEC §8 BUG90; CLAUDE.md §7). Merged 2026-11-09 (#37, `8e258c4`) |
+| V2-7 decisions | Owner, 2026-11-09: **D2 decided**, fetch on tap (ADR-0036). Recurring items and bill reminders are one feature; a due item reaches the Inbox only when nothing captured matches it by two days after the due date; items in either book, tied to entries by a link table. Goals: manual contributions plus a linked category. Splits, lending and loans are one debt model, with "Repayment" and "Lent" on an Inbox candidate. EMI: rupee-rounded, interest to the paisa, pinned to a real bank schedule. §4 has each. PRs in order: ADR-0036 → Tools page and goals (v15) → recurring data (v16) → recurring screens → debts and loans (v17) → utilities. The LedgerFlow PIN goes after V2-7 |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -66,7 +68,7 @@ starts.
 | # | Request | Collides with | Recommendation |
 |---|---|---|---|
 | D1 | Google Drive backup/sync; "online" data | Law 6 (nothing computed touches a network) | **ADR-0029: opt-in network, own-account only.** Drive holds the same `.lfbk` files the SAF folder does — already encrypted to the phrase-derived key (ADR-0027) before they leave the phone. Google sees ciphertext and file names; LedgerFlow runs no server. Uses the Drive REST API through the Storage Access Framework picker if possible (no Google SDK); the official Drive/Identity SDKs only if SAF cannot hold a Drive folder reliably — a dependency the owner approves separately. **Decided 2026-11-07, ADR-0034** (the 0029 above went to BUG56): option B, Drive's REST API with Play services' `AuthorizationClient` (`play-services-auth`, `drive.file` only); the sealed `.lfbk` and receipt sidecars, any network, newest five on Drive, restore from Drive as a later PR; every network call in `:core:drive`. Drive can in fact be picked as the backup folder (checked 2026-11-07, ADR-0034); the owner kept B for automatic copies and in-app status whatever folder is picked. |
-| D2 | Currency converter with real-time rates | Locked decision: *rates are user-entered, never fetched* | **Split.** The ledger rule stays: an entry's `fx_rate_micro` is what the user enters. A **utility** converter may fetch a public rate table (e.g. ECB reference rates), sending nothing but the request, cached, clearly labelled "indicative". Optionally it may *suggest* a rate the user confirms on the entry form. Needs ADR-0030 superseding the §0 line. |
+| D2 | Currency converter with real-time rates | Locked decision: *rates are user-entered, never fetched* | **Split.** The ledger rule stays: an entry's `fx_rate_micro` is what the user enters. A **utility** converter may fetch a public rate table (e.g. ECB reference rates), sending nothing but the request, cached, clearly labelled "indicative". Optionally it may *suggest* a rate the user confirms on the entry form. Needs ADR-0030 superseding the §0 line. **Decided 2026-11-09, ADR-0036** (the 0030 above went to device preferences): fetch on tap. The Utilities converter fetches the ECB's daily reference rates from one fixed address only when the user asks, sending nothing but the request; cached in `filesDir`, labelled indicative with the ECB's date; a typed rate always works. The suggestion on the entry form was **declined**: nothing fetched reaches an entry. Network code in `:core:drive` or a new `:core:rates`; Law 6 reworded. |
 | D3 | Account: profile, email, phone, sign-in/out, delete account, account type | Law 6; privacy; there is no backend | **No LedgerFlow accounts.** "Account" becomes a **local profile** (name, photo) stored in the vault, plus the Google account linked for Drive (D1), shown as "Signed in to Google Drive as …" with sign-out. "Delete account" = erase this install's data (with the purge-style `Warning` confirmation) and unlink Drive. Email/phone are not collected: nothing would use them, and a field that stores PII for no purpose is a liability. **2026-10-25:** the owner's reference samples include sign-up, login, reset-password and verification-code screens. They are drawn on the design canvas and mapped in `DESIGN_SYSTEM_PLAN.md` §5.6 as "waits on D3"; none is built while this row stands. |
 | D4 | Change default currency after onboarding | Locked decision: one base currency per install; `amount_minor` is always base | Base currency stays fixed once data exists (changing it would silently relabel every amount). Settings shows it read-only, with symbol, number format (lakh/western grouping) and date format as the adjustable parts. A future "start a new book in another currency" is a separate design. |
 | D5 | Receipts auto-delete after a period | ADR-0023 declined a timed purge | Owner reverses ADR-0023's decision explicitly (superseding ADR), or v2 ships "select and delete" + a reminder instead of silent auto-deletion. Recommendation: allow auto-delete **only of receipts already backed up** to a verified backup, never of the only copy. **Decided 2026-11-08, ADR-0035** (option A): nothing recorded per receipt that it was backed up, and a deleted row is unrestorable once five backups rotate, so a receipt is **removed from the phone** (file only, row kept) when Google Drive holds a checked copy, by hand or after 30/90/365 days (off until turned on). A backup folder on the phone does not count. Delete stays, and now removes the backup-folder copy too (BUG88). |
@@ -344,12 +346,46 @@ linked to a category/credit source), projected completion at the current rate.
 Goals are **not** a third ledger: contributions are notes against the plan,
 and nothing nets income against spending (Law 2).
 
+**Owner, 2026-11-09:** progress is manual contributions **and** approved
+entries in a category the user links to the goal. Which book a linked category
+counts and from which date are settled with the mockup. A goal never appears in
+a book's total. Schema v15, with a Tools page on Profile where V2-7's tools
+live.
+
 ### 4.2 Recurring transactions
 Explicit recurring items (rent, subscriptions, EMIs, taxes, bills): amount,
 cadence (monthly / quarterly / yearly / custom), next renewal date, reminder.
 Seeded from the existing **recurring detection** (Analytics runway) as
 suggestions the user confirms. A due item creates an **Inbox candidate**, never
 a ledger entry (Law 1).
+
+**Checked in the code (2026-11-09, `8e258c4`).** Detection (`RecurringDetection`)
+reads each merchant's payment dates over 730 days, per book: at least three,
+σ/μ < 0.25, a mean gap of at most 400 days. It yields the merchant, the median
+amount, the rounded interval and the next expected date, which is what a
+suggestion is seeded from. `ledger_entry.is_recurring` exists since v1 and
+nothing writes it. The cross-source dedupe matches only candidates written
+within ±3 minutes of each other, so a candidate made on the due date would never
+meet the bank SMS for the same payment. Import met the same problem with its own
+date-aware match on `PendingCandidateWriter.Duplicates.Decided`.
+
+**Owner, 2026-11-09:**
+- **One feature with bill reminders (§4.4):** an item is "Remind me" or "Remind
+  me and add to Inbox". The reminder comes on time, on its own channel.
+- **The candidate waits two days.** It is written, as `EntrySource.RECURRING`
+  with the reference `recurring:<item>:<due date>`, only if nothing captured
+  matches it (same book and amount, the merchant when known, from three days
+  before the due date to two after). The capture dedupe is not changed. A
+  candidate that is written notifies like any other, and approval goes through
+  `ApprovePendingUseCase` unchanged. Known gap: a capture arriving more than two
+  days late can still duplicate it.
+- **Either book**, one book per item (a salary is a credit item).
+- **The link lives in a `recurring_occurrence` table** (item, due date,
+  candidate, entry). `is_recurring` stays unwritten: setting it after an
+  approval would be a fifth write into `ledger_entry`.
+- **Capture coverage counts a recurring entry as not captured**, since it shows
+  where capture missed.
+- Schema v16, in two PRs: the data layer and worker, then the screens.
 
 ### 4.3 Debts & loans
 Loan: principal, interest rate (bps), tenure, start date, EMI (computed with a
@@ -358,11 +394,31 @@ schedule, outstanding balance, interest paid to date. EMI payments matched to
 debit entries as they are approved. Money lent to others tracked the same way
 (owed to me / I owe).
 
+**Owner, 2026-11-09:**
+- **One model for loans, lending and splits (§4.4):** a `debt` (who, which way,
+  the principal, and an optional rate in basis points with a tenure, which gives
+  a schedule) and its `debt_event` rows. A bank loan is an "I owe" debt with a
+  rate; a split creates "owed to me" debts.
+- **Lending is not spending and a repayment is not income.** An Inbox candidate
+  offers "Repayment" and "Lent": either records the money on a debt and sets the
+  candidate aside, kept and visible, instead of approving it into a book.
+- **EMI:** the reducing-balance EMI rounded to the nearest rupee; each month's
+  interest is outstanding × rate ÷ 12, rounded to the paisa, half up; the last
+  instalment absorbs the remainder. Exact integer arithmetic. Pinned to a real
+  bank schedule from the owner before the PR is built.
+- Schema v17.
+
 ### 4.4 Utilities
 Calculator (with "use as amount" into the entry form), currency converter (per
 D2), split expense (equal / by share / by amount; creates one debit for the
 user's share and a record of who owes what — **not** a netted figure), bill
 reminder (shares §3.4's reminders).
+
+**Owner, 2026-11-09:** the converter follows ADR-0036 (fetch on tap, nothing
+fetched reaches an entry, no "Use as amount" on it). Split builds on §4.3's
+debt model and the bill reminder on §4.2's items, so Utilities adds no schema of
+its own; `:core:rates` and its guard changes land in this PR. It is V2-7's last
+PR.
 
 ---
 
@@ -545,7 +601,7 @@ BUG82, found on the way: a merge did not re-sum the daily summaries.
 | V2-4 | Data & sync: Drive, Import (CSV/XLSX), Restore entry | D1, D8; P5 XLSX |
 | V2-5 | Receipts management; schema v14 | D5, decided 2026-11-08 (ADR-0035) |
 | V2-6 | Merchant categories (schema v13): taxonomy, manual categorisation in Merchants, browse-by-category picker, merchant-category analytics (§5) | decided 2026-10-01; seed list confirmed 2026-10-31 |
-| V2-7 | More: recurring, goals, debts, utilities (schema v15+) | D2 for converter |
+| V2-7 | More: recurring, goals, debts, utilities (schema v15+) | D2 decided 2026-11-09 (ADR-0036); a real bank schedule for the EMI rule |
 | V2-8 | Recommended additions the owner picks; Play listing for v2 | owner |
 
 `docs/PERF-120HZ-PLAN.md` runs alongside from V2-1 (its transition work is
