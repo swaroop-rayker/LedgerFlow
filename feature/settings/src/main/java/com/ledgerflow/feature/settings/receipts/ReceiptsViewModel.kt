@@ -9,9 +9,11 @@ import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
 import com.ledgerflow.core.domain.receipts.ReceiptCopies
 import com.ledgerflow.core.domain.receipts.ReceiptCount
+import com.ledgerflow.core.domain.receipts.ReceiptDeletion
 import com.ledgerflow.core.domain.receipts.ReceiptListItem
 import com.ledgerflow.core.domain.receipts.ReceiptPeriod
 import com.ledgerflow.core.domain.receipts.ReceiptsRepository
+import com.ledgerflow.core.domain.receipts.RemoveReceiptsFromPhoneUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,17 +39,22 @@ public data class ReceiptsUiState(
     /** Every receipt on this phone, measured from the files (ADR-0023). */
     val onPhone: AttachmentUsage? = null,
     val copies: ReceiptCopies? = null,
+    /** Removed from the phone, kept only in backups (ADR-0035). Null until read. */
+    val removed: ReceiptCount? = null,
     val selecting: Boolean = false,
     val selected: Set<String> = emptySet(),
     /** The size of [selected], for the dialog: a delete names its size (ADR-0035 §5). */
     val selectedBytes: Long = 0L,
     val confirmation: ReceiptsConfirmation? = null,
     val working: Boolean = false,
-    /** What the last delete did. */
+    /** What the last delete or removal did. */
     val message: String? = null,
-)
+) {
+    /** "Remove from phone" is offered only while Google Drive backup is on (ADR-0035). */
+    val canRemoveFromPhone: Boolean get() = copies?.drive == true
+}
 
-/** The irreversible question on screen. */
+/** The question on screen: a delete (irreversible) or a removal (Drive keeps a copy). */
 public sealed interface ReceiptsConfirmation {
     public val count: Int
     public val bytes: Long
@@ -55,6 +62,8 @@ public sealed interface ReceiptsConfirmation {
     public data class DeleteSelected(override val count: Int, override val bytes: Long) : ReceiptsConfirmation
 
     public data class DeleteAll(override val count: Int, override val bytes: Long) : ReceiptsConfirmation
+
+    public data class RemoveSelected(override val count: Int, override val bytes: Long) : ReceiptsConfirmation
 }
 
 public sealed interface ReceiptsEvent {
@@ -66,6 +75,7 @@ public sealed interface ReceiptsEvent {
     /** Takes every receipt the period shows, not only the rows loaded so far. */
     public data object SelectAll : ReceiptsEvent
     public data object DeleteSelectedRequested : ReceiptsEvent
+    public data object RemoveSelectedRequested : ReceiptsEvent
     public data object DeleteAllRequested : ReceiptsEvent
     public data object ConfirmationAccepted : ReceiptsEvent
     public data object ConfirmationDismissed : ReceiptsEvent
@@ -77,6 +87,7 @@ public sealed interface ReceiptsEvent {
 public class ReceiptsViewModel @Inject constructor(
     private val receiptsRepository: ReceiptsRepository,
     private val attachments: AttachmentRepository,
+    private val removeFromPhone: RemoveReceiptsFromPhoneUseCase,
 ) : ViewModel() {
 
     private val local = MutableStateFlow(ReceiptsUiState())
@@ -92,7 +103,8 @@ public class ReceiptsViewModel @Inject constructor(
     public val state: StateFlow<ReceiptsUiState> = combine(
         local,
         period.flatMapLatest { receiptsRepository.observeCount(it) },
-    ) { state, count -> state.copy(count = count) }
+        receiptsRepository.observeRemoved(),
+    ) { state, count, removed -> state.copy(count = count, removed = removed) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), local.value)
 
     /** The phone's figure and the copies: measurements, re-read on resume. */
@@ -117,24 +129,32 @@ public class ReceiptsViewModel @Inject constructor(
             }
             is ReceiptsEvent.Toggled -> local.update { toggled(it, event) }
             ReceiptsEvent.SelectAll -> viewModelScope.launch { selectAll() }
-            ReceiptsEvent.DeleteSelectedRequested -> local.update {
-                if (it.selected.isEmpty()) {
-                    it
-                } else {
-                    it.copy(confirmation = ReceiptsConfirmation.DeleteSelected(it.selected.size, it.selectedBytes))
-                }
-            }
-            ReceiptsEvent.DeleteAllRequested -> local.update {
-                val onPhone = it.onPhone ?: return@update it
-                // Asked even at zero, as the Settings row always was: a
-                // destructive control that is sometimes inert teaches people to
-                // tap it without reading.
-                it.copy(confirmation = ReceiptsConfirmation.DeleteAll(onPhone.count, onPhone.bytes))
-            }
+            ReceiptsEvent.DeleteSelectedRequested,
+            ReceiptsEvent.RemoveSelectedRequested,
+            ReceiptsEvent.DeleteAllRequested,
+            -> local.update { asked(it, event) }
             ReceiptsEvent.ConfirmationAccepted -> viewModelScope.launch { delete() }
             ReceiptsEvent.ConfirmationDismissed -> local.update { it.copy(confirmation = null) }
             ReceiptsEvent.MessageDismissed -> local.update { it.copy(message = null) }
         }
+    }
+
+    /** The question a request opens, or none (nothing selected; Drive off for a removal). */
+    private fun asked(state: ReceiptsUiState, event: ReceiptsEvent): ReceiptsUiState {
+        val question = when (event) {
+            ReceiptsEvent.DeleteSelectedRequested -> state.selected.takeIf { it.isNotEmpty() }
+                ?.let { ReceiptsConfirmation.DeleteSelected(it.size, state.selectedBytes) }
+            ReceiptsEvent.RemoveSelectedRequested -> state.selected
+                .takeIf { it.isNotEmpty() && state.canRemoveFromPhone }
+                ?.let { ReceiptsConfirmation.RemoveSelected(it.size, state.selectedBytes) }
+            // Asked even at zero, as the Settings row always was: a destructive
+            // control that is sometimes inert teaches people to tap it without
+            // reading. At zero the dialog says there is nothing to delete.
+            ReceiptsEvent.DeleteAllRequested -> state.onPhone
+                ?.let { ReceiptsConfirmation.DeleteAll(it.count, it.bytes) }
+            else -> null
+        }
+        return question?.let { state.copy(confirmation = it) } ?: state
     }
 
     private fun toggled(state: ReceiptsUiState, event: ReceiptsEvent.Toggled): ReceiptsUiState =
@@ -159,9 +179,10 @@ public class ReceiptsViewModel @Inject constructor(
             return
         }
         local.update { it.copy(confirmation = null, working = true) }
-        val deletion = when (confirmation) {
-            is ReceiptsConfirmation.DeleteSelected -> receiptsRepository.delete(local.value.selected)
-            is ReceiptsConfirmation.DeleteAll -> receiptsRepository.deleteAll()
+        val message = when (confirmation) {
+            is ReceiptsConfirmation.DeleteSelected -> deleted(receiptsRepository.delete(local.value.selected))
+            is ReceiptsConfirmation.DeleteAll -> deleted(receiptsRepository.deleteAll())
+            is ReceiptsConfirmation.RemoveSelected -> ReceiptsText.removed(removeFromPhone(local.value.selected))
         }
         // Re-measured rather than assumed: a failed unlink shows as a file
         // still there, not as a clean slate the app merely hoped for.
@@ -173,10 +194,13 @@ public class ReceiptsViewModel @Inject constructor(
                 selected = emptySet(),
                 selectedBytes = 0L,
                 onPhone = usage,
-                message = if (deletion.deleted == 0) ReceiptsText.NOTHING_DELETED else ReceiptsText.deleted(deletion),
+                message = message,
             )
         }
     }
+
+    private fun deleted(deletion: ReceiptDeletion): String =
+        if (deletion.deleted == 0) ReceiptsText.NOTHING_DELETED else ReceiptsText.deleted(deletion)
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L

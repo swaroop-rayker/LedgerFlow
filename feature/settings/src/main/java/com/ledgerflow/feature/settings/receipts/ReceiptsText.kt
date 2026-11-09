@@ -4,6 +4,7 @@ import com.ledgerflow.core.domain.receipts.ReceiptCopies
 import com.ledgerflow.core.domain.receipts.ReceiptDeletion
 import com.ledgerflow.core.domain.receipts.ReceiptFiling
 import com.ledgerflow.core.domain.receipts.ReceiptPeriod
+import com.ledgerflow.core.domain.receipts.RemovalOutcome
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.feature.settings.formatSize
 
@@ -103,6 +104,56 @@ internal object ReceiptsText {
      */
     const val NOTHING_TO_DELETE_TITLE: String = "No receipts to delete"
     const val NOTHING_TO_DELETE_BODY: String = "There are no receipt images on this phone."
+
+    // ── Remove from phone (ADR-0035) ─────────────────────────────────────────
+
+    fun removeTitle(count: Int, bytes: Long): String =
+        "Remove ${receipts(count)} from this phone (${formatSize(bytes)})?"
+
+    /**
+     * Not a Warning: Google Drive keeps a copy. But it says plainly that seeing
+     * them again takes a restore with the 24 words, because the phone cannot
+     * open a backup copy (ADR-0027), and that unchecked ones stay.
+     */
+    fun removeBody(count: Int): String {
+        val each = if (count == 1) "it" else "each"
+        val them = if (count == 1) "it" else "them"
+        return "Google Drive keeps a copy of $each, checked now before anything is removed. " +
+            "To see $them again you'll need to restore a backup with your 24 words. " +
+            "A receipt without a checked Drive copy stays on the phone."
+    }
+
+    /** What a removal did: what left the phone, and why the rest stayed. */
+    fun removed(outcome: RemovalOutcome): String = when (outcome) {
+        is RemovalOutcome.Checked -> removedChecked(outcome)
+        RemovalOutcome.DriveOff -> "Google Drive backup is off. Nothing was removed."
+        RemovalOutcome.NeedsSignIn ->
+            "Sign in to Google Drive again in Data, Google Drive. Nothing was removed."
+        RemovalOutcome.Unreachable -> "Google Drive couldn't be checked. Nothing was removed. Try again online."
+    }
+
+    private fun removedChecked(outcome: RemovalOutcome.Checked): String {
+        val done = if (outcome.removed == 0) {
+            "Nothing was removed."
+        } else {
+            "Removed ${receipts(outcome.removed)} (${formatSize(outcome.bytes)}) from this phone."
+        }
+        val stayed = listOfNotNull(
+            outcome.notInDriveYet.takeIf { it > 0 }?.let {
+                "$it stayed: not in Google Drive yet. Receipts are copied after the nightly backup."
+            },
+            outcome.inInbox.takeIf { it > 0 }?.let { "$it stayed: waiting in the Inbox." },
+        )
+        return (listOf(done) + stayed).joinToString(" ")
+    }
+
+    /** A removed row's detail, in place of its size. */
+    const val IN_DRIVE_BACKUP: String = "in Drive backup"
+
+    const val REMOVED_TITLE: String = "In your Google Drive backup"
+
+    fun removedBody(dateText: String): String =
+        "Removed from this phone on $dateText. Restoring a backup with your 24 words brings it back."
 
     const val IMAGE_UNAVAILABLE_TITLE: String = "This image can't be opened"
     /**

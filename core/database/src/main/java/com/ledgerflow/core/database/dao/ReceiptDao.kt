@@ -27,6 +27,7 @@ public interface ReceiptDao {
      */
     @Query(
         "SELECT a.id AS id, a.entry_id AS entry_id, a.bytes AS bytes, a.created_at AS created_at, " +
+            "a.removed_from_phone_at AS removed_from_phone_at, " +
             "(SELECT p.id FROM pending_transaction p WHERE p.raw_ref_id = a.id " +
             "AND p.status = 'PENDING' LIMIT 1) AS pending_id " +
             "FROM attachment a WHERE a.created_at >= :since " +
@@ -37,6 +38,7 @@ public interface ReceiptDao {
     /** [pagingReceipts]'s row for one receipt. */
     @Query(
         "SELECT a.id AS id, a.entry_id AS entry_id, a.bytes AS bytes, a.created_at AS created_at, " +
+            "a.removed_from_phone_at AS removed_from_phone_at, " +
             "(SELECT p.id FROM pending_transaction p WHERE p.raw_ref_id = a.id " +
             "AND p.status = 'PENDING' LIMIT 1) AS pending_id " +
             "FROM attachment a WHERE a.id = :id",
@@ -54,6 +56,32 @@ public interface ReceiptDao {
 
     @Query("DELETE FROM attachment WHERE id IN (:ids)")
     public suspend fun deleteByIds(ids: List<String>): Int
+
+    /** Receipts removed from the phone, kept only in backups (ADR-0035). */
+    @Query(
+        "SELECT COUNT(*) AS count, COALESCE(SUM(bytes), 0) AS bytes FROM attachment " +
+            "WHERE removed_from_phone_at IS NOT NULL",
+    )
+    public fun observeRemoved(): Flow<ReceiptCountRow>
+
+    /**
+     * Marks [id] removed from the phone, **unless** it already is, or its
+     * candidate is still waiting in the Inbox (ADR-0035 §2): the predicate is
+     * in the statement, so no caller can skip it.
+     *
+     * @return 1 when marked, 0 when refused.
+     */
+    @Query(
+        "UPDATE attachment SET removed_from_phone_at = :at " +
+            "WHERE id = :id AND removed_from_phone_at IS NULL " +
+            "AND NOT EXISTS (SELECT 1 FROM pending_transaction p " +
+            "WHERE p.raw_ref_id = attachment.id AND p.status = 'PENDING')",
+    )
+    public suspend fun markRemovedFromPhone(id: String, at: Long): Int
+
+    /** The image is on the phone again (a restore brought it back). */
+    @Query("UPDATE attachment SET removed_from_phone_at = NULL WHERE id = :id")
+    public suspend fun clearRemovedFromPhone(id: String)
 
     /** The expense book's entry a receipt belongs to, if it is one of them. */
     @Query(
@@ -84,6 +112,7 @@ public data class ReceiptListRow(
     @ColumnInfo(name = "bytes") val bytes: Long,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "pending_id") val pendingId: String?,
+    @ColumnInfo(name = "removed_from_phone_at") val removedFromPhoneAt: Long?,
 )
 
 public data class ReceiptCountRow(

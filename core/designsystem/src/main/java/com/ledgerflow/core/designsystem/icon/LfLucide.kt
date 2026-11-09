@@ -257,6 +257,11 @@ internal object LfLucide {
         "M4 7h16a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1z",
     )
 
+    /** Lucide `cloud`: a receipt kept only in the Google Drive backup (V2-5). */
+    val Cloud: List<String> = listOf(
+        "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z",
+    )
+
     /** Lucide `external-link`. */
     val ExternalLink: List<String> = listOf(
         "M15 3h6v6",

@@ -32,7 +32,7 @@ class ReceiptsViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun kotlinx.coroutines.test.TestScope.viewModel(): ReceiptsViewModel =
-        ReceiptsViewModel(receipts, receipts).also { vm ->
+        ReceiptsViewModel(receipts, receipts, receipts.removeUseCase()).also { vm ->
             backgroundScope.launch { vm.state.collect {} }
             backgroundScope.launch { vm.receipts.collect {} }
             vm.refresh()
@@ -93,6 +93,47 @@ class ReceiptsViewModelTest {
         vm.onEvent(ReceiptsEvent.ConfirmationAccepted)
         advanceUntilIdle()
         assertThat(receipts.deletedAll).isEqualTo(1)
+    }
+
+    /** ADR-0035: asked first, then only the ones with a checked Drive copy leave, and it says which stayed. */
+    @Test
+    fun removingTheSelection_asksFirst_thenRemovesOnlyTheChecked() = runTest(dispatcher) {
+        receipts.backedUp("r1")
+        val vm = viewModel()
+        vm.onEvent(ReceiptsEvent.SelectionStarted)
+        vm.onEvent(ReceiptsEvent.Toggled("r1", 412_000))
+        vm.onEvent(ReceiptsEvent.Toggled("r2", 268_000))
+        vm.onEvent(ReceiptsEvent.RemoveSelectedRequested)
+        advanceUntilIdle()
+        assertThat(vm.state.value.confirmation)
+            .isEqualTo(ReceiptsConfirmation.RemoveSelected(count = 2, bytes = 680_000))
+
+        vm.onEvent(ReceiptsEvent.ConfirmationAccepted)
+        advanceUntilIdle()
+
+        assertThat(receipts.rows.value.single { it.id == "r1" }.removedFromPhoneAt).isNotNull()
+        assertThat(receipts.rows.value.single { it.id == "r2" }.removedFromPhoneAt).isNull()
+        assertThat(vm.state.value.message)
+            .isEqualTo(
+                "Removed 1 receipt (412 kB) from this phone. " +
+                    "1 stayed: not in Google Drive yet. Receipts are copied after the nightly backup.",
+            )
+        assertThat(vm.state.value.removed?.count).isEqualTo(1)
+    }
+
+    /** Without Google Drive backup there is no copy to check: the action is not offered. */
+    @Test
+    fun withDriveOff_removeIsNotOffered() = runTest(dispatcher) {
+        receipts.driveOn = false
+        receipts.copies = receipts.copies.copy(drive = false)
+        val vm = viewModel()
+        vm.onEvent(ReceiptsEvent.SelectionStarted)
+        vm.onEvent(ReceiptsEvent.Toggled("r1", 412_000))
+        vm.onEvent(ReceiptsEvent.RemoveSelectedRequested)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.canRemoveFromPhone).isFalse()
+        assertThat(vm.state.value.confirmation).isNull()
     }
 
     /** Owner, 2026-11-08: with nothing on the phone it says so, and nothing is deleted. */

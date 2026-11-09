@@ -92,8 +92,38 @@ public class DefaultReceiptsRepository @Inject constructor(
         dao.receipt(id)?.toItem(dao)
     }
 
-    override suspend fun image(id: String): ReceiptImage =
-        attachments.read(id)?.let(ReceiptImage::Available) ?: ReceiptImage.Unavailable
+    /**
+     * The file wins when it is there, even with the column set: that is a
+     * removal that did not finish unlinking, and the image is still readable.
+     */
+    override suspend fun image(id: String): ReceiptImage {
+        attachments.read(id)?.let { return ReceiptImage.Available(it) }
+        val removedAt = withContext(io) {
+            session.openForBackgroundWork()?.receiptDao()?.receipt(id)?.removedFromPhoneAt
+        }
+        return removedAt?.let(ReceiptImage::RemovedFromPhone) ?: ReceiptImage.Unavailable
+    }
+
+    override fun observeRemoved(): Flow<ReceiptCount> =
+        session.whenUnlocked().flatMapLatest { database ->
+            val dao = database?.receiptDao() ?: return@flatMapLatest flowOf(ReceiptCount.None)
+            dao.observeRemoved().map { ReceiptCount(it.count, it.bytes) }
+        }
+
+    /**
+     * The column first, then the file (ADR-0035 §3). A process death between
+     * the two leaves a marked row whose file is still there, which [image]
+     * still shows; nothing is lost.
+     * The DAO refuses an Inbox candidate's image and one already marked.
+     */
+    override suspend fun removeFromPhone(id: String): Boolean = withContext(io) {
+        val database = session.openForBackgroundWork() ?: return@withContext false
+        val dao = database.receiptDao()
+        val row = dao.byIds(listOf(id)).singleOrNull() ?: return@withContext false
+        val marked = runCatching { dao.markRemovedFromPhone(id, clock.nowMillis()) }.getOrDefault(0) > 0
+        if (marked) files.delete(listOf(row.filePath))
+        marked
+    }
 
     override suspend fun copies(): ReceiptCopies = withContext(io) {
         val database = session.openForBackgroundWork()
@@ -163,7 +193,13 @@ public class DefaultReceiptsRepository @Inject constructor(
             pending != null -> ReceiptFiling.InInbox(pending)
             else -> ReceiptFiling.NotFiled
         }
-        return ReceiptListItem(id = id, capturedAt = createdAt, bytes = bytes, filing = filing)
+        return ReceiptListItem(
+            id = id,
+            capturedAt = createdAt,
+            bytes = bytes,
+            filing = filing,
+            removedFromPhoneAt = removedFromPhoneAt,
+        )
     }
 
     private suspend fun filedIn(dao: ReceiptDao, entryId: String): ReceiptFiling.Filed? {

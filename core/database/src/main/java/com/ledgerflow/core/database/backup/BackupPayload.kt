@@ -137,6 +137,14 @@ public data class AttachmentRow(
     val sha256: String,
     val bytes: Long,
     val createdAt: Long,
+    /**
+     * v14 (V2-5, ADR-0035). When the receipt left the phone, or null.
+     *
+     * Defaults to null -- what `MIGRATION_13_14` writes -- so every older
+     * `.lfbk` decodes, and its receipts restore as on the phone, exactly as a
+     * migrated older database has them (CLAUDE.md 5, Room).
+     */
+    val removedFromPhoneAt: Long? = null,
 )
 
 /**

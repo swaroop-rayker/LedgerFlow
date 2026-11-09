@@ -1,6 +1,9 @@
 package com.ledgerflow.core.domain.drive
 
 import com.ledgerflow.core.common.time.Clock
+import com.ledgerflow.core.domain.receipts.ReceiptPeriod
+import com.ledgerflow.core.domain.receipts.ReceiptsRepository
+import com.ledgerflow.core.domain.receipts.RemoveReceiptsFromPhoneUseCase
 import java.security.MessageDigest
 import javax.inject.Inject
 
@@ -97,6 +100,7 @@ public class CopyBackupsToDriveUseCase @Inject constructor(
     private val access: DriveAccess,
     private val drive: DriveFiles,
     private val local: LocalBackupFiles,
+    private val receipts: ReceiptsRepository,
     private val clock: Clock,
 ) {
 
@@ -133,7 +137,7 @@ public class CopyBackupsToDriveUseCase @Inject constructor(
         private var stopped: DriveOutcome? = null
         private var refused = false
         private var root = ""
-        private var receipts = ""
+        private var receiptsFolder = ""
         private var backups = 0
         private var attachments = 0
         private var bytes = 0L
@@ -143,7 +147,7 @@ public class CopyBackupsToDriveUseCase @Inject constructor(
         suspend fun run(files: LocalBackupSet): DriveOutcome? {
             val done = folders() &&
                 uploadMissing(root, files.backups.take(1).map(LocalBackupFile::Backup)) &&
-                uploadMissing(receipts, files.attachments.map(LocalBackupFile::Attachment)) &&
+                syncReceipts(files) &&
                 rotate(files)
             return when {
                 done -> DriveOutcome.Copied(backups, attachments, bytes, removed)
@@ -154,7 +158,7 @@ public class CopyBackupsToDriveUseCase @Inject constructor(
 
         private suspend fun folders(): Boolean {
             root = drive.folder(token, DriveLayout.FOLDER, null).valueOrStop() ?: return false
-            receipts = drive.folder(token, LocalBackupFiles.ATTACHMENTS, root).valueOrStop() ?: return false
+            receiptsFolder = drive.folder(token, LocalBackupFiles.ATTACHMENTS, root).valueOrStop() ?: return false
             return true
         }
 
@@ -162,6 +166,29 @@ public class CopyBackupsToDriveUseCase @Inject constructor(
         private suspend fun uploadMissing(folderId: String, wanted: List<LocalBackupFile>): Boolean {
             val there = drive.list(token, folderId).valueOrStop()?.map { it.name }?.toSet() ?: return false
             return wanted.filterNot { it.name in there }.all { file -> uploadOne(folderId, file) }
+        }
+
+        /**
+         * Every receipt copy Drive lacks, and every one whose copy in the folder
+         * has changed size since it was uploaded (BUG89): re-sealed under the
+         * same name, so Drive's is the old one and its MD5 no longer matches the
+         * folder's, which "Remove from phone" checks (ADR-0035 §1). The new copy
+         * goes up and is verified **before** the old one is deleted, so Drive is
+         * never without one. A size Drive or the folder cannot give re-uploads nothing.
+         */
+        private suspend fun syncReceipts(files: LocalBackupSet): Boolean {
+            val remote = drive.list(token, receiptsFolder).valueOrStop()?.associateBy { it.name } ?: return false
+            return files.attachments.all { name ->
+                val there = remote[name]
+                val local = files.attachmentSizes[name]
+                when {
+                    there == null -> uploadOne(receiptsFolder, LocalBackupFile.Attachment(name))
+                    local != null && there.size != null && there.size != local ->
+                        uploadOne(receiptsFolder, LocalBackupFile.Attachment(name)) &&
+                            drive.delete(token, there.id).let { true }
+                    else -> true
+                }
+            }
         }
 
         private suspend fun uploadOne(folderId: String, file: LocalBackupFile): Boolean {
@@ -182,11 +209,18 @@ public class CopyBackupsToDriveUseCase @Inject constructor(
             return true
         }
 
-        /** Newest [DriveLayout.KEEP] backups, and sidecars the phone still has. Only names this app gives. */
+        /**
+         * Newest [DriveLayout.KEEP] backups, and every sidecar that the phone's
+         * folder has **or a receipt row still names** (ADR-0035 §4, amending
+         * ADR-0034 §5). The folder alone is not enough: a receipt removed from
+         * the phone is in no new folder after the user picks one, and Drive's
+         * copy would then be its last. Only names this app gives.
+         */
         private suspend fun rotate(files: LocalBackupSet): Boolean {
             val remoteBackups = drive.list(token, root).valueOrStop() ?: return false
-            val remoteReceipts = drive.list(token, receipts).valueOrStop() ?: return false
-            val keepReceipts = files.attachments.toSet()
+            val remoteReceipts = drive.list(token, receiptsFolder).valueOrStop() ?: return false
+            val keepReceipts = files.attachments.toSet() +
+                receipts.idsIn(ReceiptPeriod.All).map(RemoveReceiptsFromPhoneUseCase::fileNameFor)
             val doomed = remoteBackups.filter { DriveLayout.BACKUP_NAME.matches(it.name) }
                 .sortedByDescending { it.name }
                 .drop(DriveLayout.KEEP) +

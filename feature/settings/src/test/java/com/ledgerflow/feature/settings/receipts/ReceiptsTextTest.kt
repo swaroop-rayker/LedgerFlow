@@ -57,6 +57,47 @@ class ReceiptsTextTest {
         }
     }
 
+    /**
+     * ADR-0035: removal says Drive keeps a copy, that it is checked first, and
+     * plainly that seeing them again takes a restore with the 24 words. It
+     * offers no download: the phone cannot open the copy.
+     */
+    @Test
+    fun theRemoveQuestion_saysDriveKeepsACopy_andTheWordsAreNeededToSeeItAgain() {
+        assertThat(ReceiptsText.removeTitle(count = 2, bytes = 680_000))
+            .isEqualTo("Remove 2 receipts from this phone (680 kB)?")
+        val body = ReceiptsText.removeBody(count = 2)
+        assertThat(body).contains("Google Drive keeps a copy of each, checked now")
+        assertThat(body).contains("restore a backup with your 24 words")
+        assertThat(body).contains("stays on the phone")
+        assertThat(body.lowercase()).doesNotContain("download")
+    }
+
+    @Test
+    fun aRemovalThatCouldNotCheckDrive_saysNothingWasRemoved() {
+        listOf(
+            com.ledgerflow.core.domain.receipts.RemovalOutcome.DriveOff,
+            com.ledgerflow.core.domain.receipts.RemovalOutcome.NeedsSignIn,
+            com.ledgerflow.core.domain.receipts.RemovalOutcome.Unreachable,
+        ).forEach { assertThat(ReceiptsText.removed(it)).contains("Nothing was removed.") }
+    }
+
+    @Test
+    fun aRemoval_namesWhatLeft_andWhyTheRestStayed() {
+        val outcome = com.ledgerflow.core.domain.receipts.RemovalOutcome.Checked(
+            removed = 2,
+            bytes = 680_000,
+            notInDriveYet = 1,
+            inInbox = 1,
+        )
+
+        assertThat(ReceiptsText.removed(outcome)).isEqualTo(
+            "Removed 2 receipts (680 kB) from this phone. " +
+                "1 stayed: not in Google Drive yet. Receipts are copied after the nightly backup. " +
+                "1 stayed: waiting in the Inbox.",
+        )
+    }
+
     @Test
     fun theUnavailableImage_promisesNoRestore() {
         assertThat(ReceiptsText.IMAGE_UNAVAILABLE_BODY.lowercase()).doesNotContain("restore")

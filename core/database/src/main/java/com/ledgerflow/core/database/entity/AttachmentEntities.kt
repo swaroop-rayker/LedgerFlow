@@ -101,6 +101,17 @@ public data class AttachmentEntity(
 
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
+
+    /**
+     * When this receipt left the phone because Google Drive holds a checked copy
+     * (V2-5, ADR-0035; schema v14). Null while it is on the phone. The file is
+     * gone and the row stays, so every later `.lfbk` still lists it and a
+     * restore with the 24 words brings it back. A file that is present wins:
+     * a set column with the file still there is a removal that did not finish,
+     * and the image is shown.
+     */
+    @ColumnInfo(name = "removed_from_phone_at")
+    val removedFromPhoneAt: Long? = null,
 )
 
 /**

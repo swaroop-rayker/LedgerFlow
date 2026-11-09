@@ -73,6 +73,21 @@ public class SafBackupFolder(
 
     override fun list(): List<String> = children().filterNot { it.isDirectory }.map { it.name }
 
+    /** One query for the whole folder; a provider that leaves the size null reports none for that file. */
+    override fun sizes(): Map<String, Long> = runCatching {
+        val uri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
+        val columns = arrayOf(Document.COLUMN_DISPLAY_NAME, Document.COLUMN_MIME_TYPE, Document.COLUMN_SIZE)
+        resolver.query(uri, columns, null, null, null)?.use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(1) != Document.MIME_TYPE_DIR && !cursor.isNull(2)) {
+                        put(cursor.getString(0), cursor.getLong(2))
+                    }
+                }
+            }
+        }.orEmpty()
+    }.getOrDefault(emptyMap())
+
     /** The tree's root document, queried: a renamed or deleted folder has none. */
     override fun displayName(): String? = runCatching {
         resolver.query(folderUri, arrayOf(Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cursor ->
