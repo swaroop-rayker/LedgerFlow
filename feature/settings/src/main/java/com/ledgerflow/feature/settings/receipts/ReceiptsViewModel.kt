@@ -7,6 +7,8 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
+import com.ledgerflow.core.domain.receipts.AgeRemovalRecord
+import com.ledgerflow.core.domain.receipts.ReceiptAgeRemoval
 import com.ledgerflow.core.domain.receipts.ReceiptCopies
 import com.ledgerflow.core.domain.receipts.ReceiptCount
 import com.ledgerflow.core.domain.receipts.ReceiptDeletion
@@ -49,6 +51,14 @@ public data class ReceiptsUiState(
     val working: Boolean = false,
     /** What the last delete or removal did. */
     val message: String? = null,
+    /** Removal by age (ADR-0035 §6): the chosen age in days, or null for off. */
+    val removeAfterDays: Int? = null,
+    /** The last run of removal by age that removed anything. */
+    val lastAgeRemoval: AgeRemovalRecord? = null,
+    /** The age picker is open. */
+    val choosingAge: Boolean = false,
+    /** Turning removal by age on, to this age: asked once, from off. */
+    val confirmingAge: Int? = null,
 ) {
     /** "Remove from phone" is offered only while Google Drive backup is on (ADR-0035). */
     val canRemoveFromPhone: Boolean get() = copies?.drive == true
@@ -80,6 +90,14 @@ public sealed interface ReceiptsEvent {
     public data object ConfirmationAccepted : ReceiptsEvent
     public data object ConfirmationDismissed : ReceiptsEvent
     public data object MessageDismissed : ReceiptsEvent
+
+    /** The "Remove from phone after" row: opens the picker while Drive backup is on. */
+    public data object AgeRequested : ReceiptsEvent
+
+    /** A choice in the picker: an age in days, or null for off. */
+    public data class AgePicked(val days: Int?) : ReceiptsEvent
+    public data object AgeConfirmed : ReceiptsEvent
+    public data object AgeDismissed : ReceiptsEvent
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -88,6 +106,7 @@ public class ReceiptsViewModel @Inject constructor(
     private val receiptsRepository: ReceiptsRepository,
     private val attachments: AttachmentRepository,
     private val removeFromPhone: RemoveReceiptsFromPhoneUseCase,
+    private val ageRemoval: ReceiptAgeRemoval,
 ) : ViewModel() {
 
     private val local = MutableStateFlow(ReceiptsUiState())
@@ -104,7 +123,11 @@ public class ReceiptsViewModel @Inject constructor(
         local,
         period.flatMapLatest { receiptsRepository.observeCount(it) },
         receiptsRepository.observeRemoved(),
-    ) { state, count, removed -> state.copy(count = count, removed = removed) }
+        ageRemoval.observeAfterDays(),
+        ageRemoval.observeLast(),
+    ) { state, count, removed, days, last ->
+        state.copy(count = count, removed = removed, removeAfterDays = days, lastAgeRemoval = last)
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), local.value)
 
     /** The phone's figure and the copies: measurements, re-read on resume. */
@@ -136,6 +159,40 @@ public class ReceiptsViewModel @Inject constructor(
             ReceiptsEvent.ConfirmationAccepted -> viewModelScope.launch { delete() }
             ReceiptsEvent.ConfirmationDismissed -> local.update { it.copy(confirmation = null) }
             ReceiptsEvent.MessageDismissed -> local.update { it.copy(message = null) }
+            ReceiptsEvent.AgeRequested,
+            is ReceiptsEvent.AgePicked,
+            ReceiptsEvent.AgeConfirmed,
+            ReceiptsEvent.AgeDismissed,
+            -> onAge(event)
+        }
+    }
+
+    /**
+     * Removal by age. Turning it on from off asks once, because a receipt it
+     * removes takes the 24 words to see again (ADR-0035 §6); a different age,
+     * or off, applies at once.
+     */
+    private fun onAge(event: ReceiptsEvent) {
+        when (event) {
+            ReceiptsEvent.AgeRequested -> local.update {
+                if (it.canRemoveFromPhone) it.copy(choosingAge = true) else it
+            }
+            is ReceiptsEvent.AgePicked -> {
+                val turningOn = state.value.removeAfterDays == null && event.days != null
+                if (turningOn) {
+                    local.update { it.copy(choosingAge = false, confirmingAge = event.days) }
+                } else {
+                    local.update { it.copy(choosingAge = false) }
+                    viewModelScope.launch { ageRemoval.setAfterDays(event.days) }
+                }
+            }
+            ReceiptsEvent.AgeConfirmed -> {
+                val days = local.value.confirmingAge
+                local.update { it.copy(confirmingAge = null) }
+                if (days != null) viewModelScope.launch { ageRemoval.setAfterDays(days) }
+            }
+            ReceiptsEvent.AgeDismissed -> local.update { it.copy(choosingAge = false, confirmingAge = null) }
+            else -> Unit
         }
     }
 

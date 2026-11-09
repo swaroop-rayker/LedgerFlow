@@ -611,7 +611,7 @@ private fun SettingsDialogs(state: SettingsUiState, onEvent: (SettingsEvent) -> 
  * dialog has.
  */
 @Composable
-private fun OptionsDialog(
+internal fun OptionsDialog(
     title: String,
     body: String,
     options: List<String>,

@@ -63,6 +63,7 @@ import com.ledgerflow.core.designsystem.theme.LfLayout
 import com.ledgerflow.core.designsystem.theme.LfTextAlign
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.ingest.AttachmentUsage
+import com.ledgerflow.core.domain.receipts.ReceiptAgeRemoval
 import com.ledgerflow.core.domain.receipts.ReceiptCopies
 import com.ledgerflow.core.domain.receipts.ReceiptCount
 import com.ledgerflow.core.domain.receipts.ReceiptFiling
@@ -70,6 +71,7 @@ import com.ledgerflow.core.domain.receipts.ReceiptListItem
 import com.ledgerflow.core.domain.receipts.ReceiptPeriod
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.feature.settings.OptionsDialog
 import com.ledgerflow.feature.settings.formatSize
 import java.time.Instant
 import java.time.ZoneId
@@ -114,6 +116,7 @@ internal fun ReceiptsContent(
     modifier: Modifier = Modifier,
 ) {
     state.confirmation?.let { DeleteDialog(it, state.copies, onEvent) }
+    AgeDialogs(state, onEvent)
     // One painter of each for every row (CLAUDE.md §8), not one per row.
     val glyphs = RowGlyphs(
         onPhone = rememberVectorPainter(LfIcons.Receipt),
@@ -440,6 +443,8 @@ private fun capturedDay(millis: Long): String =
 private fun LazyListScope.deleteAll(state: ReceiptsUiState, onEvent: (ReceiptsEvent) -> Unit) {
     item(key = "delete-all", contentType = "delete-all") {
         LfPanel(modifier = Modifier.padding(top = LfTheme.space.sectionGap)) {
+            AgeRow(state, onEvent)
+            LfDivider()
             Text(
                 text = "Delete all receipts",
                 style = LfTheme.type.body,
@@ -455,6 +460,74 @@ private fun LazyListScope.deleteAll(state: ReceiptsUiState, onEvent: (ReceiptsEv
                     .padding(horizontal = LfTheme.space.rowInset, vertical = LfTheme.space.rowInsetVertical),
             )
         }
+    }
+}
+
+/**
+ * Removal by age (ADR-0035 §6): the age, and a sentence that says what it
+ * takes, or why it does nothing while Drive backup is off, and what the last
+ * run removed. Tappable only while Drive is on.
+ */
+@Composable
+private fun AgeRow(state: ReceiptsUiState, onEvent: (ReceiptsEvent) -> Unit) {
+    val last = state.lastAgeRemoval
+    val lastDay = last?.let { remember(it.at) { capturedDay(it.at) } }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                enabled = state.canRemoveFromPhone,
+                role = Role.Button,
+                onClick = { onEvent(ReceiptsEvent.AgeRequested) },
+            )
+            .heightIn(min = LfLayout.minTouchTarget)
+            .padding(horizontal = LfTheme.space.rowInset, vertical = LfTheme.space.rowInsetVertical),
+    ) {
+        LfAdaptiveRow(
+            leading = {
+                Text(text = ReceiptsAgeText.AGE_TITLE, style = LfTheme.type.body, color = LfTheme.colors.text.primary)
+            },
+            trailing = {
+                Text(
+                    text = ReceiptsAgeText.ageValue(state.removeAfterDays.takeIf { state.canRemoveFromPhone }),
+                    style = LfTheme.type.bodySmall,
+                    color = LfTheme.colors.text.secondary,
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = ReceiptsAgeText.ageDetail(state.canRemoveFromPhone, lastDay, last),
+            style = LfTheme.type.label,
+            color = LfTheme.colors.text.muted,
+        )
+    }
+}
+
+/** The age picker, and the once-only question when turning it on from off. */
+@Composable
+private fun AgeDialogs(state: ReceiptsUiState, onEvent: (ReceiptsEvent) -> Unit) {
+    if (state.choosingAge) {
+        val choices = ReceiptAgeRemoval.CHOICES
+        OptionsDialog(
+            title = ReceiptsAgeText.AGE_TITLE,
+            body = ReceiptsAgeText.AGE_PICKER_BODY,
+            options = ReceiptsAgeText.ageOptions(choices),
+            selectedIndex = state.removeAfterDays?.let { choices.indexOf(it) + 1 } ?: 0,
+            onPick = { index ->
+                onEvent(ReceiptsEvent.AgePicked(if (index == 0) null else choices[index - 1]))
+            },
+            onClose = { onEvent(ReceiptsEvent.AgeDismissed) },
+        )
+    }
+    state.confirmingAge?.let { days ->
+        LfDialog(
+            title = ReceiptsAgeText.ageConfirmTitle(days),
+            body = ReceiptsAgeText.ageConfirmBody(days),
+            confirmText = "Turn on",
+            onConfirm = { onEvent(ReceiptsEvent.AgeConfirmed) },
+            onDismiss = { onEvent(ReceiptsEvent.AgeDismissed) },
+        )
     }
 }
 

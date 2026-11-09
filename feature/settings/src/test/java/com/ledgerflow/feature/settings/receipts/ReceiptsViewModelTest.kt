@@ -32,7 +32,7 @@ class ReceiptsViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun kotlinx.coroutines.test.TestScope.viewModel(): ReceiptsViewModel =
-        ReceiptsViewModel(receipts, receipts, receipts.removeUseCase()).also { vm ->
+        ReceiptsViewModel(receipts, receipts, receipts.removeUseCase(), receipts).also { vm ->
             backgroundScope.launch { vm.state.collect {} }
             backgroundScope.launch { vm.receipts.collect {} }
             vm.refresh()
@@ -134,6 +134,52 @@ class ReceiptsViewModelTest {
 
         assertThat(vm.state.value.canRemoveFromPhone).isFalse()
         assertThat(vm.state.value.confirmation).isNull()
+    }
+
+    /** ADR-0035 §6: from off, choosing an age asks once, because a removed receipt takes the 24 words to see. */
+    @Test
+    fun turningRemovalByAgeOn_asksOnce_thenSaves() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(ReceiptsEvent.AgeRequested)
+        advanceUntilIdle()
+        assertThat(vm.state.value.choosingAge).isTrue()
+
+        vm.onEvent(ReceiptsEvent.AgePicked(90))
+        advanceUntilIdle()
+        assertThat(vm.state.value.confirmingAge).isEqualTo(90)
+        assertThat(receipts.afterDays.value).isNull()
+
+        vm.onEvent(ReceiptsEvent.AgeConfirmed)
+        advanceUntilIdle()
+        assertThat(receipts.afterDays.value).isEqualTo(90)
+        assertThat(vm.state.value.removeAfterDays).isEqualTo(90)
+    }
+
+    /** Already on: another age, or off, applies at once. */
+    @Test
+    fun changingTheAge_orTurningItOff_appliesAtOnce() = runTest(dispatcher) {
+        receipts.afterDays.value = 90
+        val vm = viewModel()
+
+        vm.onEvent(ReceiptsEvent.AgePicked(30))
+        advanceUntilIdle()
+        assertThat(vm.state.value.confirmingAge).isNull()
+        assertThat(receipts.afterDays.value).isEqualTo(30)
+
+        vm.onEvent(ReceiptsEvent.AgePicked(null))
+        advanceUntilIdle()
+        assertThat(receipts.afterDays.value).isNull()
+    }
+
+    @Test
+    fun withDriveOff_theAgePickerDoesNotOpen() = runTest(dispatcher) {
+        receipts.copies = receipts.copies.copy(drive = false)
+        val vm = viewModel()
+
+        vm.onEvent(ReceiptsEvent.AgeRequested)
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.choosingAge).isFalse()
     }
 
     /** Owner, 2026-11-08: with nothing on the phone it says so, and nothing is deleted. */

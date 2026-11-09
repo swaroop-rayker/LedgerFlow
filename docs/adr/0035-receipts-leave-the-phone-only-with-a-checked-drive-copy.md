@@ -193,6 +193,13 @@ now" needs the 24 words, and the app never holds them.
   a Google Drive folder. That is a second off-phone copy, and the rule is the
   same.
 
+- **Removal by age**, built as decided:
+  - `RemoveOldReceiptsUseCase` runs only in `DriveUploadWorker` after a
+    `Copied` outcome, and its own failure never fails the copy.
+  - It considers receipts filed to an entry in a book, asking each book
+    separately (Law 2).
+  - The setting and the last run that removed anything are kept in `app_meta`.
+
 ## Consequences
 
 - **Gained:** receipts stop growing without limit on the phone, without

@@ -83,6 +83,24 @@ public interface ReceiptDao {
     @Query("UPDATE attachment SET removed_from_phone_at = NULL WHERE id = :id")
     public suspend fun clearRemovedFromPhone(id: String)
 
+    /**
+     * Removal by age's candidates in the expense book (ADR-0035 §2): captured
+     * before [before], still on the phone, filed to an entry in the book. One
+     * book per statement (Law 2); the bin is excluded by the view itself.
+     */
+    @Query(
+        "SELECT a.id FROM attachment a JOIN debit_entries e ON e.id = a.entry_id " +
+            "WHERE a.created_at < :before AND a.removed_from_phone_at IS NULL",
+    )
+    public suspend fun debitFiledBefore(before: Long): List<String>
+
+    /** The income book's mirror of [debitFiledBefore]. */
+    @Query(
+        "SELECT a.id FROM attachment a JOIN credit_entries e ON e.id = a.entry_id " +
+            "WHERE a.created_at < :before AND a.removed_from_phone_at IS NULL",
+    )
+    public suspend fun creditFiledBefore(before: Long): List<String>
+
     /** The expense book's entry a receipt belongs to, if it is one of them. */
     @Query(
         "SELECT e.amount_minor AS amount_minor, e.currency AS currency, e.local_date AS local_date, " +
