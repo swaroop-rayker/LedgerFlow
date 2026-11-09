@@ -132,6 +132,13 @@ internal class FakeReceipts(vararg initial: ReceiptListItem) : ReceiptsRepositor
     override suspend fun delete(ids: Set<String>) = ReceiptDeletion.Nothing
     override suspend fun deleteAll() = ReceiptDeletion.Nothing
     override fun observeRemoved(): Flow<ReceiptCount> = flowOf(ReceiptCount.None)
+    override suspend fun filedBefore(before: Long) = rows.values
+        .filter {
+            it.capturedAt < before && it.removedFromPhoneAt == null &&
+                it.filing is com.ledgerflow.core.domain.receipts.ReceiptFiling.Filed
+        }
+        .map { it.id }
+
     override suspend fun removeFromPhone(id: String): Boolean {
         val row = rows[id] ?: return false
         rows[id] = row.copy(removedFromPhoneAt = 1L)

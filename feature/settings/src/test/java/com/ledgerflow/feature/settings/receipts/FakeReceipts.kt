@@ -14,6 +14,8 @@ import com.ledgerflow.core.domain.receipts.ReceiptsRepository
 import com.ledgerflow.core.domain.drive.DriveAttempt
 import com.ledgerflow.core.domain.drive.DriveStatus
 import com.ledgerflow.core.domain.drive.DriveStatusStore
+import com.ledgerflow.core.domain.receipts.AgeRemovalRecord
+import com.ledgerflow.core.domain.receipts.ReceiptAgeRemoval
 import com.ledgerflow.core.domain.receipts.ReceiptBackupCopies
 import com.ledgerflow.core.domain.receipts.ReceiptFiling
 import com.ledgerflow.core.domain.receipts.RemoveReceiptsFromPhoneUseCase
@@ -27,7 +29,7 @@ import kotlinx.coroutines.flow.map
 /** An in-memory store of receipts, for the page's ViewModels. */
 internal class FakeReceipts(
     initial: List<ReceiptListItem> = previewReceipts,
-) : ReceiptsRepository, AttachmentRepository {
+) : ReceiptsRepository, AttachmentRepository, ReceiptAgeRemoval {
 
     val rows = MutableStateFlow(initial)
     val deletedIds = mutableListOf<Set<String>>()
@@ -82,6 +84,25 @@ internal class FakeReceipts(
         if (row.removedFromPhoneAt != null || row.filing is ReceiptFiling.InInbox) return false
         rows.value = rows.value.map { if (it.id == id) it.copy(removedFromPhoneAt = REMOVED_AT) else it }
         return true
+    }
+
+    override suspend fun filedBefore(before: Long): List<String> = rows.value
+        .filter { it.capturedAt < before && it.removedFromPhoneAt == null && it.filing is ReceiptFiling.Filed }
+        .map { it.id }
+
+    // ── Removal by age's setting (ADR-0035 §6), in memory ──────────────────
+
+    val afterDays = MutableStateFlow<Int?>(null)
+    val lastRun = MutableStateFlow<AgeRemovalRecord?>(null)
+
+    override fun observeAfterDays(): Flow<Int?> = afterDays
+    override suspend fun afterDays(): Int? = afterDays.value
+    override suspend fun setAfterDays(days: Int?) {
+        afterDays.value = days
+    }
+    override fun observeLast(): Flow<AgeRemovalRecord?> = lastRun
+    override suspend fun record(record: AgeRemovalRecord) {
+        lastRun.value = record
     }
 
     // ── What "Remove from phone" checks (ADR-0035 §1), in memory ────────────

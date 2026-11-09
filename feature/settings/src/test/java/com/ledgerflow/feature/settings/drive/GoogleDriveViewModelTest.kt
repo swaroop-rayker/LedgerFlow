@@ -54,12 +54,15 @@ class GoogleDriveViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
+    private val receipts = com.ledgerflow.feature.settings.receipts.FakeReceipts(emptyList())
+
     private fun TestScope.viewModel(): GoogleDriveViewModel {
         val vm = GoogleDriveViewModel(
             observeStatus = ObserveDriveStatusUseCase(store),
             setEnabled = SetDriveEnabledUseCase(store),
             signIn = signIn,
             copies = { queued++ },
+            receipts = receipts,
         )
         backgroundScope.launch { vm.state.collect { } }
         return vm
@@ -86,6 +89,20 @@ class GoogleDriveViewModelTest {
         assertThat(store.account).isEqualTo("me@example.com")
         assertThat(queued).isEqualTo(1)
         assertThat(vm.state.value.message).startsWith("Drive backup is on")
+    }
+
+    /** ADR-0035 §6: the page knows how many receipts live only in backups, and turning off says so. */
+    @Test
+    fun receiptsRemovedFromThePhone_areCounted_andTurningOffNamesThem() = runTest(dispatcher) {
+        receipts.rows.value = com.ledgerflow.feature.settings.receipts.previewReceipts.take(3)
+            .map { it.copy(removedFromPhoneAt = 1L) }
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.receiptsOnlyInBackups).isEqualTo(3)
+        assertThat(onlyInBackupsTitle(3)).isEqualTo("3 receipts are kept only in your backups")
+        assertThat(turnOffBody(3)).contains("Removing receipts by age stops.")
+        assertThat(turnOffBody(0)).doesNotContain("by age")
     }
 
     @Test

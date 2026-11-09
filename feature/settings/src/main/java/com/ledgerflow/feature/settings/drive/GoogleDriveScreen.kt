@@ -25,13 +25,15 @@ import com.ledgerflow.core.designsystem.component.LfButton
 import com.ledgerflow.core.designsystem.component.LfButtonStyle
 import com.ledgerflow.core.designsystem.component.LfDialog
 import com.ledgerflow.core.designsystem.component.LfDivider
+import com.ledgerflow.core.designsystem.component.LfNotice
+import com.ledgerflow.core.designsystem.component.LfNoticeTone
 import com.ledgerflow.core.designsystem.pattern.LfPanel
 import com.ledgerflow.core.designsystem.pattern.LfSettingsPage
 import com.ledgerflow.core.designsystem.theme.LfTheme
 import com.ledgerflow.core.domain.drive.DriveAttempt
+import com.ledgerflow.core.domain.drive.DriveLayout
 import com.ledgerflow.core.domain.drive.DriveOutcome
 import com.ledgerflow.core.domain.drive.DriveStatus
-import com.ledgerflow.core.domain.drive.DriveLayout
 import com.ledgerflow.feature.settings.PanelRow
 
 /**
@@ -55,7 +57,7 @@ public fun GoogleDriveScreen(
             onEvent(GoogleDriveEvent.MessageShown)
         }
     }
-    if (state.confirmingOff) TurnOffDialog(onEvent)
+    if (state.confirmingOff) TurnOffDialog(state.receiptsOnlyInBackups, onEvent)
 
     LfSettingsPage(
         title = "Google Drive",
@@ -65,6 +67,17 @@ public fun GoogleDriveScreen(
         onBack = onBack,
     ) {
         item(key = "status", contentType = "panel") { StatusPanel(state, onEvent) }
+        // ADR-0035 §6: only once receipts live nowhere else, so deleting the
+        // Drive folder is known to delete them.
+        if (state.receiptsOnlyInBackups > 0) {
+            item(key = "only-in-backups", contentType = "notice") {
+                LfNotice(
+                    tone = LfNoticeTone.Warning,
+                    title = onlyInBackupsTitle(state.receiptsOnlyInBackups),
+                    body = ONLY_IN_BACKUPS_BODY,
+                )
+            }
+        }
         item(key = "details", contentType = "panel") {
             if (state.status.enabled) DetailsPanel(state, onEvent) else AboutPanel()
         }
@@ -160,15 +173,33 @@ private fun Note(text: String) {
  * nobody turns it off believing their copies go with it.
  */
 @Composable
-private fun TurnOffDialog(onEvent: (GoogleDriveEvent) -> Unit) {
+private fun TurnOffDialog(receiptsOnlyInBackups: Int, onEvent: (GoogleDriveEvent) -> Unit) {
     LfDialog(
         title = "Turn off Drive backup?",
-        body = "New backups stay on this phone only. The copies already in your Drive stay there; " +
-            "delete them in Drive if you want them gone.",
+        body = turnOffBody(receiptsOnlyInBackups),
         confirmText = "Turn off",
         onConfirm = { onEvent(GoogleDriveEvent.TurnOffConfirmed) },
         onDismiss = { onEvent(GoogleDriveEvent.TurnOffDismissed) },
     )
+}
+
+/** "3 receipts are kept only in your backups". */
+internal fun onlyInBackupsTitle(count: Int): String =
+    if (count == 1) "1 receipt is kept only in your backups" else "$count receipts are kept only in your backups"
+
+internal const val ONLY_IN_BACKUPS_BODY: String =
+    "They were removed from this phone. Deleting \"LedgerFlow backups\" on Drive's website deletes them."
+
+/**
+ * What stops and what stays; and, once receipts were removed from the phone,
+ * that removal by age stops too and those receipts are only in backups.
+ */
+internal fun turnOffBody(receiptsOnlyInBackups: Int): String {
+    val base = "New backups stay on this phone only. The copies already in your Drive stay there; " +
+        "delete them in Drive if you want them gone."
+    if (receiptsOnlyInBackups == 0) return base
+    return "$base Removing receipts by age stops. ${onlyInBackupsTitle(receiptsOnlyInBackups)}: " +
+        "deleting \"LedgerFlow backups\" on Drive's website deletes them."
 }
 
 /**

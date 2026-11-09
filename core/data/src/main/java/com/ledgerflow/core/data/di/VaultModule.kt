@@ -25,6 +25,7 @@ import com.ledgerflow.core.data.inbox.DefaultPendingRepository
 import com.ledgerflow.core.data.ingest.DefaultAttachmentRepository
 import com.ledgerflow.core.data.ingest.DefaultReceiptBackupCopies
 import com.ledgerflow.core.data.ingest.DefaultReceiptsRepository
+import com.ledgerflow.core.data.ingest.VaultReceiptAgeRemoval
 import com.ledgerflow.core.data.ingest.DefaultPackageAllowlistRepository
 import com.ledgerflow.core.data.ingest.DefaultRawIngestRepository
 import com.ledgerflow.core.data.ledger.DefaultDraftRepository
@@ -55,6 +56,7 @@ import com.ledgerflow.core.domain.drive.LocalBackupFiles
 import com.ledgerflow.core.domain.export.ExportRepository
 import com.ledgerflow.core.domain.inbox.PendingRepository
 import com.ledgerflow.core.domain.ingest.AttachmentRepository
+import com.ledgerflow.core.domain.receipts.ReceiptAgeRemoval
 import com.ledgerflow.core.domain.receipts.ReceiptBackupCopies
 import com.ledgerflow.core.domain.receipts.ReceiptsRepository
 import com.ledgerflow.core.domain.ingest.PackageAllowlistRepository
@@ -294,6 +296,10 @@ public interface IngestModule {
     /** The backup folder's sealed copy of a receipt, for "Remove from phone"'s check (ADR-0035 §1). */
     @Binds
     public fun receiptBackupCopies(impl: DefaultReceiptBackupCopies): ReceiptBackupCopies
+
+    /** Removal by age's setting and record (ADR-0035 §6), in `app_meta`. */
+    @Binds
+    public fun receiptAgeRemoval(impl: VaultReceiptAgeRemoval): ReceiptAgeRemoval
 
     /**
      * The Inbox's read side (P2-6).

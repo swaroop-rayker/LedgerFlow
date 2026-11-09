@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.ledgerflow.core.domain.drive.CopyBackupsToDriveUseCase
 import com.ledgerflow.core.domain.drive.DriveOutcome
+import com.ledgerflow.core.domain.receipts.RemoveOldReceiptsUseCase
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
@@ -34,6 +35,7 @@ public class DriveUploadWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val copyToDrive: CopyBackupsToDriveUseCase,
+    private val removeOldReceipts: RemoveOldReceiptsUseCase,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = runCatching {
@@ -41,6 +43,14 @@ public class DriveUploadWorker @AssistedInject constructor(
             // Counts only: never a file's contents.
             is DriveOutcome.Copied -> Result.success().also {
                 Log.i(TAG, "Drive: ${outcome.backups} backups, ${outcome.attachments} receipts copied.")
+                // Removal by age (ADR-0035 §6) runs only here, after a pass
+                // that brought Drive fully up to date; its own failure never
+                // fails the copy, which has already succeeded.
+                runCatching { removeOldReceipts() }
+                    .onSuccess { record ->
+                        record?.let { Log.i(TAG, "Receipts: ${it.removed} removed by age.") }
+                    }
+                    .onFailure { Log.e(TAG, "Removal by age failed", it) }
             }
             is DriveOutcome.Failed -> if (outcome.retryable && runAttemptCount < MAX_ATTEMPTS) {
                 Result.retry()

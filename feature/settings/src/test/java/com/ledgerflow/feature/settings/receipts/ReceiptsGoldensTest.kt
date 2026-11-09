@@ -132,6 +132,41 @@ open class ReceiptsGoldensTest {
         ),
     )
 
+    // ── Removal by age (ADR-0035 §6) ─────────────────────────────────────────
+
+    private val ageOn = previewReceiptsState.copy(
+        removeAfterDays = 90,
+        lastAgeRemoval = com.ledgerflow.core.domain.receipts.AgeRemovalRecord(
+            at = REMOVED_AT,
+            removed = 3,
+            bytes = 1_200_000,
+        ),
+    )
+
+    @Test fun ageOn_1x() = page("receipts-age-on-1x", 1f, state = ageOn)
+
+    @Config(qualifiers = PHONE_2X)
+    @Test fun ageOn_2x() = page("receipts-age-on-2x", 2f, state = ageOn)
+
+    /** Drive backup off: the row says why it does nothing. */
+    @Test fun ageDriveOff_1x() = page(
+        "receipts-age-drive-off-1x",
+        1f,
+        state = previewReceiptsState.copy(copies = ReceiptCopies(backupFolder = "LedgerFlow", drive = false)),
+    )
+
+    @Test fun agePicker_1x() = withDialog(
+        "receipts-age-picker-1x",
+        1f,
+        state = previewReceiptsState.copy(choosingAge = true),
+    )
+
+    @Test fun ageConfirm_1x() = withDialog(
+        "receipts-age-confirm-1x",
+        1f,
+        state = previewReceiptsState.copy(confirmingAge = 90),
+    )
+
     @Test fun deleteDialog_1x() = withDialog("receipts-delete-1x", 1f)
 
     @Config(qualifiers = PHONE_2X)

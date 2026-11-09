@@ -171,6 +171,12 @@ public class DefaultReceiptsRepository @Inject constructor(
         )
     }
 
+    override suspend fun filedBefore(before: Long): List<String> = withContext(io) {
+        val dao = session.openForBackgroundWork()?.receiptDao() ?: return@withContext emptyList()
+        // Each book asked on its own (Law 2); a receipt belongs to one entry.
+        dao.debitFiledBefore(before) + dao.creditFiledBefore(before)
+    }
+
     /** The same test the backup passes use: the grant is held and the folder still exists. */
     private suspend fun reachableFolder(database: LedgerFlowDatabase): BackupFolder? =
         runCatching {

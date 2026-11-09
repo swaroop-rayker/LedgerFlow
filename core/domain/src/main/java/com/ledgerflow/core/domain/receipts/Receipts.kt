@@ -59,7 +59,46 @@ public interface ReceiptsRepository {
      * @return true when the receipt is now removed from the phone.
      */
     public suspend fun removeFromPhone(id: String): Boolean
+
+    /**
+     * Receipts removal by age may consider (ADR-0035 §2): captured before
+     * [before] (epoch millis), still on the phone, and attached to an entry that
+     * is in one of the books. Not one in the bin, not one never filed, and not
+     * one whose candidate waits in the Inbox.
+     */
+    public suspend fun filedBefore(before: Long): List<String>
 }
+
+/**
+ * Removal by age (ADR-0035 §6): the setting, and what its last removal did.
+ * Kept in the vault (`app_meta`), beside Drive's own status, and read by the
+ * Drive worker, which opens the vault anyway.
+ */
+public interface ReceiptAgeRemoval {
+
+    /** The age in days after which receipts leave the phone, or null for off. */
+    public fun observeAfterDays(): Flow<Int?>
+
+    public suspend fun afterDays(): Int?
+
+    public suspend fun setAfterDays(days: Int?)
+
+    /** The last run that removed anything, or null if none has. */
+    public fun observeLast(): Flow<AgeRemovalRecord?>
+
+    public suspend fun record(record: AgeRemovalRecord)
+
+    public companion object {
+        /** The owner's three choices (2026-11-08). */
+        public val CHOICES: List<Int> = listOf(30, 90, 365)
+
+        /** Preselected when the user turns it on. */
+        public const val DEFAULT_DAYS: Int = 90
+    }
+}
+
+/** When a removal by age ran, and what it removed. */
+public data class AgeRemovalRecord(val at: Long, val removed: Int, val bytes: Long)
 
 /**
  * The backup folder's copy of a receipt, as the Drive check needs it (ADR-0035 §1).

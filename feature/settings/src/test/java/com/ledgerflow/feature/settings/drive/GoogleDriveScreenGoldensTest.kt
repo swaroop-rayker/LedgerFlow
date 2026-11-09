@@ -74,6 +74,9 @@ open class GoogleDriveScreenGoldensTest {
 
     @Test fun copiedRtl_1x() = capture("drive-copied-rtl-1x", copied, 1f, LayoutDirection.Rtl)
 
+    /** ADR-0035 §6: receipts removed from the phone live only in the backups, and the page says so. */
+    @Test fun onlyInBackups_1x() = capture("drive-only-in-backups-1x", copied.copy(receiptsOnlyInBackups = 3), 1f)
+
     @Test fun signInAgain_1x() = capture("drive-sign-in-again-1x", signInAgain, 1f)
 
     @Config(qualifiers = PHONE_2X)

@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.ledgerflow.core.domain.drive.DriveStatus
 import com.ledgerflow.core.domain.drive.ObserveDriveStatusUseCase
 import com.ledgerflow.core.domain.drive.SetDriveEnabledUseCase
+import com.ledgerflow.core.domain.receipts.ReceiptsRepository
 import com.ledgerflow.core.drive.DriveSignIn
 import com.ledgerflow.core.drive.DriveSignInStep
 import com.ledgerflow.feature.settings.work.DriveUploadWorker
@@ -38,6 +39,8 @@ public data class GoogleDriveUiState(
     val consent: PendingIntent? = null,
     val confirmingOff: Boolean = false,
     val message: String? = null,
+    /** Receipts removed from the phone and kept only in backups (ADR-0035 §6). */
+    val receiptsOnlyInBackups: Int = 0,
 ) {
     /** The status asks for a sign-in: the page offers it in place of Copy now. */
     val needsSignIn: Boolean get() = status.enabled && driveTone(status) == DriveTone.NeedsYou
@@ -95,6 +98,7 @@ public class GoogleDriveViewModel @Inject constructor(
     private val setEnabled: SetDriveEnabledUseCase,
     private val signIn: DriveSignIn,
     private val copies: DriveCopyQueue,
+    receipts: ReceiptsRepository,
 ) : ViewModel() {
 
     private val local = MutableStateFlow(GoogleDriveUiState())
@@ -102,8 +106,12 @@ public class GoogleDriveViewModel @Inject constructor(
     /** The account being signed in, between the picker and Google's answer. */
     private var signingIn: String? = null
 
-    public val state: StateFlow<GoogleDriveUiState> = combine(observeStatus(), local) { status, extra ->
-        extra.copy(status = status)
+    public val state: StateFlow<GoogleDriveUiState> = combine(
+        observeStatus(),
+        local,
+        receipts.observeRemoved(),
+    ) { status, extra, removed ->
+        extra.copy(status = status, receiptsOnlyInBackups = removed.count)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), GoogleDriveUiState())
 
     public fun onEvent(event: GoogleDriveEvent) {

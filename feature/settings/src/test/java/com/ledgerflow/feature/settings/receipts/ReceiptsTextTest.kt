@@ -98,6 +98,28 @@ class ReceiptsTextTest {
         )
     }
 
+    /** ADR-0035 §6: turning removal by age on says the same plain things a manual removal does. */
+    @Test
+    fun turningRemovalByAgeOn_saysDriveKeepsACopy_andTheWordsAreNeeded() {
+        assertThat(ReceiptsAgeText.ageConfirmTitle(90)).isEqualTo("Remove receipts after 90 days?")
+        val body = ReceiptsAgeText.ageConfirmBody(90)
+        assertThat(body).contains("older than 90 days")
+        assertThat(body).contains("checked copy")
+        assertThat(body).contains("restore a backup with your 24 words")
+        assertThat(body).contains("Receipts still in the Inbox")
+    }
+
+    @Test
+    fun theAgeRow_saysWhyItDoesNothingWhileDriveIsOff_andWhatTheLastRunDid() {
+        assertThat(ReceiptsAgeText.ageDetail(driveOn = false, lastDay = null, last = null))
+            .isEqualTo("Needs Google Drive backup. Turn it on in Data, Google Drive.")
+        val last = com.ledgerflow.core.domain.receipts.AgeRemovalRecord(at = 1, removed = 3, bytes = 1_200_000)
+        assertThat(ReceiptsAgeText.ageDetail(driveOn = true, lastDay = "9 Nov", last = last))
+            .isEqualTo("Only receipts with a checked Google Drive copy. Last removed on 9 Nov: 3 receipts (1 MB).")
+        assertThat(ReceiptsAgeText.ageOptions(listOf(30, 90, 365)))
+            .containsExactly("Off", "30 days", "90 days", "365 days").inOrder()
+    }
+
     @Test
     fun theUnavailableImage_promisesNoRestore() {
         assertThat(ReceiptsText.IMAGE_UNAVAILABLE_BODY.lowercase()).doesNotContain("restore")
