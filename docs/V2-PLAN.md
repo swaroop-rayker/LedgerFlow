@@ -1,8 +1,7 @@
 # Plan — LedgerFlow v2 (for general users)
 
-Status: **V2-1, V2-2, V2-3, V2-4 and V2-6 merged (V2-4 completed
-2026-11-07); the Night Vault redesign merged (2026-10-31). V2-5 is next: D5
-decided 2026-11-08 (ADR-0035).**
+Status: **V2-1 to V2-6 merged (V2-5 completed 2026-11-09, ADR-0035); the
+Night Vault redesign merged (2026-10-31). V2-7 is next.**
 Written 2026-09-30 from the
 owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 
@@ -37,7 +36,8 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-5 decisions | Owner, 2026-11-08: **D5 option A** (ADR-0035, superseding ADR-0023's "No auto-purge" and amending ADR-0034 §5). A receipt leaves the phone only when Google Drive holds a checked copy, checked in the same pass; its row stays (schema v14, `attachment.removed_from_phone_at`). A manual "Remove from phone" beside Delete; removal by age off until turned on, 30/90/365 days with 90 preselected. BUG88 fixed: Delete also removes the backup-folder copy. PRs in order: this ADR → Receipts page (with BUG88) → v14 and "Remove from phone" → removal by age |
 | V2-5 · Receipts page | Built on `claude/v2-5-receipts-page`, stacked on the ADR (§3.7; SPEC §9.3, §8 BUG88; TESTING E5, E6). Owner, 2026-11-08: layout A, a tap opening the receipt's image; no "Open entry", since no page shows one entry, so the receipt's page shows its entry's facts. The period is chips, not the mockup's segmented control, after the phone check (owner, 2026-11-08). No schema change. Merged 2026-11-08 (#34) |
 | V2-5 · Remove from phone | Built on `claude/v2-5-remove-from-phone` (ADR-0035 §1–§5; SPEC §9.3; TESTING E7). Owner, 2026-11-08: the v14 migration and the screens as shown (Remove from phone before Delete, only while Drive is on; a plain question naming the 24 words; a hollow cloud tile; "Removed, in Drive only"). Schema v14 (`attachment.removed_from_phone_at`), Drive keeps a sidecar a row names. BUG89 fixed before merge (E7 on the SM-S721B). Merged 2026-11-09 (#35) |
-| V2-5 · Removal by age | Built on `claude/v2-5-removal-by-age` (ADR-0035 §6; SPEC §9.3; TESTING E8). Owner, 2026-11-08: the design as shown (the row above Delete all; Off / 30 / 90 / 365, 90 preselected; asked once from Off; runs after each full Drive copy; "Last removed on …"; the Drive page's "kept only in your backups"). No schema change. Not yet merged |
+| V2-5 · Removal by age | Built on `claude/v2-5-removal-by-age` (ADR-0035 §6; SPEC §9.3; TESTING E8). Owner, 2026-11-08: the design as shown (the row above Delete all; Off / 30 / 90 / 365, 90 preselected; asked once from Off; runs after each full Drive copy; "Last removed on …"; the Drive page's "kept only in your backups"). No schema change. Merged 2026-11-09 (#36); V2-5 complete |
+| BUG90 purge and receipts | Built on `claude/bug90-purge-backup-copy`: purging an entry from the bin also removes its receipt's backup-folder copy (SPEC §8 BUG90; CLAUDE.md §7). Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the

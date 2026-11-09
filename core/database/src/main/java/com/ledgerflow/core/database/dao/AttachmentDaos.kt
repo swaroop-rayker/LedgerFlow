@@ -49,6 +49,14 @@ public interface AttachmentDao {
     @Query("SELECT file_path FROM attachment WHERE entry_id IN (:entryIds)")
     public suspend fun pathsForEntry(entryIds: List<String>): List<String>
 
+    /**
+     * The ids of the receipts a set of entries owns, read **before** a purge
+     * for the same reason as [pathsForEntry]: each has a sealed copy in the
+     * backup folder named by its id, which the purge removes too (BUG90).
+     */
+    @Query("SELECT id FROM attachment WHERE entry_id IN (:entryIds)")
+    public suspend fun idsForEntry(entryIds: List<String>): List<String>
+
     /** Every row, for the backup payload. */
     @Query("SELECT * FROM attachment ORDER BY id")
     public suspend fun all(): List<AttachmentEntity>

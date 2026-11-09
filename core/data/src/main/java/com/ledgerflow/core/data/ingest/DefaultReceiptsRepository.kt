@@ -159,15 +159,12 @@ public class DefaultReceiptsRepository @Inject constructor(
         if (deleted == 0) return ReceiptDeletion.Nothing
         files.delete(rows.map { it.filePath })
 
-        val images = reachableFolder(database)?.subfolder(AttachmentBackup.IMAGES_DIRECTORY)
-        val removed = images?.let { folder ->
-            runCatching { folder.deleteEach(rows.map { "${it.id}.${AttachmentBackup.EXTENSION}" }) }.getOrDefault(0)
-        } ?: 0
+        val removed = ReceiptBackupFolder(folders).deleteCopies(database, rows.map { it.id })
         return ReceiptDeletion(
             deleted = deleted,
             bytes = rows.sumOf { it.bytes },
-            backupCopiesRemoved = removed,
-            backupFolderUnreachable = images == null,
+            backupCopiesRemoved = removed ?: 0,
+            backupFolderUnreachable = removed == null,
         )
     }
 
