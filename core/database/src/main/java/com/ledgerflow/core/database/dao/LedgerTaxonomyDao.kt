@@ -119,6 +119,19 @@ public interface LedgerTaxonomyDao {
     )
     public suspend fun dateSpanForMerchant(ledger: LedgerType, merchantId: String): DateSpan
 
+    /**
+     * The first and last day one book files anything under a category or
+     * subcategory, at entry or line grain, binned entries included: the range
+     * a delete or purge that moves them must re-sum (BUG91). Null when none.
+     */
+    @Query(
+        "SELECT MIN(e.local_date) AS firstDate, MAX(e.local_date) AS lastDate FROM ledger_entry e " +
+            "WHERE e.ledger = :ledger AND (e.category_id = :categoryId OR e.subcategory_id = :categoryId " +
+            "OR EXISTS (SELECT 1 FROM line_item li WHERE li.entry_id = e.id " +
+            "AND (li.category_id = :categoryId OR li.subcategory_id = :categoryId)))",
+    )
+    public suspend fun dateSpanForCategory(ledger: LedgerType, categoryId: String): DateSpan
+
     @Query(
         "UPDATE ledger_entry SET merchant_id = :target, updated_at = :now " +
             "WHERE ledger = :ledger AND merchant_id = :source",

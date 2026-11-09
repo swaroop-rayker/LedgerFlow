@@ -5,6 +5,7 @@ import com.ledgerflow.core.common.di.IoDispatcher
 import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.data.vault.VaultSession
+import com.ledgerflow.core.database.dao.DateSpan
 import com.ledgerflow.core.database.entity.CategoryEntity
 import com.ledgerflow.core.domain.taxonomy.CategoryRepository
 import com.ledgerflow.core.domain.taxonomy.NewCategory
@@ -206,6 +207,8 @@ public class DefaultCategoryRepository @Inject constructor(
             // went out together.
             val now = clock.nowMillis()
             database.withTransaction {
+                // BUG91: read before the move, while the rows still name it.
+                val span = entries.dateSpanForCategory(ledger, id)
                 if (reassignTo != null) {
                     entries.reassignCategory(ledger, id, reassignTo, now)
                     entries.reassignLineItemCategory(ledger, id, reassignTo)
@@ -236,6 +239,12 @@ public class DefaultCategoryRepository @Inject constructor(
                 // deleted is not a restore.
                 dao.softDeleteChildren(id, now)
                 dao.softDelete(id, now)
+                // BUG91: the rollups name the category too. Without this they
+                // kept the moved money under the deleted category until the
+                // nightly reconciliation, so Analytics, budgets and goals read
+                // it there (or nowhere). The same re-sum a merchant merge does
+                // (BUG82), over the days the move touched.
+                recomputeSpan(database, ledger, span)
             }
             TaxonomyResult.Success(Unit)
         }
@@ -362,31 +371,58 @@ public class DefaultCategoryRepository @Inject constructor(
 
             val now = clock.nowMillis()
             val destroyed = database.withTransaction {
-                doomed.forEach { doomedId ->
-                    if (reassignTo != null) {
-                        entries.reassignCategory(ledger, doomedId, reassignTo, now)
-                        entries.reassignLineItemCategory(ledger, doomedId, reassignTo)
-                        // As on the soft delete: goals counting it follow its
-                        // entries. Without a target, a goal keeps the id and
-                        // its page says the category was removed.
-                        database.goalDao().repointLinkedCategory(doomedId, reassignTo, now)
-                    }
-                    // Always, target or not: this reference has nowhere to go
-                    // and cannot be left pointing at a row about to stop
-                    // existing. Both grains, for the same reason -- and it
-                    // matters more here than on the soft delete, because after
-                    // this transaction the category row is gone and a missed
-                    // reference resolves to nothing forever.
-                    entries.clearSubcategory(ledger, doomedId, now)
-                    entries.clearLineItemSubcategory(ledger, doomedId)
-                }
+                // BUG91, as on the soft delete: read the days before the move.
+                val spans = doomed.map { entries.dateSpanForCategory(ledger, it) }
+                doomed.forEach { doomedId -> moveOff(database, ledger, doomedId, reassignTo, now) }
                 if (branch.isNotEmpty()) dao.hardDeleteChildren(id, hidden.deletedAt)
+                spans.forEach { recomputeSpan(database, ledger, it) }
                 dao.hardDelete(id)
             }
             // Outside the transaction: SQLite refuses to VACUUM inside one.
             if (destroyed > 0) storage.compactStorage()
             TaxonomyResult.Success(Unit)
         }
+
+    /**
+     * The purge's move for one doomed row: its entries to [reassignTo] when
+     * there is one, its subcategory references cleared either way.
+     */
+    private suspend fun moveOff(
+        database: com.ledgerflow.core.database.LedgerFlowDatabase,
+        ledger: LedgerType,
+        doomedId: String,
+        reassignTo: String?,
+        now: Long,
+    ) {
+        val entries = database.ledgerTaxonomyDao()
+        if (reassignTo != null) {
+            entries.reassignCategory(ledger, doomedId, reassignTo, now)
+            entries.reassignLineItemCategory(ledger, doomedId, reassignTo)
+            // As on the soft delete: goals counting it follow its
+            // entries. Without a target, a goal keeps the id and
+            // its page says the category was removed.
+            database.goalDao().repointLinkedCategory(doomedId, reassignTo, now)
+        }
+        // Always, target or not: this reference has nowhere to go
+        // and cannot be left pointing at a row about to stop
+        // existing. Both grains, for the same reason -- and it
+        // matters more here than on the soft delete, because after
+        // this transaction the category row is gone and a missed
+        // reference resolves to nothing forever.
+        entries.clearSubcategory(ledger, doomedId, now)
+        entries.clearLineItemSubcategory(ledger, doomedId)
+    }
+
+    /** Re-sums `daily_rollup` over [span], one book (BUG91). Nothing when the category had no rows. */
+    private suspend fun recomputeSpan(
+        database: com.ledgerflow.core.database.LedgerFlowDatabase,
+        ledger: LedgerType,
+        span: DateSpan,
+    ) {
+        val first = span.firstDate ?: return
+        val last = span.lastDate ?: return
+        database.dailyRollupDao().recompute(ledger, first, last)
+    }
 
     /** The refusal §6.1.1's index would otherwise raise as a constraint violation. */
     private suspend fun nameClash(

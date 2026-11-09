@@ -69,6 +69,11 @@ class RollupSingleWriterTest {
      * `DefaultMerchantRepository` since BUG82: a merge moves entries from one
      * merchant to another, and the summaries are keyed by merchant too, so it
      * re-sums the dates the moved entries span, inside the merge.
+     *
+     * `DefaultCategoryRepository` since BUG91, for the same reason: deleting
+     * or purging a category with its entries moved re-sums the dates they
+     * span, inside the delete, or the rollups keep the money under the
+     * category that is gone.
      */
     @Test
     fun onlyPermittedFilesReachTheRollupWriteStatements() {
@@ -79,6 +84,7 @@ class RollupSingleWriterTest {
             "DefaultRollupRepository.kt",
             "DatabaseBackupManager.kt",
             "DefaultMerchantRepository.kt",
+            "DefaultCategoryRepository.kt",
         )
 
         val offenders = productionSources()
