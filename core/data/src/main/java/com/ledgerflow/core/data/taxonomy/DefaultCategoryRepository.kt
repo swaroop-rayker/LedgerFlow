@@ -213,6 +213,14 @@ public class DefaultCategoryRepository @Inject constructor(
                     // here, so moving `ledger_entry` alone would leave the very
                     // rows the count was about still pointing at the category
                     // the user just emptied.
+                    //
+                    // Savings goals counting this category follow its entries
+                    // (V2-PLAN §4.1, owner 2026-11-09), or their progress would
+                    // drop for money that only changed label. A goal on one of
+                    // its subcategories stays put: those entries join the whole
+                    // target category, and counting all of it would overstate
+                    // the goal.
+                    database.goalDao().repointLinkedCategory(id, reassignTo, now)
                 }
                 entries.clearSubcategory(ledger, id, now)
                 entries.clearLineItemSubcategory(ledger, id)
@@ -358,6 +366,10 @@ public class DefaultCategoryRepository @Inject constructor(
                     if (reassignTo != null) {
                         entries.reassignCategory(ledger, doomedId, reassignTo, now)
                         entries.reassignLineItemCategory(ledger, doomedId, reassignTo)
+                        // As on the soft delete: goals counting it follow its
+                        // entries. Without a target, a goal keeps the id and
+                        // its page says the category was removed.
+                        database.goalDao().repointLinkedCategory(doomedId, reassignTo, now)
                     }
                     // Always, target or not: this reference has nowhere to go
                     // and cannot be left pointing at a row about to stop

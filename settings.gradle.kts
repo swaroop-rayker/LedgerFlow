@@ -76,6 +76,8 @@ include(
     ":feature:ocr",
     ":feature:export",
     ":feature:settings",
+    // V2-7's tools (V2-PLAN §4).
+    ":feature:tools",
 )
 
 // Macrobenchmark + baseline profile generation. Requires a physical device, so

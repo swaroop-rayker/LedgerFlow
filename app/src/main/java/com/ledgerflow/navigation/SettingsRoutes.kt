@@ -14,6 +14,7 @@ import androidx.navigation.toRoute
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.settings.ProfileScreen
+import com.ledgerflow.feature.settings.ProfileViewModel
 import com.ledgerflow.feature.categories.CategoriesScreen
 import com.ledgerflow.feature.categories.CategoriesViewModel
 import com.ledgerflow.feature.categories.MerchantCategoriesScreen
@@ -61,9 +62,13 @@ internal fun NavGraphBuilder.profileAndSettingsDestinations(navController: NavHo
     composable<Destination.Profile> {
         // Organise and Data open straight from Profile (BUG65), so Back from
         // them returns here rather than to Settings.
+        val profile: ProfileViewModel = hiltViewModel()
+        val goalCount by profile.goalCount.collectAsStateWithLifecycle()
         ProfileScreen(
             onPage = { page -> navController.navigate(settingsRouteFor(page)) },
             onSettings = { navController.navigate(Destination.Settings) },
+            onGoals = { navController.navigate(Destination.Goals) },
+            goalCount = goalCount,
         )
     }
     composable<Destination.Settings> {

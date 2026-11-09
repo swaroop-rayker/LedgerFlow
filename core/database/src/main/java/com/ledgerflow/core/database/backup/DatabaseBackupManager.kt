@@ -367,6 +367,9 @@ public class DatabaseBackupManager(
         merchantCategories = database.merchantCategoryDao().all().map(::toMerchantCategoryRow),
         itemCategoryMemory = database.itemCategoryMemoryDao().all()
             .map(::toItemCategoryMemoryRow),
+        // Schema v15. User intent, like `budget`.
+        savingsGoals = database.goalDao().allGoals().map(::toSavingsGoalRow),
+        goalContributions = database.goalDao().allContributions().map(::toGoalContributionRow),
     )
 
     /**
@@ -462,6 +465,11 @@ public class DatabaseBackupManager(
         database.attachmentDao().insertAll(payload.attachments.map(::toAttachment))
         database.itemCategoryMemoryDao()
             .insertAll(payload.itemCategoryMemory.map(::toItemCategoryMemory))
+        // v15. Goals before their contributions, which have a real foreign key
+        // to them. A goal's linked category has none (ADR-0016), so a goal
+        // naming a category the backup lacks still restores.
+        database.goalDao().insertAllGoals(payload.savingsGoals.map(::toSavingsGoal))
+        database.goalDao().insertAllContributions(payload.goalContributions.map(::toGoalContribution))
         // `daily_rollup` is derived and deliberately absent from the payload
         // (ADR-0006), so it is rebuilt here rather than restored. A restored
         // install must open onto correct analytics, not onto empty charts

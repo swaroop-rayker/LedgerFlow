@@ -294,6 +294,20 @@ approximate — run it on the device, not an emulator.
 
 ---
 
+## 11a. Money tools (V2-7)
+
+Savings goals (`docs/V2-PLAN.md` §4.1, SPEC §9.3). Run on the playSafe copy;
+none of these touches the phrase.
+
+| # | Phase | Test | Steps | Expected |
+|---|---|---|---|---|
+| K1 | V2-7 | **A goal from start to Reached** | Profile → **Savings goals** → **New goal**: a name, a target of ₹1,000, no date, no category. Save. Open it; **Add money** ₹600; **Take out** ₹100; **Add money** ₹500. | The list shows it with its bar; Profile's row shows 1. The page lists three hand-added amounts, the taken-out one with a minus. After the last, the goal moves under **Reached** on the list. Force-stop and relaunch: all of it is still there. |
+| K2 | V2-7 | **The Add money dialog** (no golden: see SPEC §9.3) | On a goal, **Add money**; type an amount, change the date, type a note; Save. Again with text at 1.15 and 2.0, and once in RTL. | The keyboard does not hide the Save button; the amount, date and note fields are all reachable; no label is clipped. Save with an empty amount says "Enter an amount above zero" and stores nothing. |
+| K3 | V2-7 | **A linked category counts its book, and moves with it** | New goal linked to an expense category, counting from today. Approve one expense in that category (Inbox or the entry form), and one income of the same amount. Then Organise → delete that category, moving its entries to another. | The goal's linked line shows the expense only, never the income. After the delete, the goal names the other category and its total is unchanged. The Ledger's and Home's totals are unchanged by the goal throughout. |
+| K4 | V2-7 | **Deleting a goal** | On a goal with a linked category and two hand-added amounts, ⋮ → **Delete goal**. | The sheet names the two amounts and says the category's entries stay. After Delete the page closes and the goal is gone from the list and from Profile's count; the category's entries are still in the Ledger. |
+
+---
+
 ## 12. Recording a run
 
 Copy this into the release PR or the tag's notes. A run with no record did not

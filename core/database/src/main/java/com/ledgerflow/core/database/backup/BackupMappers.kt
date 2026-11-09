@@ -9,6 +9,7 @@ package com.ledgerflow.core.database.backup
 import com.ledgerflow.core.database.entity.AttachmentEntity
 import com.ledgerflow.core.database.entity.BudgetEntity
 import com.ledgerflow.core.database.entity.CategoryEntity
+import com.ledgerflow.core.database.entity.GoalContributionEntity
 import com.ledgerflow.core.database.entity.ItemCategoryMemoryEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
@@ -16,6 +17,7 @@ import com.ledgerflow.core.database.entity.MerchantCategoryEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
+import com.ledgerflow.core.database.entity.SavingsGoalEntity
 import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
 import com.ledgerflow.core.database.entity.PendingTransactionEntity
@@ -272,6 +274,28 @@ internal fun toBudget(row: BudgetRow): BudgetEntity? {
         alertPeriodStart = row.alertPeriodStart,
     )
 }
+
+internal fun toSavingsGoal(row: SavingsGoalRow) = SavingsGoalEntity(
+    id = row.id, name = row.name, targetMinor = Money(row.targetMinor), targetDate = row.targetDate,
+    linkedCategoryId = row.linkedCategoryId, countFrom = row.countFrom, sortOrder = row.sortOrder,
+    createdAt = row.createdAt, updatedAt = row.updatedAt,
+)
+
+internal fun toSavingsGoalRow(row: SavingsGoalEntity) = SavingsGoalRow(
+    id = row.id, name = row.name, targetMinor = row.targetMinor.minor, targetDate = row.targetDate,
+    linkedCategoryId = row.linkedCategoryId, countFrom = row.countFrom, sortOrder = row.sortOrder,
+    createdAt = row.createdAt, updatedAt = row.updatedAt,
+)
+
+internal fun toGoalContribution(row: GoalContributionRow) = GoalContributionEntity(
+    id = row.id, goalId = row.goalId, amountMinor = Money(row.amountMinor), localDate = row.localDate,
+    note = row.note, createdAt = row.createdAt, updatedAt = row.updatedAt,
+)
+
+internal fun toGoalContributionRow(row: GoalContributionEntity) = GoalContributionRow(
+    id = row.id, goalId = row.goalId, amountMinor = row.amountMinor.minor, localDate = row.localDate,
+    note = row.note, createdAt = row.createdAt, updatedAt = row.updatedAt,
+)
 
 internal fun toBudgetRow(row: BudgetEntity) = BudgetRow(
     id = row.id,

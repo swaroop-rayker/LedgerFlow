@@ -11,7 +11,8 @@ package com.ledgerflow.core.designsystem.icon
  *
  * Copied, not depended on: 36 files from `lucide-icons/lucide` (`icons/<name>.svg`,
  * fetched 2026-10-28; `list-filter`, `chevron-down`, `database` and `tag`
- * 2026-10-29, step F5; `external-link` 2026-10-31, V2-3; `check` 2026-11-01, BUG83),
+ * 2026-10-29, step F5; `external-link` 2026-10-31, V2-3; `check` 2026-11-01, BUG83;
+ * `target` and `ellipsis-vertical` 2026-11-09, V2-7),
  * converted to path data unchanged in shape -- `circle`,
  * `rect` and `polyline` written out as the equivalent paths. ISC licence, at
  * `assets/licenses/Lucide-ISC.txt`. A new icon is added here, from the same
@@ -260,6 +261,20 @@ internal object LfLucide {
     /** Lucide `cloud`: a receipt kept only in the Google Drive backup (V2-5). */
     val Cloud: List<String> = listOf(
         "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z",
+    )
+
+    /** Lucide `target`: savings goals (V2-7). */
+    val Target: List<String> = listOf(
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        "M6 12a6 6 0 1 0 12 0a6 6 0 1 0 -12 0z",
+        "M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0z",
+    )
+
+    /** Lucide `ellipsis-vertical`: a page's options (V2-7). */
+    val EllipsisVertical: List<String> = listOf(
+        "M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
+        "M11 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
+        "M11 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
     )
 
     /** Lucide `external-link`. */

@@ -40,6 +40,7 @@ owner's v2 brief; V2-1 started 2026-10-14 at the owner's word.
 | V2-5 · Removal by age | Built on `claude/v2-5-removal-by-age` (ADR-0035 §6; SPEC §9.3; TESTING E8). Owner, 2026-11-08: the design as shown (the row above Delete all; Off / 30 / 90 / 365, 90 preselected; asked once from Off; runs after each full Drive copy; "Last removed on …"; the Drive page's "kept only in your backups"). No schema change. Merged 2026-11-09 (#36); V2-5 complete |
 | BUG90 purge and receipts | Built on `claude/bug90-purge-backup-copy`: purging an entry from the bin also removes its receipt's backup-folder copy (SPEC §8 BUG90; CLAUDE.md §7). Merged 2026-11-09 (#37, `8e258c4`) |
 | V2-7 decisions | Owner, 2026-11-09: **D2 decided**, fetch on tap (ADR-0036). Recurring items and bill reminders are one feature; a due item reaches the Inbox only when nothing captured matches it by two days after the due date; items in either book, tied to entries by a link table. Goals: manual contributions plus a linked category. Splits, lending and loans are one debt model, with "Repayment" and "Lent" on an Inbox candidate. EMI: rupee-rounded, interest to the paisa, pinned to a real bank schedule. §4 has each. PRs in order: ADR-0036 → Tools page and goals (v15) → recurring data (v16) → recurring screens → debts and loans (v17) → utilities. The LedgerFlow PIN goes after V2-7 |
+| V2-7 · Savings goals | Built on `claude/v2-7-goals` (§4.1; SPEC §6.1, §9.3; TESTING K1–K4). Owner, 2026-11-09: the mockups as shown (a Money tools panel on Profile; the list, a goal's page, the form), schema v15 as shown, then no foreign key on the linked category so a goal follows its category's entries when the category is deleted (ADR-0016). New module `:feature:tools` for V2-7's tools. Not yet merged |
 
 **Before V2-2 starts, two numbers this plan reserved are taken.** ADR-0029 is
 the per-launch SQLCipher key (BUG56, PR #1), so the network ADR (D1) and the
@@ -351,6 +352,12 @@ entries in a category the user links to the goal. Which book a linked category
 counts and from which date are settled with the mockup. A goal never appears in
 a book's total. Schema v15, with a Tools page on Profile where V2-7's tools
 live.
+
+**Built (2026-11-09):** the Tools page became a second panel on Profile,
+"Money tools", since Settings already has a Tools page. A category deleted with
+its entries moved takes its goals with it (owner, the same day), and the link
+has no foreign key, as `budget.category_id` has none (ADR-0016). The figures
+show paise, as every amount in the app does.
 
 ### 4.2 Recurring transactions
 Explicit recurring items (rent, subscriptions, EMIs, taxes, bills): amount,
