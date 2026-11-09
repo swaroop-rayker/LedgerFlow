@@ -10,6 +10,7 @@ import com.ledgerflow.core.common.id.Uuid7Generator
 import com.ledgerflow.core.common.time.Clock
 import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.data.ingest.AttachmentFiles
+import com.ledgerflow.core.data.ingest.ReceiptBackupFolder
 import com.ledgerflow.core.data.vault.VaultSession
 import com.ledgerflow.core.database.LedgerFlowDatabase
 import com.ledgerflow.core.database.entity.AppMetaEntity
@@ -60,6 +61,11 @@ public class DefaultLedgerRepository @Inject constructor(
     /** For the purge's unlink only — see [purgeDeletedEntries]. */
     private val attachments: AttachmentFiles,
     @param:IoDispatcher private val io: CoroutineDispatcher,
+    /**
+     * For the purge only: a purged entry's receipts lose their backup-folder
+     * copies too (BUG90). Defaulted for the tests that build this by hand.
+     */
+    private val backupFolder: ReceiptBackupFolder = ReceiptBackupFolder.NONE,
 ) : LedgerRepository {
 
     override suspend fun approve(request: ApprovalRequest): LedgerResult<LedgerEntry> =
@@ -193,11 +199,15 @@ public class DefaultLedgerRepository @Inject constructor(
         val database = session.requireDatabase()
         // Collected before the delete. See [unlinkAttachments].
         val doomed = database.attachmentDao().pathsForEntry(listOf(id))
+        val doomedIds = database.attachmentDao().idsForEntry(listOf(id))
         val purged = database.ledgerEntryDao().purgeDeletedEntry(ledger, id)
         // Only if the row actually went: the statement binds `deleted_at IS
         // NOT NULL` and `:ledger`, so it legitimately affects nothing, and
         // unlinking then would destroy the image of a live entry.
-        if (purged > 0) attachments.delete(doomed)
+        if (purged > 0) {
+            attachments.delete(doomed)
+            backupFolder.deleteCopies(database, doomedIds)
+        }
         purged
     }
 
@@ -205,8 +215,15 @@ public class DefaultLedgerRepository @Inject constructor(
         val database = session.requireDatabase()
         val ids = database.ledgerEntryDao().deletedEntryIds(ledger)
         val doomed = if (ids.isEmpty()) emptyList() else database.attachmentDao().pathsForEntry(ids)
+        val doomedIds = if (ids.isEmpty()) emptyList() else database.attachmentDao().idsForEntry(ids)
         val purged = database.ledgerEntryDao().purgeDeletedEntries(ledger)
-        if (purged > 0) attachments.delete(doomed)
+        if (purged > 0) {
+            attachments.delete(doomed)
+            // BUG90: the backup folder's copies of those receipts go too, and
+            // Drive's follow (ADR-0035 §4); a row a restore of an older backup
+            // still names reports the image not found, ADR-0023's sentence.
+            backupFolder.deleteCopies(database, doomedIds)
+        }
         purged
     }
 

@@ -350,12 +350,14 @@ private fun BinConfirmationDialog(confirmation: BinConfirmation, onEvent: (BinEv
             val noun = if (confirmation.count == 1) "entry" else "entries"
             "Erase ${confirmation.count} $noun?" to
                 "This removes them from the database for good, with their line " +
-                "items. There is no undo. Export first if you might want them."
+                "items and receipt images, including the copies in your backup folder. " +
+                "There is no undo. Export first if you might want them."
         }
         is BinConfirmation.PurgeAll -> {
             val noun = if (confirmation.count == 1) "entry" else "entries"
             "Erase all ${confirmation.count} $noun?" to
-                "This empties the bin for good, with every line item in it. " +
+                "This empties the bin for good, with every line item and receipt " +
+                "image in it, including the copies in your backup folder. " +
                 "There is no undo. Export first if you might want them."
         }
     }

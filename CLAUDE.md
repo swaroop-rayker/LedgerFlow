@@ -360,6 +360,11 @@ is a write that makes past totals change again.
   at once (ADR-0015), so it is the one screen where a write can be issued
   against the wrong ledger — and with the predicate in place that affects no
   rows and returns `EntryNotFound` rather than quietly hitting something else.
+- **A purge takes the entries' receipts everywhere** (BUG90): the files on the
+  phone, and the sealed copies in the backup folder, read by id **before** the
+  delete and removed only if the statement destroyed something. Drive's copies
+  follow on its next pass (ADR-0035 §4). A folder that cannot be reached never
+  stops the purge.
 - **The per-row purge also binds `deleted_at IS NOT NULL`.** Without it, that
   statement would destroy any entry by id, live or not. The bin only ever shows
   binned rows, so nothing in the UI would have caught the difference.
