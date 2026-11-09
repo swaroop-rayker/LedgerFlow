@@ -11,7 +11,7 @@ These are settled. Do not relitigate them, do not "helpfully" suggest alternativ
 | | Decision |
 |---|---|
 | **Stack** | Native Kotlin + Jetpack Compose. Not Flutter. Not XML Views. |
-| **Currency** | One base currency per install (default INR), chosen at onboarding. `amount_minor` is **always** base currency. Foreign spend stores `original_amount_minor` + `original_currency` + `fx_rate_micro`, all user-entered. **No FX lookup and no conversion engine** — rates are user-entered, never fetched. (The app does declare `INTERNET` from P4; see Law 6. It is not used for this: the only network code is `:core:drive`'s copy of the encrypted backup to the user's Drive, ADR-0034.) |
+| **Currency** | One base currency per install (default INR), chosen at onboarding. `amount_minor` is **always** base currency. Foreign spend stores `original_amount_minor` + `original_currency` + `fx_rate_micro`, all user-entered. **No FX lookup for an entry and no conversion engine** — an entry's rate is user-entered, never fetched. The one fetched rate is the Utilities converter's: public ECB reference rates, on a tap, labelled indicative, and never written into an entry (ADR-0036). (The app declares `INTERNET` from P4; see Law 6.) |
 | **Recovery** | 24-word BIP-39 phrase is mandatory and primary. It wraps the DEK *and* encrypts `.lfbk` backups. The optional passphrase wrap (KEK-C) is **dropped** — ADR-0011. Two factors: Keystore and phrase. Do not reintroduce a user-chosen secret anywhere on the key path; it would silently downgrade the scheme to whatever the user typed. |
 | **Ingest** | SMS **and** notification listening are co-equal first-class sources, both shipped in P2, sharing one rule engine and one dedupe layer. Notification ingest is in **both** product flavours; SMS is `smsFull` only. |
 
@@ -34,7 +34,7 @@ Dev environment: **Windows 11 + Android Studio**, testing on a physical device (
 3. **Money is `Long` minor units.** No `Float` or `Double` for a monetary amount, and no currency arithmetic outside `Money`. Ever. The ban is on *money*, not on floating point generally — parser `confidence`, Jaro-Winkler scores and σ/μ ratios are legitimately real-valued, and the CI check is correspondingly scoped to money-shaped identifiers in `core/model` (`amount`, `price`, `total`, `balance`).
 4. **No destructive migrations.** `fallbackToDestructiveMigration()` is banned. Every schema change ships an explicit `Migration` + a `MigrationTest` + an updated committed schema JSON.
 5. **Persistent data lives in `filesDir`/`databases/`.** Never `cacheDir`, never external storage. `cacheDir` is for decoded-image scratch only.
-6. **Nothing this app computes touches a network.** All parsing, OCR, analytics and encryption are on-device. No user data leaves the phone **except files already encrypted on it, copied to the user's own Google Drive when they turn that on** (ADR-0034, owner 2026-11-07): the sealed `.lfbk` and receipt sidecars, byte for byte, with the `drive.file` scope only. **Every network call lives in `:core:drive`**, and `bannedApiCheck` fails on a JDK network API anywhere else. `:core:drive` is handed bytes and names and never sees the vault, the database or a key. If you think *other* code needs the network, you're wrong: raise it as an ADR instead.
+6. **Nothing this app computes touches a network.** All parsing, OCR, analytics and encryption are on-device. No user data leaves the phone **except files already encrypted on it, copied to the user's own Google Drive when they turn that on** (ADR-0034, owner 2026-11-07): the sealed `.lfbk` and receipt sidecars, byte for byte, with the `drive.file` scope only. The one other request is for **a public exchange-rate table, when the user asks for it in the converter, and it carries nothing about them** (ADR-0036, owner 2026-11-09). **Every network call lives in `:core:drive` or `:core:rates`**, and `bannedApiCheck` fails on a JDK network API anywhere else (`:core:rates` arrives with V2-7's Utilities PR; until then the check allows `:core:drive` only). Neither module sees the vault, the database or a key. If you think *other* code needs the network, you're wrong: raise it as an ADR instead.
    **The `INTERNET` permission is not how this is checked** (ADR-0021). From the commit that adds bundled ML Kit, release declares it: the recognizer drags in `transport-backend-cct` (Google's telemetry uploader), R8 refuses to build without those classes, and the owner chose to accept the permission rather than strip it. Recognition itself stays local *structurally* — the model ships inside the APK, so a receipt is never uploaded to be read. What replaces the grep is `EXPECTED_MERGED_PERMISSIONS` in `app/build.gradle.kts`, which pins the packaged permission set per variant and fails on a **second** unexpected entry, plus `OcrRunsWithoutNetworkTest`, plus the module rule above. Adding a dependency that merges a new permission is now a deliberate act with a pin to update.
 
 7. **Every bug fixed gets a named regression test.** Name it after the bug (`Bug6_DraftSurvivesProcessDeathTest`). The suite only grows.
@@ -59,7 +59,8 @@ LedgerFlow/
 ├─ app/
 ├─ core/
 │  ├─ model  common  crypto  database  datastore  domain  data  designsystem  ui  testing
-│  │  drive          ← the only module that touches a network (ADR-0034; from V2-4's build PR)
+│  │  drive          ← network: the encrypted backup to the user's Drive (ADR-0034)
+│  │  rates          ← network: the converter's public rate table (ADR-0036; from V2-7's Utilities PR)
 ├─ feature/
 │  ├─ onboarding  dashboard  inbox  entry  ledger  analytics  budget
 │  ├─ categories  ingest  ocr  export  settings
@@ -347,6 +348,12 @@ The DEK is multi-wrapped by two factors: Android Keystore (KEK-A) and the 24-wor
 - **An upload isn't done until Drive's `md5Checksum` matches the local file.** Only then does `lastDriveUploadAt` move, and only then are older backups deleted on Drive.
 - **Turning Drive off never deletes the user's files on Drive.**
 
+### `:core:rates` (the converter's rate table, ADR-0036)
+- **One fixed address, fetched only on the user's tap.** No background fetch, no fetch on opening a screen, no worker, no retry loop. A second host is a superseding ADR.
+- **The request carries nothing about the user:** a `GET` with no query string, no cookie, a fixed `User-Agent` of `LedgerFlow` (Android's default names the phone), and no redirect followed.
+- **A fetched rate never reaches an entry.** Not `fx_rate_micro`, not a suggestion on the entry form or at review, not a "Use as amount". The module rule keeps `:core:rates` away from everything but the converter and `:app`.
+- **Every fetched figure says it is indicative and gives the ECB's date**, not the time of the tap. The cache is public data in `filesDir/rates/`, never in the vault or a backup.
+
 ### Destroying ledger data
 `PurgeDeletedEntriesUseCase` is the only thing in the app that removes a
 committed `ledger_entry` row from the file, and the only irreversible operation
@@ -445,11 +452,11 @@ Targets live in `SPEC.md` §11. Practical rules while coding:
 | A `Row` of 3 action buttons in a card | `LfActionRow`; labels never wrap (BUG9) |
 | Silently dropping an unparsed bank SMS | `PENDING` with `confidence = 0` |
 | Wiping the DB when decryption fails | Recovery screen |
-| Fetching an FX rate | user-entered `fx_rate_micro`, or require base amount at review |
+| Fetching an FX rate for an entry, or offering a fetched one on the form | user-entered `fx_rate_micro`, or require base amount at review (ADR-0036) |
 | Summing mixed currencies in analytics | `amount_minor` is always base currency — there is nothing to mix |
 | Encrypting `.lfbk` with any user-chosen secret | phrase-derived key only |
 | `if (source == SMS)` outside an adapter | source-agnostic pipeline |
-| A network call outside `:core:drive` | raise an ADR (Law 6, ADR-0034) |
+| A network call outside `:core:drive` / `:core:rates` | raise an ADR (Law 6, ADR-0034, ADR-0036) |
 | Reading a notification before the allowlist check | filter first, then touch the body |
 | Shipping only `smsFull` | both flavours build and test on every PR |
 
