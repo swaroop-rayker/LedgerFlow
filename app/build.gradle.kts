@@ -391,6 +391,7 @@ dependencies {
     // dependency landed.
     implementation(project(":feature:ocr"))
     implementation(project(":feature:settings"))
+    implementation(project(":feature:tools"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)

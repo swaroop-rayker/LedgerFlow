@@ -103,6 +103,14 @@ public data class BackupPayload(
     // they called them. Defaulted to empty for the reason every block above is;
     // a v12 backup restores with none, and the launch seed fills the defaults.
     val merchantCategories: List<MerchantCategoryRow> = emptyList(),
+
+    // -- Schema v15 -- savings goals (V2-PLAN 4.1) ----------------------------
+    //
+    // User intent that nothing can rebuild, like `budget`. Defaulted to empty
+    // for the reason every block above is: a v14 backup restores with no
+    // goals, exactly as `MIGRATION_14_15` leaves a migrated v14 database.
+    val savingsGoals: List<SavingsGoalRow> = emptyList(),
+    val goalContributions: List<GoalContributionRow> = emptyList(),
 ) {
     /** Total rows, for the post-restore equality assertion and diagnostics. */
     public val rowCount: Int
@@ -112,7 +120,8 @@ public data class BackupPayload(
             categoryGroupMembers.size + smsRaw.size + notificationsRaw.size +
             packageAllowlist.size + senderAllowlist.size + parserRules.size +
             pendingTransactions.size + budgets.size +
-            attachments.size + itemCategoryMemory.size + merchantCategories.size
+            attachments.size + itemCategoryMemory.size + merchantCategories.size +
+            savingsGoals.size + goalContributions.size
 }
 
 /**
@@ -197,6 +206,32 @@ public data class MerchantRow(
      * migrated older database has them (CLAUDE.md 5, Room).
      */
     val merchantCategoryId: String? = null,
+)
+
+/** v15: a savings goal (V2-PLAN 4.1). Money is base-currency minor units (Law 3). */
+@Serializable
+public data class SavingsGoalRow(
+    val id: String,
+    val name: String,
+    val targetMinor: Long,
+    val targetDate: Int?,
+    val linkedCategoryId: String?,
+    val countFrom: Int?,
+    val sortOrder: Int,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/** v15: money added to a goal by hand, or taken out (negative). */
+@Serializable
+public data class GoalContributionRow(
+    val id: String,
+    val goalId: String,
+    val amountMinor: Long,
+    val localDate: Int,
+    val note: String?,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
 
 /** v13: a kind of place a merchant is (V2-PLAN 5). */

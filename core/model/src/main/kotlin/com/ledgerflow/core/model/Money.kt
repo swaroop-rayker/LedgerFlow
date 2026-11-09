@@ -63,6 +63,26 @@ public value class Money(public val minor: Long) : Comparable<Money> {
         }
     }
 
+    /**
+     * This amount × [numerator] ÷ [denominator]: a savings goal's monthly pace
+     * from what was added over a window of days (V2-PLAN §4.1).
+     *
+     * Rounds **half away from zero**, as [times] by a quantity does, with
+     * integer arithmetic only. [denominator] must be positive.
+     */
+    public fun scaled(numerator: Int, denominator: Int): Money {
+        require(denominator > 0) { "scaled by a ratio with a denominator of $denominator" }
+        val product = minor * numerator
+        val truncated = product / denominator
+        val remainder = product % denominator
+        val roundsAway = remainder.absoluteValue * 2 >= denominator
+        return when {
+            remainder == 0L || !roundsAway -> Money(truncated)
+            product > 0L -> Money(truncated + 1)
+            else -> Money(truncated - 1)
+        }
+    }
+
     public operator fun unaryMinus(): Money = Money(-minor)
 
     public val isZero: Boolean get() = minor == 0L

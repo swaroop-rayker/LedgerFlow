@@ -71,6 +71,12 @@ public object LfIcons {
     /** A receipt removed from the phone, kept in the Google Drive backup (V2-5, ADR-0035). */
     public val InDriveBackup: ImageVector by lazy { lucide("InDriveBackup", LfLucide.Cloud) }
 
+    /** Profile's Savings goals row (V2-7, V2-PLAN §4.1). */
+    public val Goals: ImageVector by lazy { lucide("Goals", LfLucide.Target) }
+
+    /** A page's options sheet: edit, delete (V2-7's goal page). */
+    public val Options: ImageVector by lazy { lucide("Options", LfLucide.EllipsisVertical) }
+
     private fun lucide(name: String, paths: List<String>, autoMirror: Boolean = false): ImageVector =
         ImageVector.Builder(
             name = "Lf$name",

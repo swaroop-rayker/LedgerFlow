@@ -51,7 +51,14 @@ class Bug65_EveryPageHasOneRowTest {
     fun profile_opensOrganiseDataAndSettings_andHasNoExportRowOfItsOwn() {
         val opened = mutableListOf<String>()
         rule.setContent {
-            LfTheme { ProfileScreen(onPage = { opened += it.name }, onSettings = { opened += "settings" }) }
+            LfTheme {
+                ProfileScreen(
+                    onPage = { opened += it.name },
+                    onSettings = { opened += "settings" },
+                    onGoals = {},
+                    goalCount = null,
+                )
+            }
         }
         listOf("Organise" to "Organise", "Data" to "Data", "Settings" to "settings").forEach { (title, page) ->
             opened.clear()

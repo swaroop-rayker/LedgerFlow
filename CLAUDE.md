@@ -63,7 +63,7 @@ LedgerFlow/
 │  │  rates          ← network: the converter's public rate table (ADR-0036; from V2-7's Utilities PR)
 ├─ feature/
 │  ├─ onboarding  dashboard  inbox  entry  ledger  analytics  budget
-│  ├─ categories  ingest  ocr  export  settings
+│  ├─ categories  ingest  ocr  export  settings  tools
 │     └─ ingest/src/
 │        ├─ main/          ← rule engine, dedupe, worker, adapters/NotificationAdapter
 │        ├─ smsFull/       ← adapters/SmsAdapter + RECEIVE_SMS manifest entry

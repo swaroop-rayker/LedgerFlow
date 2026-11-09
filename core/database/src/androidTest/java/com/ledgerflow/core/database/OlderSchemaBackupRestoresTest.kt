@@ -166,6 +166,21 @@ class OlderSchemaBackupRestoresTest {
         assertThat(receipt.removedFromPhoneAt).isNull()
     }
 
+    /**
+     * A v14 backup carries no goals (V2-7, V2-PLAN 4.1). It restores with
+     * none, exactly as `MIGRATION_14_15` leaves a migrated v14 database, and
+     * every v14 row comes through.
+     */
+    @Test
+    fun aV14Backup_restores_withNoGoals() {
+        assertThat(restore(V14, schemaVersion = 14)).isInstanceOf(RestoreResult.Success::class.java)
+
+        val payload = restored()
+        assertThat(payload.savingsGoals).isEmpty()
+        assertThat(payload.goalContributions).isEmpty()
+        assertThat(payload.attachments.single().removedFromPhoneAt).isEqualTo(1_760_000_000_000L)
+    }
+
     private companion object {
         /** The six tables v1 had, in v1's row shapes (unchanged since). */
         const val CORE = """
@@ -228,5 +243,12 @@ class OlderSchemaBackupRestoresTest {
             "budgets": [], "itemCategoryMemory": [], "merchantCategories": [],
             "attachments": [{"id": "att-1", "entryId": "e-1", "filePath": "att-1.lfa",
                 "mime": "image/png", "sha256": "hash-1", "bytes": 412000, "createdAt": 1755000000000}]}"""
+
+        /** v14: v13's receipt, removed from the phone, and no goal lists. */
+        val V14 = """{"schemaVersion": 14, "createdAt": 1755000000000, $CORE, $V7_ADDITIONS,
+            "budgets": [], "itemCategoryMemory": [], "merchantCategories": [],
+            "attachments": [{"id": "att-1", "entryId": "e-1", "filePath": "att-1.lfa",
+                "mime": "image/png", "sha256": "hash-1", "bytes": 412000, "createdAt": 1755000000000,
+                "removedFromPhoneAt": 1760000000000}]}"""
     }
 }

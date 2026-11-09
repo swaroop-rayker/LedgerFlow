@@ -27,6 +27,8 @@ import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
 import com.ledgerflow.core.database.entity.MerchantCategoryEntity
+import com.ledgerflow.core.database.entity.GoalContributionEntity
+import com.ledgerflow.core.database.entity.SavingsGoalEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
@@ -360,6 +362,35 @@ class BackupRestoreRoundTripTest {
                 ),
             ),
         )
+        // v15 (V2-PLAN 4.1). Two goals that differ in every optional column --
+        // one linked to a category with a date, one with neither -- and two
+        // contributions, one of them money taken out (negative).
+        database.goalDao().insertAllGoals(
+            listOf(
+                SavingsGoalEntity(
+                    id = "goal-fund", name = "Emergency fund", targetMinor = Money(10_000_000),
+                    targetDate = 20_500, linkedCategoryId = "cat-food", countFrom = 20_000,
+                    sortOrder = 0, createdAt = 1_760_000_000_000L, updatedAt = 1_760_000_000_100L,
+                ),
+                SavingsGoalEntity(
+                    id = "goal-laptop", name = "New laptop", targetMinor = Money(9_000_000),
+                    targetDate = null, linkedCategoryId = null, countFrom = null,
+                    sortOrder = 1, createdAt = 1_760_000_000_200L, updatedAt = 1_760_000_000_200L,
+                ),
+            ),
+        )
+        database.goalDao().insertAllContributions(
+            listOf(
+                GoalContributionEntity(
+                    "goal-c-1", "goal-fund", Money(1_500_000), 20_100, "Bonus",
+                    1_760_000_000_300L, 1_760_000_000_300L,
+                ),
+                GoalContributionEntity(
+                    "goal-c-2", "goal-fund", Money(-200_000), 20_110, null,
+                    1_760_000_000_400L, 1_760_000_000_400L,
+                ),
+            ),
+        )
         // v11 (ADR-0023). Metadata only -- the image bytes are not in a .lfbk,
         // so what has to survive here is the row that says which file belongs
         // to which entry and what it should hash to.
@@ -446,6 +477,8 @@ class BackupRestoreRoundTripTest {
         val attachments: List<AttachmentEntity>,
         val itemCategoryMemory: List<ItemCategoryMemoryEntity>,
         val merchantCategories: List<MerchantCategoryEntity>,
+        val savingsGoals: List<SavingsGoalEntity>,
+        val goalContributions: List<GoalContributionEntity>,
     ) {
         /**
          * Every table, as lists, for the vacuity guard below.
@@ -487,6 +520,8 @@ class BackupRestoreRoundTripTest {
             attachments = db.attachmentDao().all(),
             itemCategoryMemory = db.itemCategoryMemoryDao().all(),
             merchantCategories = db.merchantCategoryDao().all(),
+            savingsGoals = db.goalDao().allGoals(),
+            goalContributions = db.goalDao().allContributions(),
         )
     }
 

@@ -1,5 +1,7 @@
 package com.ledgerflow.feature.settings
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -34,6 +36,8 @@ import com.ledgerflow.core.designsystem.theme.LfTheme
 public fun ProfileScreen(
     onPage: (SettingsPage) -> Unit,
     onSettings: () -> Unit,
+    onGoals: () -> Unit,
+    goalCount: Int?,
     modifier: Modifier = Modifier,
 ) {
     // No scaffold of its own: the shell hosts the tabs.
@@ -49,6 +53,29 @@ public fun ProfileScreen(
                     LfDivider()
                 }
                 LfNavRow(title = "Settings", onClick = onSettings, icon = LfIcons.Settings)
+            }
+        }
+        // V2-7's tools (V2-PLAN §4; owner 2026-11-09): a second panel of the
+        // same shape. Recurring, Debts and loans, and Utilities join it as
+        // their PRs land; a row is only here once its page exists. Not called
+        // "Tools": Settings already has a Tools page, holding Diagnostics.
+        item(key = "money-tools-heading", contentType = "heading") {
+            Text(
+                text = "Money tools",
+                style = LfTheme.type.label,
+                color = LfTheme.colors.text.secondary,
+                modifier = Modifier.padding(top = LfTheme.space.itemGap),
+            )
+        }
+        item(key = "money-tools", contentType = "panel") {
+            LfPanel {
+                LfNavRow(
+                    title = "Savings goals",
+                    onClick = onGoals,
+                    icon = LfIcons.Goals,
+                    // A count only once there is something to count.
+                    value = goalCount?.takeIf { it > 0 }?.toString(),
+                )
             }
         }
     }
@@ -76,5 +103,5 @@ internal val ProfilePages: Set<SettingsPage> = setOf(SettingsPage.Organise, Sett
 @PreviewLightDark
 @Composable
 private fun ProfilePreview() {
-    LfTheme { ProfileScreen(onPage = {}, onSettings = {}) }
+    LfTheme { ProfileScreen(onPage = {}, onSettings = {}, onGoals = {}, goalCount = 3) }
 }

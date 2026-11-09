@@ -10,6 +10,7 @@ import com.ledgerflow.core.data.analytics.DefaultAnalyticsRepository
 import com.ledgerflow.core.data.analytics.DefaultBudgetRepository
 import com.ledgerflow.core.data.analytics.DefaultRollupRepository
 import com.ledgerflow.core.data.backup.BackupDocumentReader
+import com.ledgerflow.core.data.goals.DefaultGoalRepository
 import com.ledgerflow.core.data.backup.BackupFolderResolver
 import com.ledgerflow.core.data.backup.DefaultBackupRepository
 import com.ledgerflow.core.data.backup.DefaultRestoreRepository
@@ -51,6 +52,7 @@ import com.ledgerflow.core.domain.backup.RestoreRepository
 import com.ledgerflow.core.domain.diagnostics.CrashReportRepository
 import com.ledgerflow.core.domain.diagnostics.IngestDiagnosticsRepository
 import com.ledgerflow.core.domain.drive.DriveRestoreStaging
+import com.ledgerflow.core.domain.goals.GoalRepository
 import com.ledgerflow.core.domain.drive.DriveStatusStore
 import com.ledgerflow.core.domain.drive.LocalBackupFiles
 import com.ledgerflow.core.domain.export.ExportRepository
@@ -204,6 +206,10 @@ public interface RollupModule {
      */
     @Binds
     public fun budgetRepository(impl: DefaultBudgetRepository): BudgetRepository
+
+    /** Savings goals (V2-PLAN §4.1, schema v15). */
+    @Binds
+    public fun goalRepository(impl: DefaultGoalRepository): GoalRepository
 
     /**
      * The ingest diagnostics report (P5). Beside analytics because it is the

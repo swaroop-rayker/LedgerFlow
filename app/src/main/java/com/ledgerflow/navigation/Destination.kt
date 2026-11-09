@@ -103,6 +103,18 @@ public sealed interface Destination {
     @Serializable
     public data object Budgets : Destination
 
+    /** Savings goals (V2-7, V2-PLAN §4.1), reached from Profile's Money tools. */
+    @Serializable
+    public data object Goals : Destination
+
+    /** One goal's page. The argument's name is `GoalViewModel.GOAL_ID_ARG`. */
+    @Serializable
+    public data class Goal(val goalId: String) : Destination
+
+    /** New goal (empty [goalId]) or Edit goal. */
+    @Serializable
+    public data class GoalEditor(val goalId: String = "") : Destination
+
     @Serializable
     public data object Export : Destination
 

@@ -69,6 +69,60 @@ internal object CsvTables {
         budgets(payload),
         attachments(payload),
         itemCategoryMemory(payload),
+        savingsGoals(payload),
+        goalContributions(payload),
+    )
+
+    /**
+     * v15 (V2-PLAN 4.1): savings goals. `target_minor` twice, like every money
+     * column. `target_date` and `count_from` are day numbers with no ISO twin,
+     * as `budget.start_date`.
+     */
+    private fun savingsGoals(payload: BackupPayload) = CsvDocument(
+        fileName = "savings_goal.csv",
+        header = listOf(
+            "id", "name", "target_minor", "target", "target_date", "linked_category_id",
+            "count_from", "sort_order", "created_at", "created_at_iso", "updated_at", "updated_at_iso",
+        ),
+        rows = payload.savingsGoals.map { row ->
+            listOf(
+                row.id,
+                row.name,
+                row.targetMinor.toString(),
+                CsvWriter.decimal(row.targetMinor),
+                row.targetDate?.toString(),
+                row.linkedCategoryId,
+                row.countFrom?.toString(),
+                row.sortOrder.toString(),
+                row.createdAt.toString(),
+                CsvWriter.timestamp(row.createdAt),
+                row.updatedAt.toString(),
+                CsvWriter.timestamp(row.updatedAt),
+            )
+        },
+    )
+
+    /** v15: a goal's hand-added amounts; negative is money taken out. */
+    private fun goalContributions(payload: BackupPayload) = CsvDocument(
+        fileName = "goal_contribution.csv",
+        header = listOf(
+            "id", "goal_id", "amount_minor", "amount", "local_date", "note",
+            "created_at", "created_at_iso", "updated_at", "updated_at_iso",
+        ),
+        rows = payload.goalContributions.map { row ->
+            listOf(
+                row.id,
+                row.goalId,
+                row.amountMinor.toString(),
+                CsvWriter.decimal(row.amountMinor),
+                row.localDate.toString(),
+                row.note,
+                row.createdAt.toString(),
+                CsvWriter.timestamp(row.createdAt),
+                row.updatedAt.toString(),
+                CsvWriter.timestamp(row.updatedAt),
+            )
+        },
     )
 
     /**

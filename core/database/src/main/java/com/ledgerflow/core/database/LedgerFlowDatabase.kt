@@ -11,6 +11,7 @@ import com.ledgerflow.core.database.dao.CategoryDao
 import com.ledgerflow.core.database.dao.CategoryGroupDao
 import com.ledgerflow.core.database.dao.DailyRollupDao
 import com.ledgerflow.core.database.dao.DraftEntryDao
+import com.ledgerflow.core.database.dao.GoalDao
 import com.ledgerflow.core.database.dao.IngestDiagnosticsDao
 import com.ledgerflow.core.database.dao.LedgerEntryDao
 import com.ledgerflow.core.database.dao.MerchantEntriesDao
@@ -37,6 +38,7 @@ import com.ledgerflow.core.database.entity.CreditEntryView
 import com.ledgerflow.core.database.entity.DailyRollupEntity
 import com.ledgerflow.core.database.entity.DebitEntryView
 import com.ledgerflow.core.database.entity.DraftEntryEntity
+import com.ledgerflow.core.database.entity.GoalContributionEntity
 import com.ledgerflow.core.database.entity.LedgerEntryEntity
 import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
@@ -47,6 +49,7 @@ import com.ledgerflow.core.database.entity.PackageAllowlistEntity
 import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
 import com.ledgerflow.core.database.entity.PendingTransactionEntity
+import com.ledgerflow.core.database.entity.SavingsGoalEntity
 import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.database.entity.SmsRawEntity
 
@@ -90,6 +93,9 @@ import com.ledgerflow.core.database.entity.SmsRawEntity
         ItemCategoryMemoryEntity::class,
         // v13 (V2-PLAN §5) — merchant categories.
         MerchantCategoryEntity::class,
+        // v15 (V2-PLAN §4.1) — savings goals.
+        SavingsGoalEntity::class,
+        GoalContributionEntity::class,
     ],
     views = [
         DebitEntryView::class,
@@ -155,6 +161,9 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
      * no schema change, and nothing here writes.
      */
     public abstract fun ingestDiagnosticsDao(): IngestDiagnosticsDao
+
+    /** v15: savings goals (V2-PLAN §4.1). */
+    public abstract fun goalDao(): GoalDao
 
     public companion object {
         /**
@@ -232,8 +241,14 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * receipt left the phone because Google Drive holds a checked copy; its
          * row stays. Every existing row keeps `NULL`. A rebuild of one table;
          * see `MIGRATION_13_14`.
+         *
+         * v15 adds savings goals — V2-PLAN §4.1, V2-7: `savings_goal` and its
+         * hand-added `goal_contribution` rows. Purely additive: two
+         * `CREATE TABLE`s and their indices, nothing existing read or
+         * rewritten. A goal is a plan, not a third ledger (Law 2). See
+         * `MIGRATION_14_15`.
          */
-        public const val VERSION: Int = 14
+        public const val VERSION: Int = 15
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"
