@@ -4,6 +4,7 @@ import com.ledgerflow.core.domain.analytics.AnalyticsFilters
 import com.ledgerflow.core.domain.analytics.AnalyticsRepository
 import com.ledgerflow.core.domain.analytics.AnalyticsSnapshot
 import com.ledgerflow.core.domain.analytics.AnalyticsWindow
+import com.ledgerflow.core.domain.analytics.RecurringMerchant
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
 
@@ -38,6 +39,12 @@ public class FakeAnalyticsRepository : AnalyticsRepository {
 
     override suspend fun total(ledger: LedgerType, window: AnalyticsWindow): Money =
         totals[ledger]?.invoke(window) ?: Money(0L)
+
+    /** Each book's detected recurring merchants (V2-7's suggestions). */
+    public val recurring: MutableMap<LedgerType, List<RecurringMerchant>> = mutableMapOf()
+
+    override suspend fun recurringMerchants(ledger: LedgerType, today: Int): List<RecurringMerchant> =
+        recurring[ledger].orEmpty()
 }
 
 /** A snapshot with nothing in it, for [ledger] over [window]. */

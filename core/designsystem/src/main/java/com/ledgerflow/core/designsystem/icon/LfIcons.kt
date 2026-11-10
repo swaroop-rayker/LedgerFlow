@@ -74,6 +74,9 @@ public object LfIcons {
     /** Profile's Savings goals row (V2-7, V2-PLAN §4.1). */
     public val Goals: ImageVector by lazy { lucide("Goals", LfLucide.Target) }
 
+    /** Profile's Recurring row (V2-7, V2-PLAN §4.2). */
+    public val Recurring: ImageVector by lazy { lucide("Recurring", LfLucide.Repeat) }
+
     /** A page's options sheet: edit, delete (V2-7's goal page). */
     public val Options: ImageVector by lazy { lucide("Options", LfLucide.EllipsisVertical) }
 

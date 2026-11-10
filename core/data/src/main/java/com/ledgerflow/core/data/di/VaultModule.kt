@@ -54,6 +54,7 @@ import com.ledgerflow.core.domain.diagnostics.CrashReportRepository
 import com.ledgerflow.core.domain.diagnostics.IngestDiagnosticsRepository
 import com.ledgerflow.core.domain.drive.DriveRestoreStaging
 import com.ledgerflow.core.domain.goals.GoalRepository
+import com.ledgerflow.core.domain.recurring.RecurringItemsReader
 import com.ledgerflow.core.domain.recurring.RecurringRepository
 import com.ledgerflow.core.domain.drive.DriveStatusStore
 import com.ledgerflow.core.domain.drive.LocalBackupFiles
@@ -216,6 +217,10 @@ public interface RollupModule {
     /** Recurring items (V2-PLAN §4.2, schema v16). */
     @Binds
     public fun recurringRepository(impl: DefaultRecurringRepository): RecurringRepository
+
+    /** Home's Coming up: the list, once (V2-7). */
+    @Binds
+    public fun recurringItemsReader(impl: DefaultRecurringRepository): RecurringItemsReader
 
     /**
      * The ingest diagnostics report (P5). Beside analytics because it is the

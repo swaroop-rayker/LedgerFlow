@@ -189,7 +189,7 @@ class DashboardHomeTest {
                 return analytics.snapshot(ledger, window, comparePrevious, filters).also { completed++ }
             }
         }
-        val vm = viewModel(GetHomeSummaryUseCase(slow))
+        val vm = viewModel(GetHomeSummaryUseCase(slow) { emptyList() })
         advanceUntilIdle()
 
         // A burst while the first read is held: an approval, then a resume.
@@ -316,7 +316,9 @@ class DashboardHomeTest {
         override suspend fun status(): IngestSourceStatus = IngestSourceStatus.READY
     }
 
-    private fun viewModel(summary: GetHomeSummaryUseCase = GetHomeSummaryUseCase(analytics)): DashboardViewModel {
+    private fun viewModel(
+        summary: GetHomeSummaryUseCase = GetHomeSummaryUseCase(analytics) { emptyList() },
+    ): DashboardViewModel {
         val clock = Clock { now }
         val gaps = FakeCaptureGapStore()
         val crashes = FakeCrashReportRepository()

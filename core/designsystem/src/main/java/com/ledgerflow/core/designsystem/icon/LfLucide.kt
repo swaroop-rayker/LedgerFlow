@@ -12,7 +12,7 @@ package com.ledgerflow.core.designsystem.icon
  * Copied, not depended on: 36 files from `lucide-icons/lucide` (`icons/<name>.svg`,
  * fetched 2026-10-28; `list-filter`, `chevron-down`, `database` and `tag`
  * 2026-10-29, step F5; `external-link` 2026-10-31, V2-3; `check` 2026-11-01, BUG83;
- * `target` and `ellipsis-vertical` 2026-11-09, V2-7),
+ * `target` and `ellipsis-vertical` 2026-11-09, `repeat` 2026-11-10, V2-7),
  * converted to path data unchanged in shape -- `circle`,
  * `rect` and `polyline` written out as the equivalent paths. ISC licence, at
  * `assets/licenses/Lucide-ISC.txt`. A new icon is added here, from the same
@@ -268,6 +268,14 @@ internal object LfLucide {
         "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
         "M6 12a6 6 0 1 0 12 0a6 6 0 1 0 -12 0z",
         "M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0z",
+    )
+
+    /** Lucide `repeat`: recurring items (V2-7). */
+    val Repeat: List<String> = listOf(
+        "m17 2 4 4-4 4",
+        "M3 11v-1a4 4 0 0 1 4-4h14",
+        "m7 22-4-4 4-4",
+        "M21 13v1a4 4 0 0 1-4 4H3",
     )
 
     /** Lucide `ellipsis-vertical`: a page's options (V2-7). */

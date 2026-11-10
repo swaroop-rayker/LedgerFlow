@@ -111,6 +111,25 @@ public sealed interface Destination {
     @Serializable
     public data class Goal(val goalId: String) : Destination
 
+    /** Recurring items (V2-7, V2-PLAN §4.2), reached from Profile's Money tools. */
+    @Serializable
+    public data object Recurring : Destination
+
+    /** One recurring item. The argument's name is `RecurringItemViewModel.ITEM_ID_ARG`. */
+    @Serializable
+    public data class RecurringItem(val itemId: String) : Destination
+
+    /**
+     * New recurring (empty [itemId]), Edit, or "Add" on a suggestion
+     * ([fromMerchant] and [fromLedger], a `LedgerType` name).
+     */
+    @Serializable
+    public data class RecurringEditor(
+        val itemId: String = "",
+        val fromMerchant: String = "",
+        val fromLedger: String = "",
+    ) : Destination
+
     /** New goal (empty [goalId]) or Edit goal. */
     @Serializable
     public data class GoalEditor(val goalId: String = "") : Destination

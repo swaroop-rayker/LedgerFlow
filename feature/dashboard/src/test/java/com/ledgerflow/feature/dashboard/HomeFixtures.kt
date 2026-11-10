@@ -7,7 +7,7 @@ import com.ledgerflow.core.domain.analytics.CaptureCoverage
 import com.ledgerflow.core.domain.analytics.CaptureShare
 import com.ledgerflow.core.domain.analytics.HomeSummary
 import com.ledgerflow.core.domain.analytics.MonthToDate
-import com.ledgerflow.core.domain.analytics.RecurringMerchant
+import com.ledgerflow.core.domain.analytics.UpcomingCharge
 import com.ledgerflow.core.domain.ingest.NotificationCaptureHealth
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.LedgerListItem
@@ -96,16 +96,8 @@ internal object HomeFixtures {
             projectedSpend = Money(projected),
         )
 
-    private fun recurring(id: String, name: String, minor: Long, next: Int) = RecurringMerchant(
-        merchantId = id,
-        name = name,
-        occurrences = 4,
-        intervalDays = 30,
-        regularity = 0.05,
-        typicalAmount = Money(minor),
-        lastSeen = next - 30,
-        nextExpected = next,
-    )
+    private fun recurring(id: String, name: String, minor: Long, next: Int) =
+        UpcomingCharge(name = name, amount = Money(minor), due = next, merchantId = id)
 
     val summary: HomeSummary = HomeSummary(
         today = TODAY,

@@ -96,7 +96,7 @@ class DashboardBackupReminderTest {
             DismissCrashReportsUseCase(crashes),
             HomeReads(
                 ObservePendingCountUseCase(FakePendingRepository()),
-                GetHomeSummaryUseCase(FakeAnalyticsRepository()),
+                GetHomeSummaryUseCase(FakeAnalyticsRepository()) { emptyList() },
                 FakeLedgerRepository(),
                 clock,
                 FakeHideAmountsSetting(),

@@ -20,6 +20,19 @@ public data class BookMonth(
 )
 
 /**
+ * One charge Home expects before the month ends: a recurring item's next due
+ * date, or a detected merchant's next expected one. Debit only, like the rest
+ * of Home's runway.
+ */
+public data class UpcomingCharge(
+    val name: String,
+    val amount: Money,
+    /** Days since epoch. */
+    val due: Int,
+    val merchantId: String?,
+)
+
+/**
  * Home's figures (V2-PLAN BUG-C): the calendar month to date, debit-side
  * extras, and nothing that nets one book against the other.
  *
@@ -36,13 +49,17 @@ public data class HomeSummary(
     val spentToday: Money,
     /** The budgets closest to their limit, most spent first; at most [HOME_BUDGETS]. */
     val budgets: List<BudgetProgress>,
-    /** Detected charges expected from [today] through [runwayThrough], soonest first. */
-    val runway: List<RecurringMerchant>,
+    /**
+     * What is coming up from [today] through [runwayThrough], soonest first:
+     * the user's recurring items, then detected charges for merchants with no
+     * item (V2-7, owner 2026-11-09), so nothing is listed twice.
+     */
+    val runway: List<UpcomingCharge>,
     val runwayThrough: Int,
     val captureCoverage: CaptureCoverage,
 ) {
     /** What [runway] adds up to. Law 3: `Long`. */
-    public val runwayTotal: Money get() = Money(runway.sumOf { it.typicalAmount.minor })
+    public val runwayTotal: Money get() = Money.sum(runway.map { it.amount })
 
     public companion object {
         /** Home is orientation; the Budgets screen has the rest. */

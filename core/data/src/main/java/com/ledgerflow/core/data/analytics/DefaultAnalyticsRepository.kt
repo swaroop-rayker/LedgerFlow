@@ -77,6 +77,12 @@ public class DefaultAnalyticsRepository @Inject constructor(
         build(database, names, ledger, window, comparePrevious, resolved)
     }
 
+    override suspend fun recurringMerchants(ledger: LedgerType, today: Int): List<RecurringMerchant> =
+        withContext(io) {
+            val database = session.openForBackgroundWork() ?: return@withContext emptyList()
+            detectRecurring(database.dailyRollupDao(), ledger, NameBook.read(database), today)
+        }
+
     @Suppress("LongParameterList")
     private suspend fun build(
         database: LedgerFlowDatabase,
@@ -169,30 +175,6 @@ public class DefaultAnalyticsRepository @Inject constructor(
             windowTotal(database.dailyRollupDao(), ledger, window, AnalyticsFilters.None)
         }
 
-    /**
-     * A8's detection, over a **longer history than the selected window**.
-     *
-     * A monthly subscription needs three months of dates to be visible, so
-     * detecting inside a one-month view would find nothing and the feature would
-     * appear broken on exactly the range people look at most. The lookback is
-     * fixed and generous; the window still decides what A1–A5 show.
-     */
-    private suspend fun detectRecurring(
-        dao: com.ledgerflow.core.database.dao.DailyRollupDao,
-        ledger: LedgerType,
-        names: NameBook,
-        today: Int,
-    ): List<RecurringMerchant> = dao
-        .merchantOccurrences(ledger, today - RECURRING_LOOKBACK_DAYS, today)
-        .groupBy { it.merchantId }
-        .mapNotNull { (merchantId, rows) ->
-            RecurringDetection.detect(
-                merchantId = merchantId,
-                name = names.merchant(merchantId),
-                occurrences = rows.map { Occurrence(it.localDate, it.amountMinor) },
-            )
-        }
-        .sortedByDescending { it.typicalAmount.minor }
 
     /**
      * A7: every live budget against the period containing [today].
@@ -835,3 +817,28 @@ private const val EMPTY_FILTER_PLACEHOLDER = "\u0000-no-filter"
 private const val CATEGORY = "category"
 private const val MERCHANT = "merchant"
 private const val METHOD = "method"
+
+/**
+ * A8's detection, over a **longer history than the selected window**.
+ *
+ * A monthly subscription needs three months of dates to be visible, so
+ * detecting inside a one-month view would find nothing and the feature would
+ * appear broken on exactly the range people look at most. The lookback is
+ * fixed and generous; the window still decides what A1–A5 show.
+ */
+private suspend fun detectRecurring(
+    dao: com.ledgerflow.core.database.dao.DailyRollupDao,
+    ledger: LedgerType,
+    names: NameBook,
+    today: Int,
+): List<RecurringMerchant> = dao
+    .merchantOccurrences(ledger, today - RECURRING_LOOKBACK_DAYS, today)
+    .groupBy { it.merchantId }
+    .mapNotNull { (merchantId, rows) ->
+        RecurringDetection.detect(
+            merchantId = merchantId,
+            name = names.merchant(merchantId),
+            occurrences = rows.map { Occurrence(it.localDate, it.amountMinor) },
+        )
+    }
+    .sortedByDescending { it.typicalAmount.minor }

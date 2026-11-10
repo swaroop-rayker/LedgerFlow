@@ -39,6 +39,8 @@ public fun ProfileScreen(
     onGoals: () -> Unit,
     goalCount: Int?,
     modifier: Modifier = Modifier,
+    onRecurring: () -> Unit = {},
+    recurringCount: Int? = null,
 ) {
     // No scaffold of its own: the shell hosts the tabs.
     LfTabPage(title = "Profile", modifier = modifier) {
@@ -76,6 +78,13 @@ public fun ProfileScreen(
                     // A count only once there is something to count.
                     value = goalCount?.takeIf { it > 0 }?.toString(),
                 )
+                LfDivider()
+                LfNavRow(
+                    title = "Recurring",
+                    onClick = onRecurring,
+                    icon = LfIcons.Recurring,
+                    value = recurringCount?.takeIf { it > 0 }?.toString(),
+                )
             }
         }
     }
@@ -103,5 +112,5 @@ internal val ProfilePages: Set<SettingsPage> = setOf(SettingsPage.Organise, Sett
 @PreviewLightDark
 @Composable
 private fun ProfilePreview() {
-    LfTheme { ProfileScreen(onPage = {}, onSettings = {}, onGoals = {}, goalCount = 3) }
+    LfTheme { ProfileScreen(onPage = {}, onSettings = {}, onGoals = {}, goalCount = 3, recurringCount = 4) }
 }
