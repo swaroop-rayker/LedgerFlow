@@ -48,7 +48,7 @@ class EcbRatesSourceTest {
     fun tearDown() = server.stop(0)
 
     private fun source(address: String = "http://127.0.0.1:${server.address.port}$PATH") =
-        EcbRatesSource(address, directory, Dispatchers.IO)
+        EcbRatesSource(address, { directory }, Dispatchers.IO)
 
     private fun handle(exchange: HttpExchange) {
         seen += Seen(

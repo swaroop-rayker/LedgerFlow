@@ -32,13 +32,19 @@ import kotlinx.coroutines.withContext
  * place, so a crash mid-write leaves the old table rather than half a new one.
  * It is public data: not in the vault, not in a backup.
  *
+ * **Constructing it touches no disk (BUG92, as BUG51 before it).** Hilt builds
+ * it on the main thread when the converter opens, and resolving
+ * `context.filesDir` there is a disk read that StrictMode's penaltyDeath turns
+ * into a crash in every debug build. The folder is a function, resolved on
+ * first use, which is always inside `withContext(io)`.
+ *
  * [address] and [directory] are the ECB's and `filesDir/rates/`; tests point
  * them at an in-process server and a temporary folder.
  */
 @Singleton
 public class EcbRatesSource internal constructor(
     private val address: String,
-    private val directory: File,
+    directory: () -> File,
     private val io: CoroutineDispatcher,
 ) : RatesSource {
 
@@ -46,10 +52,13 @@ public class EcbRatesSource internal constructor(
     public constructor(
         @ApplicationContext context: Context,
         @IoDispatcher io: CoroutineDispatcher,
-    ) : this(EcbRates.ADDRESS, File(context.filesDir, DIRECTORY), io)
+    ) : this(EcbRates.ADDRESS, { File(context.filesDir, DIRECTORY) }, io)
 
     private val lock = Mutex()
-    private val file get() = File(directory, FILE_NAME)
+
+    /** Resolved the first time a read or a write needs it, on [io]. */
+    private val folder: File by lazy(directory)
+    private val file get() = File(folder, FILE_NAME)
 
     override suspend fun cached(): RateTable? = withContext(io) {
         lock.withLock { file.takeIf { it.isFile }?.readBytes()?.let(EcbRates::parse) }
@@ -108,8 +117,8 @@ public class EcbRatesSource internal constructor(
     }
 
     private fun store(bytes: ByteArray) {
-        directory.mkdirs()
-        val temporary = File(directory, "$FILE_NAME.tmp")
+        folder.mkdirs()
+        val temporary = File(folder, "$FILE_NAME.tmp")
         FileOutputStream(temporary).use { out ->
             out.write(bytes)
             out.fd.sync()
