@@ -25,6 +25,7 @@ import com.ledgerflow.core.database.dao.ParserRuleDao
 import com.ledgerflow.core.database.dao.PaymentMethodDao
 import com.ledgerflow.core.database.dao.PendingTransactionDao
 import com.ledgerflow.core.database.dao.ReceiptDao
+import com.ledgerflow.core.database.dao.RecurringDao
 import com.ledgerflow.core.database.dao.SenderAllowlistDao
 import com.ledgerflow.core.database.dao.SmsRawDao
 import com.ledgerflow.core.database.entity.AppMetaEntity
@@ -49,6 +50,9 @@ import com.ledgerflow.core.database.entity.PackageAllowlistEntity
 import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
 import com.ledgerflow.core.database.entity.PendingTransactionEntity
+import com.ledgerflow.core.database.entity.RecurringDismissalEntity
+import com.ledgerflow.core.database.entity.RecurringItemEntity
+import com.ledgerflow.core.database.entity.RecurringOccurrenceEntity
 import com.ledgerflow.core.database.entity.SavingsGoalEntity
 import com.ledgerflow.core.database.entity.SenderAllowlistEntity
 import com.ledgerflow.core.database.entity.SmsRawEntity
@@ -96,6 +100,10 @@ import com.ledgerflow.core.database.entity.SmsRawEntity
         // v15 (V2-PLAN §4.1) — savings goals.
         SavingsGoalEntity::class,
         GoalContributionEntity::class,
+        // v16 (V2-PLAN §4.2) — recurring items.
+        RecurringItemEntity::class,
+        RecurringOccurrenceEntity::class,
+        RecurringDismissalEntity::class,
     ],
     views = [
         DebitEntryView::class,
@@ -164,6 +172,9 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
 
     /** v15: savings goals (V2-PLAN §4.1). */
     public abstract fun goalDao(): GoalDao
+
+    /** v16: recurring items (V2-PLAN §4.2). */
+    public abstract fun recurringDao(): RecurringDao
 
     public companion object {
         /**
@@ -247,8 +258,14 @@ public abstract class LedgerFlowDatabase : RoomDatabase() {
          * `CREATE TABLE`s and their indices, nothing existing read or
          * rewritten. A goal is a plan, not a third ledger (Law 2). See
          * `MIGRATION_14_15`.
+         *
+         * v16 adds recurring items — V2-PLAN §4.2, V2-7: `recurring_item`,
+         * the log of what each due date turned into (`recurring_occurrence`),
+         * and dismissed suggestions (`recurring_dismissal`). Purely additive.
+         * An item never writes the ledger (Law 1): an unmatched due date
+         * becomes, at most, an Inbox candidate. See `MIGRATION_15_16`.
          */
-        public const val VERSION: Int = 15
+        public const val VERSION: Int = 16
 
         /** Lives in `databases/`, never `cacheDir` or external storage (Law 5). */
         public const val DATABASE_NAME: String = "ledgerflow.db"

@@ -32,4 +32,10 @@ dependencies {
     // The shared screenshot harness and its accessibility checks.
     testImplementation(project(":core:testing"))
     testImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // Recurring items' daily pass runs in a Worker: it must run with no
+    // Activity alive, like budget alerts and capture.
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 }

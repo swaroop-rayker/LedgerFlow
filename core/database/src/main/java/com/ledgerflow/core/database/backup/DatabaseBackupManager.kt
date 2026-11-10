@@ -370,6 +370,10 @@ public class DatabaseBackupManager(
         // Schema v15. User intent, like `budget`.
         savingsGoals = database.goalDao().allGoals().map(::toSavingsGoalRow),
         goalContributions = database.goalDao().allContributions().map(::toGoalContributionRow),
+        // Schema v16. User intent and its log, like `budget`.
+        recurringItems = database.recurringDao().allItems().map(::toRecurringItemRow),
+        recurringOccurrences = database.recurringDao().allOccurrences().map(::toRecurringOccurrenceRow),
+        recurringDismissals = database.recurringDao().allDismissals().map(::toRecurringDismissalRow),
     )
 
     /**
@@ -470,6 +474,15 @@ public class DatabaseBackupManager(
         // naming a category the backup lacks still restores.
         database.goalDao().insertAllGoals(payload.savingsGoals.map(::toSavingsGoal))
         database.goalDao().insertAllContributions(payload.goalContributions.map(::toGoalContribution))
+        // v16. Items before their log, which has a real foreign key to them.
+        // An occurrence whose item was dropped (an unknown book) is dropped too.
+        val items = payload.recurringItems.mapNotNull(::toRecurringItem)
+        val itemIds = items.map { it.id }.toSet()
+        database.recurringDao().insertAllItems(items)
+        database.recurringDao().insertAllOccurrences(
+            payload.recurringOccurrences.filter { it.itemId in itemIds }.map(::toRecurringOccurrence),
+        )
+        database.recurringDao().insertAllDismissals(payload.recurringDismissals.mapNotNull(::toRecurringDismissal))
         // `daily_rollup` is derived and deliberately absent from the payload
         // (ADR-0006), so it is rebuilt here rather than restored. A restored
         // install must open onto correct analytics, not onto empty charts

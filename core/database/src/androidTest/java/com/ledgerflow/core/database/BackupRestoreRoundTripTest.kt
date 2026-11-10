@@ -28,6 +28,9 @@ import com.ledgerflow.core.database.entity.LineItemEntity
 import com.ledgerflow.core.database.entity.MerchantAliasEntity
 import com.ledgerflow.core.database.entity.MerchantCategoryEntity
 import com.ledgerflow.core.database.entity.GoalContributionEntity
+import com.ledgerflow.core.database.entity.RecurringDismissalEntity
+import com.ledgerflow.core.database.entity.RecurringItemEntity
+import com.ledgerflow.core.database.entity.RecurringOccurrenceEntity
 import com.ledgerflow.core.database.entity.SavingsGoalEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.NotificationRawEntity
@@ -391,6 +394,40 @@ class BackupRestoreRoundTripTest {
                 ),
             ),
         )
+        // v16 (V2-PLAN 4.2). Two items differing in every optional column, a
+        // log row with a matched entry and one with a candidate, and a dismissal.
+        database.recurringDao().insertAllItems(
+            listOf(
+                RecurringItemEntity(
+                    id = "rec-rent", name = "Rent", ledger = LedgerType.DEBIT, amountMinor = Money(2_500_000),
+                    merchantId = "mer-1", categoryId = "cat-food", subcategoryId = null, cadence = "MONTHLY",
+                    everyDays = null, anchorDate = 20_000, nextDue = 20_061, remindDaysBefore = 1,
+                    toInbox = true, createdAt = 1_760_000_000_000L, updatedAt = 1_760_000_000_100L,
+                ),
+                RecurringItemEntity(
+                    id = "rec-power", name = "Electricity", ledger = LedgerType.DEBIT, amountMinor = Money(210_000),
+                    amountVaries = true, merchantId = null, categoryId = null, subcategoryId = null,
+                    cadence = "EVERY_N_DAYS", everyDays = 28, anchorDate = 20_010, nextDue = 20_066,
+                    remindDaysBefore = 3, toInbox = false, paused = true,
+                    createdAt = 1_760_000_000_200L, updatedAt = 1_760_000_000_200L,
+                ),
+            ),
+        )
+        database.recurringDao().insertAllOccurrences(
+            listOf(
+                RecurringOccurrenceEntity(
+                    "rec-o-1", "rec-rent", 20_000, "MATCHED", null, "debit-1", 1_760_000_000_300L,
+                    1_760_000_000_300L, 1_760_000_000_300L,
+                ),
+                RecurringOccurrenceEntity(
+                    "rec-o-2", "rec-rent", 20_031, "CANDIDATE", "pending-1", null, null,
+                    1_760_000_000_400L, 1_760_000_000_400L,
+                ),
+            ),
+        )
+        database.recurringDao().insertAllDismissals(
+            listOf(RecurringDismissalEntity("mer-1", LedgerType.CREDIT, 1_760_000_000_500L)),
+        )
         // v11 (ADR-0023). Metadata only -- the image bytes are not in a .lfbk,
         // so what has to survive here is the row that says which file belongs
         // to which entry and what it should hash to.
@@ -479,6 +516,9 @@ class BackupRestoreRoundTripTest {
         val merchantCategories: List<MerchantCategoryEntity>,
         val savingsGoals: List<SavingsGoalEntity>,
         val goalContributions: List<GoalContributionEntity>,
+        val recurringItems: List<RecurringItemEntity>,
+        val recurringOccurrences: List<RecurringOccurrenceEntity>,
+        val recurringDismissals: List<RecurringDismissalEntity>,
     ) {
         /**
          * Every table, as lists, for the vacuity guard below.
@@ -522,6 +562,9 @@ class BackupRestoreRoundTripTest {
             merchantCategories = db.merchantCategoryDao().all(),
             savingsGoals = db.goalDao().allGoals(),
             goalContributions = db.goalDao().allContributions(),
+            recurringItems = db.recurringDao().allItems(),
+            recurringOccurrences = db.recurringDao().allOccurrences(),
+            recurringDismissals = db.recurringDao().allDismissals(),
         )
     }
 

@@ -526,6 +526,7 @@ public class ReviewViewModel @Inject constructor(
                 EntrySource.OCR -> "From a receipt"
                 EntrySource.MANUAL -> "Entered by hand"
                 EntrySource.IMPORT -> "Imported"
+                EntrySource.RECURRING -> "From a recurring item"
             },
             referenceHint = extracted.referenceNo?.let { "Ref $it" },
         )

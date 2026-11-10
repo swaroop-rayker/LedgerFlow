@@ -39,6 +39,7 @@ import com.ledgerflow.feature.settings.SettingsPage
 import com.ledgerflow.feature.settings.SettingsSectionScreen
 import com.ledgerflow.feature.settings.SettingsUiState
 import com.ledgerflow.feature.settings.SettingsViewModel
+import com.ledgerflow.feature.tools.recurring.RecurringNotifications
 import com.ledgerflow.feature.settings.drive.GoogleDriveScreen
 import com.ledgerflow.feature.settings.drive.GoogleDriveViewModel
 import com.ledgerflow.feature.settings.receipts.ReceiptScreen
@@ -118,6 +119,11 @@ internal fun NavGraphBuilder.profileAndSettingsDestinations(navController: NavHo
                 )
                 // An OEM build without the page is a row that does nothing,
                 // never a crash.
+                runCatching { context.startActivity(intent) }
+            },
+            // V2-7: the Reminders channel, the same way.
+            onReminders = {
+                val intent = RecurringNotifications.settingsIntent(context, state.reminders ?: AlertChannelState.ON)
                 runCatching { context.startActivity(intent) }
             },
             onEvent = viewModel::onEvent,
@@ -277,6 +283,7 @@ internal fun SettingsSectionRoute(
     onBack: () -> Unit,
     onBudgetAlerts: () -> Unit,
     onEvent: (SettingsEvent) -> Unit,
+    onReminders: () -> Unit = {},
 ) {
     SettingsSectionScreen(
         page = page,
@@ -297,6 +304,7 @@ internal fun SettingsSectionRoute(
         onDataPermissions = { navigate(Destination.DataPermissions) },
         onAbout = { link -> navigate(aboutRouteFor(link)) },
         onBudgetAlerts = onBudgetAlerts,
+        onReminders = onReminders,
         onEvent = onEvent,
     )
 }

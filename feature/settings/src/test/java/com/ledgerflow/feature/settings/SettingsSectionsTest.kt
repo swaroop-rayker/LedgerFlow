@@ -47,6 +47,8 @@ class SettingsSectionsTest {
         SettingsItem.NotificationCapture to "notification access",
         SettingsItem.PaymentApps to "payment apps",
         SettingsItem.BudgetAlerts to "budget alerts",
+        // V2-7: Android's page for the Reminders channel, as Budget alerts.
+        SettingsItem.Reminders to "reminders",
         SettingsItem.Categories to "categories",
         SettingsItem.Budgets to "budgets",
         SettingsItem.BackUpNow to "back up",
@@ -83,6 +85,8 @@ class SettingsSectionsTest {
                 SettingsItem.NotificationCapture,
                 SettingsItem.PaymentApps,
                 SettingsItem.BudgetAlerts,
+                // V2-7: recurring items' reminders, beside the other alert.
+                SettingsItem.Reminders,
             ),
             "Organise" to listOf(SettingsItem.Categories, SettingsItem.Budgets),
             "Data" to listOf(
@@ -197,6 +201,7 @@ class SettingsSectionsTest {
                     onBackUp = { opened += "back up" },
                     onDiagnostics = { opened += "diagnostics" },
                     onBudgetAlerts = { opened += "budget alerts" },
+                    onReminders = { opened += "reminders" },
                     onPaymentApps = { opened += "payment apps" },
                     onDataPermissions = { opened += "data permissions" },
                     onAbout = { opened += "about $it" },
