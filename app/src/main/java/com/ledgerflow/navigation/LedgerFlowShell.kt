@@ -226,6 +226,7 @@ private fun LedgerFlowNavHost(
         profileAndSettingsDestinations(navController)
         goalDestinations(navController)
         recurringDestinations(navController)
+        utilityDestinations(navController)
         securityDestinations(navController)
         aboutDestinations(navController)
         organiseDestinations(navController)
@@ -587,6 +588,8 @@ private val Destination.label: String
         Destination.Recurring -> "Recurring"
         is Destination.RecurringItem -> "Recurring"
         is Destination.RecurringEditor -> "Recurring"
+        Destination.Calculator -> "Calculator"
+        Destination.Converter -> "Converter"
         Destination.Export -> "Export"
         Destination.DeletedEntries -> "Deleted"
         Destination.BackUpNow -> "Back up"

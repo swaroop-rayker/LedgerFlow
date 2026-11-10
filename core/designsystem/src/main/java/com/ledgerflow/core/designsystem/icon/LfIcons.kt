@@ -77,6 +77,15 @@ public object LfIcons {
     /** Profile's Recurring row (V2-7, V2-PLAN §4.2). */
     public val Recurring: ImageVector by lazy { lucide("Recurring", LfLucide.Repeat) }
 
+    /** Profile's Calculator row (V2-7, V2-PLAN §4.4). */
+    public val Calculator: ImageVector by lazy { lucide("Calculator", LfLucide.Calculator) }
+
+    /** Profile's Converter row (V2-7, ADR-0036). */
+    public val Converter: ImageVector by lazy { lucide("Converter", LfLucide.ArrowRightLeft) }
+
+    /** The calculator's backspace key: one key back (V2-7). */
+    public val Backspace: ImageVector by lazy { lucide("Backspace", LfLucide.Delete) }
+
     /** A page's options sheet: edit, delete (V2-7's goal page). */
     public val Options: ImageVector by lazy { lucide("Options", LfLucide.EllipsisVertical) }
 

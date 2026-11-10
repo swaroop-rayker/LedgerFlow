@@ -1,5 +1,6 @@
 package com.ledgerflow.core.model
 
+import java.math.BigInteger
 import kotlin.math.absoluteValue
 
 /**
@@ -83,6 +84,37 @@ public value class Money(public val minor: Long) : Comparable<Money> {
         }
     }
 
+    /**
+     * This amount, in a currency with [fromExponent] minor digits, converted
+     * into a currency with [toExponent] digits at the ratio [rate] ÷ [per]:
+     * the converter's figure (ADR-0036). Never an entry's amount.
+     *
+     * The rate is a ratio of two integers so that a cross rate through the
+     * euro (INR per euro ÷ USD per euro) is applied **without being rounded
+     * first**: a typed rate is `rate = typed micro, per = RATE_SCALE`; the
+     * ECB's is `rate = target per euro, per = source per euro`, both in micro.
+     *
+     * Integer arithmetic only, rounded **half away from zero** once at the end,
+     * as [scaled] does; for the converter's positive amounts that is half up.
+     * The intermediate product outgrows a `Long` (an amount of 10¹² minor
+     * units at a rate of 10¹⁰ micro), so it is carried in a `BigInteger`;
+     * `null` when the answer itself does not fit, or when either side of the
+     * ratio is not positive.
+     */
+    public fun converted(rate: Long, per: Long, fromExponent: Int, toExponent: Int): Money? {
+        if (rate <= 0L || per <= 0L) return null
+        val numerator = BigInteger.valueOf(minor) * BigInteger.valueOf(rate) * BigInteger.TEN.pow(toExponent)
+        val denominator = BigInteger.TEN.pow(fromExponent) * BigInteger.valueOf(per)
+        val (truncated, remainder) = numerator.divideAndRemainder(denominator).let { it[0] to it[1] }
+        val roundsAway = remainder.abs().shiftLeft(1) >= denominator
+        val rounded = when {
+            !roundsAway -> truncated
+            numerator.signum() > 0 -> truncated + BigInteger.ONE
+            else -> truncated - BigInteger.ONE
+        }
+        return if (rounded.bitLength() < Long.SIZE_BITS) Money(rounded.toLong()) else null
+    }
+
     public operator fun unaryMinus(): Money = Money(-minor)
 
     public val isZero: Boolean get() = minor == 0L
@@ -98,6 +130,9 @@ public value class Money(public val minor: Long) : Comparable<Money> {
 
     public companion object {
         public val ZERO: Money = Money(0)
+
+        /** A rate's scale: micro-units, as `fx_rate_micro` (§5.8). */
+        public const val RATE_SCALE: Long = 1_000_000L
 
         public fun sum(amounts: Iterable<Money>): Money =
             Money(amounts.sumOf { it.minor })

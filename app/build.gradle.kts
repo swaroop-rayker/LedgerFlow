@@ -370,6 +370,7 @@ dependencies {
     // copies of the nightly backup. Bound here like the two stores above;
     // :feature:settings uses it too, for the sign-in its Drive page starts.
     implementation(project(":core:drive"))
+    implementation(project(":core:rates"))
     implementation(project(":feature:onboarding"))
     implementation(project(":feature:dashboard"))
     implementation(project(":feature:entry"))

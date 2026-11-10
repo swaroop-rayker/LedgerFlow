@@ -66,9 +66,13 @@ public sealed interface Destination {
      * `EntryDraftArgumentTest` fails the build if they drift.
      *
      * Null means "a new entry", which is what the centre action asks for.
+     *
+     * [amount] is the calculator's "Use as amount" (V2-7): a new entry's
+     * amount in minor units, as text. The same contract, with
+     * `EntryViewModel.AMOUNT_ARG`.
      */
     @Serializable
-    public data class Entry(val draftId: String? = null) : Destination
+    public data class Entry(val draftId: String? = null, val amount: String? = null) : Destination
 
     /**
      * Reached from Settings > Organise, and from Analytics' "Categorise in
@@ -129,6 +133,14 @@ public sealed interface Destination {
         val fromMerchant: String = "",
         val fromLedger: String = "",
     ) : Destination
+
+    /** The calculator (V2-7, V2-PLAN §4.4), reached from Profile's Money tools. */
+    @Serializable
+    public data object Calculator : Destination
+
+    /** The currency converter (V2-7, ADR-0036), reached from Profile's Money tools. */
+    @Serializable
+    public data object Converter : Destination
 
     /** New goal (empty [goalId]) or Edit goal. */
     @Serializable

@@ -49,7 +49,9 @@ internal fun permissionWhy(kind: PermissionKind): String = when (kind) {
     PermissionKind.RECEIVE_SMS -> "Reads bank and card messages for your Inbox."
     PermissionKind.CAMERA -> "Scans receipts and recovery QR codes, on this phone."
     PermissionKind.POST_NOTIFICATIONS -> "Tells you when a payment waits or a budget nears its limit."
-    PermissionKind.INTERNET -> "Only for Google Drive backup, if you turn it on. Google's text reader also asks for it."
+    // ADR-0034 and ADR-0036: the two things LedgerFlow itself asks the network for.
+    PermissionKind.INTERNET -> "For Google Drive backup, if you turn it on, and exchange rates when you ask the " +
+        "converter. Google's text reader also asks for it."
     PermissionKind.BIOMETRIC -> "Used by App lock only, through your phone's prompt."
     PermissionKind.BACKGROUND_WORK -> "Processes captured messages and runs backups while closed."
     PermissionKind.UNEXPLAINED -> "LedgerFlow does not say why it holds this. Please report it."

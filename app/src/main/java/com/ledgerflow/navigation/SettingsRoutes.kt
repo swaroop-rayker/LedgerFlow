@@ -313,5 +313,7 @@ private fun ProfileRoute(navController: NavHostController) {
         goalCount = goalCount,
         onRecurring = { navController.navigate(Destination.Recurring) },
         recurringCount = recurringCount,
+        onCalculator = { navController.navigate(Destination.Calculator) },
+        onConverter = { navController.navigate(Destination.Converter) },
     )
 }

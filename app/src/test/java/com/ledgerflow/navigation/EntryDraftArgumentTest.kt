@@ -37,5 +37,14 @@ class EntryDraftArgumentTest {
     @Test
     fun theRouteDefaultsToNoDraft() {
         assertThat(Destination.Entry().draftId).isNull()
+        assertThat(Destination.Entry().amount).isNull()
+    }
+
+    /** The calculator's "Use as amount" (V2-7) rides the same kind of contract. */
+    @Test
+    fun theAmountPropertyNameMatchesTheArgumentTheEntryFormReads() {
+        val fields = Destination.Entry().javaClass.declaredFields.map { it.name }
+
+        assertThat(fields).contains(EntryViewModel.AMOUNT_ARG)
     }
 }
