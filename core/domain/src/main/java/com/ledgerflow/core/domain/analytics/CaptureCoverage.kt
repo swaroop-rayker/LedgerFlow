@@ -79,7 +79,10 @@ public data class CaptureCoverage(
             }
             return CaptureCoverage(
                 automatic = fold(AutomaticSources),
-                manual = fold(setOf(EntrySource.MANUAL)),
+                // A recurring item's candidate is written only when capture saw
+                // nothing (V2-7, owner 2026-11-09): it shows where capture missed,
+                // so it counts beside the typed entries, never as captured.
+                manual = fold(setOf(EntrySource.MANUAL, EntrySource.RECURRING)),
                 imported = fold(setOf(EntrySource.IMPORT)),
             )
         }

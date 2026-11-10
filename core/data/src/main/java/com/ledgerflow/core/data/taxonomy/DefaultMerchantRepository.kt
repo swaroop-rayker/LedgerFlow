@@ -241,6 +241,9 @@ public class DefaultMerchantRepository @Inject constructor(
                 // becomes one -- without that, the next capture naming it would
                 // un-hide it through createOrGet and reverse the merge (BUG28).
                 database.merchantAliasDao().reassign(sourceId, target.id)
+                // Recurring items naming it follow it too (V2-7): they have no
+                // foreign key to keep them pointing anywhere (ADR-0016).
+                database.recurringDao().repointMerchant(sourceId, target.id, clock.nowMillis())
                 teach(database, source.normalizedKey, source.canonicalName, target.id)
                 dao.softDelete(sourceId, clock.nowMillis())
             }

@@ -39,6 +39,7 @@ internal fun toggleFor(item: SettingsItem, state: SettingsUiState): SettingsTogg
     SettingsItem.NotificationCapture,
     SettingsItem.PaymentApps,
     SettingsItem.BudgetAlerts,
+    SettingsItem.Reminders,
     SettingsItem.Categories,
     SettingsItem.Budgets,
     SettingsItem.BackUpNow,
@@ -139,6 +140,17 @@ internal fun paymentAppsSubtitle(enabledCount: Int?): String = when (enabledCoun
 internal fun budgetAlertsSubtitle(state: AlertChannelState?): String = when (state) {
     null -> "When a budget nears its limit, or is on course to go over."
     AlertChannelState.ON -> "On. When a budget nears its limit, or is on course to go over."
+    AlertChannelState.CHANNEL_OFF -> "Off in Android settings. Tap to turn them on."
+    AlertChannelState.APP_OFF -> "LedgerFlow's notifications are off. Tap to turn them on."
+}
+
+/**
+ * What the Reminders row says (V2-7): the channel's state, as Budget alerts
+ * says its own. Null before the first read on resume.
+ */
+internal fun remindersSubtitle(state: AlertChannelState?): String = when (state) {
+    null -> "Before a recurring payment is due."
+    AlertChannelState.ON -> "On. Before a recurring payment is due."
     AlertChannelState.CHANNEL_OFF -> "Off in Android settings. Tap to turn them on."
     AlertChannelState.APP_OFF -> "LedgerFlow's notifications are off. Tap to turn them on."
 }
@@ -245,6 +257,7 @@ internal fun choiceFor(item: SettingsItem, state: SettingsUiState): SettingsChoi
     SettingsItem.NotificationCapture,
     SettingsItem.PaymentApps,
     SettingsItem.BudgetAlerts,
+    SettingsItem.Reminders,
     SettingsItem.Categories,
     SettingsItem.Budgets,
     SettingsItem.BackUpNow,

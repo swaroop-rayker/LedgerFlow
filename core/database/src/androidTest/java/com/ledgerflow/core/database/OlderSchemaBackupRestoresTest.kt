@@ -181,6 +181,18 @@ class OlderSchemaBackupRestoresTest {
         assertThat(payload.attachments.single().removedFromPhoneAt).isEqualTo(1_760_000_000_000L)
     }
 
+    /** A v15 backup carries no recurring items (V2-7, V2-PLAN 4.2); its goals come through. */
+    @Test
+    fun aV15Backup_restores_withNoRecurringItems() {
+        assertThat(restore(V15, schemaVersion = 15)).isInstanceOf(RestoreResult.Success::class.java)
+
+        val payload = restored()
+        assertThat(payload.recurringItems).isEmpty()
+        assertThat(payload.recurringOccurrences).isEmpty()
+        assertThat(payload.recurringDismissals).isEmpty()
+        assertThat(payload.savingsGoals.single().name).isEqualTo("Fund")
+    }
+
     private companion object {
         /** The six tables v1 had, in v1's row shapes (unchanged since). */
         const val CORE = """
@@ -250,5 +262,12 @@ class OlderSchemaBackupRestoresTest {
             "attachments": [{"id": "att-1", "entryId": "e-1", "filePath": "att-1.lfa",
                 "mime": "image/png", "sha256": "hash-1", "bytes": 412000, "createdAt": 1755000000000,
                 "removedFromPhoneAt": 1760000000000}]}"""
+
+        /** v15: one goal, and no recurring lists. */
+        val V15 = """{"schemaVersion": 15, "createdAt": 1755000000000, $CORE, $V7_ADDITIONS,
+            "budgets": [], "itemCategoryMemory": [], "merchantCategories": [], "attachments": [],
+            "savingsGoals": [{"id": "g-1", "name": "Fund", "targetMinor": 10000000, "targetDate": null,
+                "linkedCategoryId": null, "countFrom": null, "sortOrder": 0, "createdAt": 1, "updatedAt": 1}],
+            "goalContributions": []}"""
     }
 }

@@ -25,6 +25,12 @@ public enum class EntrySource {
     OCR,
     MANUAL,
     IMPORT,
+
+    /**
+     * A recurring item's due date that nothing captured answered (V2-7,
+     * V2-PLAN §4.2): a generator like [IMPORT], not a capture adapter.
+     */
+    RECURRING,
 }
 
 /** Instrument types a payment method can be (SPEC.md §5.5). */

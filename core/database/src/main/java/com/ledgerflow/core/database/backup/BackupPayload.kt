@@ -111,6 +111,14 @@ public data class BackupPayload(
     // goals, exactly as `MIGRATION_14_15` leaves a migrated v14 database.
     val savingsGoals: List<SavingsGoalRow> = emptyList(),
     val goalContributions: List<GoalContributionRow> = emptyList(),
+
+    // -- Schema v16 -- recurring items (V2-PLAN 4.2) ---------------------------
+    //
+    // User intent and its log. Defaulted to empty: a v15 backup restores with
+    // no items, exactly as `MIGRATION_15_16` leaves a migrated v15 database.
+    val recurringItems: List<RecurringItemRow> = emptyList(),
+    val recurringOccurrences: List<RecurringOccurrenceRow> = emptyList(),
+    val recurringDismissals: List<RecurringDismissalRow> = emptyList(),
 ) {
     /** Total rows, for the post-restore equality assertion and diagnostics. */
     public val rowCount: Int
@@ -121,7 +129,8 @@ public data class BackupPayload(
             packageAllowlist.size + senderAllowlist.size + parserRules.size +
             pendingTransactions.size + budgets.size +
             attachments.size + itemCategoryMemory.size + merchantCategories.size +
-            savingsGoals.size + goalContributions.size
+            savingsGoals.size + goalContributions.size +
+            recurringItems.size + recurringOccurrences.size + recurringDismissals.size
 }
 
 /**
@@ -207,6 +216,46 @@ public data class MerchantRow(
      */
     val merchantCategoryId: String? = null,
 )
+
+/** v16: a recurring item (V2-PLAN 4.2). Money is base-currency minor units (Law 3). */
+@Serializable
+public data class RecurringItemRow(
+    val id: String,
+    val name: String,
+    val ledger: String,
+    val amountMinor: Long,
+    val amountVaries: Boolean = false,
+    val merchantId: String?,
+    val categoryId: String?,
+    val subcategoryId: String?,
+    val cadence: String,
+    val everyDays: Int?,
+    val anchorDate: Int,
+    val nextDue: Int,
+    val remindDaysBefore: Int = 1,
+    val toInbox: Boolean = true,
+    val paused: Boolean = false,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/** v16: what one due date of an item turned into. */
+@Serializable
+public data class RecurringOccurrenceRow(
+    val id: String,
+    val itemId: String,
+    val dueDate: Int,
+    val outcome: String,
+    val pendingId: String?,
+    val entryId: String?,
+    val remindedAt: Long?,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/** v16: a dismissed recurring suggestion. */
+@Serializable
+public data class RecurringDismissalRow(val merchantId: String, val ledger: String, val dismissedAt: Long)
 
 /** v15: a savings goal (V2-PLAN 4.1). Money is base-currency minor units (Law 3). */
 @Serializable

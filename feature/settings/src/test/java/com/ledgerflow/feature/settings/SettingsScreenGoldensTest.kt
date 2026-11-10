@@ -128,6 +128,7 @@ open class SettingsScreenGoldensTest {
         // Currency & region, also moved from the defaults.
         region = RegionConventions(grouping = NumberGrouping.WESTERN, dateOrder = DateOrder.DAY_MONTH_YEAR),
         budgetAlerts = AlertChannelState.ON,
+        reminders = AlertChannelState.ON,
         paymentApps = 20,
         security = SecurityPreferences(appLock = true),
     )
@@ -138,6 +139,7 @@ open class SettingsScreenGoldensTest {
         captureHealth = NotificationCaptureHealth.NOT_GRANTED,
         baseCurrency = "INR",
         budgetAlerts = AlertChannelState.APP_OFF,
+        reminders = AlertChannelState.APP_OFF,
         paymentApps = 20,
     )
 

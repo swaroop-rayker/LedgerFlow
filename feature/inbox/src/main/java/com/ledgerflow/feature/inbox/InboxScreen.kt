@@ -768,6 +768,7 @@ private fun PendingTransaction.provenance(): String {
         EntrySource.OCR -> "Receipt"
         EntrySource.MANUAL -> "Manual"
         EntrySource.IMPORT -> "Import"
+        EntrySource.RECURRING -> "Recurring"
     }
     return buildList {
         add(origin)

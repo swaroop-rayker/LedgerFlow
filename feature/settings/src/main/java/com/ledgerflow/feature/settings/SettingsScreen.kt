@@ -78,6 +78,7 @@ public fun SettingsSectionScreen(
     onImport: () -> Unit = {},
     onGoogleDrive: () -> Unit = {},
     onReceipts: () -> Unit = {},
+    onReminders: () -> Unit = {},
 ) {
     SettingsDialogs(state = state, onEvent = onEvent)
 
@@ -88,6 +89,7 @@ public fun SettingsSectionScreen(
         SettingsItem.NotificationCapture to onNotificationAccess,
         SettingsItem.PaymentApps to onPaymentApps,
         SettingsItem.BudgetAlerts to onBudgetAlerts,
+        SettingsItem.Reminders to onReminders,
         SettingsItem.Categories to onCategories,
         SettingsItem.Budgets to onBudgets,
         SettingsItem.BackUpNow to onBackUp,
@@ -151,6 +153,9 @@ internal enum class SettingsItem {
     NotificationCapture,
     PaymentApps,
     BudgetAlerts,
+
+    // V2-7: recurring items' reminders, Android's channel the only switch.
+    Reminders,
     Categories,
     Budgets,
     BackUpNow,
@@ -236,7 +241,12 @@ internal val SettingsSections: List<SettingsSection> = listOf(
     SettingsSection(
         SettingsPage.Notifications,
         "Notifications",
-        listOf(SettingsItem.NotificationCapture, SettingsItem.PaymentApps, SettingsItem.BudgetAlerts),
+        listOf(
+            SettingsItem.NotificationCapture,
+            SettingsItem.PaymentApps,
+            SettingsItem.BudgetAlerts,
+            SettingsItem.Reminders,
+        ),
     ),
     SettingsSection(SettingsPage.Organise, "Organise", listOf(SettingsItem.Categories, SettingsItem.Budgets)),
     SettingsSection(
@@ -309,6 +319,7 @@ internal val SettingsItem.title: String
         SettingsItem.NotificationCapture -> "Notification capture"
         SettingsItem.PaymentApps -> "Payment apps"
         SettingsItem.BudgetAlerts -> "Budget alerts"
+        SettingsItem.Reminders -> "Reminders"
         SettingsItem.Categories -> "Categories & merchants"
         SettingsItem.Budgets -> "Budgets"
         SettingsItem.BackUpNow -> "Back up now"
@@ -360,6 +371,7 @@ private val SUBTITLES: Map<SettingsItem, (SettingsUiState) -> String> = mapOf(
     SettingsItem.NotificationCapture to { captureSubtitle(it) },
     SettingsItem.PaymentApps to { paymentAppsSubtitle(it.paymentApps) },
     SettingsItem.BudgetAlerts to { budgetAlertsSubtitle(it.budgetAlerts) },
+    SettingsItem.Reminders to { remindersSubtitle(it.reminders) },
     SettingsItem.Categories to { "Organise how spending is grouped" },
     SettingsItem.Budgets to { "Set a limit per category" },
     SettingsItem.BackUpNow to { backupSubtitle(it) },

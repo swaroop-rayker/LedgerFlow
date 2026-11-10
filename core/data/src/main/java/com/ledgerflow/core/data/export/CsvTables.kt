@@ -71,6 +71,55 @@ internal object CsvTables {
         itemCategoryMemory(payload),
         savingsGoals(payload),
         goalContributions(payload),
+        recurringItems(payload),
+        recurringOccurrences(payload),
+        recurringDismissals(payload),
+    )
+
+    /** v16 (V2-PLAN 4.2): recurring items. Day numbers have no ISO twin, as `budget.start_date`. */
+    private fun recurringItems(payload: BackupPayload) = CsvDocument(
+        fileName = "recurring_item.csv",
+        header = listOf(
+            "id", "name", "ledger", "amount_minor", "amount", "amount_varies", "merchant_id", "category_id",
+            "subcategory_id", "cadence", "every_days", "anchor_date", "next_due", "remind_days_before",
+            "to_inbox", "paused", "created_at", "created_at_iso", "updated_at", "updated_at_iso",
+        ),
+        rows = payload.recurringItems.map { row ->
+            listOf(
+                row.id, row.name, row.ledger, row.amountMinor.toString(), CsvWriter.decimal(row.amountMinor),
+                CsvWriter.boolean(row.amountVaries), row.merchantId, row.categoryId, row.subcategoryId,
+                row.cadence, row.everyDays?.toString(), row.anchorDate.toString(), row.nextDue.toString(),
+                row.remindDaysBefore.toString(), CsvWriter.boolean(row.toInbox), CsvWriter.boolean(row.paused),
+                row.createdAt.toString(), CsvWriter.timestamp(row.createdAt),
+                row.updatedAt.toString(), CsvWriter.timestamp(row.updatedAt),
+            )
+        },
+    )
+
+    /** v16: what each due date turned into. */
+    private fun recurringOccurrences(payload: BackupPayload) = CsvDocument(
+        fileName = "recurring_occurrence.csv",
+        header = listOf(
+            "id", "item_id", "due_date", "outcome", "pending_id", "entry_id", "reminded_at", "reminded_at_iso",
+            "created_at", "created_at_iso", "updated_at", "updated_at_iso",
+        ),
+        rows = payload.recurringOccurrences.map { row ->
+            listOf(
+                row.id, row.itemId, row.dueDate.toString(), row.outcome, row.pendingId, row.entryId,
+                row.remindedAt?.toString(), CsvWriter.timestamp(row.remindedAt),
+                row.createdAt.toString(), CsvWriter.timestamp(row.createdAt),
+                row.updatedAt.toString(), CsvWriter.timestamp(row.updatedAt),
+            )
+        },
+    )
+
+    /** v16: suggestions the user said were not recurring. */
+    private fun recurringDismissals(payload: BackupPayload) = CsvDocument(
+        fileName = "recurring_dismissal.csv",
+        header = listOf("merchant_id", "ledger", "dismissed_at", "dismissed_at_iso"),
+        rows = payload.recurringDismissals.map { row ->
+            listOf(row.merchantId, row.ledger, row.dismissedAt.toString(), CsvWriter.timestamp(row.dismissedAt))
+        },
     )
 
     /**

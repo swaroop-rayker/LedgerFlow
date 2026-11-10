@@ -7,6 +7,7 @@ import com.ledgerflow.core.domain.about.AppInfo
 import com.ledgerflow.core.domain.about.AppInfoReader
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.analytics.BudgetAlertChannel
+import com.ledgerflow.core.domain.recurring.ReminderChannel
 import com.ledgerflow.core.domain.appearance.AnimationPreference
 import com.ledgerflow.core.domain.appearance.AppearancePreferences
 import com.ledgerflow.core.domain.appearance.StartScreen
@@ -174,6 +175,8 @@ public data class SettingsUiState(
      * resume, as the user changes it in system settings.
      */
     val budgetAlerts: AlertChannelState? = null,
+    /** V2-7: the Reminders channel. Null before the first read on resume. */
+    val reminders: AlertChannelState? = null,
 
     /** Apps whose notifications are read (the enabled allowlist, D-10); null until read. */
     val paymentApps: Int? = null,
@@ -201,7 +204,7 @@ public class SettingsViewModel @Inject constructor(
     private val attachments: AttachmentRepository,
     backupStatus: BackupStatusSources,
     device: DevicePreferences,
-    private val budgetAlertChannel: BudgetAlertChannel,
+    private val channels: NotificationChannels,
     allowlist: PackageAllowlistRepository,
     private val hideAmounts: HideAmountsSetting,
     appInfoReader: AppInfoReader,
@@ -222,6 +225,7 @@ public class SettingsViewModel @Inject constructor(
     private val choosingDateOrder = MutableStateFlow(false)
 
     private val budgetAlerts = MutableStateFlow<AlertChannelState?>(null)
+    private val reminders = MutableStateFlow<AlertChannelState?>(null)
 
     private val hasScreenLock = MutableStateFlow(true)
 
@@ -280,6 +284,7 @@ public class SettingsViewModel @Inject constructor(
         .combine(baseCurrency) { state, code -> state.copy(baseCurrency = code) }
         .combine(choosingDateOrder) { state, choosing -> state.copy(choosingDateOrder = choosing) }
         .combine(budgetAlerts) { state, alerts -> state.copy(budgetAlerts = alerts) }
+        .combine(reminders) { state, channel -> state.copy(reminders = channel) }
         .combine(allowlist.observe()) { state, apps -> state.copy(paymentApps = apps.count { it.enabled }) }
         .combine(securityStore.preferences) { state, security -> state.copy(security = security) }
         .combine(hasScreenLock) { state, secure -> state.copy(hasScreenLock = secure) }
@@ -299,7 +304,8 @@ public class SettingsViewModel @Inject constructor(
         phoneAnimationsOn.value = phoneMotion.animatorDurationScale() != 0f
         // Likewise the notification channel: the user turns it on in Android's
         // settings and comes back.
-        budgetAlerts.value = budgetAlertChannel.state()
+        budgetAlerts.value = channels.budgetAlerts.state()
+        reminders.value = channels.reminders.state()
         hasScreenLock.value = deviceSecurity.hasScreenLock()
         viewModelScope.launch {
             captureHealth.value = getCaptureHealth()
@@ -384,4 +390,14 @@ public class SettingsViewModel @Inject constructor(
 public class BackupStatusSources @Inject constructor(
     public val backups: BackupRepository,
     public val drive: ObserveDriveStatusUseCase,
+)
+
+/**
+ * The notification channels Settings > Notifications reports (V2-PLAN §3.4):
+ * Budget alerts, and since V2-7 Reminders. One parameter for both, as each is
+ * read the same way on resume.
+ */
+public class NotificationChannels @javax.inject.Inject constructor(
+    internal val budgetAlerts: BudgetAlertChannel,
+    internal val reminders: ReminderChannel,
 )

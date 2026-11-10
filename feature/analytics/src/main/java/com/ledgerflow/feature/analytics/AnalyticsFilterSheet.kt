@@ -496,6 +496,7 @@ private fun EntrySource.label(): String = when (this) {
     EntrySource.NOTIFICATION -> "Notification"
     EntrySource.OCR -> "Receipt"
     EntrySource.IMPORT -> "Imported"
+    EntrySource.RECURRING -> "Recurring"
 }
 
 private const val MILLIS_PER_DAY = 86_400_000L

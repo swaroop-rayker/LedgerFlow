@@ -15,6 +15,8 @@ import com.ledgerflow.feature.analytics.work.RollupWorker
 import com.ledgerflow.feature.budget.notify.BudgetNotifications
 import com.ledgerflow.feature.ingest.notify.InboxNotifications
 import com.ledgerflow.feature.settings.work.NightlyBackupWorker
+import com.ledgerflow.feature.tools.recurring.RecurringNotifications
+import com.ledgerflow.feature.tools.recurring.RecurringWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.MainScope
@@ -105,6 +107,10 @@ public class LedgerFlowApplication : Application(), Configuration.Provider {
         // turn budget alerts off without first going over a budget to conjure
         // the switch.
         BudgetNotifications.ensureChannel(this)
+        // Recurring items (V2-7): their Reminders channel, for the same reason,
+        // and the daily pass around 09:00, kept with `KEEP` like the rollup's.
+        RecurringNotifications.ensureChannel(this)
+        RecurringWorker.schedule(this)
     }
 
     /**

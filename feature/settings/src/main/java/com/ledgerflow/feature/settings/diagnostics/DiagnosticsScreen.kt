@@ -208,6 +208,7 @@ internal fun keptLabel(kept: KeptCopy): String = when (kept.source) {
     EntrySource.OCR -> "Kept the scanned receipt"
     EntrySource.MANUAL -> "Kept the typed entry"
     EntrySource.IMPORT -> "Kept the imported entry"
+    EntrySource.RECURRING -> "Kept the recurring entry"
     null -> "Kept copy no longer in the Inbox"
 }
 

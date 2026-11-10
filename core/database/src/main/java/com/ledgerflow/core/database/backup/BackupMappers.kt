@@ -17,6 +17,9 @@ import com.ledgerflow.core.database.entity.MerchantCategoryEntity
 import com.ledgerflow.core.database.entity.MerchantEntity
 import com.ledgerflow.core.database.entity.NotificationRawEntity
 import com.ledgerflow.core.database.entity.PackageAllowlistEntity
+import com.ledgerflow.core.database.entity.RecurringDismissalEntity
+import com.ledgerflow.core.database.entity.RecurringItemEntity
+import com.ledgerflow.core.database.entity.RecurringOccurrenceEntity
 import com.ledgerflow.core.database.entity.SavingsGoalEntity
 import com.ledgerflow.core.database.entity.ParserRuleEntity
 import com.ledgerflow.core.database.entity.PaymentMethodEntity
@@ -274,6 +277,44 @@ internal fun toBudget(row: BudgetRow): BudgetEntity? {
         alertPeriodStart = row.alertPeriodStart,
     )
 }
+
+/** Null for a book this build does not know, so the row is dropped rather than misfiled (Law 2). */
+internal fun toRecurringItem(row: RecurringItemRow): RecurringItemEntity? {
+    val ledger = LedgerType.entries.firstOrNull { it.name == row.ledger } ?: return null
+    return RecurringItemEntity(
+        id = row.id, name = row.name, ledger = ledger, amountMinor = Money(row.amountMinor),
+        amountVaries = row.amountVaries, merchantId = row.merchantId, categoryId = row.categoryId,
+        subcategoryId = row.subcategoryId, cadence = row.cadence, everyDays = row.everyDays,
+        anchorDate = row.anchorDate, nextDue = row.nextDue, remindDaysBefore = row.remindDaysBefore,
+        toInbox = row.toInbox, paused = row.paused, createdAt = row.createdAt, updatedAt = row.updatedAt,
+    )
+}
+
+internal fun toRecurringItemRow(row: RecurringItemEntity) = RecurringItemRow(
+    id = row.id, name = row.name, ledger = row.ledger.name, amountMinor = row.amountMinor.minor,
+    amountVaries = row.amountVaries, merchantId = row.merchantId, categoryId = row.categoryId,
+    subcategoryId = row.subcategoryId, cadence = row.cadence, everyDays = row.everyDays,
+    anchorDate = row.anchorDate, nextDue = row.nextDue, remindDaysBefore = row.remindDaysBefore,
+    toInbox = row.toInbox, paused = row.paused, createdAt = row.createdAt, updatedAt = row.updatedAt,
+)
+
+internal fun toRecurringOccurrence(row: RecurringOccurrenceRow) = RecurringOccurrenceEntity(
+    id = row.id, itemId = row.itemId, dueDate = row.dueDate, outcome = row.outcome, pendingId = row.pendingId,
+    entryId = row.entryId, remindedAt = row.remindedAt, createdAt = row.createdAt, updatedAt = row.updatedAt,
+)
+
+internal fun toRecurringOccurrenceRow(row: RecurringOccurrenceEntity) = RecurringOccurrenceRow(
+    id = row.id, itemId = row.itemId, dueDate = row.dueDate, outcome = row.outcome, pendingId = row.pendingId,
+    entryId = row.entryId, remindedAt = row.remindedAt, createdAt = row.createdAt, updatedAt = row.updatedAt,
+)
+
+internal fun toRecurringDismissal(row: RecurringDismissalRow): RecurringDismissalEntity? {
+    val ledger = LedgerType.entries.firstOrNull { it.name == row.ledger } ?: return null
+    return RecurringDismissalEntity(row.merchantId, ledger, row.dismissedAt)
+}
+
+internal fun toRecurringDismissalRow(row: RecurringDismissalEntity) =
+    RecurringDismissalRow(row.merchantId, row.ledger.name, row.dismissedAt)
 
 internal fun toSavingsGoal(row: SavingsGoalRow) = SavingsGoalEntity(
     id = row.id, name = row.name, targetMinor = Money(row.targetMinor), targetDate = row.targetDate,
