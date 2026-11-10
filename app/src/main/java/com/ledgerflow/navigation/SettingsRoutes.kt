@@ -60,18 +60,7 @@ import com.ledgerflow.feature.settings.settingsPageNamed
  * as Categories is, so the bar shows on Profile alone.
  */
 internal fun NavGraphBuilder.profileAndSettingsDestinations(navController: NavHostController) {
-    composable<Destination.Profile> {
-        // Organise and Data open straight from Profile (BUG65), so Back from
-        // them returns here rather than to Settings.
-        val profile: ProfileViewModel = hiltViewModel()
-        val goalCount by profile.goalCount.collectAsStateWithLifecycle()
-        ProfileScreen(
-            onPage = { page -> navController.navigate(settingsRouteFor(page)) },
-            onSettings = { navController.navigate(Destination.Settings) },
-            onGoals = { navController.navigate(Destination.Goals) },
-            goalCount = goalCount,
-        )
-    }
+    composable<Destination.Profile> { ProfileRoute(navController) }
     composable<Destination.Settings> {
         val viewModel: SettingsViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
@@ -306,5 +295,23 @@ internal fun SettingsSectionRoute(
         onBudgetAlerts = onBudgetAlerts,
         onReminders = onReminders,
         onEvent = onEvent,
+    )
+}
+
+/** The fourth tab: Organise, Data, Settings, then Money tools (V2-7). */
+@Composable
+private fun ProfileRoute(navController: NavHostController) {
+    // Organise and Data open straight from Profile (BUG65), so Back from
+    // them returns here rather than to Settings.
+    val profile: ProfileViewModel = hiltViewModel()
+    val goalCount by profile.goalCount.collectAsStateWithLifecycle()
+    val recurringCount by profile.recurringCount.collectAsStateWithLifecycle()
+    ProfileScreen(
+        onPage = { page -> navController.navigate(settingsRouteFor(page)) },
+        onSettings = { navController.navigate(Destination.Settings) },
+        onGoals = { navController.navigate(Destination.Goals) },
+        goalCount = goalCount,
+        onRecurring = { navController.navigate(Destination.Recurring) },
+        recurringCount = recurringCount,
     )
 }

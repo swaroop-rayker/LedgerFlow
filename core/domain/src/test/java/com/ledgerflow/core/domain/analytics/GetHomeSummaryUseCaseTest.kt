@@ -1,6 +1,8 @@
 package com.ledgerflow.core.domain.analytics
 
 import com.google.common.truth.Truth.assertThat
+import com.ledgerflow.core.domain.recurring.Cadence
+import com.ledgerflow.core.domain.recurring.RecurringItem
 import com.ledgerflow.core.domain.usecase.GetHomeSummaryUseCase
 import com.ledgerflow.core.model.BudgetPeriod
 import com.ledgerflow.core.model.LedgerType
@@ -22,7 +24,8 @@ import org.junit.Test
 class GetHomeSummaryUseCaseTest {
 
     private val analytics = ScriptedAnalytics()
-    private val summarise = GetHomeSummaryUseCase(analytics)
+    private var items: List<RecurringItem> = emptyList()
+    private val summarise = GetHomeSummaryUseCase(analytics) { items }
 
     @Test
     fun spending_isTheDebitBook_againstTheSameDaysOfLastMonth() = runTest {
@@ -102,6 +105,43 @@ class GetHomeSummaryUseCaseTest {
         assertThat(summary.runwayThrough).isEqualTo(day(2026, 10, 31))
         assertThat(summary.runwayTotal).isEqualTo(Money(3_499_00L))
     }
+
+    /**
+     * V2-7 (owner, 2026-11-09): the user's items, and detected charges only
+     * for merchants no item names, so Coming up never lists one twice. A
+     * paused item, and one in the other book, are not coming up.
+     */
+    @Test
+    fun runway_joinsItems_withDetectionForMerchantsWithoutOne() = runTest {
+        analytics.recurring = listOf(
+            recurring("gym", next = TODAY + 2, amount = 1_500_00L),
+            recurring("stream", next = TODAY + 4, amount = 499_00L),
+        )
+        items = listOf(
+            item("rent", merchantId = "landlord", due = TODAY + 1, amount = 25_000_00L),
+            item("gym-item", merchantId = "gym", due = TODAY + 3, amount = 1_600_00L),
+            item("paused", merchantId = null, due = TODAY + 5, amount = 9_00L, paused = true),
+            item("salary", merchantId = "employer", due = TODAY + 6, amount = 1_20_000_00L, ledger = LedgerType.CREDIT),
+        )
+
+        val summary = summarise(TODAY)
+
+        assertThat(summary.runway.map { it.name }).containsExactly("rent", "gym-item", "stream").inOrder()
+        assertThat(summary.runwayTotal).isEqualTo(Money(27_099_00L))
+    }
+
+    private fun item(
+        name: String,
+        merchantId: String?,
+        due: Int,
+        amount: Long,
+        paused: Boolean = false,
+        ledger: LedgerType = LedgerType.DEBIT,
+    ) = RecurringItem(
+        id = name, name = name, ledger = ledger, amount = Money(amount), amountVaries = false,
+        merchantId = merchantId, categoryId = null, subcategoryId = null, cadence = Cadence.MONTHLY,
+        everyDays = null, anchorDate = due, nextDue = due, remindDaysBefore = 1, toInbox = true, paused = paused,
+    )
 
     @Test
     fun captureCoverage_isTheDebitSnapshots() = runTest {

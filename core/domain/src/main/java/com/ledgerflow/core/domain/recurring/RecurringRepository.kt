@@ -155,6 +155,16 @@ public interface RecurringRepository {
     public suspend fun advance(itemId: String, nextDue: Int)
 }
 
+/** Every recurring item, for a reader that needs the list once (Home's Coming up). Empty while locked. */
+public fun interface RecurringItemsReader {
+    public suspend fun items(): List<RecurringItem>
+}
+
+/** Asks for a recurring pass soon, after an item is saved, so a reminder already due is not missed. */
+public fun interface RecurringPassTrigger {
+    public fun runSoon()
+}
+
 /** Posts the "Rent due tomorrow" reminder. Implemented beside its channel, in `:feature:tools`. */
 public fun interface RecurringReminders {
     public suspend fun remind(item: RecurringItem, dueDate: Int)

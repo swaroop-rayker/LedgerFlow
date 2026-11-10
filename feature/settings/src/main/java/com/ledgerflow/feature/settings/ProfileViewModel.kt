@@ -2,11 +2,13 @@ package com.ledgerflow.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ledgerflow.core.domain.recurring.RecurringRepository
 import com.ledgerflow.core.domain.usecase.ObserveGoalCountUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 /**
@@ -17,9 +19,14 @@ import kotlinx.coroutines.flow.stateIn
 @HiltViewModel
 public class ProfileViewModel @Inject constructor(
     observeGoalCount: ObserveGoalCountUseCase,
+    recurring: RecurringRepository,
 ) : ViewModel() {
 
     public val goalCount: StateFlow<Int?> = observeGoalCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), null)
+
+    /** V2-7: how many recurring items, beside the Recurring row. */
+    public val recurringCount: StateFlow<Int?> = recurring.observeItems().map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), null)
 
     private companion object {

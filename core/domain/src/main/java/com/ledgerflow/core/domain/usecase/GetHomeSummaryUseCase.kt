@@ -7,6 +7,9 @@ import com.ledgerflow.core.domain.analytics.MonthToDate
 import com.ledgerflow.core.domain.analytics.RecurringDetection
 import com.ledgerflow.core.model.LedgerType
 import com.ledgerflow.core.model.Money
+import com.ledgerflow.core.domain.analytics.RecurringMerchant
+import com.ledgerflow.core.domain.analytics.UpcomingCharge
+import com.ledgerflow.core.domain.recurring.RecurringItemsReader
 import javax.inject.Inject
 
 /**
@@ -24,6 +27,7 @@ import javax.inject.Inject
  */
 public class GetHomeSummaryUseCase @Inject constructor(
     private val analytics: AnalyticsRepository,
+    private val recurring: RecurringItemsReader,
 ) {
     public suspend operator fun invoke(today: Int): HomeSummary {
         val window = MonthToDate.window(today)
@@ -55,13 +59,26 @@ public class GetHomeSummaryUseCase @Inject constructor(
             // Not `debit.runway`: the snapshot projects its runway a range's
             // nominal length past the window, and a custom window's nominal
             // length is a placeholder. Home's runway ends with the month.
-            runway = RecurringDetection.runway(
-                detected = debit.recurring,
-                today = today,
-                through = runwayThrough,
-            ),
+            runway = comingUp(debit.recurring, today, runwayThrough),
             runwayThrough = runwayThrough,
             captureCoverage = debit.captureCoverage,
         )
+    }
+
+    /**
+     * The user's debit items due from [today] through [through], and detected
+     * charges only for merchants none of those items name (V2-7). A paused
+     * item is not coming up.
+     */
+    private suspend fun comingUp(detected: List<RecurringMerchant>, today: Int, through: Int): List<UpcomingCharge> {
+        val items = recurring.items().filter { it.ledger == LedgerType.DEBIT }
+        val named = items.mapNotNull { it.merchantId }.toSet()
+        val fromItems = items
+            .filter { !it.paused && it.nextDue in today..through }
+            .map { UpcomingCharge(it.name, it.amount, it.nextDue, it.merchantId) }
+        val fromDetection = RecurringDetection.runway(detected, today, through)
+            .filter { it.merchantId !in named }
+            .map { UpcomingCharge(it.name, it.typicalAmount, it.nextExpected, it.merchantId) }
+        return (fromItems + fromDetection).sortedBy { it.due }
     }
 }

@@ -230,7 +230,8 @@ open class SettingsScreenGoldensTest {
 
     /** Profile with its Money tools panel (V2-7). */
     @Composable
-    private fun Profile() = ProfileScreen(onPage = {}, onSettings = {}, onGoals = {}, goalCount = 3)
+    private fun Profile() =
+        ProfileScreen(onPage = {}, onSettings = {}, onGoals = {}, goalCount = 3, recurringCount = 4)
 }
 
 /** The same goldens with the phone in dark mode, saved with a `-dark` suffix (DESIGN_SYSTEM_PLAN §6.3). */

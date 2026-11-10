@@ -378,4 +378,13 @@ public interface AnalyticsRepository {
      * number. Per book, like everything here (Law 2).
      */
     public suspend fun total(ledger: LedgerType, window: AnalyticsWindow): Money
+
+    /**
+     * One book's detected recurring merchants as of [today] (§5.6, A8): what
+     * the Recurring page suggests (V2-7). Without the rest of a snapshot,
+     * which would run every breakdown to read this one list. The default reads
+     * it from a month's snapshot, which is what a test fake has.
+     */
+    public suspend fun recurringMerchants(ledger: LedgerType, today: Int): List<RecurringMerchant> =
+        snapshot(ledger, AnalyticsWindow.endingOn(today, AnalyticsRange.MONTH), comparePrevious = false).recurring
 }

@@ -15,6 +15,7 @@ import com.ledgerflow.core.common.time.LocalDates
 import com.ledgerflow.core.domain.analytics.AlertChannelState
 import com.ledgerflow.core.domain.ledger.LedgerRepository
 import com.ledgerflow.core.domain.recurring.RecurringItem
+import com.ledgerflow.core.domain.recurring.RecurringPassTrigger
 import com.ledgerflow.core.domain.recurring.RecurringReminders
 import com.ledgerflow.core.domain.recurring.ReminderChannel
 import com.ledgerflow.core.domain.usecase.RunRecurringPassUseCase
@@ -104,6 +105,13 @@ internal class AndroidRecurringReminders @Inject constructor(
     }
 }
 
+/** A pass soon, after an item is saved: [RecurringWorker.runSoon]. */
+internal class AndroidRecurringPassTrigger @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : RecurringPassTrigger {
+    override fun runSoon() = RecurringWorker.runSoon(context)
+}
+
 internal class AndroidReminderChannel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ReminderChannel {
@@ -120,4 +128,7 @@ internal abstract class RecurringModule {
 
     @Binds
     internal abstract fun channel(impl: AndroidReminderChannel): ReminderChannel
+
+    @Binds
+    internal abstract fun trigger(impl: AndroidRecurringPassTrigger): RecurringPassTrigger
 }

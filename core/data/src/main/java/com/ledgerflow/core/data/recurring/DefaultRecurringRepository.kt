@@ -20,6 +20,7 @@ import com.ledgerflow.core.domain.recurring.OccurrenceOutcome
 import com.ledgerflow.core.domain.recurring.RecurringDetails
 import com.ledgerflow.core.domain.recurring.RecurringError
 import com.ledgerflow.core.domain.recurring.RecurringItem
+import com.ledgerflow.core.domain.recurring.RecurringItemsReader
 import com.ledgerflow.core.domain.recurring.RecurringMatch
 import com.ledgerflow.core.domain.recurring.RecurringOccurrence
 import com.ledgerflow.core.domain.recurring.RecurringRepository
@@ -33,6 +34,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -59,7 +61,11 @@ public class DefaultRecurringRepository @Inject constructor(
     private val ids: Uuid7Generator,
     private val clock: Clock,
     @param:IoDispatcher private val io: CoroutineDispatcher,
-) : RecurringRepository {
+) : RecurringRepository, RecurringItemsReader {
+
+    /** Home's Coming up reads the list once; empty while the vault is locked. */
+    override suspend fun items(): List<RecurringItem> = observeItems().first()
+
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeItems(): Flow<List<RecurringItem>> =
