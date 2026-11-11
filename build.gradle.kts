@@ -58,7 +58,11 @@ plugins {
  *   `:app` depend on `:core:drive`, the one module
  *   that touches a network (ADR-0034), and `:core:drive` depends on no
  *   `:core:data`, `:core:database` or `:core:crypto`: it is handed bytes, never
- *   the vault or a key.
+ *   the vault or a key;
+ * - only `:feature:tools` (the converter) and `:app` depend on `:core:rates`,
+ *   the other network module (ADR-0036), and `:core:rates` depends on
+ *   `:core:model` and `:core:common` only, so it cannot reach the vault, a key
+ *   or the user's Drive.
  *
  * Read from each project's *declared* dependencies once every project is
  * evaluated, and captured as plain strings so the configuration cache can store
@@ -101,6 +105,10 @@ tasks.register("moduleDependencyRuleCheck") {
                         ":feature:onboarding (restore from Drive) and :app only"
                 from == ":core:drive" && to in setOf(":core:data", ":core:database", ":core:crypto") ->
                     ":core:drive is handed bytes, never the vault, the database or a key (ADR-0034)"
+                to == ":core:rates" && from !in setOf(":feature:tools", ":app") ->
+                    ":core:rates (the converter's rate table, ADR-0036) is used by :feature:tools and :app only"
+                from == ":core:rates" && to !in setOf(":core:model", ":core:common") ->
+                    ":core:rates depends on :core:model and :core:common only (ADR-0036 §4)"
                 else -> null
             }
             why?.let { "$from -> $to ($configuration): $it" }
@@ -115,7 +123,8 @@ tasks.register("moduleDependencyRuleCheck") {
 
 tasks.register("bannedApiCheck") {
     group = "verification"
-    description = "Fails on `!!`, cacheDir, and network code outside :core:drive (CLAUDE.md §2 Laws 5-7)."
+    description = "Fails on `!!`, cacheDir, and network code outside :core:drive and :core:rates " +
+        "(CLAUDE.md §2 Laws 5-7)."
 
     val sourceRoots = subprojects
         .filter { it.buildFile.exists() }
@@ -127,9 +136,9 @@ tasks.register("bannedApiCheck") {
         // `!!` inside a string or a doubled negation is not matched.
         val bangBang = Regex("""[\w)\]]!!""")
         val cacheDir = Regex("""\.cacheDir\b""")
-        // Law 6 (ADR-0034): the JDK's ways onto a network, anywhere but
-        // :core:drive. Imports and qualified names both, and `openConnection(`
-        // for a URL reached some other way.
+        // Law 6 (ADR-0034, ADR-0036): the JDK's ways onto a network, anywhere
+        // but :core:drive and :core:rates. Imports and qualified names both,
+        // and `openConnection(` for a URL reached some other way.
         val network = Regex(
             """\bjava\.net\.(URL|HttpURLConnection|URLConnection|Socket|DatagramSocket)\b|""" +
                 """\bjavax\.net\.ssl\.HttpsURLConnection\b|\bokhttp3\.|\.openConnection\s*\(""",
@@ -145,12 +154,13 @@ tasks.register("bannedApiCheck") {
                         file.name.endsWith("Test.kt") || "/build/" in path
                 }
                 .forEach { file ->
-                    val mayNetwork = "/core/drive/src/main/" in file.invariantSeparatorsPath
+                    val path = file.invariantSeparatorsPath
+                    val mayNetwork = "/core/drive/src/main/" in path || "/core/rates/src/main/" in path
                     file.readLines().forEachIndexed { index, line ->
                         val code = line.substringBefore("//")
                         if (!mayNetwork && network.containsMatchIn(code)) {
                             violations += "${file.path}:${index + 1}: network code lives in :core:drive " +
-                                "only -- Law 6 / ADR-0034"
+                                "and :core:rates only -- Law 6 / ADR-0034, ADR-0036"
                         }
                         if (bangBang.containsMatchIn(code)) {
                             violations += "${file.path}:${index + 1}: `!!` is banned outside tests " +

@@ -41,6 +41,8 @@ public fun ProfileScreen(
     modifier: Modifier = Modifier,
     onRecurring: () -> Unit = {},
     recurringCount: Int? = null,
+    onCalculator: () -> Unit = {},
+    onConverter: () -> Unit = {},
 ) {
     // No scaffold of its own: the shell hosts the tabs.
     LfTabPage(title = "Profile", modifier = modifier) {
@@ -58,9 +60,9 @@ public fun ProfileScreen(
             }
         }
         // V2-7's tools (V2-PLAN §4; owner 2026-11-09): a second panel of the
-        // same shape. Recurring, Debts and loans, and Utilities join it as
-        // their PRs land; a row is only here once its page exists. Not called
-        // "Tools": Settings already has a Tools page, holding Diagnostics.
+        // same shape. Debts and loans joins it when its PR lands; a row is
+        // only here once its page exists. Not called "Tools": Settings already
+        // has a Tools page, holding Diagnostics.
         item(key = "money-tools-heading", contentType = "heading") {
             Text(
                 text = "Money tools",
@@ -85,6 +87,10 @@ public fun ProfileScreen(
                     icon = LfIcons.Recurring,
                     value = recurringCount?.takeIf { it > 0 }?.toString(),
                 )
+                LfDivider()
+                LfNavRow(title = "Calculator", onClick = onCalculator, icon = LfIcons.Calculator)
+                LfDivider()
+                LfNavRow(title = "Converter", onClick = onConverter, icon = LfIcons.Converter)
             }
         }
     }

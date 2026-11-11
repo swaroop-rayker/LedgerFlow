@@ -12,7 +12,8 @@ package com.ledgerflow.core.designsystem.icon
  * Copied, not depended on: 36 files from `lucide-icons/lucide` (`icons/<name>.svg`,
  * fetched 2026-10-28; `list-filter`, `chevron-down`, `database` and `tag`
  * 2026-10-29, step F5; `external-link` 2026-10-31, V2-3; `check` 2026-11-01, BUG83;
- * `target` and `ellipsis-vertical` 2026-11-09, `repeat` 2026-11-10, V2-7),
+ * `target` and `ellipsis-vertical` 2026-11-09, `repeat`, `calculator`,
+ * `arrow-right-left` and `delete` 2026-11-10, V2-7),
  * converted to path data unchanged in shape -- `circle`,
  * `rect` and `polyline` written out as the equivalent paths. ISC licence, at
  * `assets/licenses/Lucide-ISC.txt`. A new icon is added here, from the same
@@ -276,6 +277,35 @@ internal object LfLucide {
         "M3 11v-1a4 4 0 0 1 4-4h14",
         "m7 22-4-4 4-4",
         "M21 13v1a4 4 0 0 1-4 4H3",
+    )
+
+    /** Lucide `calculator`: the calculator (V2-7). Its `rect` and `line`s written as paths. */
+    val Calculator: List<String> = listOf(
+        "M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z",
+        "M8 6h8",
+        "M16 14v4",
+        "M16 10h.01",
+        "M12 10h.01",
+        "M8 10h.01",
+        "M12 14h.01",
+        "M8 14h.01",
+        "M12 18h.01",
+        "M8 18h.01",
+    )
+
+    /** Lucide `arrow-right-left`: the converter (V2-7). */
+    val ArrowRightLeft: List<String> = listOf(
+        "m16 3 4 4-4 4",
+        "M20 7H4",
+        "m8 21-4-4 4-4",
+        "M4 17h16",
+    )
+
+    /** Lucide `delete`: the calculator's backspace key (V2-7). */
+    val Delete: List<String> = listOf(
+        "M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z",
+        "m12 9 6 6",
+        "m18 9-6 6",
     )
 
     /** Lucide `ellipsis-vertical`: a page's options (V2-7). */

@@ -122,8 +122,15 @@ public class EntryViewModel @Inject constructor(
         )
 
     init {
+        // The calculator's "Use as amount" (V2-7): a new entry with the amount
+        // typed in, as if the user had typed it, so the usual draft write keeps
+        // it (BUG6). Removed once read, so a back stack restored after process
+        // death does not type it into a second draft; the first is on the stack.
+        val prefill = savedStateHandle.get<String>(AMOUNT_ARG)?.toLongOrNull()?.takeIf { it > 0L }
+        savedStateHandle.remove<String>(AMOUNT_ARG)
         viewModelScope.launch {
             currency.value = ledgerRepository.baseCurrency() ?: EntryUiState.DEFAULT_CURRENCY
+            prefill?.let { minor -> changeAmount(MoneyFormat.plain(minor, currency.value)) }
         }
         viewModelScope.launch { collectDraftWrites() }
 
@@ -500,6 +507,14 @@ public class EntryViewModel @Inject constructor(
          * Navigation Compose turns into this argument.
          */
         public const val DRAFT_ID_ARG: String = "draftId"
+
+        /**
+         * A new entry's amount, in minor units as text: the calculator's "Use
+         * as amount" (V2-7). The same contract as [DRAFT_ID_ARG], with
+         * `Destination.Entry.amount`; `EntryDraftArgumentTest` holds the two
+         * names together.
+         */
+        public const val AMOUNT_ARG: String = "amount"
     }
 
     /**

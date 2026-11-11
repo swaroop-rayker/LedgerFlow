@@ -33,6 +33,10 @@ dependencies {
     testImplementation(project(":core:testing"))
     testImplementation(libs.androidx.compose.ui.test.manifest)
 
+    // The converter's public rate table (ADR-0036): this module and :app are
+    // the only ones that may depend on the second network module.
+    implementation(project(":core:rates"))
+
     // Recurring items' daily pass runs in a Worker: it must run with no
     // Activity alive, like budget alerts and capture.
     implementation(libs.androidx.work.runtime.ktx)

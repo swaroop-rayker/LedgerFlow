@@ -119,9 +119,11 @@ open class DataPermissionsScreenTest {
             .isEqualTo("Not allowed. Scans receipts and recovery QR codes, on this phone.")
         assertThat(byKind.getValue(PermissionKind.NOTIFICATION_ACCESS).sentence).startsWith("Allowed. ")
         // The heading says "Granted when installed"; the row only says why.
-        // ADR-0034: Drive backup is the one use, and only when turned on.
-        assertThat(byKind.getValue(PermissionKind.INTERNET).sentence)
-            .isEqualTo("Only for Google Drive backup, if you turn it on. Google's text reader also asks for it.")
+        // ADR-0034: Drive backup, only when turned on; ADR-0036: the converter's rates, only on a tap.
+        assertThat(byKind.getValue(PermissionKind.INTERNET).sentence).isEqualTo(
+            "For Google Drive backup, if you turn it on, and exchange rates when you ask the converter. " +
+                "Google's text reader also asks for it.",
+        )
     }
 
     @Test

@@ -58,6 +58,7 @@ include(
     ":core:data",
     // The only module that touches a network (ADR-0034, Law 6).
     ":core:drive",
+    ":core:rates",
     ":core:designsystem",
     ":core:ui",
     ":core:testing",

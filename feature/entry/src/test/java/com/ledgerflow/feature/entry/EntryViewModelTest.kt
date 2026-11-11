@@ -713,7 +713,47 @@ class EntryViewModelTest {
      *   form is opened from a pending row in the Ledger. Null is the centre
      *   action's "new entry", which is what every other test here wants.
      */
-    private fun viewModel(openingDraftId: String? = null) = EntryViewModel(
+    /**
+     * The calculator's "Use as amount" (V2-7): the form opens new with the
+     * amount typed in, the draft write keeps it (BUG6), and the argument is
+     * consumed so a restored back stack cannot type it into a second draft.
+     */
+    @Test
+    fun anAmountArgument_opensANewEntryWithItTypedIn_once() = runTest(dispatcher) {
+        val handle = SavedStateHandle(mapOf(EntryViewModel.AMOUNT_ARG to "16000"))
+        val subject = viewModel(handle = handle)
+        collectors += CoroutineScope(dispatcher).launch { subject.state.collect {} }
+        testScheduler.advanceUntilIdle()
+
+        assertThat(subject.state.value.amountMinor).isEqualTo(160_00L)
+        assertThat(subject.state.value.amountText).isEqualTo("160.00")
+        assertThat(handle.contains(EntryViewModel.AMOUNT_ARG)).isFalse()
+
+        advanceTimeBy(DEBOUNCE_MS + 1)
+        advanceUntilIdle()
+        assertThat(drafts.saves.single()).contains("\"amountMinor\":16000")
+    }
+
+    @Test
+    fun anUnusableAmountArgument_opensAnEmptyForm() = runTest(dispatcher) {
+        listOf("0", "-500", "ten").forEach { text ->
+            val subject = viewModel(handle = SavedStateHandle(mapOf(EntryViewModel.AMOUNT_ARG to text)))
+            collectors += CoroutineScope(dispatcher).launch { subject.state.collect {} }
+            testScheduler.advanceUntilIdle()
+
+            assertThat(subject.state.value.amountMinor).isEqualTo(0L)
+        }
+        advanceTimeBy(DEBOUNCE_MS * 4)
+        advanceUntilIdle()
+        assertThat(drafts.saves).isEmpty()
+    }
+
+    private fun viewModel(
+        openingDraftId: String? = null,
+        handle: SavedStateHandle = SavedStateHandle(
+            openingDraftId?.let { mapOf(EntryViewModel.DRAFT_ID_ARG to it) } ?: emptyMap(),
+        ),
+    ) = EntryViewModel(
         approveTransaction = ApproveTransactionUseCase(ledger, NoOpBudgetAlertTrigger),
         drafts = drafts,
         ledgerRepository = ledger,
@@ -723,9 +763,7 @@ class EntryViewModelTest {
         paymentMethods = paymentMethods,
         clock = Clock { NOW },
         ids = Uuid7Generator(SecureRandom()),
-        savedStateHandle = SavedStateHandle(
-            openingDraftId?.let { mapOf(EntryViewModel.DRAFT_ID_ARG to it) } ?: emptyMap(),
-        ),
+        savedStateHandle = handle,
     )
 
     /** The merchant picker browses by merchant category (V2-6 PR 3): it reads them, and files nothing. */

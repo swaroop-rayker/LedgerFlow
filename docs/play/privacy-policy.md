@@ -1,6 +1,6 @@
 # LedgerFlow privacy policy
 
-Last updated: 7 November 2026
+Last updated: 10 November 2026
 
 LedgerFlow is a personal expense tracker for Android. This policy covers both
 versions: the one on Google Play (`com.ledgerflow.playsafe`), and the one on
@@ -52,8 +52,16 @@ HTTPS, and Google states it does not share them with third parties. They
 never include your receipts, entries or messages. Google describes this at
 https://developers.google.com/ml-kit/android-data-disclosure.
 
-Apart from Google Drive backup, described next, LedgerFlow itself sends
-nothing.
+Apart from Google Drive backup, described next, and the exchange-rate request
+below, LedgerFlow itself sends nothing.
+
+**Exchange rates.** The currency converter (Profile > Money tools > Converter)
+can fetch the European Central Bank's public daily reference rates, but only
+when you tap "Get today's rates". The request goes to one fixed ECB address and
+carries nothing about you: no amount, no currency you picked, no account and no
+device identifier. The ECB can see your IP address, the time, and that the
+request came from LedgerFlow. The rates are kept on your phone for next time.
+Nothing fetched is ever written into your entries.
 
 ## Backups and your recovery phrase
 
@@ -82,8 +90,9 @@ Drive stay there until you delete them.
   when a budget reaches a threshold.
 - **Notification access** (granted in Android's settings): to read payment
   notifications, as described above.
-- **Internet**: used only for Google Drive backup, if you turn it on. It is
-  also brought in by the ML Kit library described above.
+- **Internet**: used for Google Drive backup, if you turn it on, and for the
+  converter's exchange rates, when you ask for them. It is also brought in by
+  the ML Kit library described above.
 - **Receive SMS** (Galaxy Store and repository version only, not the Google
   Play version): to receive bank transaction messages, as described above.
 
